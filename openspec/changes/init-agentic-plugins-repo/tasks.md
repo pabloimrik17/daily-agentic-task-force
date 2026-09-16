@@ -47,7 +47,7 @@
 
 - [x] 7.1 Add `release-please-config.json` for `plugins/datf-lab` with `release-type: "simple"`, `tag-separator: "--"`, `include-v-in-tag: true`, `bootstrap-sha` set to the OpenSpec scaffolding commit `17fb8fd`, and `extra-files` syncing `.claude-plugin/plugin.json`, `package.json`, and the `datf-lab` entry in the root marketplace manifest
 - [x] 7.2 Add `.release-please-manifest.json` with `plugins/datf-lab` at `0.1.0`, and confirm no root package is configured so the repository itself stays unversioned
-- [ ] 7.3 Verify the config parses and targets the right paths by running release-please in dry-run mode, confirming it proposes updates to all three manifests and no root changelog
+- [x] 7.3 Verify the config parses and targets the right paths by running release-please in dry-run mode, confirming it proposes updates to all three manifests and no root changelog
 
 ## 8. CI/CD
 
