@@ -1,0 +1,13 @@
+node_modules/
+# Agent scaffolding — tooling for AI hosts, not this repository's source.
+# Keep this list identical to eslint.config.ts, knip.config.ts, .fallowrc.jsonc
+# and .markdownlintignore; divergence shows up as one tool failing on files the
+# others skip.
+openspec/
+.agents/
+.claude/
+.junie/
+.opencode/
+.pi/
+# husky's generated shim directory
+.husky/_/

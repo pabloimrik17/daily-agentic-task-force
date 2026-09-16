@@ -1,0 +1,7 @@
+node_modules/
+.idea/
+.worktrees/
+# fallow analysis cache
+.fallow/
+.claude/settings.local.json
+coverage/

@@ -1,0 +1,7 @@
+{
+    "name": "@daily-agentic-task-force/plugin-datf-lab",
+    "version": "0.1.0",
+    "private": true,
+    "description": "Staging area for skills and commands under validation — contents are provisional and may be promoted or removed",
+    "type": "module"
+}

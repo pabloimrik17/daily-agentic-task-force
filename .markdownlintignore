@@ -1,0 +1,20 @@
+node_modules/
+coverage/
+
+# Agent scaffolding — tooling for AI hosts, not this repository's source.
+# Keep this list identical to .oxfmtignore, eslint.config.ts, knip.config.ts
+# and .fallowrc.jsonc; divergence shows up as one tool failing on files the
+# others skip.
+openspec/
+.agents/
+.claude/
+.junie/
+.opencode/
+.pi/
+
+# AI agent instruction files
+AGENTS.md
+CLAUDE.md
+
+# Auto-generated changelogs
+**/CHANGELOG.md
