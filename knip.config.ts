@@ -1,10 +1,7 @@
 import type { KnipConfig } from "knip";
 
 export default {
-    // Agent scaffolding — tooling for AI hosts, not this repository's source.
-    // Keep this list identical to .oxfmtignore, eslint.config.ts,
-    // .fallowrc.jsonc and .markdownlintignore; divergence shows up as one tool
-    // failing on files the others skip.
+    // Agent scaffolding, not source. Mirrored in 4 sibling configs; see CLAUDE.md.
     ignore: [
         "openspec/**",
         ".agents/**",
@@ -27,8 +24,7 @@ export default {
             entry: ["scripts/*.ts", "scripts/**/*.test.ts"],
             project: ["scripts/**/*.ts"],
         },
-        // Plugins carry Markdown today; the workspace is declared so their code
-        // is analysed the moment they gain any.
+        // Declared ahead of need: plugins carry only Markdown today.
         "plugins/*": {
             entry: ["scripts/**/*.ts", "**/*.test.ts"],
             project: ["**/*.ts"],

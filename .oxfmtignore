@@ -1,8 +1,5 @@
 node_modules/
-# Agent scaffolding — tooling for AI hosts, not this repository's source.
-# Keep this list identical to eslint.config.ts, knip.config.ts, .fallowrc.jsonc
-# and .markdownlintignore; divergence shows up as one tool failing on files the
-# others skip.
+# Agent scaffolding, not source. Mirrored in 4 sibling configs; see CLAUDE.md.
 openspec/
 .agents/
 .claude/

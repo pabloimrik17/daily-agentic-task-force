@@ -8,10 +8,7 @@ export default tseslint.config(
         ignores: [
             "node_modules/**",
             "coverage/**",
-            // Agent scaffolding — tooling for AI hosts, not this repository's
-            // source. Keep this list identical to .oxfmtignore, knip.config.ts,
-            // .fallowrc.jsonc and .markdownlintignore; divergence shows up as
-            // one tool failing on files the others skip.
+            // Agent scaffolding, not source. Mirrored in 4 sibling configs; see CLAUDE.md.
             "openspec/**",
             ".agents/**",
             ".claude/**",
@@ -32,10 +29,8 @@ export default tseslint.config(
             },
         },
     },
-    // Type-aware linting. Every .ts file in the repository is inside the root
-    // tsconfig's `include: ["**/*.ts"]`, root config files included — excluding
-    // them the way monolab does would leave type-aware linting covering nearly
-    // nothing here, since root configs are most of the TypeScript that exists.
+    // Type-aware linting reaches the root config files too: tsconfig's
+    // `include: ["**/*.ts"]` has no exclusions.
     {
         files: ["**/*.ts"],
         extends: [tseslint.configs.recommendedTypeChecked],
@@ -46,8 +41,8 @@ export default tseslint.config(
             },
         },
     },
-    // .mjs and .cjs cannot participate in the TypeScript project, so the
-    // type-checked rules would trip the parser rather than lint them.
+    // .mjs and .cjs are outside the TypeScript project; type-checked rules
+    // would trip the parser rather than lint them.
     {
         files: ["**/*.{js,cjs,mjs}"],
         extends: [tseslint.configs.disableTypeChecked],

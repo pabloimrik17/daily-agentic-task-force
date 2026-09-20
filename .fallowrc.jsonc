@@ -1,13 +1,8 @@
 {
     "$schema": "./node_modules/fallow/schema.json",
-    // Written from scratch rather than ported: monolab lists its plugin
-    // directory in ignorePatterns, so its config has never analysed plugin
-    // code. Here, plugins are the codebase.
-    //
-    // eslint, vitest, commitlint and lint-staged configs are picked up by
-    // built-in plugins; oxfmt and knip have none, and the validation script is
-    // a CLI entry point rather than an import target, so they are declared here
-    // alongside the branch-name config, which the husky hook loads by convention.
+    // Declared here because no built-in plugin claims them: oxfmt and knip
+    // have none, the validation script is a CLI entry point, and the
+    // branch-name config is loaded by the husky hook.
     "entry": [
         "oxfmt.config.ts",
         "knip.config.ts",
@@ -15,10 +10,7 @@
         "validate-branch-name.config.cjs",
         "plugins/*/scripts/**/*.ts",
     ],
-    // Agent scaffolding — tooling for AI hosts, not this repository's source.
-    // Keep this list identical to .oxfmtignore, eslint.config.ts,
-    // knip.config.ts and .markdownlintignore; divergence shows up as one tool
-    // failing on files the others skip.
+    // Agent scaffolding, not source. Mirrored in 4 sibling configs; see CLAUDE.md.
     "ignorePatterns": [
         "openspec/**",
         ".agents/**",

@@ -1,16 +1,10 @@
 /**
- * Validates that the Claude Code marketplace manifest at the repository root is
- * internally consistent: every listed plugin resolves to a real plugin, every
- * plugin on disk is listed, and every version a plugin records agrees with the
- * others.
+ * Checks the marketplace manifest against the plugins on disk: names match,
+ * nothing is unlisted, and all three version anchors agree.
  *
- * Release-please updates three files per release through independent
- * `extra-files` rules. A JSONPath that stops matching after a rename fails
- * silently, leaving the marketplace advertising a version the plugin does not
- * carry. This script closes that loop.
- *
- * All problems are accumulated and reported in one run rather than stopping at
- * the first, so a single CI failure shows everything that needs fixing.
+ * Release-please writes those three files through independent `extra-files`
+ * rules, and a JSONPath that stops matching after a rename fails silently.
+ * Problems are accumulated so one CI run shows all of them.
  */
 import { existsSync, readdirSync, readFileSync, statSync } from "node:fs";
 import { isAbsolute, join, relative, resolve } from "node:path";
