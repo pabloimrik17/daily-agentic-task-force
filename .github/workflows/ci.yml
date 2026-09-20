@@ -44,11 +44,15 @@ jobs:
             - name: 🔍 Validate marketplace
               run: bun run lint:marketplace
 
+            # Schema only. The version and name invariants are lint:marketplace's job.
+            - name: 🔍 Validate marketplace schema
+              run: bunx @anthropic-ai/claude-code@2.1.278 plugin validate .claude-plugin/marketplace.json --strict
+
             - name: 🔍 Validate OpenSpec change proposals
               run: bunx @fission-ai/openspec@1.11.0 validate --changes --no-interactive
 
             # PRs are gated by fallow.yml (audit, new-only ratchet); this catches
             # dead code landing on main via direct pushes
             - name: 🔍 Fallow dead-code gate (full repo)
-              run: bunx fallow dead-code --fail-on-issues
+              run: bun run lint:fallow
               if: ${{ github.event_name == 'push' }}
