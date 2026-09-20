@@ -1,0 +1,10 @@
+node_modules/
+# Agent scaffolding, not source. Mirrored in 4 sibling configs; see CLAUDE.md.
+openspec/
+.agents/
+.claude/
+.junie/
+.opencode/
+.pi/
+# husky's generated shim directory
+.husky/_/

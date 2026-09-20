@@ -1,0 +1,66 @@
+{
+    "$schema": "https://docs.renovatebot.com/renovate-schema.json",
+    "extends": [
+        "config:best-practices",
+        ":semanticCommits",
+        ":enableVulnerabilityAlertsWithLabel(security)",
+        ":maintainLockFilesWeekly",
+        "security:openssf-scorecard",
+        "customManagers:githubActionsVersions"
+    ],
+    "timezone": "Europe/Madrid",
+    "reviewers": ["pabloimrik17"],
+    "labels": ["dependencies"],
+    "baseBranchPatterns": ["main"],
+    "dependencyDashboardTitle": "📦 Dependency Dashboard",
+    "prConcurrentLimit": 10,
+    "prHourlyLimit": 2,
+    "minimumReleaseAge": "14 days",
+    "rangeStrategy": "pin",
+    "vulnerabilityAlerts": {
+        "prHourlyLimit": 0,
+        "prConcurrentLimit": 0
+    },
+    "packageRules": [
+        {
+            "matchUpdateTypes": ["patch"],
+            "schedule": ["on the first day of the month"]
+        },
+        {
+            "matchUpdateTypes": ["minor"],
+            "schedule": ["on the first day of the month every 2 months"]
+        },
+        {
+            "matchUpdateTypes": ["major"],
+            "schedule": ["on the first day of the month every 3 months"]
+        },
+        {
+            "description": "Re-assert the 14-day npm minimum release age; config:best-practices brings security:minimumReleaseAgeNpm with a shorter 3-day window that would otherwise override the top-level value for npm packages",
+            "matchDatasources": ["npm"],
+            "minimumReleaseAge": "14 days"
+        }
+    ],
+    "customManagers": [
+        {
+            "customType": "regex",
+            "description": "Update pinned CLI tool versions in CI workflows (bunx/npx)",
+            "managerFilePatterns": ["/^\\.github/workflows/.+\\.ya?ml$/"],
+            "matchStrings": [
+                "(?:bunx|npx) (?<depName>(?:@[^/\\s]+/)?[^@\\s]+)@(?<currentValue>[^\\s]+)"
+            ],
+            "datasourceTemplate": "npm"
+        },
+        {
+            "customType": "regex",
+            "description": "Update pinned 'bunx --package <pkg>@<ver>' versions (renovate-config-validator and similar)",
+            "managerFilePatterns": [
+                "/^\\.github/workflows/.+\\.ya?ml$/",
+                "/^lint-staged\\.config\\.ts$/"
+            ],
+            "matchStrings": [
+                "bunx (?:--package|-p) (?<depName>(?:@[^/\\s]+/)?[^@\\s]+)@(?<currentValue>[^\\s]+)"
+            ],
+            "datasourceTemplate": "npm"
+        }
+    ]
+}

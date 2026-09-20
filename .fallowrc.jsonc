@@ -1,0 +1,28 @@
+{
+    "$schema": "./node_modules/fallow/schema.json",
+    // Declared here because no built-in plugin claims them: oxfmt and knip
+    // have none, the validation script is a CLI entry point, and the
+    // branch-name config is loaded by the husky hook.
+    "entry": [
+        "oxfmt.config.ts",
+        "knip.config.ts",
+        "scripts/validate-marketplace.ts",
+        "validate-branch-name.config.cjs",
+        "plugins/*/scripts/**/*.ts",
+    ],
+    // Agent scaffolding, not source. Mirrored in 4 sibling configs; see CLAUDE.md.
+    "ignorePatterns": [
+        "openspec/**",
+        ".agents/**",
+        ".claude/**",
+        ".junie/**",
+        ".opencode/**",
+        ".pi/**",
+        "coverage/**",
+    ],
+    "ignoreDependencies": ["@types/bun", "validate-branch-name"],
+    "rules": {
+        // suppression comments must carry a reason
+        "require-suppression-reason": "warn",
+    },
+}

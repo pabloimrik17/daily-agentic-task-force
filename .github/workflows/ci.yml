@@ -1,0 +1,58 @@
+name: CI
+
+on:
+    push:
+        branches:
+            - main
+    pull_request: {}
+
+permissions:
+    contents: read
+
+jobs:
+    main:
+        runs-on: ubuntu-latest
+        steps:
+            - name: Checkout code
+              uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+              with:
+                  persist-credentials: false
+
+            - name: Setup Bun
+              uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2.2.0
+              with:
+                  bun-version-file: .bun-version
+
+            - name: Install dependencies
+              run: bun install --frozen-lockfile
+
+            - name: 🔍 Check formatting
+              run: bun run lint:oxfmt
+
+            - name: 🔍 Lint
+              run: bun run lint:eslint
+
+            - name: 🔍 Lint Markdown
+              run: bun run lint:markdown
+
+            - name: 🔍 Unused code and dependencies
+              run: bun run lint:knip
+
+            - name: 🧪 Tests
+              run: bun run test
+
+            - name: 🔍 Validate marketplace
+              run: bun run lint:marketplace
+
+            # Schema only. The version and name invariants are lint:marketplace's job.
+            - name: 🔍 Validate marketplace schema
+              run: bunx @anthropic-ai/claude-code@2.1.278 plugin validate .claude-plugin/marketplace.json --strict
+
+            - name: 🔍 Validate OpenSpec change proposals
+              run: bunx @fission-ai/openspec@1.11.0 validate --changes --no-interactive
+
+            # PRs are gated by fallow.yml (audit, new-only ratchet); this catches
+            # dead code landing on main via direct pushes
+            - name: 🔍 Fallow dead-code gate (full repo)
+              run: bun run lint:fallow
+              if: ${{ github.event_name == 'push' }}

@@ -1,0 +1,19 @@
+{
+    "name": "daily-agentic-task-force",
+    "owner": {
+        "name": "Pablo F.G.",
+        "email": "pabloimrik17@users.noreply.github.com"
+    },
+    "metadata": {
+        "description": "Claude Code plugins from the Daily Agentic Task Force repository",
+        "pluginRoot": "./plugins"
+    },
+    "plugins": [
+        {
+            "name": "datf-lab",
+            "source": "./plugins/datf-lab",
+            "version": "0.1.0",
+            "description": "Staging area for skills and commands under validation — contents are provisional and may be promoted or removed"
+        }
+    ]
+}

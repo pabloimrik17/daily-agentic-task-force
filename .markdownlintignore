@@ -1,0 +1,17 @@
+node_modules/
+coverage/
+
+# Agent scaffolding, not source. Mirrored in 4 sibling configs; see CLAUDE.md.
+openspec/
+.agents/
+.claude/
+.junie/
+.opencode/
+.pi/
+
+# AI agent instruction files
+AGENTS.md
+CLAUDE.md
+
+# Auto-generated changelogs
+**/CHANGELOG.md

@@ -1,0 +1,42 @@
+{
+    "packages": {
+        "plugins/datf-lab": {
+            "release-type": "simple",
+            "package-name": "datf-lab",
+            "tag-separator": "--",
+            "include-v-in-tag": true,
+            "changelog-path": "CHANGELOG.md",
+            "bootstrap-sha": "17fb8fd4e01fe36cf4b1e4cae95faedd7becf7b4",
+            "extra-files": [
+                {
+                    "type": "json",
+                    "path": ".claude-plugin/plugin.json",
+                    "jsonpath": "$.version"
+                },
+                {
+                    "type": "json",
+                    "path": "package.json",
+                    "jsonpath": "$.version"
+                },
+                {
+                    "type": "json",
+                    "path": "/.claude-plugin/marketplace.json",
+                    "jsonpath": "$.plugins[?(@.name=='datf-lab')].version"
+                }
+            ]
+        }
+    },
+    "changelog-sections": [
+        { "type": "feat", "section": "Features", "hidden": false },
+        { "type": "fix", "section": "Bug Fixes", "hidden": false },
+        { "type": "perf", "section": "Performance Improvements", "hidden": false },
+        { "type": "revert", "section": "Reverts", "hidden": false },
+        { "type": "docs", "section": "Documentation", "hidden": false },
+        { "type": "style", "section": "Styles", "hidden": true },
+        { "type": "chore", "section": "Miscellaneous Chores", "hidden": true },
+        { "type": "refactor", "section": "Code Refactoring", "hidden": false },
+        { "type": "test", "section": "Tests", "hidden": true },
+        { "type": "build", "section": "Build System", "hidden": true },
+        { "type": "ci", "section": "Continuous Integration", "hidden": true }
+    ]
+}
