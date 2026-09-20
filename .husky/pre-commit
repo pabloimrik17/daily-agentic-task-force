@@ -1,2 +1,2 @@
-bunx validate-branch-name
-bunx lint-staged --config lint-staged.config.ts
+bun run validate-branch-name
+bun run lint-staged --config lint-staged.config.ts
