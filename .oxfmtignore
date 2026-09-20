@@ -8,3 +8,9 @@ openspec/
 .pi/
 # husky's generated shim directory
 .husky/_/
+
+# release-please round-trips JSON through JSON.parse/stringify, expanding
+# compact arrays. Upstream WONTFIX (release-please#2319), so formatting
+# what it writes turns every release PR red on the first CI step.
+**/CHANGELOG.md
+plugins/*/.claude-plugin/plugin.json
