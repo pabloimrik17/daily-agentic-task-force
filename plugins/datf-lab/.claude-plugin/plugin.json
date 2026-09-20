@@ -1,6 +1,6 @@
 {
     "name": "datf-lab",
-    "version": "0.1.0",
+    "version": "0.2.0",
     "description": "Staging area for skills and commands under validation — contents are provisional and may be promoted or removed",
     "author": {
         "name": "Pablo F.G.",
@@ -9,5 +9,11 @@
     "license": "MIT",
     "repository": "https://github.com/pabloimrik17/daily-agentic-task-force",
     "homepage": "https://github.com/pabloimrik17/daily-agentic-task-force/tree/main/plugins/datf-lab",
-    "keywords": ["lab", "staging", "beta", "skills", "commands"]
+    "keywords": [
+        "lab",
+        "staging",
+        "beta",
+        "skills",
+        "commands"
+    ]
 }
