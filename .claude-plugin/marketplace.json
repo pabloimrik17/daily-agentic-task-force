@@ -12,7 +12,7 @@
         {
             "name": "datf-lab",
             "source": "./plugins/datf-lab",
-            "version": "0.1.0",
+            "version": "0.2.0",
             "description": "Staging area for skills and commands under validation — contents are provisional and may be promoted or removed"
         }
     ]
