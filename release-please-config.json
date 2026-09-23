@@ -24,6 +24,30 @@
                     "jsonpath": "$.plugins[?(@.name=='datf-lab')].version"
                 }
             ]
+        },
+        "plugins/autonomous": {
+            "release-type": "simple",
+            "package-name": "autonomous",
+            "tag-separator": "--",
+            "include-v-in-tag": true,
+            "changelog-path": "CHANGELOG.md",
+            "extra-files": [
+                {
+                    "type": "json",
+                    "path": ".claude-plugin/plugin.json",
+                    "jsonpath": "$.version"
+                },
+                {
+                    "type": "json",
+                    "path": "package.json",
+                    "jsonpath": "$.version"
+                },
+                {
+                    "type": "json",
+                    "path": "/.claude-plugin/marketplace.json",
+                    "jsonpath": "$.plugins[?(@.name=='autonomous')].version"
+                }
+            ]
         }
     },
     "changelog-sections": [
