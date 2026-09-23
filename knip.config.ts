@@ -15,6 +15,8 @@ export default {
     ],
     // pinned per-invocation via `bunx --package renovate@<version>`, never installed
     ignoreDependencies: ["renovate"],
+    // external CLI the autonomous plugin requires on the consumer machine
+    ignoreBinaries: ["openusage"],
     ignoreExportsUsedInFile: {
         interface: true,
         type: true,
