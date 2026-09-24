@@ -59,7 +59,7 @@ enforces it, and CI fails the change if they drift.
 
 ## Working on this repository
 
-Bun 1.3.14 is the runtime and the package manager; the version is pinned in
+Bun is the runtime and the package manager; the version is pinned in
 `.bun-version`.
 
 ```bash

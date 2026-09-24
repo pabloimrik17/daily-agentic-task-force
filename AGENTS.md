@@ -6,7 +6,7 @@ everything at the root is the toolchain that gates them.
 
 ## Package manager
 
-**bun**, pinned to `1.3.14` in `.bun-version`. Never use npm, yarn or pnpm.
+**bun**, pinned in `.bun-version`. Never use npm, yarn or pnpm.
 
 | npm                    | bun                             |
 | ---------------------- | ------------------------------- |
