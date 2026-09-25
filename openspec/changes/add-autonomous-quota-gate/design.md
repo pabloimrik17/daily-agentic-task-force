@@ -83,13 +83,22 @@ The precedence is: exhausted → `wait`; then missing, incomplete, invalid, stal
 ```text
 plugins/autonomous/
   .claude-plugin/plugin.json
-  package.json            # @daily-agentic-task-force/plugin-autonomous, private, 0.0.0
-  README.md               # purpose, requirements, tiering principle
-  CHANGELOG.md            # owned by release-please
-  commands/run.md         # thin: run script, relay output
-  src/run.ts              # entry: args, runner, render, exit code
-  src/runner.ts           # step contract and runner
-  src/quota-gate/…        # openusage read, parse, select, project, decide, render
+  package.json                     # @daily-agentic-task-force/plugin-autonomous, private, 0.0.0
+  README.md                        # purpose, requirements, tiering principle
+  CHANGELOG.md                     # owned by release-please
+  commands/run.md                  # thin: run script, relay output
+  src/run.ts                       # entry: wires args, runner, report
+  src/args.ts                      # --account, --force, --json parsing and usage text
+  src/runner.ts                    # step contract and runner
+  src/report.ts                    # run report, text and JSON rendering, exit codes
+  src/quota-gate/step.ts           # the quota-gate step: read, select, decide, render
+  src/quota-gate/openusage.ts      # run openusage, parse its stdout as JSON
+  src/quota-gate/parse.ts          # strict OpenUsage document validation
+  src/quota-gate/select.ts         # Claude account selection
+  src/quota-gate/decide.ts         # window evaluation and step outcome
+  src/quota-gate/project.ts        # informational usage projection
+  src/quota-gate/render.ts         # quota-gate text section
+  src/quota-gate/test-fixtures.ts  # shared test builders
   src/**/*.test.ts
 ```
 
