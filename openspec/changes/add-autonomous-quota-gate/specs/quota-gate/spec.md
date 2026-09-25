@@ -79,7 +79,7 @@ For each evaluated window, the gate SHALL compute projected usage as OpenUsage d
 
 The gate outcome SHALL be:
 
-1. `wait` when any evaluated window with valid, fresh data has `used ≥ limit`;
+1. `wait` when any evaluated window with valid, fresh data has `used ≥ limit`, where data is fresh when the account is not stale and OpenUsage reports no error for it;
 2. otherwise `not-evaluable` when the account is stale, OpenUsage reports an error for it, or a required window is missing or invalid;
 3. otherwise `advance`.
 
@@ -94,6 +94,11 @@ Projected usage SHALL be reported but SHALL NOT affect the outcome. Missing or s
 
 - **WHEN** the session window is exhausted and the weekly window is missing
 - **THEN** the outcome is `wait`, and the missing weekly window is still reported
+
+#### Scenario: Exhausted window with an OpenUsage error
+
+- **WHEN** a window is exhausted and OpenUsage reports an error for the account
+- **THEN** the outcome is `not-evaluable` and the reason carries the error
 
 #### Scenario: Projection above capacity
 

@@ -86,6 +86,16 @@ describe("quota gate decision: not evaluable from the account data", () => {
         expect(result.data.windows.map((w) => w.used)).toEqual([20, 100]);
     });
 
+    it("is not evaluable on an exhausted window when OpenUsage reports an error", async () => {
+        const result = await gate(
+            limits({ claude: provider({ session: session(20), weekly: weekly(100) }) }, [
+                { providerId: "claude", message: "rate limited" },
+            ]),
+        );
+        expect(result.outcome).toBe("not-evaluable");
+        expect(result.reasons).toContain("OpenUsage reported an error for claude: rate limited");
+    });
+
     it("is not evaluable when OpenUsage reports an error for the account", async () => {
         const result = await gate(
             limits({ claude: provider({ session: session(20), weekly: weekly(30) }) }, [
