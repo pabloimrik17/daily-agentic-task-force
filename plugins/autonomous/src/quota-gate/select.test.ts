@@ -60,6 +60,18 @@ describe("selectAccount", () => {
         ]);
     });
 
+    it.each([
+        ["no provider at all", {}],
+        ["only a non-Claude provider", { codex: personal }],
+    ])("reports no Claude account when OpenUsage has %s", (_, providers) => {
+        const selection = selectAccount(parsed(limits(providers)), undefined);
+        expect(selection).toEqual({
+            ok: false,
+            reason: "OpenUsage reported no Claude account",
+            candidates: [],
+        });
+    });
+
     it("selects an account known only from an error, carrying the error", () => {
         const selection = selectAccount(
             parsed(limits({}, [{ providerId: "claude", message: "token expired" }])),

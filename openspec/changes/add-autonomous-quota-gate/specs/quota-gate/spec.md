@@ -42,6 +42,11 @@ The gate SHALL consider every provider whose key is `claude` or starts with `cla
 - **WHEN** exactly one Claude account is present and `--account` is absent
 - **THEN** that account is evaluated
 
+#### Scenario: No Claude account
+
+- **WHEN** OpenUsage reports no Claude account
+- **THEN** the outcome is `not-evaluable` and the reason says no Claude account was reported
+
 ### Requirement: Evaluated windows
 
 The gate SHALL evaluate the `session` and `weekly` resources of the selected account, reporting for each its used amount, limit, reset time and window duration. Any other resource SHALL be listed with its current usage and marked as not evaluated.
