@@ -129,8 +129,9 @@ function windowValues(resource: OpenUsageResource): WindowValues {
     };
 }
 
-// Precedence (design D6): exhausted → wait; missing, stale or error →
-// not-evaluable; otherwise advance. Projection never affects the outcome.
+// Precedence (design D6): exhausted → wait; missing, incomplete, invalid,
+// stale or error → not-evaluable; otherwise advance. Projection never
+// affects the outcome.
 function decide(
     account: AccountReport,
     hasData: boolean,
