@@ -34,11 +34,11 @@ detect a change.
 /autonomous:run [--account <provider-key>] [--force] [--json]
 ```
 
-| Flag                       | Effect                                                                        |
-| -------------------------- | ----------------------------------------------------------------------------- |
-| `--account <provider-key>` | Claude account to evaluate (`claude` or `claude@<id>`). Required with several |
-| `--force`                  | Ask OpenUsage to bypass its shared cache                                      |
-| `--json`                   | Print one `autonomous.run.v1` JSON document instead of the text report        |
+| Flag                       | Effect                                                                                                    |
+| -------------------------- | --------------------------------------------------------------------------------------------------------- |
+| `--account <provider-key>` | Claude account to evaluate (`claude` or `claude@<id>`). Required when several Claude accounts are present |
+| `--force`                  | Ask OpenUsage to bypass its shared cache                                                                  |
+| `--json`                   | Print one `autonomous.run.v1` JSON document instead of the text report                                    |
 
 The script can also be run directly, which is what a shell or `/loop` should
 branch on:
@@ -49,12 +49,12 @@ bun plugins/autonomous/src/run.ts --account claude --json
 
 ### Exit codes
 
-| Code | Outcome                                                        |
-| ---- | -------------------------------------------------------------- |
-| 0    | `advance` — every step advanced                                |
-| 2    | `wait` — a step says to wait (for example, a window exhausted) |
-| 3    | `not-evaluable` — required data is missing, stale or failed    |
-| 1    | Invalid arguments or a failure of the runner itself            |
+| Code | Outcome                                                                                                         |
+| ---- | --------------------------------------------------------------------------------------------------------------- |
+| 0    | `advance` — every step advanced                                                                                 |
+| 2    | `wait` — a step says to wait (for example, a window exhausted)                                                  |
+| 3    | `not-evaluable` — no decision possible: account not chosen, or data missing, invalid, outdated, stale or failed |
+| 1    | Invalid arguments or a failure of the runner itself                                                             |
 
 ## The quota gate
 
