@@ -122,5 +122,5 @@ Projected usage SHALL be reported but SHALL NOT affect the outcome. Missing or s
 
 #### Scenario: Invalid window
 
-- **WHEN** the session window reports a limit of 0, a negative used amount, or a window duration of 0
+- **WHEN** the session window reports a limit of 0, a negative used amount, or a window duration of 0, and the weekly window is valid and below its limit
 - **THEN** the outcome is `not-evaluable`, never `wait` or `advance`, and the reason names the session window and the invalid value
