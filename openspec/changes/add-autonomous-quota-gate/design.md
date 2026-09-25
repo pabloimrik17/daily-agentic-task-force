@@ -72,7 +72,7 @@ The command runs `bun "${CLAUDE_PLUGIN_ROOT}/src/run.ts" $ARGUMENTS`. Validation
 
 ### D5 — Account selection and freshness
 
-A Claude account is any provider key equal to `claude` or starting with `claude@`. `--account` picks one by key; with none, a single account is used and several are `not-evaluable` with the candidates listed. Freshness comes from OpenUsage itself: `stale: true` or an entry in `errors` that names the provider → not evaluable. The gate does not apply its own age threshold, because OpenUsage already owns the cache policy. Using `claude-swap status` or the machine role from dotfiles to choose a default is deferred until explicit keys become a burden.
+A Claude account is any provider key equal to `claude` or starting with `claude@`. A matching key that appears only as a `providerId` in `errors` is also an account, evaluated as having no data and carrying its error, so a failed refresh is reported instead of hidden. `--account` picks one by key; with none, a single account is used and several are `not-evaluable` with the candidates listed. Freshness comes from OpenUsage itself: `stale: true` or an entry in `errors` that names the provider → not evaluable. The gate does not apply its own age threshold, because OpenUsage already owns the cache policy. Using `claude-swap status` or the machine role from dotfiles to choose a default is deferred until explicit keys become a burden.
 
 ### D6 — Decision order
 

@@ -25,7 +25,7 @@ The gate SHALL obtain quota by running the `openusage` CLI for the Claude provid
 
 ### Requirement: Unambiguous account selection
 
-The gate SHALL consider every provider whose key is `claude` or starts with `claude@` as a Claude account. With `--account <key>` it SHALL use exactly that account. Without it, it SHALL use the only Claude account when there is exactly one. It SHALL NOT aggregate accounts or switch the active account.
+The gate SHALL consider every provider whose key is `claude` or starts with `claude@` as a Claude account, and SHALL also count, under the same rule, every key that appears only as a `providerId` in OpenUsage's `errors`; such an account is evaluated as having no data and carries its error, so its outcome is `not-evaluable`. With `--account <key>` it SHALL use exactly that account. Without it, it SHALL use the only Claude account when there is exactly one. It SHALL NOT aggregate accounts or switch the active account.
 
 #### Scenario: Several accounts, none selected
 
