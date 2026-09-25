@@ -18,7 +18,7 @@
         {
             "name": "autonomous",
             "source": "./plugins/autonomous",
-            "version": "0.0.0",
+            "version": "1.0.0",
             "description": "Autonomous loop entry point — runs deterministic gate steps, starting with a Claude quota gate, before any work is delegated"
         }
     ]
