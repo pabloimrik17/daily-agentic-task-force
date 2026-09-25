@@ -64,7 +64,7 @@ computes it. Other resources, such as `fable`, are listed but not evaluated.
 
 The decision, in order of precedence:
 
-1. **wait** when either window, with fresh and complete data, has
+1. **wait** when either window, with fresh, complete and valid data, has
    `used ≥ limit`;
 2. **not-evaluable** when the account is stale, OpenUsage reports an error for
    it, or a window is missing, incomplete or invalid;
