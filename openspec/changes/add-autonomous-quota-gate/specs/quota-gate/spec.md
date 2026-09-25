@@ -83,7 +83,7 @@ The gate outcome SHALL be:
 2. otherwise `not-evaluable` when the account is stale, OpenUsage reports an error for it, or a required window is missing or invalid;
 3. otherwise `advance`.
 
-Projected usage SHALL be reported but SHALL NOT affect the outcome. Missing or stale data SHALL never be treated as zero usage or available capacity, and valid values SHALL still be reported alongside a `not-evaluable` outcome.
+Projected usage SHALL be reported but SHALL NOT affect the outcome. Missing or stale data SHALL never be treated as zero usage or available capacity, and valid values SHALL still be reported alongside a `not-evaluable` outcome. A window is invalid when its `used` is negative or its `limit` or `windowSeconds` is not positive.
 
 #### Scenario: Exhausted window
 
@@ -109,3 +109,8 @@ Projected usage SHALL be reported but SHALL NOT affect the outcome. Missing or s
 
 - **WHEN** OpenUsage marks the selected account as stale
 - **THEN** the outcome is `not-evaluable`, the reason says the data is stale, and the last known values are shown flagged as stale
+
+#### Scenario: Invalid window
+
+- **WHEN** the session window reports a limit of 0, a negative used amount, or a window duration of 0
+- **THEN** the outcome is `not-evaluable`, never `wait` or `advance`, and the reason names the session window and the invalid value

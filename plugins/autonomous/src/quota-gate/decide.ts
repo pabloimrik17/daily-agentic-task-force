@@ -13,7 +13,7 @@ export interface WindowReport {
     unit: string | null;
     resetsAt: string | null;
     windowSeconds: number | null;
-    // Why the window cannot be evaluated; null when its data is complete.
+    // Why the window cannot be evaluated; null when its data is complete and valid.
     problem: string | null;
     exhausted: boolean;
     projection: Projection | null;
@@ -88,11 +88,23 @@ function evaluateWindow(
         const absent = REQUIRED_VALUES.filter((k) => resource[k] === undefined);
         return { ...report, problem: `incomplete (no ${absent.join(", ")})` };
     }
+    const invalid = invalidValues(used, limit, windowSeconds);
+    if (invalid.length > 0) {
+        return { ...report, problem: `invalid (${invalid.join(", ")})` };
+    }
     return {
         ...report,
         exhausted: used >= limit,
         projection: project({ used, limit, resetsAt: new Date(resetsAt), windowSeconds, now }),
     };
+}
+
+function invalidValues(used: number, limit: number, windowSeconds: number): string[] {
+    return [
+        ...(used < 0 ? [`used = ${used}`] : []),
+        ...(limit <= 0 ? [`limit = ${limit}`] : []),
+        ...(windowSeconds <= 0 ? [`windowSeconds = ${windowSeconds}`] : []),
+    ];
 }
 
 const REQUIRED_VALUES = ["used", "limit", "resetsAt", "windowSeconds"] as const;

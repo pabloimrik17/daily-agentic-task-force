@@ -67,7 +67,7 @@ The decision, in order of precedence:
 1. **wait** when either window, with fresh and complete data, has
    `used ≥ limit`;
 2. **not-evaluable** when the account is stale, OpenUsage reports an error for
-   it, or a window is missing or incomplete;
+   it, or a window is missing, incomplete or invalid;
 3. **advance** otherwise.
 
 Projection is reported but never blocks. Missing or stale data is never read as

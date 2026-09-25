@@ -7,7 +7,7 @@ async function gate(output: unknown, account?: string) {
     return quotaGateStep.run(context(fakeExec(output), { account }));
 }
 
-describe("quota gate decision", () => {
+describe("quota gate decision: advance", () => {
     it("advances with capacity in both windows", async () => {
         const result = await gate(
             limits({ claude: provider({ session: session(20), weekly: weekly(30) }) }),
@@ -19,6 +19,30 @@ describe("quota gate decision", () => {
         expect(w?.projection).toMatchObject({ available: true });
     });
 
+    it("advances when only the projection exceeds capacity", async () => {
+        // 52% after 2h of 5h projects to 130%
+        const result = await gate(
+            limits({ claude: provider({ session: session(52), weekly: weekly(30) }) }),
+        );
+        expect(result.outcome).toBe("advance");
+        const projection = result.data.windows[0]?.projection;
+        expect(projection?.available && projection.projectedUsage).toBeCloseTo(130);
+    });
+
+    it("lists other resources as not evaluated without affecting the outcome", async () => {
+        const result = await gate(
+            limits({
+                claude: provider({ session: session(20), weekly: weekly(30), fable: weekly(100) }),
+            }),
+        );
+        expect(result.outcome).toBe("advance");
+        expect(result.data.otherResources).toEqual([
+            { name: "fable", used: 100, limit: 100, unit: "percent", evaluated: false },
+        ]);
+    });
+});
+
+describe("quota gate decision: wait", () => {
     it("waits on an exhausted window and names its reset", async () => {
         const exhausted = weekly(100);
         const result = await gate(
@@ -39,16 +63,17 @@ describe("quota gate decision", () => {
         expect(result.outcome).toBe("wait");
     });
 
-    it("advances when only the projection exceeds capacity", async () => {
-        // 52% after 2h of 5h projects to 130%
-        const result = await gate(
-            limits({ claude: provider({ session: session(52), weekly: weekly(30) }) }),
-        );
-        expect(result.outcome).toBe("advance");
-        const projection = result.data.windows[0]?.projection;
-        expect(projection?.available && projection.projectedUsage).toBeCloseTo(130);
+    it("lets an exhausted window beat a missing one, still reporting both", async () => {
+        const result = await gate(limits({ claude: provider({ session: session(100) }) }));
+        expect(result.outcome).toBe("wait");
+        expect(result.data.windows.map((w) => [w.name, w.problem])).toEqual([
+            ["session", null],
+            ["weekly", "missing"],
+        ]);
     });
+});
 
+describe("quota gate decision: not evaluable from the account data", () => {
     it("is not evaluable on stale data, still reporting the last known values", async () => {
         const result = await gate(
             limits({
@@ -71,41 +96,6 @@ describe("quota gate decision", () => {
         expect(result.reasons).toEqual(["OpenUsage reported an error for claude: rate limited"]);
     });
 
-    it("is not evaluable when a required window is missing", async () => {
-        const result = await gate(limits({ claude: provider({ session: session(20) }) }));
-        expect(result.outcome).toBe("not-evaluable");
-        expect(result.reasons).toEqual(["weekly window missing"]);
-    });
-
-    it("is not evaluable when a window lacks its reset time", async () => {
-        const { resetsAt: _r, ...noReset } = weekly(30);
-        const result = await gate(
-            limits({ claude: provider({ session: session(20), weekly: noReset }) }),
-        );
-        expect(result.reasons).toEqual(["weekly window incomplete (no resetsAt)"]);
-    });
-
-    it("lets an exhausted window beat a missing one, still reporting both", async () => {
-        const result = await gate(limits({ claude: provider({ session: session(100) }) }));
-        expect(result.outcome).toBe("wait");
-        expect(result.data.windows.map((w) => [w.name, w.problem])).toEqual([
-            ["session", null],
-            ["weekly", "missing"],
-        ]);
-    });
-
-    it("lists other resources as not evaluated without affecting the outcome", async () => {
-        const result = await gate(
-            limits({
-                claude: provider({ session: session(20), weekly: weekly(30), fable: weekly(100) }),
-            }),
-        );
-        expect(result.outcome).toBe("advance");
-        expect(result.data.otherResources).toEqual([
-            { name: "fable", used: 100, limit: 100, unit: "percent", evaluated: false },
-        ]);
-    });
-
     it("is not evaluable with several accounts and none selected", async () => {
         const result = await gate(
             limits({
@@ -126,5 +116,32 @@ describe("quota gate decision", () => {
         );
         expect(result.outcome).toBe("not-evaluable");
         expect(result.reasons).toEqual(["openusage CLI not found on PATH"]);
+    });
+});
+
+describe("quota gate decision: not evaluable from a window", () => {
+    it("is not evaluable when a required window is missing", async () => {
+        const result = await gate(limits({ claude: provider({ session: session(20) }) }));
+        expect(result.outcome).toBe("not-evaluable");
+        expect(result.reasons).toEqual(["weekly window missing"]);
+    });
+
+    it("is not evaluable when a window lacks its reset time", async () => {
+        const { resetsAt: _r, ...noReset } = weekly(30);
+        const result = await gate(
+            limits({ claude: provider({ session: session(20), weekly: noReset }) }),
+        );
+        expect(result.reasons).toEqual(["weekly window incomplete (no resetsAt)"]);
+    });
+
+    it.each([
+        ["limit = 0", resource(0, 7_200, 18_000, 0)],
+        ["used = -5", session(-5)],
+        ["windowSeconds = 0", { ...session(20), windowSeconds: 0 }],
+    ])("is not evaluable when a window is invalid (%s)", async (invalid, s) => {
+        const result = await gate(limits({ claude: provider({ session: s, weekly: weekly(30) }) }));
+        expect(result.outcome).toBe("not-evaluable");
+        expect(result.reasons).toEqual([`session window invalid (${invalid})`]);
+        expect(result.data.windows.map((w) => w.used)).toEqual([s.used, 30]);
     });
 });
