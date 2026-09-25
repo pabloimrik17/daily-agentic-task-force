@@ -13,7 +13,7 @@ export interface WindowReport {
     unit: string | null;
     resetsAt: string | null;
     windowSeconds: number | null;
-    // Why the window cannot be evaluated; null when its data is complete and valid.
+    // Why the window cannot be evaluated; null when its data is complete, valid and not outdated.
     problem: string | null;
     exhausted: boolean;
     projection: Projection | null;
