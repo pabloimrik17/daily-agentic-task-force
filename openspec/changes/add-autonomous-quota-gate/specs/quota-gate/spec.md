@@ -80,10 +80,10 @@ For each evaluated window, the gate SHALL compute projected usage as OpenUsage d
 The gate outcome SHALL be:
 
 1. `wait` when any evaluated window with valid, fresh data has `used ≥ limit`, where data is fresh when the account is not stale and OpenUsage reports no error for it;
-2. otherwise `not-evaluable` when the account is stale, OpenUsage reports an error for it, or a required window is missing or invalid;
+2. otherwise `not-evaluable` when the account is stale, OpenUsage reports an error for it, or a required window is missing, incomplete or invalid;
 3. otherwise `advance`.
 
-Projected usage SHALL be reported but SHALL NOT affect the outcome. Missing or stale data SHALL never be treated as zero usage or available capacity, and valid values SHALL still be reported alongside a `not-evaluable` outcome. A window is invalid when its `used` is negative or its `limit` or `windowSeconds` is not positive.
+Projected usage SHALL be reported but SHALL NOT affect the outcome. Missing or stale data SHALL never be treated as zero usage or available capacity, and valid values SHALL still be reported alongside a `not-evaluable` outcome. A window is invalid when its `used` is negative or its `limit` or `windowSeconds` is not positive. A window is incomplete when its resource is present but lacks `used`, `limit`, `resetsAt` or `windowSeconds`.
 
 #### Scenario: Exhausted window
 
@@ -114,6 +114,11 @@ Projected usage SHALL be reported but SHALL NOT affect the outcome. Missing or s
 
 - **WHEN** OpenUsage marks the selected account as stale
 - **THEN** the outcome is `not-evaluable`, the reason says the data is stale, and the last known values are shown flagged as stale
+
+#### Scenario: Incomplete window
+
+- **WHEN** the weekly window is present but has no `resetsAt`
+- **THEN** the outcome is `not-evaluable` and the reason names the weekly window and the missing field
 
 #### Scenario: Invalid window
 
