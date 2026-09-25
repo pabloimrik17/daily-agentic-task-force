@@ -6,7 +6,7 @@ Decides whether the autonomous loop may spend Claude quota now, from OpenUsage d
 
 ### Requirement: Read quota from OpenUsage
 
-The gate SHALL obtain quota by running the `openusage` CLI for the Claude provider, using its shared cache unless `--force` is given, and SHALL validate the output against the `openusage.limits.v1` contract. Validation SHALL cover the whole document, not only the evaluated account and windows. A missing CLI, a non-zero exit, unparseable output or a schema mismatch SHALL produce `not-evaluable` with the reason; a contract violation anywhere in the output, including in an account or resource the gate does not evaluate, SHALL produce `not-evaluable` with a reason that names the offending path.
+The gate SHALL obtain quota by running the `openusage` CLI for the Claude provider, using its shared cache unless `--force` is given, and SHALL validate the output against the `openusage.limits.v1` contract. Validation SHALL cover the whole document, not only the evaluated account and windows. A missing CLI, a non-zero exit, a timeout (120 s), unparseable output or a schema mismatch SHALL produce `not-evaluable` with the reason; a contract violation anywhere in the output, including in an account or resource the gate does not evaluate, SHALL produce `not-evaluable` with a reason that names the offending path.
 
 #### Scenario: CLI unavailable
 

@@ -25,7 +25,8 @@ detect a change.
 - The [`openusage`](https://github.com/robinebers/openusage) CLI on `PATH`,
   verified against 0.7.12. Its `openusage.limits.v1` output is validated
   strictly; a change in that contract makes the gate `not-evaluable`, never a
-  silent pass.
+  silent pass. A call that takes longer than 120 s is treated as a failure
+  (`not-evaluable`).
 
 ## Usage
 
