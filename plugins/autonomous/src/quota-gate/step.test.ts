@@ -155,3 +155,19 @@ describe("quota gate decision: not evaluable from a window", () => {
         expect(result.data.windows.map((w) => w.used)).toEqual([s.used, 30]);
     });
 });
+
+describe("quota gate decision: not evaluable from malformed output", () => {
+    it("is not evaluable when an account that is not selected is malformed", async () => {
+        const result = await gate(
+            limits({
+                claude: provider({ session: session(20), weekly: weekly(30) }),
+                "claude@work": provider({}, { resources: "none" }),
+            }),
+            "claude",
+        );
+        expect(result.outcome).toBe("not-evaluable");
+        expect(result.reasons).toEqual([
+            "openusage output does not match openusage.limits.v1: $.providers.claude@work.resources must be an object",
+        ]);
+    });
+});
