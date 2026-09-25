@@ -23,9 +23,10 @@ is `datf-lab` and not `experiments`, which `monolab` already publishes.
 
 ## Plugins
 
-| Plugin     | Version | Purpose                                               |
-| ---------- | ------- | ----------------------------------------------------- |
-| `datf-lab` | 0.1.0   | Staging area for skills and commands under validation |
+| Plugin       | Version | Purpose                                                                     |
+| ------------ | ------- | --------------------------------------------------------------------------- |
+| `autonomous` | 0.0.0   | Autonomous loop entry point — gate steps, starting with a Claude quota gate |
+| `datf-lab`   | 0.2.0   | Staging area for skills and commands under validation                       |
 
 ## Plugin lifecycle
 
