@@ -14,6 +14,12 @@
             "source": "./plugins/datf-lab",
             "version": "0.2.0",
             "description": "Staging area for skills and commands under validation — contents are provisional and may be promoted or removed"
+        },
+        {
+            "name": "autonomous",
+            "source": "./plugins/autonomous",
+            "version": "0.0.0",
+            "description": "Autonomous loop entry point — runs deterministic gate steps, starting with a Claude quota gate, before any work is delegated"
         }
     ]
 }

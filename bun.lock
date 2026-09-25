@@ -25,6 +25,10 @@
         "vitest": "4.1.10",
       },
     },
+    "plugins/autonomous": {
+      "name": "@daily-agentic-task-force/plugin-autonomous",
+      "version": "0.0.0",
+    },
     "plugins/datf-lab": {
       "name": "@daily-agentic-task-force/plugin-datf-lab",
       "version": "0.2.0",
@@ -72,6 +76,8 @@
     "@conventional-changelog/git-client": ["@conventional-changelog/git-client@3.1.2", "", { "dependencies": { "@simple-libs/child-process-utils": "^2.0.0", "@simple-libs/stream-utils": "^2.0.0", "semver": "^7.5.2" }, "peerDependencies": { "conventional-commits-filter": "^6.0.1", "conventional-commits-parser": "^7.1.2" }, "optionalPeers": ["conventional-commits-filter", "conventional-commits-parser"] }, "sha512-jZqwnJwf7nboIlAcw/mkOjVa6DexCcUOgT2oOQgkoi3z9vR8tGFkcMy2BFcYwjhL9sYcDDXkRQDayiDieCoW7A=="],
 
     "@conventional-changelog/template": ["@conventional-changelog/template@1.4.0", "", {}, "sha512-aalGyl7dbB5PArRebDIX43ZvBlXrYm9uWzGJ26t+4SzJVPsOuvfILGGbw5X4yX7i50YEmJ8zvbiWnqH/AAnZqg=="],
+
+    "@daily-agentic-task-force/plugin-autonomous": ["@daily-agentic-task-force/plugin-autonomous@workspace:plugins/autonomous"],
 
     "@daily-agentic-task-force/plugin-datf-lab": ["@daily-agentic-task-force/plugin-datf-lab@workspace:plugins/datf-lab"],
 

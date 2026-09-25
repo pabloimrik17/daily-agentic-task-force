@@ -1,0 +1,114 @@
+> **Provisional.** This is the first iteration of the autonomous loop (DOT-82). The step contract, the run report and the runner shape below are a starting point, expected to change substantially as later steps are added. Prefer changing them over working around them.
+
+## Context
+
+See proposal.md for motivation. Constraints that shape the approach:
+
+- **Plugins install without dependencies.** Claude Code copies the plugin directory; no `bun install` runs on the consumer machine. Anything imported at runtime must ship in the plugin.
+- **OpenUsage 0.7.12** (`openusage [provider] [--force]`) prints `openusage.limits.v1` JSON: `providers` keyed by `claude` / `claude@<id>`, each with `displayName`, `plan`, `fetchedAt`, `expiresAt`, `stale` and `resources` (`session`, `weekly`, sometimes `fable`), each resource holding `kind`, `used`, `limit`, `resetsAt`, `windowSeconds`, `unit`; plus a top-level `errors` array. The machine used for refinement has two Claude accounts (personal and work).
+- **Projection reference**: `Pace.evaluate` in OpenUsage, identical in v0.7.11 and v0.7.12 (<https://github.com/robinebers/openusage/blob/v0.7.12/Sources/OpenUsage/Support/Pace.swift>). Only `projectedUsage` and its nil conditions are reproduced; the ahead/on-track/behind colouring is UI-only.
+- Repository rules: new plugin code is `.ts`; Vitest discovers each `plugins/*` workspace; knip already declares `plugins/*` entries, but needs `openusage` added to `ignoreBinaries`, because the plugin invokes that CLI at runtime without it being a package dependency.
+
+## Goals / Non-Goals
+
+**Goals:**
+
+- A runner whose shape can take more steps without rewriting the entry point.
+- Every part of the quota gate in deterministic, tested code.
+- Output that a person can verify by hand and a script or `/loop` can branch on.
+
+**Non-Goals:**
+
+- A generic plugin/adapter framework for steps or quota providers.
+- Defining `handoff`, persistent run state, or concurrency between runs.
+
+## Decisions
+
+### D1 — Tier every part of every step: code → Jev → LLM
+
+Each part of a step is placed in the earliest tier that can do it reliably:
+
+1. **Code**: anything fully deterministic.
+2. **Jev** (TypeSafe AI, `@typesafe-ai/sdk`): narrow, typed judgements that are hard to code but fit a schema-constrained answer (a choice, a classification, an evaluation). Control flow stays in code.
+3. **LLM**: open-ended reasoning or text.
+
+This buys determinism, reliability and lower token cost. For this iteration everything is tier 1:
+
+| Step         | Part                                    | Tier |
+| ------------ | --------------------------------------- | ---- |
+| `quota-gate` | read and validate OpenUsage output      | code |
+| `quota-gate` | account selection                       | code |
+| `quota-gate` | projection                              | code |
+| `quota-gate` | decision                                | code |
+| run          | report rendering (JSON and text)        | code |
+| command      | relay output; act on `handoff` (future) | LLM  |
+
+Likely first Jev candidates, in later iterations: work/personal classification when labels are missing or conflicting, and task readiness. The Jev SDK is not added until a step uses it.
+
+### D2 — Step contract (provisional)
+
+A step is a function from a shared context (parsed arguments, `now`, injected I/O) to a `StepResult`:
+
+```ts
+type StepOutcome = "advance" | "wait" | "not-evaluable";
+interface StepResult<D> {
+    step: string;
+    tier: "code" | "jev" | "llm";
+    outcome: StepOutcome;
+    reasons: string[];
+    data: D;
+}
+```
+
+The runner holds an ordered array of steps and stops at the first non-`advance`. I/O (running `openusage`, the clock) is injected so every step is testable with synthetic input. **Alternative rejected**: a registry or plugin mechanism for steps — speculative with one step.
+
+### D3 — Run report and exit codes
+
+`RunReport { schema: "autonomous.run.v1"; startedAt; steps; outcome; handoff? }`. The quota JSON is the `data` of the `quota-gate` step, not a separate schema. Each step exposes a text renderer, and the text report concatenates them. Exit codes: 0 advance, 2 wait, 3 not-evaluable, 1 usage or runner failure — so a shell or `/loop` can branch without parsing. `handoff` is typed as `unknown` and never emitted.
+
+### D4 — Zero runtime dependencies; hand-written validation
+
+The command runs `bun "${CLAUDE_PLUGIN_ROOT}/src/run.ts" $ARGUMENTS`. Validation of the OpenUsage JSON is a small parser returning a discriminated result: a missing required field or a mistyped field is an error with a path, never a default. The required fields are `schema`, `generatedAt`, `providers` and `errors` at the root, `displayName`, `fetchedAt`, `expiresAt`, `stale` and `resources` on a provider, `kind` and `unit` on a resource, and `providerId` and `message` on an `errors` entry; a provider's `plan` and a resource's `used`, `limit`, `resetsAt` and `windowSeconds` are optional, so a missing one is not a contract violation (for an evaluated window it makes the window incomplete, see the spec's Gate decision), though a present one must still have the right type. Timestamps (`generatedAt`, `fetchedAt`, `expiresAt`, `resetsAt`) must be RFC 3339 with an explicit offset (`Z` or `±hh:mm`); an ISO 8601 form without one, such as `2026-09-23T12:00:00`, is rejected. Validation is document-wide and fail-closed: a malformed account or resource the gate does not evaluate still makes the run `not-evaluable`, which is accepted because a gate that silently passes is worse than one that stops. **Alternatives rejected**: Zod or Valibot, which would need either a committed bundle or a dependency install on the consumer machine that plugins do not get; relying on Bun auto-install, which is implicit and network-dependent. Revisit with a bundling step once the plugin genuinely needs a library (for example the Jev SDK).
+
+### D5 — Account selection and freshness
+
+A Claude account is any provider key equal to `claude` or starting with `claude@`. A matching key that appears only as a `providerId` in `errors` is also an account, evaluated as having no data and carrying its error, so a failed refresh is reported instead of hidden. `--account` picks one by key; with none, a single account is used and several are `not-evaluable` with the candidates listed. Freshness comes from OpenUsage itself: `stale: true` or an entry in `errors` that names the provider → not evaluable. The gate does not apply its own age threshold, because OpenUsage already owns the cache policy. Using `claude-swap status` or the machine role from dotfiles to choose a default is deferred until explicit keys become a burden.
+
+### D6 — Decision order
+
+The precedence is: exhausted → `wait`; then missing, incomplete, invalid, outdated, stale or error → `not-evaluable`; then `advance`. Exhaustion needs complete, valid, fresh data for that window. An exhausted window whose `resetsAt` is at or before `now` is `not-evaluable` instead, because a past reset makes that exhaustion outdated and waiting would wait for a reset that has already happened; this is a logical check on the data, not an age threshold, so D5 holds. Projection is informational in this iteration. Tightening the gate on projection later is a local change to the decision function.
+
+### D7 — Plugin layout
+
+```text
+plugins/autonomous/
+  .claude-plugin/plugin.json
+  package.json                     # @daily-agentic-task-force/plugin-autonomous, private, 0.0.0
+  README.md                        # purpose, requirements, tiering principle
+  CHANGELOG.md                     # owned by release-please
+  commands/run.md                  # thin: run script, relay output
+  src/run.ts                       # entry: wires args, runner, report
+  src/args.ts                      # --account, --force, --json parsing and usage text
+  src/runner.ts                    # step contract and runner
+  src/report.ts                    # run report, text and JSON rendering, exit codes
+  src/quota-gate/step.ts           # the quota-gate step: read, select, decide, render
+  src/quota-gate/openusage.ts      # run openusage, parse its stdout as JSON
+  src/quota-gate/parse.ts          # strict OpenUsage document validation
+  src/quota-gate/select.ts         # Claude account selection
+  src/quota-gate/decide.ts         # window evaluation and step outcome
+  src/quota-gate/project.ts        # informational usage projection
+  src/quota-gate/render.ts         # quota-gate text section
+  src/quota-gate/test-fixtures.ts  # shared test builders
+  src/**/*.test.ts
+```
+
+## Risks / Trade-offs
+
+- [OpenUsage changes its JSON] → strict parsing turns this into an explicit `not-evaluable`, never a silent pass; the schema id is checked.
+- [`bun` or `openusage` missing on a machine] → reported as `not-evaluable` or a clear runner error; both are documented as requirements in the README.
+- [Two accounts make `--account` mandatory in practice] → accepted for this iteration; `claude-swap` is the planned relief.
+- [Provisional contracts churn] → accepted deliberately; the JSON is versioned so consumers can detect a change.
+
+## Migration Plan
+
+Additive. A new plugin plus marketplace and release-please entries at `0.0.0`; release-please publishes `0.1.0` from the first `feat(autonomous)` commit. Rollback is removing the plugin and its entries.

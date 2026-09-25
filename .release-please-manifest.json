@@ -1,3 +1,4 @@
 {
-    "plugins/datf-lab": "0.2.0"
+    "plugins/datf-lab": "0.2.0",
+    "plugins/autonomous": "0.0.0"
 }
