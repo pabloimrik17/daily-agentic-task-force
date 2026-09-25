@@ -1,9 +1,65 @@
+import type { ExecFileException } from "node:child_process";
+
 import { describe, expect, it } from "vitest";
 
-import { readOpenUsage } from "./openusage.ts";
+import { readOpenUsage, toExecResult } from "./openusage.ts";
 import { fakeExec, limits, provider, session, weekly } from "./test-fixtures.ts";
 
 const valid = limits({ claude: provider({ session: session(20), weekly: weekly(30) }) });
+
+// Shaped like the errors execFile passes its callback (probed under Bun and Node).
+const execError = (message: string, fields: Partial<ExecFileException>): ExecFileException =>
+    Object.assign(new Error(message), { cmd: "openusage claude", ...fields });
+
+describe("toExecResult", () => {
+    it("passes stdout through on success", () => {
+        expect(toExecResult(null, "{}", "")).toEqual({ ok: true, stdout: "{}" });
+    });
+
+    it("reports a timeout as a timeout", () => {
+        const error = execError("Command failed: openusage claude", {
+            killed: true,
+            signal: "SIGTERM",
+        });
+        expect(toExecResult(error, "", "")).toEqual({
+            ok: false,
+            error: "openusage timed out after 120 s",
+        });
+    });
+
+    it("reports a missing CLI", () => {
+        const error = execError('Executable not found in $PATH: "openusage"', { code: "ENOENT" });
+        expect(toExecResult(error, "", "")).toEqual({
+            ok: false,
+            error: "openusage CLI not found on PATH",
+        });
+    });
+
+    it("reports a maxBuffer overflow as itself, not as a timeout", () => {
+        const error = execError("stdout maxBuffer length exceeded", {
+            code: "ERR_CHILD_PROCESS_STDIO_MAXBUFFER",
+        });
+        expect(toExecResult(error, "", "")).toEqual({
+            ok: false,
+            error: "openusage failed: stdout maxBuffer length exceeded",
+        });
+    });
+
+    it("reports a non-zero exit with stderr, or the message when stderr is empty", () => {
+        const error = execError("Command failed: openusage claude\nboom\n", {
+            code: 3,
+            killed: false,
+        });
+        expect(toExecResult(error, "", "boom\n")).toEqual({
+            ok: false,
+            error: "openusage failed: boom",
+        });
+        expect(toExecResult(error, "", "")).toEqual({
+            ok: false,
+            error: "openusage failed: Command failed: openusage claude\nboom\n",
+        });
+    });
+});
 
 describe("readOpenUsage", () => {
     it("parses valid output", async () => {
