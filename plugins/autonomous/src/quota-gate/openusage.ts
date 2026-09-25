@@ -8,7 +8,6 @@ export type OpenUsageExec = (args: string[]) => Promise<ExecResult>;
 
 export type ReadResult = { ok: true; limits: OpenUsageLimits } | { ok: false; error: string };
 
-// `--force` refreshes providers; the default reads OpenUsage's shared cache.
 const TIMEOUT_MS = 120_000;
 
 export function toExecResult(
@@ -39,6 +38,7 @@ export const execOpenUsage: OpenUsageExec = (args) =>
     });
 
 export async function readOpenUsage(exec: OpenUsageExec, force: boolean): Promise<ReadResult> {
+    // `--force` refreshes providers; the default reads OpenUsage's shared cache.
     const result = await exec(force ? ["claude", "--force"] : ["claude"]);
     if (!result.ok) {
         return result;
