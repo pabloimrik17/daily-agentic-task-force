@@ -6,7 +6,7 @@ Decides whether the autonomous loop may spend Claude quota now, from OpenUsage d
 
 ### Requirement: Read quota from OpenUsage
 
-The gate SHALL obtain quota by running the `openusage` CLI for the Claude provider, using its shared cache unless `--force` is given, and SHALL validate the output against the `openusage.limits.v1` contract. A missing CLI, a non-zero exit, unparseable output or a schema mismatch SHALL produce `not-evaluable` with the reason.
+The gate SHALL obtain quota by running the `openusage` CLI for the Claude provider, using its shared cache unless `--force` is given, and SHALL validate the output against the `openusage.limits.v1` contract. Validation SHALL cover the whole document, not only the evaluated account and windows. A missing CLI, a non-zero exit, unparseable output or a schema mismatch SHALL produce `not-evaluable` with the reason; a contract violation anywhere in the output, including in an account or resource the gate does not evaluate, SHALL produce `not-evaluable` with a reason that names the offending path.
 
 #### Scenario: CLI unavailable
 
@@ -17,6 +17,11 @@ The gate SHALL obtain quota by running the `openusage` CLI for the Claude provid
 
 - **WHEN** the run is invoked with `--force`
 - **THEN** OpenUsage is asked to bypass its cache
+
+#### Scenario: Malformed data outside the evaluated windows
+
+- **WHEN** a resource or account the gate does not evaluate violates the `openusage.limits.v1` contract
+- **THEN** the outcome is `not-evaluable` and the reason names the offending path
 
 ### Requirement: Unambiguous account selection
 
@@ -43,7 +48,7 @@ The gate SHALL evaluate the `session` and `weekly` resources of the selected acc
 
 #### Scenario: Extra resource
 
-- **WHEN** the account also reports a `fable` resource
+- **WHEN** the account also reports a well-formed `fable` resource
 - **THEN** it appears in the report as not evaluated and does not affect the outcome
 
 ### Requirement: Projected usage

@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import { parseLimits } from "./parse.ts";
-import { limits, provider, session } from "./test-fixtures.ts";
+import { limits, provider, session, weekly } from "./test-fixtures.ts";
 
 describe("parseLimits", () => {
     it("accepts RFC 3339 timestamps", () => {
@@ -17,4 +17,15 @@ describe("parseLimits", () => {
             });
         },
     );
+
+    it("rejects a malformed resource the gate does not evaluate", () => {
+        const fable = { ...session(5), resetsAt: null };
+        const input = limits({
+            claude: provider({ session: session(10), weekly: weekly(10), fable }),
+        });
+        expect(parseLimits(input)).toEqual({
+            ok: false,
+            error: "openusage output does not match openusage.limits.v1: $.providers.claude.resources.fable.resetsAt must be a string",
+        });
+    });
 });

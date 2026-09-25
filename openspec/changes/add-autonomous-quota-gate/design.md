@@ -68,7 +68,7 @@ The runner holds an ordered array of steps and stops at the first non-`advance`.
 
 ### D4 — Zero runtime dependencies; hand-written validation
 
-The command runs `bun "${CLAUDE_PLUGIN_ROOT}/src/run.ts" $ARGUMENTS`. Validation of the OpenUsage JSON is a small parser returning a discriminated result: a missing or mistyped field is an error with a path, never a default. **Alternatives rejected**: Zod or Valibot, which would need either a committed bundle or a dependency install on the consumer machine that plugins do not get; relying on Bun auto-install, which is implicit and network-dependent. Revisit with a bundling step once the plugin genuinely needs a library (for example the Jev SDK).
+The command runs `bun "${CLAUDE_PLUGIN_ROOT}/src/run.ts" $ARGUMENTS`. Validation of the OpenUsage JSON is a small parser returning a discriminated result: a missing or mistyped field is an error with a path, never a default. Validation is document-wide and fail-closed: a malformed account or resource the gate does not evaluate still makes the run `not-evaluable`, which is accepted because a gate that silently passes is worse than one that stops. **Alternatives rejected**: Zod or Valibot, which would need either a committed bundle or a dependency install on the consumer machine that plugins do not get; relying on Bun auto-install, which is implicit and network-dependent. Revisit with a bundling step once the plugin genuinely needs a library (for example the Jev SDK).
 
 ### D5 — Account selection and freshness
 
