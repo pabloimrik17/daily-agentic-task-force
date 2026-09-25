@@ -49,12 +49,12 @@ bun plugins/autonomous/src/run.ts --account claude --json
 
 ### Exit codes
 
-| Code | Outcome                                                                                                         |
-| ---- | --------------------------------------------------------------------------------------------------------------- |
-| 0    | `advance` — every step advanced                                                                                 |
-| 2    | `wait` — a step says to wait (for example, a window exhausted)                                                  |
-| 3    | `not-evaluable` — no decision possible: account not chosen, or data missing, invalid, outdated, stale or failed |
-| 1    | Invalid arguments or a failure of the runner itself                                                             |
+| Code | Outcome                                                                                                                                       |
+| ---- | --------------------------------------------------------------------------------------------------------------------------------------------- |
+| 0    | `advance` — every step advanced                                                                                                               |
+| 2    | `wait` — a step says to wait (for example, a window exhausted)                                                                                |
+| 3    | `not-evaluable` — no decision possible: account absent, ambiguous or unknown, or data missing, incomplete, invalid, outdated, stale or failed |
+| 1    | Invalid arguments or a failure of the runner itself                                                                                           |
 
 ## The quota gate
 
