@@ -12,7 +12,7 @@ This is the first iteration of a process expected to change a lot. The shapes in
   - reads `openusage claude` (shared cache by default, optional `--force`) and validates the `openusage.limits.v1` JSON before using any value;
   - selects one Claude account unambiguously (`--account <provider-key>`; required when more than one Claude account is present);
   - reports the `session` and `weekly` windows: current usage, reset time and projected usage, reproducing OpenUsage's `Pace.evaluate` including its unavailable-result conditions; lists other resources (for example `fable`) as not evaluated;
-  - decides, in order: **wait** when either window is exhausted according to complete, valid, fresh data; **not evaluable** when the account is stale or errored, or a window is missing, incomplete or invalid; **advance** otherwise. Projection is reported but does not block.
+  - decides, in order: **wait** when either window is exhausted according to complete, valid, fresh data and its reset is still ahead; **not evaluable** when the account is stale or errored, a window is missing, incomplete or invalid, or an exhausted window's reset time has already passed; **advance** otherwise. Projection is reported but does not block.
 - Output a run report as versioned JSON (`--json`) or pre-rendered text (default), with an exit code per outcome. The command markdown only runs the script and relays its output.
 - Document the per-step tiering principle — **code → Jev → LLM** — in the design and the plugin README.
 
