@@ -45,6 +45,17 @@ describe("renderQuotaGate", () => {
         expect(text).toContain("  weekly    ? / ?  [missing]");
     });
 
+    it("marks an outdated window without a projection", async () => {
+        // 8 days into a 7-day window: the reset was a day ago
+        const text = await rendered(
+            limits({ claude: provider({ session: session(20), weekly: weekly(100, 8) }) }),
+        );
+        expect(text).toContain("[quota-gate] not-evaluable (code)");
+        expect(text.split("\n")).toContain(
+            "  weekly    100% / 100%  window 7d  resets 2026-09-22T12:00:00.000Z  [outdated (exhausted, but its reset time 2026-09-22T12:00:00.000Z has passed; refresh with --force)]",
+        );
+    });
+
     it("lists candidates when no account could be selected", async () => {
         const text = await rendered(
             limits({

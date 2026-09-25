@@ -251,4 +251,16 @@ describe("quota gate decision: windows past their reset time", () => {
             projection: { available: false, reason: "window-expired" },
         });
     });
+
+    it("lets an exhausted window beat an outdated one", async () => {
+        const exhausted = session(100);
+        const result = await gate(
+            limits({ claude: provider({ session: exhausted, weekly: weekly(100, 8) }) }),
+        );
+        expect(result.outcome).toBe("wait");
+        expect(result.reasons).toEqual([
+            `session window exhausted: 100/100 percent, resets at ${exhausted.resetsAt}`,
+        ]);
+        expect(result.data.windows[1]?.problem).toMatch(/^outdated \(exhausted, /);
+    });
 });
