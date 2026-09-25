@@ -217,6 +217,24 @@ describe("quota gate decision: not evaluable from malformed output", () => {
     });
 });
 
+describe("quota gate step: --force reaches exec", () => {
+    it("passes --force through to exec when asked to bypass the cache", async () => {
+        const exec = fakeExec(
+            limits({ claude: provider({ session: session(20), weekly: weekly(30) }) }),
+        );
+        await quotaGateStep.run(context(exec, { force: true }));
+        expect(exec.calls).toEqual([["claude", "--force"]]);
+    });
+
+    it("omits --force by default", async () => {
+        const exec = fakeExec(
+            limits({ claude: provider({ session: session(20), weekly: weekly(30) }) }),
+        );
+        await quotaGateStep.run(context(exec));
+        expect(exec.calls).toEqual([["claude"]]);
+    });
+});
+
 describe("quota gate decision: windows past their reset time", () => {
     it("is not evaluable, rather than waiting, when an exhausted window's reset has passed", async () => {
         // 8 days into a 7-day window: the reset was a day ago
