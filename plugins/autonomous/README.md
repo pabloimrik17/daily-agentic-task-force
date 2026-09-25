@@ -61,6 +61,8 @@ For the selected account the gate reads OpenUsage and evaluates the `session`
 and `weekly` windows: used amount, limit, window length, reset time, and the
 usage projected to the end of the window as OpenUsage's `Pace.evaluate`
 computes it. Other resources, such as `fable`, are listed but not evaluated.
+They must still be well-formed, because validation covers the whole OpenUsage
+document, including accounts that are not selected.
 
 The decision, in order of precedence:
 
