@@ -15,6 +15,8 @@ export interface WindowReport {
     windowSeconds: number | null;
     // Why the window cannot be evaluated; null when its data is complete, valid and not outdated.
     problem: string | null;
+    // True only when used >= limit and the reset is still ahead; an exhaustion whose
+    // reset has passed is reported as an `outdated` problem instead.
     exhausted: boolean;
     projection: Projection | null;
 }
