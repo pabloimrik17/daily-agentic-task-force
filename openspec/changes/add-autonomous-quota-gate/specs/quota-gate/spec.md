@@ -53,7 +53,7 @@ The gate SHALL evaluate the `session` and `weekly` resources of the selected acc
 
 ### Requirement: Projected usage
 
-For each evaluated window, the gate SHALL compute projected usage as OpenUsage does: with `elapsed = now − (resetsAt − windowSeconds)`, `projected = used / elapsed × windowSeconds`. It SHALL report no projection, with the reason, when the limit or window duration is not positive, when nothing has been used, when `now` is at or after `resetsAt`, or when `elapsed` is below `max(60 s, 1% of the window)`.
+For each evaluated window, the gate SHALL compute projected usage as OpenUsage does: with `elapsed = now − (resetsAt − windowSeconds)`, `projected = used / elapsed × windowSeconds`. It SHALL report no projection, with the reason, when the limit or window duration is not positive, when nothing has been used, when `now` is at or after `resetsAt`, or when `elapsed` is below `max(60 s, 1% of the window)`. For an evaluated window, a non-positive limit or window duration is reported as an invalid window (see "Gate decision") rather than as a projection reason.
 
 #### Scenario: Session example
 
