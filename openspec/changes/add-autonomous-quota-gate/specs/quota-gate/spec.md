@@ -117,7 +117,7 @@ Projected usage SHALL be reported but SHALL NOT affect the outcome. Missing or s
 
 #### Scenario: Incomplete window
 
-- **WHEN** the weekly window is present but has no `resetsAt`
+- **WHEN** the weekly window is present but has no `resetsAt`, and the session window is complete, valid and below its limit
 - **THEN** the outcome is `not-evaluable` and the reason names the weekly window and the missing field
 
 #### Scenario: Invalid window
