@@ -79,7 +79,7 @@ For each evaluated window, the gate SHALL compute projected usage as OpenUsage d
 
 The gate outcome SHALL be:
 
-1. `wait` when any evaluated window with valid, fresh data has `used ≥ limit`, where data is fresh when the account is not stale and OpenUsage reports no error for it;
+1. `wait` when any evaluated window with complete, valid, fresh data has `used ≥ limit`, where data is fresh when the account is not stale and OpenUsage reports no error for it;
 2. otherwise `not-evaluable` when the account is stale, OpenUsage reports an error for it, or a required window is missing, incomplete or invalid;
 3. otherwise `advance`.
 

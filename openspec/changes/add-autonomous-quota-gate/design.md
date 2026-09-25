@@ -76,7 +76,7 @@ A Claude account is any provider key equal to `claude` or starting with `claude@
 
 ### D6 — Decision order
 
-The precedence is: exhausted → `wait`; then missing, incomplete, invalid, stale or error → `not-evaluable`; then `advance`. Exhaustion needs valid, fresh data for that window. Projection is informational in this iteration. Tightening the gate on projection later is a local change to the decision function.
+The precedence is: exhausted → `wait`; then missing, incomplete, invalid, stale or error → `not-evaluable`; then `advance`. Exhaustion needs complete, valid, fresh data for that window. Projection is informational in this iteration. Tightening the gate on projection later is a local change to the decision function.
 
 ### D7 — Plugin layout
 
