@@ -7,7 +7,7 @@ See proposal.md for motivation. Constraints that shape the approach:
 - **Plugins install without dependencies.** Claude Code copies the plugin directory; no `bun install` runs on the consumer machine. Anything imported at runtime must ship in the plugin.
 - **OpenUsage 0.7.12** (`openusage [provider] [--force]`) prints `openusage.limits.v1` JSON: `providers` keyed by `claude` / `claude@<id>`, each with `displayName`, `plan`, `fetchedAt`, `expiresAt`, `stale` and `resources` (`session`, `weekly`, sometimes `fable`), each resource holding `used`, `limit`, `resetsAt`, `windowSeconds`, `unit`; plus a top-level `errors` array. The machine used for refinement has two Claude accounts (personal and work).
 - **Projection reference**: `Pace.evaluate` in OpenUsage, identical in v0.7.11 and v0.7.12 (<https://github.com/robinebers/openusage/blob/v0.7.12/Sources/OpenUsage/Support/Pace.swift>). Only `projectedUsage` and its nil conditions are reproduced; the ahead/on-track/behind colouring is UI-only.
-- Repository rules: new plugin code is `.ts`; Vitest discovers each `plugins/*` workspace; knip already declares `plugins/*` entries.
+- Repository rules: new plugin code is `.ts`; Vitest discovers each `plugins/*` workspace; knip already declares `plugins/*` entries, but needs `openusage` added to `ignoreBinaries`, because the plugin invokes that CLI at runtime without it being a package dependency.
 
 ## Goals / Non-Goals
 

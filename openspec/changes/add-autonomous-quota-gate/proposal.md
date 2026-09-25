@@ -32,7 +32,7 @@ None. Adding a plugin follows the existing marketplace contract without changing
 ## Impact
 
 - **New**: `plugins/autonomous/` (manifest, package, command, TypeScript sources and Vitest tests).
-- **Modified**: `.claude-plugin/marketplace.json`, `release-please-config.json`, `.release-please-manifest.json`, `bun.lock`.
+- **Modified**: `.claude-plugin/marketplace.json`, `release-please-config.json`, `.release-please-manifest.json`, `bun.lock`, `knip.config.ts` (ignores the `openusage` binary, which the plugin invokes at runtime but is not a package dependency).
 - **No new runtime dependencies**: plugins are installed without a dependency install step, so the script must run from source with nothing but `bun`. The `openusage` JSON is validated by a small hand-written parser (see design.md).
 - **Runtime requirements on the consumer machine**: `bun` and the `openusage` CLI (verified against 0.7.12).
 - **Tracking**: Linear DOT-91 (child of DOT-82).
