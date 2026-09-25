@@ -1,6 +1,6 @@
 // Hand-written validator for `openusage.limits.v1` (design D4): plugins install
 // without dependencies, so no schema library is available at runtime. A missing
-// or mistyped field is an error with its path, never a default.
+// required field or a mistyped field is an error with its path, never a default.
 
 const SCHEMA = "openusage.limits.v1";
 
