@@ -92,7 +92,7 @@ Projected usage SHALL be reported but SHALL NOT affect the outcome. Missing or s
 
 #### Scenario: Exhausted window
 
-- **WHEN** the weekly window reports 100 used of 100
+- **WHEN** the weekly window reports 100 used of 100, with its reset still ahead
 - **THEN** the outcome is `wait` and the reason names the weekly window and its reset time
 
 #### Scenario: Exhausted beats missing data
@@ -112,7 +112,7 @@ Projected usage SHALL be reported but SHALL NOT affect the outcome. Missing or s
 
 #### Scenario: At capacity
 
-- **WHEN** a window reports exactly `used = limit`
+- **WHEN** a window reports exactly `used = limit`, with its reset still ahead
 - **THEN** the outcome is `wait`
 
 #### Scenario: Stale data
