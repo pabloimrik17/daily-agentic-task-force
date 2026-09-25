@@ -216,3 +216,39 @@ describe("quota gate decision: not evaluable from malformed output", () => {
         ]);
     });
 });
+
+describe("quota gate decision: windows past their reset time", () => {
+    it("is not evaluable, rather than waiting, when an exhausted window's reset has passed", async () => {
+        // 8 days into a 7-day window: the reset was a day ago
+        const outdated = weekly(100, 8);
+        const result = await gate(
+            limits({ claude: provider({ session: session(20), weekly: outdated }) }),
+        );
+        expect(result.outcome).toBe("not-evaluable");
+        expect(result.reasons).toEqual([
+            `weekly window outdated (exhausted, but its reset time ${outdated.resetsAt} has passed; refresh with --force)`,
+        ]);
+        expect(result.data.windows[1]).toMatchObject({ used: 100, limit: 100, exhausted: false });
+    });
+
+    it("is not evaluable when an exhausted window resets exactly now", async () => {
+        const result = await gate(
+            limits({ claude: provider({ session: session(100, 5), weekly: weekly(30) }) }),
+        );
+        expect(result.outcome).toBe("not-evaluable");
+        expect(result.data.windows[0]?.problem).toMatch(
+            /^outdated \(exhausted, but its reset time /,
+        );
+    });
+
+    it("still advances when a window below its limit is past its reset", async () => {
+        const result = await gate(
+            limits({ claude: provider({ session: session(20, 6), weekly: weekly(30) }) }),
+        );
+        expect(result.outcome).toBe("advance");
+        expect(result.data.windows[0]).toMatchObject({
+            problem: null,
+            projection: { available: false, reason: "window-expired" },
+        });
+    });
+});

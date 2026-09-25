@@ -94,8 +94,24 @@ function evaluateWindow(
     }
     return {
         ...report,
-        exhausted: used >= limit,
+        ...exhaustion(used, limit, resetsAt, now),
         projection: project({ used, limit, resetsAt: new Date(resetsAt), windowSeconds, now }),
+    };
+}
+
+// An exhausted window whose reset time has passed is outdated rather than
+// exhausted: waiting for that reset would wait for nothing (design D6).
+function exhaustion(
+    used: number,
+    limit: number,
+    resetsAt: string,
+    now: Date,
+): Pick<WindowReport, "problem" | "exhausted"> {
+    if (used < limit) return { problem: null, exhausted: false };
+    if (now.getTime() < Date.parse(resetsAt)) return { problem: null, exhausted: true };
+    return {
+        problem: `outdated (exhausted, but its reset time ${resetsAt} has passed; refresh with --force)`,
+        exhausted: false,
     };
 }
 
@@ -130,8 +146,8 @@ function windowValues(resource: OpenUsageResource): WindowValues {
 }
 
 // Precedence (design D6): exhausted → wait; missing, incomplete, invalid,
-// stale or error → not-evaluable; otherwise advance. Projection never
-// affects the outcome.
+// outdated, stale or error → not-evaluable; otherwise advance. Projection
+// never affects the outcome.
 function decide(
     account: AccountReport,
     hasData: boolean,

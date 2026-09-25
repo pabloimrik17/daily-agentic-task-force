@@ -68,9 +68,10 @@ document, including accounts that are not selected.
 The decision, in order of precedence:
 
 1. **wait** when either window, with fresh, complete and valid data, has
-   `used ≥ limit`;
+   `used ≥ limit` and a reset time still ahead;
 2. **not-evaluable** when the account is stale, OpenUsage reports an error for
-   it, or a window is missing, incomplete or invalid;
+   it, a window is missing, incomplete or invalid, or an exhausted window's
+   reset time has already passed (refresh with `--force`);
 3. **advance** otherwise.
 
 Projection is reported but never blocks. Missing or stale data is never read as

@@ -84,8 +84,8 @@ For each evaluated window, the gate SHALL compute projected usage as OpenUsage d
 
 The gate outcome SHALL be:
 
-1. `wait` when any evaluated window with complete, valid, fresh data has `used ≥ limit`, where data is fresh when the account is not stale and OpenUsage reports no error for it;
-2. otherwise `not-evaluable` when the account is stale, OpenUsage reports an error for it, or a required window is missing, incomplete or invalid;
+1. `wait` when any evaluated window with complete, valid, fresh data has `used ≥ limit` and its `resetsAt` is still after `now`, where data is fresh when the account is not stale and OpenUsage reports no error for it;
+2. otherwise `not-evaluable` when the account is stale, OpenUsage reports an error for it, a required window is missing, incomplete or invalid, or a window has `used ≥ limit` with its `resetsAt` at or before `now`, because that exhaustion predates a reset that has already happened and the data must be refreshed (for example with `--force`);
 3. otherwise `advance`.
 
 Projected usage SHALL be reported but SHALL NOT affect the outcome. Missing or stale data SHALL never be treated as zero usage or available capacity, and valid values SHALL still be reported alongside a `not-evaluable` outcome of this decision; output that fails validation reports no values (see "Read quota from OpenUsage"). A window is invalid when its `used` is negative or its `limit` or `windowSeconds` is not positive. A window is incomplete when its resource is present but lacks `used`, `limit`, `resetsAt` or `windowSeconds`.
@@ -129,3 +129,8 @@ Projected usage SHALL be reported but SHALL NOT affect the outcome. Missing or s
 
 - **WHEN** the session window reports a limit of 0, a negative used amount, or a window duration of 0, and the weekly window is valid and below its limit
 - **THEN** the outcome is `not-evaluable`, never `wait` or `advance`, and the reason names the session window and the invalid value
+
+#### Scenario: Exhausted window past its reset time
+
+- **WHEN** fresh data reports the weekly window at 100 used of 100 with a `resetsAt` before `now`, and the session window is complete, valid and below its limit
+- **THEN** the outcome is `not-evaluable`, never `wait`, and the reason says the weekly window's reset time has passed and suggests refreshing with `--force`
