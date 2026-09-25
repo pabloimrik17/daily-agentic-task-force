@@ -44,7 +44,7 @@ The gate SHALL consider every provider whose key is `claude` or starts with `cla
 
 #### Scenario: No Claude account
 
-- **WHEN** OpenUsage reports no Claude account
+- **WHEN** OpenUsage reports no Claude account and `--account` is absent
 - **THEN** the outcome is `not-evaluable` and the reason says no Claude account was reported
 
 ### Requirement: Evaluated windows
