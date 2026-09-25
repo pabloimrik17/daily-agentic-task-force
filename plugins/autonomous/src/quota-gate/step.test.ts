@@ -141,6 +141,7 @@ describe("quota gate decision: not evaluable from a window", () => {
         const result = await gate(
             limits({ claude: provider({ session: session(20), weekly: noReset }) }),
         );
+        expect(result.outcome).toBe("not-evaluable");
         expect(result.reasons).toEqual(["weekly window incomplete (no resetsAt)"]);
     });
 
