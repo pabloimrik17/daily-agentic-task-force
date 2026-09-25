@@ -144,6 +144,16 @@ describe("quota gate decision: not evaluable from a window", () => {
         expect(result.reasons).toEqual(["weekly window incomplete (no resetsAt)"]);
     });
 
+    it("is not evaluable, rather than waiting, when an exhausted window is incomplete", async () => {
+        const { resetsAt: _r, ...noReset } = session(100);
+        const result = await gate(
+            limits({ claude: provider({ session: noReset, weekly: weekly(30) }) }),
+        );
+        expect(result.outcome).toBe("not-evaluable");
+        expect(result.reasons).toEqual(["session window incomplete (no resetsAt)"]);
+        expect(result.data.windows[0]).toMatchObject({ used: 100, limit: 100, exhausted: false });
+    });
+
     it.each([
         ["limit = 0", resource(0, 7_200, 18_000, 0)],
         ["used = -5", session(-5)],
@@ -153,6 +163,40 @@ describe("quota gate decision: not evaluable from a window", () => {
         expect(result.outcome).toBe("not-evaluable");
         expect(result.reasons).toEqual([`session window invalid (${invalid})`]);
         expect(result.data.windows.map((w) => w.used)).toEqual([s.used, 30]);
+    });
+});
+
+describe("quota gate decision: accounts known only from OpenUsage errors", () => {
+    it("is not evaluable for an account with an error and no data", async () => {
+        const result = await gate(limits({}, [{ providerId: "claude", message: "token expired" }]));
+        expect(result.outcome).toBe("not-evaluable");
+        expect(result.reasons).toEqual([
+            "OpenUsage reported an error for claude: token expired",
+            "OpenUsage returned no data for claude",
+            "session window missing",
+            "weekly window missing",
+        ]);
+        expect(result.data.account).toMatchObject({
+            key: "claude",
+            displayName: null,
+            errors: ["token expired"],
+        });
+    });
+
+    it("counts an account known only from an error when deciding ambiguity", async () => {
+        const result = await gate(
+            limits({ claude: provider({ session: session(20), weekly: weekly(30) }) }, [
+                { providerId: "claude@work", message: "token expired" },
+            ]),
+        );
+        expect(result.outcome).toBe("not-evaluable");
+        expect(result.reasons).toEqual([
+            "ambiguous account: 2 Claude accounts present, pass --account <provider-key>",
+        ]);
+        expect(result.data.candidates).toEqual([
+            { key: "claude", displayName: "Claude: Personal (me@example.com)" },
+            { key: "claude@work", displayName: null },
+        ]);
     });
 });
 
