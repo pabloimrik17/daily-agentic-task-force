@@ -170,7 +170,7 @@ const RFC3339 = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d+)?(?:Z|[+-]\d{2}:\d
 function timestamp(parent: Json, key: string, path: string): string {
     const value = string(parent, key, path);
     if (!RFC3339.test(value) || Number.isNaN(Date.parse(value))) {
-        throw new ParseError(`${path}.${key} must be an ISO 8601 timestamp`);
+        throw new ParseError(`${path}.${key} must be an RFC 3339 timestamp`);
     }
     return value;
 }

@@ -13,7 +13,7 @@ describe("parseLimits", () => {
         (value) => {
             expect(parseLimits({ ...limits({}), generatedAt: value })).toEqual({
                 ok: false,
-                error: "openusage output does not match openusage.limits.v1: $.generatedAt must be an ISO 8601 timestamp",
+                error: "openusage output does not match openusage.limits.v1: $.generatedAt must be an RFC 3339 timestamp",
             });
         },
     );
