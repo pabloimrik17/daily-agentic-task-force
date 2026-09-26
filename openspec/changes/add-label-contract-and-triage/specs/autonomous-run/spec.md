@@ -29,3 +29,26 @@ The run SHALL accept `--apply` and pass it to every step. A step SHALL NOT write
 
 - **WHEN** the run is invoked with `--apply`
 - **THEN** steps that write do so under their own rules
+
+## MODIFIED Requirements
+
+### Requirement: Run report
+
+With `--json`, the run SHALL print a single JSON document identified by `schema: "autonomous.run.v1"`, containing the start time, the result of every executed step (step id, tier, outcome, reasons, data) and the run outcome. Without `--json`, it SHALL print a pre-rendered text report of the same information. The report MAY include a `handoff` field, reserved for future steps that require an agent to act; this iteration never emits it.
+
+With `--bootstrap-labels`, the run SHALL instead print the bootstrap report. With `--json`, it is a single JSON document identified by `schema: "autonomous.bootstrap.v1"`, containing the start time, the outcome and, per source, the labels created, present and failed; when the configuration cannot be loaded, it contains no sources and holds the configuration path and the error instead. Without `--json`, it is a text report of the same information, except that a configuration that cannot be loaded is reported on stderr only.
+
+#### Scenario: JSON report
+
+- **WHEN** the run is invoked with `--json` and without `--bootstrap-labels`
+- **THEN** stdout contains exactly one JSON document with `schema` equal to `autonomous.run.v1`
+
+#### Scenario: Text report
+
+- **WHEN** the run is invoked without `--json` and without `--bootstrap-labels`
+- **THEN** stdout contains a readable report listing each executed step, its outcome and its reasons
+
+#### Scenario: Bootstrap JSON report
+
+- **WHEN** the run is invoked with `--bootstrap-labels --json`
+- **THEN** stdout contains exactly one JSON document with `schema` equal to `autonomous.bootstrap.v1`, listing per enabled source the labels created, present and failed

@@ -90,7 +90,7 @@ An unreadable source makes the step `not-evaluable`, as the quota gate does with
 
 ### D9 — Bootstrap is a mode, not a step
 
-`--bootstrap-labels` short-circuits in `run.ts` before the steps: it needs the configuration and the tracker modules but none of the step machinery, and it must not be gated by quota. It processes every enabled source even when one fails (the opposite of the step's reading rule) because creating labels on Linear is useful even while `gh` is logged out. Exit codes reuse the outcome mapping (0 / 3 / 1).
+`--bootstrap-labels` short-circuits in `run.ts` before the steps: it needs the configuration and the tracker modules but none of the step machinery, and it must not be gated by quota. It processes every enabled source even when one fails (the opposite of the step's reading rule) because creating labels on Linear is useful even while `gh` is logged out. Exit codes reuse the outcome mapping (0 / 3 / 1). With `--json` it prints its own document, `autonomous.bootstrap.v1`, not `autonomous.run.v1`: the start time, the outcome and, per source, the labels created, present and failed, or the configuration path and error when the file cannot be loaded.
 
 ### D10 — Layout
 
