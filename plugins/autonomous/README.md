@@ -86,11 +86,11 @@ For `/autonomous:run [--account …] [--force] [--json] [--apply]`:
 
 For `/autonomous:run --bootstrap-labels [--json]`:
 
-| Code | Outcome                                                       |
-| ---- | ------------------------------------------------------------- |
-| 0    | Every label is present or was created on every enabled source |
-| 3    | A source could not be evaluated, or a label failed to create  |
-| 1    | Invalid arguments or a failure of the runner itself           |
+| Code | Outcome                                                                                             |
+| ---- | --------------------------------------------------------------------------------------------------- |
+| 0    | Every label is present or was created on every enabled source                                       |
+| 3    | The configuration could not be loaded, a source could not be evaluated, or a label failed to create |
+| 1    | Invalid arguments or a failure of the runner itself                                                 |
 
 ## Configuration
 
@@ -200,10 +200,12 @@ enabled source — Linear across all teams except completed, canceled and
 issues per configured repo — and reports every task missing a label group or
 carrying a group conflict.
 
-Scope is derived by a deterministic rule from existing evidence (aliases, the
-source's structural `scope`); entry, and scope when no evidence exists, is
-derived by an LLM judgement, batched and capped, ordered with `work` evidence
-first and then by most recently updated. Only a group at or above the
+Each missing group is first derived by a deterministic rule from its evidence
+(aliases, the source's structural `scope`), and a group whose evidence
+conflicts is listed for a human. A group with no evidence — usually entry, and
+scope on a source without a structural rule — is derived by an LLM judgement,
+batched and capped, ordered with `work` evidence first and then by most
+recently updated. Only a group at or above the
 configured `threshold`, and valid under the contract, is written, and only
 with `--apply`: writes are additive, read back to confirm, and a source stops
 writing on the first mismatch — nothing is ever removed. An unreadable source
