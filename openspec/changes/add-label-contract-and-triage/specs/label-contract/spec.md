@@ -87,12 +87,17 @@ The per-user parts of the contract SHALL live in one JSON file outside the plugi
 
 ### Requirement: Label bootstrap
 
-On request, the system SHALL make every contract label exist on every enabled source: it lists the source's labels, creates each missing contract label with its colour where the tracker supports colour, and leaves every existing label untouched, including one that already exists with a different colour, which it reports. On Linear, labels SHALL be created at workspace level; on GitHub, per configured repository; on Beads, labels exist by use and nothing is created. It SHALL report, per source, the labels created, the labels already present and any that could not be created. A source whose CLI is missing, not authenticated or failing SHALL be reported as not evaluable with the command that failed, and the other sources SHALL still be processed.
+On request, the system SHALL make every contract label exist on every enabled source: it lists the source's labels, creates each missing contract label with its colour where the tracker supports colour, and leaves every existing label untouched, including one that already exists with a different colour, which it reports. On Linear, labels SHALL be created at workspace level, and a same-name label that already exists in a team SHALL count as present, so no workspace duplicate is created; on GitHub, per configured repository; on Beads, labels exist by use and nothing is created. It SHALL report, per source, the labels created, the labels already present and any that could not be created. A source whose CLI is missing, not authenticated or failing SHALL be reported as not evaluable with the command that failed, and the other sources SHALL still be processed.
 
 #### Scenario: Label missing on Linear
 
 - **WHEN** Linear lacks `work` and the bootstrap runs
 - **THEN** `work` is created at workspace level with colour `#2f80ed` and reported as created
+
+#### Scenario: Label present in a Linear team
+
+- **WHEN** Linear has `AFK` only in team `DOT` and the bootstrap runs
+- **THEN** no workspace `AFK` is created and `AFK` is reported as present in team `DOT`
 
 #### Scenario: Label present with another colour
 
