@@ -1,0 +1,31 @@
+{
+    "schema": "autonomous.config.v1",
+    "sources": {
+        "linear": {
+            "enabled": true,
+            "scope": "personal",
+            "aliases": { "grill-me": ["Grill Me"] }
+        },
+        "beads": {
+            "enabled": true,
+            "directory": "/path/to/beads/repo",
+            "aliases": {
+                "work": ["project:example"],
+                "personal": ["project:personal"],
+                "HITL": ["human"]
+            }
+        },
+        "github": {
+            "enabled": true,
+            "repos": ["owner/repo"],
+            "scope": "personal"
+        }
+    },
+    "judgement": {
+        "model": "claude-sonnet-5",
+        "effort": "medium",
+        "threshold": 0.95,
+        "cap": 25,
+        "batch": 20
+    }
+}

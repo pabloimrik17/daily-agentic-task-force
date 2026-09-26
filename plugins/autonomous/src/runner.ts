@@ -1,5 +1,8 @@
 import type { RunArgs } from "./args.ts";
-import type { OpenUsageExec } from "./quota-gate/openusage.ts";
+import type { ConfigLoad } from "./config.ts";
+import type { Exec } from "./exec.ts";
+import type { JudgementExec } from "./label-triage/judgement.ts";
+import type { TrackerFactory } from "./label-triage/trackers/tracker.ts";
 
 // Provisional contract (design D2): expected to change as further steps land.
 
@@ -18,8 +21,11 @@ export interface StepResult<D = unknown> {
 export interface RunContext {
     args: RunArgs;
     now: Date;
+    config: ConfigLoad;
     io: {
-        openUsage: OpenUsageExec;
+        openUsage: Exec;
+        trackers: TrackerFactory;
+        judgement: JudgementExec;
     };
 }
 

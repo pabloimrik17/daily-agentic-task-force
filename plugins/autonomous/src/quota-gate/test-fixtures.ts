@@ -59,8 +59,22 @@ export function fakeExec(output: unknown): OpenUsageExec & { calls: string[][] }
 
 export function context(exec: OpenUsageExec, args: Partial<RunArgs> = {}): RunContext {
     return {
-        args: { account: undefined, force: false, json: false, ...args },
+        args: {
+            account: undefined,
+            force: false,
+            json: false,
+            apply: false,
+            bootstrapLabels: false,
+            ...args,
+        },
         now: NOW,
-        io: { openUsage: exec },
+        config: { ok: false, path: "", error: "unused" },
+        io: {
+            openUsage: exec,
+            trackers: () => {
+                throw new Error("unused");
+            },
+            judgement: () => Promise.resolve({ ok: false, error: "unused" }),
+        },
     };
 }

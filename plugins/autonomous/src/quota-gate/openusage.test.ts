@@ -2,7 +2,8 @@ import type { ExecFileException } from "node:child_process";
 
 import { describe, expect, it } from "vitest";
 
-import { readOpenUsage, toExecResult } from "./openusage.ts";
+import { CLI_TIMEOUT_MS, toExecResult as sharedToExecResult } from "../exec.ts";
+import { readOpenUsage } from "./openusage.ts";
 import { fakeExec, limits, provider, session, weekly } from "./test-fixtures.ts";
 
 const valid = limits({ claude: provider({ session: session(20), weekly: weekly(30) }) });
@@ -10,6 +11,10 @@ const valid = limits({ claude: provider({ session: session(20), weekly: weekly(3
 // Shaped like the errors execFile passes its callback (probed under Bun and Node).
 const execError = (message: string, fields: Partial<ExecFileException>): ExecFileException =>
     Object.assign(new Error(message), { cmd: "openusage claude", ...fields });
+
+// The OpenUsage-specific messages come from the shared helper, parameterised by command and timeout.
+const toExecResult = (error: ExecFileException | null, stdout: string, stderr: string) =>
+    sharedToExecResult("openusage", CLI_TIMEOUT_MS, error, stdout, stderr);
 
 describe("toExecResult", () => {
     it("passes stdout through on success", () => {
