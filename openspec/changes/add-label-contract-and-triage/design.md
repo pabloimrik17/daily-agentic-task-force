@@ -119,6 +119,7 @@ plugins/autonomous/
 - [`linear issue query --json` may not include labels] → verified first in the dotfiles sub-issue; fallback is the GraphQL module behind the same tracker shape.
 - [LLM confidence is self-reported] → recorded per judgement in the JSON; `AFK` always shown with confidence; threshold and model are configuration; Jev replacement planned.
 - [`claude -p` runs on the active account, not `--account`] → documented requirement; `claude-swap` integration stays deferred.
+- [Bun loses a child's exit notification (oven-sh/bun#41024, #34069; seen on 1.3.14 during the first `--apply`, reported up to 1.4.x): `execFile` never calls back and its own timeout cannot end the call] → `execCommand` carries a watchdog at the timeout plus 5 s that kills the child and settles the call as a timeout, so the 120 s bound holds and a write stops only its source.
 - [Keychain or `gh` auth unavailable in a headless `/loop`] → surfaces as `not-evaluable` naming the login command; nothing is guessed.
 - [First `--apply` touches ≈500 issues] → rule writes are deterministic and reversible by hand; judged writes are capped; run without `--apply` first and read the report.
 - [Configuration drifts between machines] → strict validation with paths; the example file is the reference.

@@ -10,6 +10,10 @@ export type Exec = (args: string[], input?: string) => Promise<ExecResult>;
 
 export const CLI_TIMEOUT_MS = 120_000;
 
+// How long after its own timeout execFile gets to report the kill before the watchdog
+// settles the call without it.
+export const WATCHDOG_GRACE_MS = 5_000;
+
 const MAX_BUFFER = 64 * 1024 * 1024;
 
 export function toExecResult(
@@ -37,11 +41,27 @@ export function toExecResult(
 export function execCommand(command: string, timeoutMs = CLI_TIMEOUT_MS): Exec {
     return (args, input) =>
         new Promise((resolve) => {
+            // Bun can lose a child's exit notification (oven-sh/bun#41024, #34069). execFile then
+            // never calls back, and its own timeout cannot help: it only signals the child and
+            // still waits for that same notification. The watchdog settles the call regardless.
+            const watchdog = setTimeout(() => {
+                try {
+                    child.kill("SIGKILL");
+                } catch {
+                    // The child is already gone, or execFile threw before creating it; the call
+                    // is settled below either way.
+                }
+                resolve({
+                    ok: false,
+                    error: `${command} timed out after ${timeoutMs / 1000} s (exit never reported)`,
+                });
+            }, timeoutMs + WATCHDOG_GRACE_MS);
             const child = execFile(
                 command,
                 args,
                 { timeout: timeoutMs, maxBuffer: MAX_BUFFER },
                 (error, stdout, stderr) => {
+                    clearTimeout(watchdog);
                     resolve(toExecResult(command, timeoutMs, error, stdout, stderr));
                 },
             );

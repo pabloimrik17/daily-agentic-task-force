@@ -15,6 +15,7 @@
 - [x] 3.2 Implement `src/label-triage/trackers/github.ts` (`gh issue list --repo … --state open --json`, `gh issue view --json`, `gh issue edit --add-label`, `gh label list --json`, `gh label create --color`) per configured repo; verify with tests as in 3.1 plus a multi-repo listing
 - [x] 3.3 Implement `src/label-triage/trackers/linear.ts` (`linear issue query --all-teams --json`, `linear issue view --json`, `linear issue update --add-label`, `linear label list --json`, `linear label create -n -c`) excluding completed, canceled and duplicate states, with the missing-credentials error mapped to a reason naming `linear auth login`; verify with tests as in 3.1 plus the unauthenticated case
 - [x] 3.4 Add `bd`, `gh`, `linear` and `claude` to `ignoreBinaries` in `knip.config.ts`; verify `bun run lint:knip` passes
+- [x] 3.5 Add a watchdog to `src/exec.ts` that settles a call whose child exit is never reported (timeout plus 5 s, `SIGKILL`, timeout error), found when the first `--apply` hung on Bun 1.3.14; verify with a fake-timer test that the lost exit settles as a timeout and a reported exit leaves no timer
 
 ## 4. Arguments and bootstrap mode
 
@@ -41,5 +42,5 @@
 
 - [x] 7.1 Run `bun run lint:oxfmt`, `lint:eslint`, `lint:markdown`, `lint:knip`, `lint:fallow`, `lint:marketplace`, `lint:types` and `bun run test`; all pass
 - [x] 7.2 Run `openspec validate add-label-contract-and-triage --strict`; it passes
-- [ ] 7.3 Create the real configuration from the example, run `--bootstrap-labels` and check on each tracker that the five labels exist with their colour (Linear only once the CLI is installed and authenticated; before that, expect Linear `not-evaluable` naming `linear auth login` with the other sources processed)
+- [x] 7.3 Create the real configuration from the example, run `--bootstrap-labels` and check on each tracker that the five labels exist with their colour (Linear only once the CLI is installed and authenticated; before that, expect Linear `not-evaluable` naming `linear auth login` with the other sources processed)
 - [ ] 7.4 Run `/autonomous:run --account <key>` without `--apply` and check the counts per source and group by hand against the trackers, then run once with `--apply`, pick three applied labels per source and confirm the read-back by opening the tasks; keep the JSON report as the first judgement baseline
