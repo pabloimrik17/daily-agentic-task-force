@@ -44,7 +44,7 @@ describe("githubTracker", () => {
                     "--state",
                     "open",
                     "--limit",
-                    "1000",
+                    "1001",
                     "--json",
                     "number,title,body,labels,updatedAt,state",
                 ],
@@ -148,6 +148,21 @@ describe("githubTracker", () => {
                 error: "gh issue list --repo pabloimrik17/monolab --state open --json number,title,body,labels,updatedAt,state: output does not match the expected shape: $[0].labels must be an array",
             });
         });
+
+        it("reports a listing past the cap as incomplete instead of truncating it", async () => {
+            const issues = Array.from({ length: 1001 }, (_, index) => ({
+                ...ISSUE_FIXTURE,
+                number: index + 1,
+            }));
+            const exec = fakeExec(() => ({ ok: true, stdout: JSON.stringify(issues) }));
+            const tracker = githubTracker(exec, CONFIG);
+            const result = await tracker.listTasks();
+
+            expect(result).toEqual({
+                ok: false,
+                error: "gh issue list --repo pabloimrik17/monolab --state open --json number,title,body,labels,updatedAt,state: more than 1000 results; the listing would be incomplete",
+            });
+        });
     });
 
     describe("readTask", () => {
@@ -248,7 +263,7 @@ describe("githubTracker", () => {
                     "--json",
                     "name,color",
                     "--limit",
-                    "1000",
+                    "1001",
                 ],
             ]);
             expect(result).toEqual({
@@ -269,6 +284,21 @@ describe("githubTracker", () => {
                 "pabloimrik17/monolab",
                 "pabloimrik17/other",
             ]);
+        });
+
+        it("reports a listing past the cap as incomplete instead of truncating it", async () => {
+            const labels = Array.from({ length: 1001 }, (_, index) => ({
+                name: `label-${index}`,
+                color: "d73a4a",
+            }));
+            const exec = fakeExec(() => ({ ok: true, stdout: JSON.stringify(labels) }));
+            const tracker = githubTracker(exec, CONFIG);
+            const result = await tracker.listLabels();
+
+            expect(result).toEqual({
+                ok: false,
+                error: "gh label list --repo pabloimrik17/monolab --json name,color: more than 1000 results; the listing would be incomplete",
+            });
         });
     });
 

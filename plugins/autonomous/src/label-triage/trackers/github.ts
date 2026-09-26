@@ -73,6 +73,21 @@ function parseTaskId(id: string): { ok: true; repo: string; number: string } | {
 
 const LIST_FIELDS = "number,title,body,labels,updatedAt,state";
 
+// `gh` has no unlimited listing, so every list asks for one past the cap:
+// getting that extra entry back means the listing would be incomplete.
+const LIST_CAP = 1000;
+const LIST_LIMIT = String(LIST_CAP + 1);
+
+function complete<T>(command: string, result: TrackerResult<T[]>): TrackerResult<T[]> {
+    if (result.ok && result.value.length > LIST_CAP) {
+        return {
+            ok: false,
+            error: `${command}: more than ${LIST_CAP} results; the listing would be incomplete`,
+        };
+    }
+    return result;
+}
+
 export function githubTracker(exec: Exec, config: GithubConfig): Tracker {
     const repos = config.repos;
 
@@ -84,22 +99,26 @@ export function githubTracker(exec: Exec, config: GithubConfig): Tracker {
         async listTasks(): Promise<TrackerResult<TrackerTask[]>> {
             const tasks: TrackerTask[] = [];
             for (const repo of repos) {
-                const result = await runJson(
-                    exec,
-                    `gh issue list --repo ${repo} --state open --json ${LIST_FIELDS}`,
-                    [
-                        "issue",
-                        "list",
-                        "--repo",
-                        repo,
-                        "--state",
-                        "open",
-                        "--limit",
-                        "1000",
-                        "--json",
-                        LIST_FIELDS,
-                    ],
-                    parseTasks(repo),
+                const command = `gh issue list --repo ${repo} --state open --json ${LIST_FIELDS}`;
+                const result = complete(
+                    command,
+                    await runJson(
+                        exec,
+                        command,
+                        [
+                            "issue",
+                            "list",
+                            "--repo",
+                            repo,
+                            "--state",
+                            "open",
+                            "--limit",
+                            LIST_LIMIT,
+                            "--json",
+                            LIST_FIELDS,
+                        ],
+                        parseTasks(repo),
+                    ),
                 );
                 if (!result.ok) {
                     return result;
@@ -143,11 +162,24 @@ export function githubTracker(exec: Exec, config: GithubConfig): Tracker {
         async listLabels(): Promise<TrackerResult<TrackerLabel[]>> {
             const labels: TrackerLabel[] = [];
             for (const repo of repos) {
-                const result = await runJson(
-                    exec,
-                    `gh label list --repo ${repo} --json name,color`,
-                    ["label", "list", "--repo", repo, "--json", "name,color", "--limit", "1000"],
-                    parseLabels(repo),
+                const command = `gh label list --repo ${repo} --json name,color`;
+                const result = complete(
+                    command,
+                    await runJson(
+                        exec,
+                        command,
+                        [
+                            "label",
+                            "list",
+                            "--repo",
+                            repo,
+                            "--json",
+                            "name,color",
+                            "--limit",
+                            LIST_LIMIT,
+                        ],
+                        parseLabels(repo),
+                    ),
                 );
                 if (!result.ok) {
                     return result;

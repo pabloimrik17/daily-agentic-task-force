@@ -68,9 +68,10 @@ branch on:
 bun plugins/autonomous/src/run.ts --account claude --json --apply
 ```
 
-`--apply` and `--bootstrap-labels` are the only ways anything is written, and
-the user must type both: nothing adds them on its own. A `/loop` that should
-write passes `--apply` explicitly, as above.
+`--apply` and `--bootstrap-labels` are the only ways anything is written. They
+are separate write paths that cannot be combined, and each must be typed
+explicitly: nothing adds either on its own. A `/loop` that should write passes
+`--apply` explicitly, as above.
 
 ### Exit codes
 
