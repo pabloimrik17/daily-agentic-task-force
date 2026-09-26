@@ -8,7 +8,7 @@
 import type { AutonomousConfig, Source } from "../config.ts";
 import { GROUPS, type Group } from "../label-contract/contract.ts";
 import { type Detection, detect } from "../label-contract/detect.ts";
-import type { Step, StepResult } from "../runner.ts";
+import type { Step, StepResult, StepTier } from "../runner.ts";
 import { decide, selectForJudgement } from "./decide.ts";
 import {
     interpretAnswers,
@@ -57,8 +57,9 @@ function result(
     outcome: StepResult["outcome"],
     reasons: string[],
     data: LabelTriageData,
+    tier: StepTier = "code",
 ): StepResult<LabelTriageData> {
-    return { step: "label-triage", tier: "code", outcome, reasons, data };
+    return { step: "label-triage", tier, outcome, reasons, data };
 }
 
 export const labelTriageStep: Step<LabelTriageData> = {
@@ -142,7 +143,9 @@ export const labelTriageStep: Step<LabelTriageData> = {
             },
             failures: written.failures,
         };
-        return result("advance", reasonsFor(data), data);
+        // The step's tier is the highest its parts used in this run: `llm` once a
+        // judgement batch was requested, `code` otherwise.
+        return result("advance", reasonsFor(data), data, judged.batches > 0 ? "llm" : "code");
     },
     render: renderLabelTriage,
 };

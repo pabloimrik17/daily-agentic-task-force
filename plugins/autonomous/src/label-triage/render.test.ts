@@ -40,7 +40,7 @@ describe("renderLabelTriage", () => {
         const llm = { source: "linear", taskId: "DOT-82", group: "entry", tier: "llm" } as const;
         const result: StepResult<LabelTriageData> = {
             step: "label-triage",
-            tier: "code",
+            tier: "llm",
             outcome: "advance",
             reasons: ["beads: 4 read, 1 complete, 1 missing scope, 2 missing entry, 1 in conflict"],
             data: {
@@ -116,7 +116,7 @@ describe("renderLabelTriage", () => {
         };
         expect(labelTriageStep.render(result)).toBe(
             [
-                "[label-triage] advance (code)",
+                "[label-triage] advance (llm)",
                 "  beads     read 4    complete 1  missing scope 1 / entry 2  conflict scope 0 / entry 1",
                 "  linear    read 12   complete 1  missing scope 1 / entry 2  conflict scope 0 / entry 1",
                 "  applied:",

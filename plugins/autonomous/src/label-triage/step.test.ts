@@ -379,6 +379,29 @@ describe("label triage: judgement degrades", () => {
     });
 });
 
+describe("label triage: step tier", () => {
+    it("is llm when a judgement batch ran and code when evidence settled every group", async () => {
+        const judged = await labelTriageStep.run(
+            triageContext({
+                trackers: trackers([], { github: [task("github", "owner/repo#2", [])] }),
+                judgement: judgeAll(),
+            }),
+        );
+        expect(judged.tier).toBe("llm");
+
+        const judgement = judgeAll();
+        const settled = await labelTriageStep.run(
+            triageContext({
+                trackers: trackers([], { beads: [task("beads", "X-12", ["nazaries", "AFK"])] }),
+                judgement,
+            }),
+        );
+        expect(judgement.requests).toEqual([]);
+        expect(settled.data.records.map((r) => [r.group, r.tier])).toEqual([["scope", "code"]]);
+        expect(settled.tier).toBe("code");
+    });
+});
+
 describe("label triage: writing only with --apply", () => {
     const listing = () => ({ beads: [task("beads", "X-12", ["nazaries"])] });
 
