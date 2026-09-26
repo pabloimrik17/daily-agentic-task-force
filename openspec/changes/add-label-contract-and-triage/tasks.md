@@ -6,19 +6,19 @@
 
 ## 2. Label contract
 
-- [ ] 2.1 Implement `src/label-contract/contract.ts` (labels, groups, colours, meanings) and `src/label-contract/detect.ts` (per-group presence, missing, conflict, with evidence from aliases and structural rules); verify with tests for complete, missing entry, both scopes, `AFK`+`HITL`, alias evidence, structural evidence and near-miss spelling (`Grill Me`)
+- [x] 2.1 Implement `src/label-contract/contract.ts` (labels, groups, colours, meanings) and `src/label-contract/detect.ts` (per-group presence, missing, conflict, with evidence from aliases and structural rules); verify with tests for complete, missing entry, both scopes, `AFK`+`HITL`, alias evidence, structural evidence and near-miss spelling (`Grill Me`)
 - [ ] 2.2 Write `src/label-triage/criteria.md` with the meaning of each label in the words the judgement prompt and the future creation-time skill share; verify with a test that the judgement prompt embeds it verbatim
 
 ## 3. Tracker modules
 
-- [ ] 3.1 Implement `src/label-triage/trackers/beads.ts` over an injected exec (`bd -C <dir> list --json`, `bd show <id> --json`, `bd label add`, `bd label list-all --json`; no label creation) with a strict parser keeping id, title, description, labels, status and updated time, and status filtering to open and in progress; verify with tests on fixture output, `ENOENT`, non-zero exit, timeout and invalid JSON
+- [x] 3.1 Implement `src/label-triage/trackers/beads.ts` over an injected exec (`bd -C <dir> list --json`, `bd show <id> --json`, `bd label add`, `bd label list-all --json`; no label creation) with a strict parser keeping id, title, description, labels, status and updated time, and status filtering to open and in progress; verify with tests on fixture output, `ENOENT`, non-zero exit, timeout and invalid JSON
 - [ ] 3.2 Implement `src/label-triage/trackers/github.ts` (`gh issue list --repo … --state open --json`, `gh issue view --json`, `gh issue edit --add-label`, `gh label list --json`, `gh label create --color`) per configured repo; verify with tests as in 3.1 plus a multi-repo listing
 - [ ] 3.3 Implement `src/label-triage/trackers/linear.ts` (`linear issue query --all-teams --json`, `linear issue view --json`, `linear issue update --add-label`, `linear label list --json`, `linear label create -n -c`) excluding completed, canceled and duplicate states, with the missing-credentials error mapped to a reason naming `linear auth login`; verify with tests as in 3.1 plus the unauthenticated case
 - [ ] 3.4 Add `bd`, `gh`, `linear` and `claude` to `ignoreBinaries` in `knip.config.ts`; verify `bun run lint:knip` passes
 
 ## 4. Arguments and bootstrap mode
 
-- [ ] 4.1 Extend `src/args.ts` with `--apply` and `--bootstrap-labels` (the latter combinable only with `--json`) and update `USAGE`; verify with tests for each flag, the `--bootstrap-labels --apply` usage error and the unknown-flag error
+- [x] 4.1 Extend `src/args.ts` with `--apply` and `--bootstrap-labels` (the latter combinable only with `--json`) and update `USAGE`; verify with tests for each flag, the `--bootstrap-labels --apply` usage error and the unknown-flag error
 - [ ] 4.2 Implement `src/label-contract/bootstrap.ts` (per enabled source: list labels, create missing ones with colour, leave existing ones including differing colour, keep processing other sources on failure, report created/present/failed) and its text and JSON rendering; verify with tests on fake trackers for label missing on Linear, present with another colour on GitHub, Beads not applicable and an unauthenticated CLI
 - [ ] 4.3 Short-circuit `--bootstrap-labels` in `src/run.ts` before the steps with exit codes 0 / 3 / 1; verify with a `run.test.ts` case that no step runs and the bootstrap report is printed
 
