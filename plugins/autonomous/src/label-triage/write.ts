@@ -26,6 +26,9 @@ export interface WriteFailure {
 
 const SOURCE_ORDER: readonly Source[] = ["beads", "github", "linear"];
 
+// Prefix of the error a read-back mismatch reports; the report renders it apart.
+export const READ_BACK_MISMATCH = "read-back mismatch";
+
 export function taskKey(source: Source, id: string): string {
     return `${source}:${id}`;
 }
@@ -125,7 +128,7 @@ async function writeOne(
     if (!expected.every((label) => afterSet.has(label))) {
         return {
             ok: false,
-            error: `read-back mismatch: before [${before.join(", ")}] + [${derivation.labels.join(", ")}] → after [${after.join(", ")}]`,
+            error: `${READ_BACK_MISMATCH}: before [${before.join(", ")}] + [${derivation.labels.join(", ")}] → after [${after.join(", ")}]`,
             after,
         };
     }

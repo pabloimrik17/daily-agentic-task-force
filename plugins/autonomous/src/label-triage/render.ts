@@ -1,6 +1,6 @@
 import type { StepResult } from "../runner.ts";
 import type { LabelTriageData, SourceCounts } from "./step.ts";
-import type { TriageRecord, WriteFailure } from "./write.ts";
+import { READ_BACK_MISMATCH, type TriageRecord, type WriteFailure } from "./write.ts";
 
 export function renderLabelTriage(result: StepResult<LabelTriageData>): string {
     const { sources, records, conflicts, notJudged, remainder, judgement, failures } = result.data;
@@ -65,7 +65,13 @@ function renderAsked(record: TriageRecord): string {
 
 function renderFailure(f: WriteFailure): string {
     const head = `${f.source} → ${f.taskId} → ${labels(f.labels)} → before [${f.before.join(", ")}]`;
-    return f.after === null ? `${head} → ${f.error}` : `${head} → after [${f.after.join(", ")}]`;
+    if (f.after === null) {
+        return `${head} → ${f.error}`;
+    }
+    const line = `${head} → after [${f.after.join(", ")}]`;
+    // A read-back mismatch is its before and after, already on the line; any other error
+    // cut a write short after some labels landed, so it carries the cause.
+    return f.error.startsWith(READ_BACK_MISMATCH) ? line : `${line} → ${f.error}`;
 }
 
 function tierOf(record: TriageRecord): string {

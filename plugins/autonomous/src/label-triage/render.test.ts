@@ -96,6 +96,14 @@ describe("renderLabelTriage", () => {
                 judgement: { model: "claude-sonnet-5", effort: "medium", cap: 25, batches: 2 },
                 failures: [
                     {
+                        source: "beads",
+                        taskId: "X-3",
+                        labels: ["AFK", "grill-me"],
+                        before: ["nazaries"],
+                        after: ["nazaries", "grill-me"],
+                        error: "bd label add: bd failed: boom",
+                    },
+                    {
                         source: "linear",
                         taskId: "DOT-9",
                         labels: ["personal"],
@@ -132,6 +140,7 @@ describe("renderLabelTriage", () => {
                 "    linear → DOT-7 → claude timed out after 300 s",
                 "  remainder: 35 tasks beyond the cap of 25",
                 "  write failures:",
+                "    beads → X-3 → AFK, grill-me → before [nazaries] → after [nazaries, grill-me] → bd label add: bd failed: boom",
                 "    linear → DOT-9 → personal → before [a, b] → after [a]",
                 "    linear → DOT-11 → AFK → before [] → linear issue update DOT-11: linear timed out after 120 s",
                 "  judgement: claude-sonnet-5 (medium), 2 batches",
