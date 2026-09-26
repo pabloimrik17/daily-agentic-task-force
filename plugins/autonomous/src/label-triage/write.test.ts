@@ -116,21 +116,153 @@ describe("applyDerivations", () => {
         expect(calls).toEqual(["beads:addLabel:bd-1:work", "beads:readTask:bd-1"]);
     });
 
-    it("calls addLabel once per label and readTask once for a derivation with two labels", async () => {
+    it("calls addLabel once per label, grill-me then HITL before AFK, and readTask once per derivation", async () => {
         const calls: string[] = [];
-        const states = new Map<string, FakeState>([["bd-1", { labels: [] }]]);
+        const states = new Map<string, FakeState>([
+            ["bd-1", { labels: [] }],
+            ["bd-2", { labels: [] }],
+        ]);
         const beads = fakeTracker("beads", calls, states);
-        const tasks = new Map([[taskKey("beads", "bd-1"), task("beads", "bd-1", [])]]);
+        const tasks = new Map([
+            [taskKey("beads", "bd-1"), task("beads", "bd-1", [])],
+            [taskKey("beads", "bd-2"), task("beads", "bd-2", [])],
+        ]);
         await applyDerivations(
-            [derivation({ group: "entry", labels: ["AFK", "grill-me"] })],
+            [
+                derivation({ group: "entry", labels: ["AFK", "grill-me"] }),
+                derivation({ taskId: "bd-2", group: "entry", labels: ["HITL", "grill-me"] }),
+            ],
             tasks,
             trackersOf(beads, beads, beads),
             true,
         );
         expect(calls).toEqual([
-            "beads:addLabel:bd-1:AFK",
             "beads:addLabel:bd-1:grill-me",
+            "beads:addLabel:bd-1:AFK",
             "beads:readTask:bd-1",
+            "beads:addLabel:bd-2:grill-me",
+            "beads:addLabel:bd-2:HITL",
+            "beads:readTask:bd-2",
+        ]);
+    });
+
+    it("reads the task back after a partial write and reports the labels that landed", async () => {
+        const calls: string[] = [];
+        const states = new Map<string, FakeState>([
+            [
+                "bd-1",
+                {
+                    labels: ["nazaries"],
+                    addLabelResult: (label) =>
+                        label === "AFK"
+                            ? { ok: false, error: "bd label add: bd failed: boom" }
+                            : { ok: true, value: undefined },
+                },
+            ],
+        ]);
+        const beads = fakeTracker("beads", calls, states);
+        const tasks = new Map([[taskKey("beads", "bd-1"), task("beads", "bd-1", ["nazaries"])]]);
+        const entry = derivation({ group: "entry", labels: ["AFK", "grill-me"] });
+        const { records, failures } = await applyDerivations(
+            [entry],
+            tasks,
+            trackersOf(beads, beads, beads),
+            true,
+        );
+        expect(records).toEqual([
+            { ...entry, status: "failed", detail: "bd label add: bd failed: boom" },
+        ]);
+        expect(failures).toEqual([
+            {
+                source: "beads",
+                taskId: "bd-1",
+                labels: ["AFK", "grill-me"],
+                before: ["nazaries"],
+                after: ["nazaries", "grill-me"],
+                error: "bd label add: bd failed: boom",
+            },
+        ]);
+        expect(calls).toEqual([
+            "beads:addLabel:bd-1:grill-me",
+            "beads:addLabel:bd-1:AFK",
+            "beads:readTask:bd-1",
+        ]);
+    });
+
+    it("keeps a null after when the read-back of a partial write fails too", async () => {
+        const calls: string[] = [];
+        const states = new Map<string, FakeState>([
+            [
+                "bd-1",
+                {
+                    labels: [],
+                    addLabelResult: (label) =>
+                        label === "AFK"
+                            ? { ok: false, error: "bd label add: bd failed: boom" }
+                            : { ok: true, value: undefined },
+                    readTaskResult: () => ({ ok: false, error: "bd show: bd failed: gone" }),
+                },
+            ],
+        ]);
+        const beads = fakeTracker("beads", calls, states);
+        const tasks = new Map([[taskKey("beads", "bd-1"), task("beads", "bd-1", [])]]);
+        const { failures } = await applyDerivations(
+            [derivation({ group: "entry", labels: ["grill-me", "AFK"] })],
+            tasks,
+            trackersOf(beads, beads, beads),
+            true,
+        );
+        expect(failures).toEqual([
+            {
+                source: "beads",
+                taskId: "bd-1",
+                labels: ["grill-me", "AFK"],
+                before: [],
+                after: null,
+                error: "bd label add: bd failed: boom",
+            },
+        ]);
+    });
+
+    it("expects the labels an earlier derivation added to the same task in the read-back", async () => {
+        const calls: string[] = [];
+        const reads = [
+            task("beads", "bd-1", ["nazaries", "work"]),
+            task("beads", "bd-1", ["nazaries", "AFK"]),
+        ];
+        const states = new Map<string, FakeState>([
+            [
+                "bd-1",
+                {
+                    labels: ["nazaries"],
+                    readTaskResult: () => ({ ok: true, value: reads.shift()! }),
+                },
+            ],
+        ]);
+        const beads = fakeTracker("beads", calls, states);
+        const tasks = new Map([[taskKey("beads", "bd-1"), task("beads", "bd-1", ["nazaries"])]]);
+        const scope = derivation();
+        const entry = derivation({ group: "entry", labels: ["AFK"] });
+        const { records, failures } = await applyDerivations(
+            [scope, entry],
+            tasks,
+            trackersOf(beads, beads, beads),
+            true,
+        );
+        const error = "read-back mismatch: before [nazaries, work] + [AFK] → after [nazaries, AFK]";
+        expect(records).toEqual([
+            { ...scope, status: "applied", detail: null },
+            { ...entry, status: "failed", detail: error },
+        ]);
+        expect(failures).toEqual([
+            {
+                source: "beads",
+                taskId: "bd-1",
+                labels: ["AFK"],
+                before: ["nazaries", "work"],
+                after: ["nazaries", "AFK"],
+                error,
+            },
         ]);
     });
 

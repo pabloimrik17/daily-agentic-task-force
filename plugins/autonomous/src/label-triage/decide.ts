@@ -7,9 +7,20 @@ import { GROUPS, type Group, isValidGroup } from "../label-contract/contract.ts"
 import type { Detection } from "../label-contract/detect.ts";
 import type { Derivation } from "./rules.ts";
 
+// A task already labelled `work` keeps its priority once its scope group is written.
 function hasWorkEvidence(detection: Detection): boolean {
     const scope = detection.groups.scope;
+    if (scope.status === "present") {
+        return scope.labels.includes("work");
+    }
     return scope.status === "missing" && scope.evidence.some((item) => item.label === "work");
+}
+
+// Trackers format timestamps differently (fractions, offsets), so they are compared as
+// instants; an empty or unparsable one sorts last.
+function updatedAtMs(detection: Detection): number {
+    const ms = Date.parse(detection.task.updatedAt);
+    return Number.isNaN(ms) ? -Infinity : ms;
 }
 
 export function orderForJudgement(detections: Detection[]): Detection[] {
@@ -19,8 +30,10 @@ export function orderForJudgement(detections: Detection[]): Detection[] {
         if (rankDiff !== 0) {
             return rankDiff;
         }
-        if (a.task.updatedAt !== b.task.updatedAt) {
-            return a.task.updatedAt < b.task.updatedAt ? 1 : -1;
+        const aMs = updatedAtMs(a);
+        const bMs = updatedAtMs(b);
+        if (aMs !== bMs) {
+            return aMs < bMs ? 1 : -1;
         }
         if (a.task.id !== b.task.id) {
             return a.task.id < b.task.id ? -1 : 1;

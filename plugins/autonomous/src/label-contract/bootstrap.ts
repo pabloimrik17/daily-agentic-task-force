@@ -73,22 +73,33 @@ async function bootstrapSource(tracker: Tracker): Promise<BootstrapSource> {
     const labels: BootstrapLabel[] = [];
     for (const scope of tracker.labelScopes) {
         for (const label of LABELS) {
-            const existing = listed.value.find(
-                (entry) => entry.scope === scope && entry.name === label,
-            );
-            labels.push(
-                existing ? present(scope, label, existing) : await create(tracker, scope, label),
-            );
+            const existing = findExisting(tracker, listed.value, scope, label);
+            labels.push(existing ? present(label, existing) : await create(tracker, scope, label));
         }
     }
     return { ...base, labels };
 }
 
-function present(scope: string, label: ContractLabel, existing: TrackerLabel): BootstrapLabel {
+// On Linear a same-name label in any team already exists for the contract, and a
+// workspace label beside it would be a duplicate; GitHub labels are per repository.
+function findExisting(
+    tracker: Tracker,
+    listed: TrackerLabel[],
+    scope: string,
+    label: ContractLabel,
+): TrackerLabel | undefined {
+    const inScope = listed.find((entry) => entry.scope === scope && entry.name === label);
+    if (inScope || tracker.source !== "linear") {
+        return inScope;
+    }
+    return listed.find((entry) => entry.name === label);
+}
+
+function present(label: ContractLabel, existing: TrackerLabel): BootstrapLabel {
     const expected = COLOURS[label];
     const differs = existing.colour !== null && existing.colour.toLowerCase() !== expected;
     return {
-        scope,
+        scope: existing.scope,
         label,
         status: "present",
         colour: existing.colour,

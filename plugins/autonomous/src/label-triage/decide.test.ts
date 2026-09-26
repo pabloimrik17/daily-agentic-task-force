@@ -95,6 +95,20 @@ describe("orderForJudgement", () => {
         expect(ordered.map((d) => d.task.id)).toEqual(["b", "a"]);
     });
 
+    it("orders tasks that already carry work first", () => {
+        const labelledWork = detection(
+            { id: "b", labels: ["work"], updatedAt: "2024-01-01T00:00:00Z" },
+            { status: "present", labels: ["work"] },
+        );
+        const labelledPersonal = detection(
+            { id: "c", labels: ["personal"], updatedAt: "2024-06-01T00:00:00Z" },
+            { status: "present", labels: ["personal"] },
+        );
+        const withoutWork = detection({ id: "a", updatedAt: "2024-06-01T00:00:00Z" });
+        const ordered = orderForJudgement([labelledPersonal, withoutWork, labelledWork]);
+        expect(ordered.map((d) => d.task.id)).toEqual(["b", "a", "c"]);
+    });
+
     it("orders by updatedAt descending, then id ascending, empty updatedAt sorting last", () => {
         const older = detection({ id: "x", updatedAt: "2024-01-01T00:00:00Z" });
         const newer = detection({ id: "y", updatedAt: "2024-06-01T00:00:00Z" });
@@ -103,6 +117,17 @@ describe("orderForJudgement", () => {
         const tie2 = detection({ id: "a", updatedAt: "2024-01-01T00:00:00Z" });
         const ordered = orderForJudgement([older, newer, unknown, tie1, tie2]);
         expect(ordered.map((d) => d.task.id)).toEqual(["y", "a", "b", "x", "z"]);
+    });
+
+    it("compares updatedAt as instants across formats, unparsable values sorting last", () => {
+        const whole = detection({ id: "a", updatedAt: "2024-06-01T10:00:02Z" });
+        const fraction = detection({ id: "b", updatedAt: "2024-06-01T10:00:02.123Z" });
+        const offset = detection({ id: "c", updatedAt: "2024-06-01T12:00:00+02:00" });
+        const earlier = detection({ id: "d", updatedAt: "2024-06-01T10:00:01Z" });
+        const unparsable = detection({ id: "e", updatedAt: "not a date" });
+        const empty = detection({ id: "f", updatedAt: "" });
+        const ordered = orderForJudgement([empty, offset, unparsable, whole, earlier, fraction]);
+        expect(ordered.map((d) => d.task.id)).toEqual(["b", "a", "d", "c", "e", "f"]);
     });
 
     it("does not mutate the input array", () => {

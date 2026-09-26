@@ -2,8 +2,10 @@
 
 Entry point of the autonomous loop: an orchestrator that will discover
 previously defined work and delegate it to other agents. Before it may start
-anything it runs a fixed list of gate steps. Today that list holds one step,
-`quota-gate`, which decides whether the Claude account has quota to spend.
+anything it runs a fixed list of gate steps. Today that list holds two steps:
+`quota-gate`, which decides whether the Claude account has quota to spend, and
+`label-triage`, which reports the tasks missing a label of the contract and,
+with `--apply`, writes the labels it is confident about.
 
 **The contracts are provisional.** The step contract, the run report and the
 runner shape are a first iteration and are expected to change as further steps
@@ -66,7 +68,9 @@ branch on:
 bun plugins/autonomous/src/run.ts --account claude --json --apply
 ```
 
-`/loop` passes `--apply` on purpose; both writes are explicit invocations.
+`--apply` and `--bootstrap-labels` are the only ways anything is written, and
+the user must type both: nothing adds them on its own. A `/loop` that should
+write passes `--apply` explicitly, as above.
 
 ### Exit codes
 
@@ -99,6 +103,9 @@ default. No credentials are stored in it.
 - Schema: `autonomous.config.v1`.
 - A missing file's error names the path and points to the example at
   `plugins/autonomous/config.example.json`.
+- Without a configuration file the quota gate still runs, but a run it lets
+  through then exits 3 (`not-evaluable`), because `label-triage` cannot be
+  evaluated. This changes the outcome for users who ran only the quota gate.
 
 ```jsonc
 {
@@ -138,9 +145,10 @@ Per source:
 
 - `enabled` — whether `label-triage` and `--bootstrap-labels` touch this
   source at all.
-- `scope` — `"work"` or `"personal"`: the structural rule, applied when a
-  task carries no other scope evidence (every task from this source is that
-  scope).
+- `scope` — `"work"` or `"personal"`: the structural rule, which makes every
+  task from this source evidence for that scope. It counts alongside any alias
+  evidence: when they agree the scope is derived, and when they disagree the
+  task is left for the human.
 - `aliases` — legacy label names, per contract label, that count as evidence
   for that label without being the label itself. They are never removed from
   a task; the contract label is added alongside them.
@@ -178,8 +186,8 @@ applied where the tracker supports them:
 | `personal` | `#27ae60` |
 
 The loop never creates labels on its own. `--bootstrap-labels` does: at
-workspace level on Linear, per repo on GitHub, and not at all on Beads, where
-labels exist only by use. An existing label with a different colour is left
+workspace level on Linear (a same-name label in any team counts as present),
+per repo on GitHub, and not at all on Beads, where labels exist only by use. An existing label with a different colour is left
 untouched and reported, never overwritten. Legacy names configured as
 `aliases` are evidence for a rule and are never removed.
 
@@ -212,13 +220,18 @@ between runs.
 The first `--apply` is the intended one-off clean-up of the existing backlog
 (roughly 400 Beads issues gaining `work`, roughly 90 Linear and GitHub issues
 gaining `personal`): run without `--apply` first and read the report before
-applying.
+applying. That first `--apply` issues about a thousand CLI calls and exceeds
+the command's timeout, so it must be run from a shell
+(`bun plugins/autonomous/src/run.ts --account <key> --apply`), not through
+`/autonomous:run`.
 
 ### Active-account caveat
 
 The judgement runs `claude -p` on the active Claude account, through the
 subscription the quota gate already checked. `--account` must name that same
-account; `claude-swap` integration is deferred.
+account; `claude-swap` integration is deferred. The judgement runs in safe
+mode with no tools, no hooks, no MCP servers and no session persistence,
+because the prompt carries issue text anyone can write.
 
 ## The quota gate
 

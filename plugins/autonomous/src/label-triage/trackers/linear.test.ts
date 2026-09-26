@@ -173,7 +173,7 @@ describe("linearTracker", () => {
             const tracker = linearTracker(exec, CONFIG);
             const result = await tracker.readTask("DOT-82");
 
-            expect(exec.calls).toEqual([["issue", "view", "DOT-82", "--json"]]);
+            expect(exec.calls).toEqual([["issue", "view", "DOT-82", "--no-comments", "--json"]]);
             expect(result).toEqual({
                 ok: true,
                 value: {

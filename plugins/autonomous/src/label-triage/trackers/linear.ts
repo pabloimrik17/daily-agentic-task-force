@@ -128,7 +128,7 @@ export function linearTracker(exec: Exec, _config: LinearConfig): Tracker {
             return runJson(
                 exec,
                 `linear issue view ${id}`,
-                ["issue", "view", id, "--json"],
+                ["issue", "view", id, "--no-comments", "--json"],
                 parseReadTask,
                 mapExecError,
             );

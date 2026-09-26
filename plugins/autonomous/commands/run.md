@@ -13,7 +13,9 @@ on every enabled tracker and exits instead of running the steps.
 
 ## Steps
 
-1. Run exactly this, once:
+1. Run exactly this, once, with the Bash tool's `timeout` set to `600000`
+   (10 minutes, the maximum) and never in the background: a judgement batch
+   alone may take 300 s.
 
     ```bash
     bun "${CLAUDE_PLUGIN_ROOT}/src/run.ts" $ARGUMENTS
@@ -29,5 +31,9 @@ on every enabled tracker and exits instead of running the steps.
   chosen, show it and stop; the user picks the account.
 - Never add `--apply` or `--bootstrap-labels` on your own. Pass exactly what
   the user typed, no more and no less.
+- The first `--apply`, the one-off clean-up of the existing backlog, issues
+  about a thousand CLI calls and exceeds the command's timeout. It must be run
+  from a shell, not through this command:
+  `bun plugins/autonomous/src/run.ts --account <key> --apply`.
 - When the report carries no `handoff`, take no further action: show the
   report and end the command. No step emits a `handoff` yet.

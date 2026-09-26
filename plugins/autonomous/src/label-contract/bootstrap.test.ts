@@ -175,6 +175,34 @@ describe("bootstrapLabels", () => {
         );
     });
 
+    it("counts a same-name Linear team label as present in its team and creates no workspace duplicate", async () => {
+        const linear = fake("linear", {
+            labelScopes: ["workspace"],
+            labels: {
+                ok: true,
+                value: [
+                    ...everyWorkspaceLabelExcept("AFK"),
+                    { scope: "DOT", name: "AFK", colour: "#000000" },
+                ],
+            },
+        });
+        const report = await bootstrapLabels(
+            trackers({ beads: beads(), github: fake("github"), linear }),
+            config({ beads: false, github: false }),
+            STARTED,
+        );
+        expect(linear.created).toEqual([]);
+        expect(report.sources[0]?.labels.find((label) => label.label === "AFK")).toEqual({
+            scope: "DOT",
+            label: "AFK",
+            status: "present",
+            colour: "#000000",
+            expected: "#5e6ad2",
+            note: "colour differs",
+        });
+        expect(report.outcome).toBe("advance");
+    });
+
     it("creates labels per configured repository, matching labels only in their own scope", async () => {
         const github = fake("github", {
             labelScopes: ["owner/a", "owner/b"],

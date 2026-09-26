@@ -68,6 +68,12 @@ describe("execCommand", () => {
         expect(result).toEqual({ ok: true, stdout: "hello from stdin" });
     });
 
+    it("reports a child that exits before draining a large input as a failure, not a crash", async () => {
+        const exec = execCommand("sh");
+        const result = await exec(["-c", "exit 3"], "x".repeat(4 * 1024 * 1024));
+        expect(result).toMatchObject({ ok: false });
+    });
+
     it("reports a missing binary as not found on PATH", async () => {
         const exec = execCommand("this-binary-does-not-exist-anywhere");
         const result = await exec([]);

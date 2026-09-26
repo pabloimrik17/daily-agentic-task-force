@@ -49,6 +49,9 @@ export async function applyDerivations(
 
     const records: TriageRecord[] = [];
     const failures: WriteFailure[] = [];
+    // The listing's labels plus those this run has added, so a task's second derivation
+    // expects the first one's labels in its read-back.
+    const known = new Map<string, string[]>();
     for (const source of SOURCE_ORDER) {
         let stopped = false;
         for (const derivation of eligible.filter((d) => d.source === source)) {
@@ -60,9 +63,12 @@ export async function applyDerivations(
                 });
                 continue;
             }
-            const before = tasks.get(taskKey(source, derivation.taskId))?.labels ?? [];
+            const key = taskKey(source, derivation.taskId);
+            const before = known.get(key) ?? tasks.get(key)?.labels ?? [];
             const outcome = await writeOne(trackers[source], derivation, before);
             if (outcome.ok) {
+                const added = derivation.labels.filter((label) => !before.includes(label));
+                known.set(key, [...before, ...added]);
                 records.push({ ...derivation, status: "applied", detail: null });
             } else {
                 records.push({ ...derivation, status: "failed", detail: outcome.error });
@@ -81,15 +87,32 @@ export async function applyDerivations(
     return { records, failures };
 }
 
+// A write cut short leaves the human-facing labels behind: grill-me, then HITL, land
+// before the rest, AFK last.
+function writeRank(label: string): number {
+    if (label === "grill-me") {
+        return 0;
+    }
+    if (label === "HITL") {
+        return 1;
+    }
+    return label === "AFK" ? 3 : 2;
+}
+
 async function writeOne(
     tracker: Tracker,
     derivation: Derivation,
     before: string[],
 ): Promise<{ ok: true } | { ok: false; error: string; after: string[] | null }> {
-    for (const label of derivation.labels) {
+    const labels = [...derivation.labels].sort((a, b) => writeRank(a) - writeRank(b));
+    for (const [index, label] of labels.entries()) {
         const result = await tracker.addLabel(derivation.taskId, label);
         if (!result.ok) {
-            return { ok: false, error: result.error, after: null };
+            if (index === 0) {
+                return { ok: false, error: result.error, after: null };
+            }
+            const read = await tracker.readTask(derivation.taskId);
+            return { ok: false, error: result.error, after: read.ok ? read.value.labels : null };
         }
     }
     const read = await tracker.readTask(derivation.taskId);

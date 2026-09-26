@@ -9,6 +9,7 @@ import { homedir } from "node:os";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 
+import { isContractLabel } from "./label-contract/contract.ts";
 import {
     boolean,
     type Json,
@@ -32,8 +33,6 @@ export const EXAMPLE_PATH = join(
 export type Scope = "work" | "personal";
 export type ContractLabel = "work" | "personal" | "AFK" | "HITL" | "grill-me";
 export type Source = "linear" | "beads" | "github";
-
-const CONTRACT_LABELS: readonly ContractLabel[] = ["work", "personal", "AFK", "HITL", "grill-me"];
 
 export interface SourceRules {
     enabled: boolean;
@@ -189,10 +188,6 @@ function aliasesValue(
     return result;
 }
 
-function isContractLabel(value: string): value is ContractLabel {
-    return (CONTRACT_LABELS as readonly string[]).includes(value);
-}
-
 function linearConfig(entry: Json, path: string): LinearConfig {
     rejectUnknownKeys(entry, ["enabled", "scope", "aliases"], path);
     return sourceRules(entry, path);
@@ -200,12 +195,25 @@ function linearConfig(entry: Json, path: string): LinearConfig {
 
 function beadsConfig(entry: Json, path: string): BeadsConfig {
     rejectUnknownKeys(entry, ["enabled", "scope", "aliases", "directory"], path);
-    return { ...sourceRules(entry, path), directory: string(entry, "directory", path) };
+    const rules = sourceRules(entry, path);
+    const directory = string(entry, "directory", path);
+    if (directory === "") {
+        throw new ParseError(`${path}.directory must not be empty`);
+    }
+    return { ...rules, directory };
 }
+
+const REPO = /^[^/\s]+\/[^/\s]+$/;
 
 function githubConfig(entry: Json, path: string): GithubConfig {
     rejectUnknownKeys(entry, ["enabled", "scope", "aliases", "repos"], path);
-    return { ...sourceRules(entry, path), repos: stringArray(entry, "repos", path) };
+    const rules = sourceRules(entry, path);
+    const repos = stringArray(entry, "repos", path);
+    const invalid = repos.findIndex((repo) => !REPO.test(repo));
+    if (invalid !== -1) {
+        throw new ParseError(`${path}.repos[${invalid}] must be "owner/name"`);
+    }
+    return { ...rules, repos };
 }
 
 const EFFORTS = ["low", "medium", "high", "xhigh", "max"];

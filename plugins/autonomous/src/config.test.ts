@@ -66,6 +66,29 @@ describe("parseConfig", () => {
         });
     });
 
+    it("rejects an empty Beads directory", () => {
+        const input = valid();
+        input.sources.beads.directory = "";
+        const result = parseConfig(input);
+        expect(result).toEqual({
+            ok: false,
+            error: "configuration does not match autonomous.config.v1: $.sources.beads.directory must not be empty",
+        });
+    });
+
+    it.each(["owner", "owner/", "/repo", "owner/repo/extra", "owner /repo", ""])(
+        "rejects the GitHub repository %j, which is not owner/name",
+        (repo) => {
+            const input = valid();
+            input.sources.github.repos = ["owner/repo", repo];
+            const result = parseConfig(input);
+            expect(result).toEqual({
+                ok: false,
+                error: 'configuration does not match autonomous.config.v1: $.sources.github.repos[1] must be "owner/name"',
+            });
+        },
+    );
+
     it("rejects a mistyped field", () => {
         const input = { ...valid(), judgement: { ...valid().judgement, threshold: "high" } };
         const result = parseConfig(input);

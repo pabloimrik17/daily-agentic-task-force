@@ -46,6 +46,9 @@ export function execCommand(command: string, timeoutMs = CLI_TIMEOUT_MS): Exec {
                 },
             );
             if (input !== undefined) {
+                // A child that exits before draining its input raises EPIPE here; the execFile
+                // callback already reports that exit, so the stream error is dropped.
+                child.stdin?.on("error", () => {});
                 child.stdin?.end(input);
             }
         });
