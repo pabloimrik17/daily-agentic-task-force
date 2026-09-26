@@ -70,7 +70,7 @@ For a missing group, the step SHALL first apply the contract's evidence: a struc
 
 ### Requirement: Confidence threshold per group
 
-A derived group SHALL be eligible for writing only when its confidence is at or above the configured threshold (0.95 unless configured) and its labels are valid under the contract: exactly one scope label, no `AFK` together with `HITL`, no label outside the vocabulary. Each group is evaluated independently. A group below the threshold or invalid SHALL be listed for the human with the labels seen, the confidence and the reason. Every `AFK` derived by judgement SHALL be shown with its confidence.
+A derived group SHALL be eligible for writing only when its confidence is at or above the configured threshold (0.95 in the shipped example) and its labels are valid under the contract: exactly one scope label, no `AFK` together with `HITL`, no label outside the vocabulary. Each group is evaluated independently. A group below the threshold or invalid SHALL be listed for the human with the labels seen, the confidence and the reason. Every `AFK` derived by judgement SHALL be shown with its confidence.
 
 #### Scenario: One group above, one below
 
