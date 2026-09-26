@@ -14,27 +14,10 @@ import {
     string,
     stringArray,
 } from "../../validate.ts";
+import { run, runJson } from "./cli-json.ts";
 import type { Tracker, TrackerLabel, TrackerResult, TrackerTask } from "./tracker.ts";
 
 const OPEN_STATUSES = new Set(["open", "in_progress"]);
-
-function parseError(command: string, error: unknown): string {
-    if (error instanceof ParseError) {
-        return `${command}: output does not match the expected shape: ${error.message}`;
-    }
-    return `${command}: output is not valid JSON: ${(error as Error).message}`;
-}
-
-function parseJson(
-    command: string,
-    stdout: string,
-): { ok: true; value: unknown } | { ok: false; error: string } {
-    try {
-        return { ok: true, value: JSON.parse(stdout) };
-    } catch (error) {
-        return { ok: false, error: parseError(command, error) };
-    }
-}
 
 function task(entry: Json, path: string): TrackerTask {
     return {
@@ -48,59 +31,27 @@ function task(entry: Json, path: string): TrackerTask {
     };
 }
 
-function parseTasks(command: string, stdout: string): TrackerResult<TrackerTask[]> {
-    const parsed = parseJson(command, stdout);
-    if (!parsed.ok) {
-        return parsed;
-    }
-    try {
-        const items = array(parsed.value, "$");
-        const tasks = items.map((item, index) => task(object(item, `$[${index}]`), `$[${index}]`));
-        return { ok: true, value: tasks.filter((item) => OPEN_STATUSES.has(item.status)) };
-    } catch (error) {
-        return { ok: false, error: parseError(command, error) };
-    }
+function parseTasks(value: unknown): TrackerTask[] {
+    const items = array(value, "$");
+    const tasks = items.map((item, index) => task(object(item, `$[${index}]`), `$[${index}]`));
+    return tasks.filter((item) => OPEN_STATUSES.has(item.status));
 }
 
-function parseTask(command: string, stdout: string): TrackerResult<TrackerTask> {
-    const parsed = parseJson(command, stdout);
-    if (!parsed.ok) {
-        return parsed;
+function parseTask(value: unknown): TrackerTask {
+    const items = array(value, "$");
+    if (items.length !== 1) {
+        throw new ParseError("$ must hold exactly one element");
     }
-    try {
-        const items = array(parsed.value, "$");
-        if (items.length !== 1) {
-            return {
-                ok: false,
-                error: `${command}: output does not match the expected shape: $ must hold exactly one element`,
-            };
-        }
-        return { ok: true, value: task(object(items[0], "$[0]"), "$[0]") };
-    } catch (error) {
-        return { ok: false, error: parseError(command, error) };
-    }
+    return task(object(items[0], "$[0]"), "$[0]");
 }
 
 function labelEntry(entry: Json, path: string): TrackerLabel {
     return { scope: "beads", name: string(entry, "label", path), colour: null };
 }
 
-function parseLabels(command: string, stdout: string): TrackerResult<TrackerLabel[]> {
-    const parsed = parseJson(command, stdout);
-    if (!parsed.ok) {
-        return parsed;
-    }
-    try {
-        const items = array(parsed.value, "$");
-        return {
-            ok: true,
-            value: items.map((item, index) =>
-                labelEntry(object(item, `$[${index}]`), `$[${index}]`),
-            ),
-        };
-    } catch (error) {
-        return { ok: false, error: parseError(command, error) };
-    }
+function parseLabels(value: unknown): TrackerLabel[] {
+    const items = array(value, "$");
+    return items.map((item, index) => labelEntry(object(item, `$[${index}]`), `$[${index}]`));
 }
 
 export function beadsTracker(exec: Exec, config: BeadsConfig): Tracker {
@@ -111,49 +62,35 @@ export function beadsTracker(exec: Exec, config: BeadsConfig): Tracker {
         labelScopes: [],
         createsLabels: false,
 
-        async listTasks(): Promise<TrackerResult<TrackerTask[]>> {
-            const command = "bd list --json";
-            const result = await exec([
-                "-C",
-                dir,
-                "list",
-                "--json",
-                "--limit",
-                "0",
-                "--status",
-                "open,in_progress",
-            ]);
-            if (!result.ok) {
-                return { ok: false, error: `${command}: ${result.error}` };
-            }
-            return parseTasks(command, result.stdout);
+        listTasks(): Promise<TrackerResult<TrackerTask[]>> {
+            return runJson(
+                exec,
+                "bd list --json",
+                ["-C", dir, "list", "--json", "--limit", "0", "--status", "open,in_progress"],
+                parseTasks,
+            );
         },
 
-        async readTask(id: string): Promise<TrackerResult<TrackerTask>> {
-            const command = `bd show ${id} --json`;
-            const result = await exec(["-C", dir, "show", id, "--json"]);
-            if (!result.ok) {
-                return { ok: false, error: `${command}: ${result.error}` };
-            }
-            return parseTask(command, result.stdout);
+        readTask(id: string): Promise<TrackerResult<TrackerTask>> {
+            return runJson(
+                exec,
+                `bd show ${id} --json`,
+                ["-C", dir, "show", id, "--json"],
+                parseTask,
+            );
         },
 
-        async addLabel(id: string, label: string): Promise<TrackerResult<void>> {
-            const command = `bd label add ${id} ${label}`;
-            const result = await exec(["-C", dir, "label", "add", id, label]);
-            if (!result.ok) {
-                return { ok: false, error: `${command}: ${result.error}` };
-            }
-            return { ok: true, value: undefined };
+        addLabel(id: string, label: string): Promise<TrackerResult<void>> {
+            return run(exec, `bd label add ${id} ${label}`, ["-C", dir, "label", "add", id, label]);
         },
 
-        async listLabels(): Promise<TrackerResult<TrackerLabel[]>> {
-            const command = "bd label list-all --json";
-            const result = await exec(["-C", dir, "label", "list-all", "--json"]);
-            if (!result.ok) {
-                return { ok: false, error: `${command}: ${result.error}` };
-            }
-            return parseLabels(command, result.stdout);
+        listLabels(): Promise<TrackerResult<TrackerLabel[]>> {
+            return runJson(
+                exec,
+                "bd label list-all --json",
+                ["-C", dir, "label", "list-all", "--json"],
+                parseLabels,
+            );
         },
 
         createLabel(): Promise<TrackerResult<void>> {

@@ -26,6 +26,10 @@ export interface WriteFailure {
 
 const SOURCE_ORDER: readonly Source[] = ["beads", "github", "linear"];
 
+export function taskKey(source: Source, id: string): string {
+    return `${source}:${id}`;
+}
+
 export async function applyDerivations(
     eligible: Derivation[],
     tasks: Map<string, TrackerTask>,
@@ -56,7 +60,7 @@ export async function applyDerivations(
                 });
                 continue;
             }
-            const before = tasks.get(derivation.taskId)?.labels ?? [];
+            const before = tasks.get(taskKey(source, derivation.taskId))?.labels ?? [];
             const outcome = await writeOne(trackers[source], derivation, before);
             if (outcome.ok) {
                 records.push({ ...derivation, status: "applied", detail: null });

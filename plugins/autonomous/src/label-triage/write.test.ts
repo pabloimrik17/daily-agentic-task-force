@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 
 import type { Derivation } from "./rules.ts";
 import type { Tracker, TrackerResult, TrackerTask, Trackers } from "./trackers/tracker.ts";
-import { applyDerivations } from "./write.ts";
+import { applyDerivations, taskKey } from "./write.ts";
 
 interface FakeState {
     labels: string[];
@@ -88,7 +88,7 @@ describe("applyDerivations", () => {
         const calls: string[] = [];
         const states = new Map<string, FakeState>([["bd-1", { labels: ["nazaries"] }]]);
         const beads = fakeTracker("beads", calls, states);
-        const tasks = new Map([["bd-1", task("beads", "bd-1", ["nazaries"])]]);
+        const tasks = new Map([[taskKey("beads", "bd-1"), task("beads", "bd-1", ["nazaries"])]]);
         const { records, failures } = await applyDerivations(
             [derivation()],
             tasks,
@@ -104,7 +104,7 @@ describe("applyDerivations", () => {
         const calls: string[] = [];
         const states = new Map<string, FakeState>([["bd-1", { labels: ["nazaries"] }]]);
         const beads = fakeTracker("beads", calls, states);
-        const tasks = new Map([["bd-1", task("beads", "bd-1", ["nazaries"])]]);
+        const tasks = new Map([[taskKey("beads", "bd-1"), task("beads", "bd-1", ["nazaries"])]]);
         const { records, failures } = await applyDerivations(
             [derivation()],
             tasks,
@@ -120,7 +120,7 @@ describe("applyDerivations", () => {
         const calls: string[] = [];
         const states = new Map<string, FakeState>([["bd-1", { labels: [] }]]);
         const beads = fakeTracker("beads", calls, states);
-        const tasks = new Map([["bd-1", task("beads", "bd-1", [])]]);
+        const tasks = new Map([[taskKey("beads", "bd-1"), task("beads", "bd-1", [])]]);
         await applyDerivations(
             [derivation({ group: "entry", labels: ["AFK", "grill-me"] })],
             tasks,
@@ -152,8 +152,8 @@ describe("applyDerivations", () => {
         const linear = fakeTracker("linear", calls, states);
         const beads = fakeTracker("beads", calls, states);
         const tasks = new Map([
-            ["lin-1", task("linear", "lin-1", ["work"])],
-            ["bd-1", task("beads", "bd-1", ["nazaries"])],
+            [taskKey("linear", "lin-1"), task("linear", "lin-1", ["work"])],
+            [taskKey("beads", "bd-1"), task("beads", "bd-1", ["nazaries"])],
         ]);
         const first = derivation({
             source: "linear",
@@ -216,7 +216,7 @@ describe("applyDerivations", () => {
             ],
         ]);
         const beads = fakeTracker("beads", calls, states);
-        const tasks = new Map([["bd-1", task("beads", "bd-1", [])]]);
+        const tasks = new Map([[taskKey("beads", "bd-1"), task("beads", "bd-1", [])]]);
         const { records, failures } = await applyDerivations(
             [derivation()],
             tasks,
@@ -254,7 +254,7 @@ describe("applyDerivations", () => {
             ],
         ]);
         const beads = fakeTracker("beads", calls, states);
-        const tasks = new Map([["bd-1", task("beads", "bd-1", [])]]);
+        const tasks = new Map([[taskKey("beads", "bd-1"), task("beads", "bd-1", [])]]);
         const { failures } = await applyDerivations(
             [derivation()],
             tasks,
@@ -278,9 +278,9 @@ describe("applyDerivations", () => {
         const states = new Map<string, FakeState>([["bd-1", { labels: ["nazaries"] }]]);
         const beads = fakeTracker("beads", calls, states);
         const before = task("beads", "bd-1", ["nazaries"]);
-        const tasks = new Map([["bd-1", before]]);
+        const tasks = new Map([[taskKey("beads", "bd-1"), before]]);
         await applyDerivations([derivation()], tasks, trackersOf(beads, beads, beads), true);
-        expect(tasks.get("bd-1")).toBe(before);
+        expect(tasks.get(taskKey("beads", "bd-1"))).toBe(before);
         expect(before.labels).toEqual(["nazaries"]);
     });
 });

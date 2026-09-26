@@ -6,25 +6,8 @@
 import type { LinearConfig } from "../../config.ts";
 import type { Exec } from "../../exec.ts";
 import { array, type Json, object, optional, ParseError, string } from "../../validate.ts";
+import { run, runJson } from "./cli-json.ts";
 import type { Tracker, TrackerLabel, TrackerResult, TrackerTask } from "./tracker.ts";
-
-function parseError(command: string, error: unknown): string {
-    if (error instanceof ParseError) {
-        return `${command}: output does not match the expected shape: ${error.message}`;
-    }
-    return `${command}: output is not valid JSON: ${(error as Error).message}`;
-}
-
-function parseJson(
-    command: string,
-    stdout: string,
-): { ok: true; value: unknown } | { ok: false; error: string } {
-    try {
-        return { ok: true, value: JSON.parse(stdout) };
-    } catch (error) {
-        return { ok: false, error: parseError(command, error) };
-    }
-}
 
 function isUnauthenticated(text: string): boolean {
     return text.includes("linear auth login") || text.includes("No API key configured");
@@ -68,26 +51,15 @@ function isExcluded(type: string, status: string): boolean {
     return type === "completed" || type === "canceled" || status.toLowerCase() === "duplicate";
 }
 
-function parseTasks(command: string, stdout: string): TrackerResult<TrackerTask[]> {
-    const parsed = parseJson(command, stdout);
-    if (!parsed.ok) {
-        return parsed;
-    }
-    try {
-        const root = object(parsed.value, "$");
-        const nodes = array(root.nodes, "$.nodes");
-        const entries = nodes.map((item, index) =>
-            listedTask(object(item, `$.nodes[${index}]`), `$.nodes[${index}]`),
-        );
-        return {
-            ok: true,
-            value: entries
-                .filter(({ task, type }) => !isExcluded(type, task.status))
-                .map(({ task }) => task),
-        };
-    } catch (error) {
-        return { ok: false, error: parseError(command, error) };
-    }
+function parseTasks(value: unknown): TrackerTask[] {
+    const root = object(value, "$");
+    const nodes = array(root.nodes, "$.nodes");
+    const entries = nodes.map((item, index) =>
+        listedTask(object(item, `$.nodes[${index}]`), `$.nodes[${index}]`),
+    );
+    return entries
+        .filter(({ task, type }) => !isExcluded(type, task.status))
+        .map(({ task }) => task);
 }
 
 function nullableDescription(entry: Json, path: string): string | null {
@@ -115,16 +87,8 @@ function readTask(entry: Json, path: string): TrackerTask {
     };
 }
 
-function parseReadTask(command: string, stdout: string): TrackerResult<TrackerTask> {
-    const parsed = parseJson(command, stdout);
-    if (!parsed.ok) {
-        return parsed;
-    }
-    try {
-        return { ok: true, value: readTask(object(parsed.value, "$"), "$") };
-    } catch (error) {
-        return { ok: false, error: parseError(command, error) };
-    }
+function parseReadTask(value: unknown): TrackerTask {
+    return readTask(object(value, "$"), "$");
 }
 
 function labelEntry(entry: Json, path: string): TrackerLabel {
@@ -136,23 +100,12 @@ function labelEntry(entry: Json, path: string): TrackerLabel {
     return { scope, name: string(entry, "name", path), colour: color.toLowerCase() };
 }
 
-function parseLabels(command: string, stdout: string): TrackerResult<TrackerLabel[]> {
-    const parsed = parseJson(command, stdout);
-    if (!parsed.ok) {
-        return parsed;
-    }
-    try {
-        const root = object(parsed.value, "$");
-        const nodes = array(root.nodes, "$.nodes");
-        return {
-            ok: true,
-            value: nodes.map((item, index) =>
-                labelEntry(object(item, `$.nodes[${index}]`), `$.nodes[${index}]`),
-            ),
-        };
-    } catch (error) {
-        return { ok: false, error: parseError(command, error) };
-    }
+function parseLabels(value: unknown): TrackerLabel[] {
+    const root = object(value, "$");
+    const nodes = array(root.nodes, "$.nodes");
+    return nodes.map((item, index) =>
+        labelEntry(object(item, `$.nodes[${index}]`), `$.nodes[${index}]`),
+    );
 }
 
 export function linearTracker(exec: Exec, _config: LinearConfig): Tracker {
@@ -161,59 +114,58 @@ export function linearTracker(exec: Exec, _config: LinearConfig): Tracker {
         labelScopes: ["workspace"],
         createsLabels: true,
 
-        async listTasks(): Promise<TrackerResult<TrackerTask[]>> {
-            const command = "linear issue query --all-teams";
-            const result = await exec(["issue", "query", "--all-teams", "--limit", "0", "--json"]);
-            if (!result.ok) {
-                return { ok: false, error: mapExecError(command, result.error) };
-            }
-            return parseTasks(command, result.stdout);
+        listTasks(): Promise<TrackerResult<TrackerTask[]>> {
+            return runJson(
+                exec,
+                "linear issue query --all-teams",
+                ["issue", "query", "--all-teams", "--limit", "0", "--json"],
+                parseTasks,
+                mapExecError,
+            );
         },
 
-        async readTask(id: string): Promise<TrackerResult<TrackerTask>> {
-            const command = `linear issue view ${id}`;
-            const result = await exec(["issue", "view", id, "--json"]);
-            if (!result.ok) {
-                return { ok: false, error: mapExecError(command, result.error) };
-            }
-            return parseReadTask(command, result.stdout);
+        readTask(id: string): Promise<TrackerResult<TrackerTask>> {
+            return runJson(
+                exec,
+                `linear issue view ${id}`,
+                ["issue", "view", id, "--json"],
+                parseReadTask,
+                mapExecError,
+            );
         },
 
-        async addLabel(id: string, label: string): Promise<TrackerResult<void>> {
-            const command = `linear issue update ${id} --add-label ${label}`;
-            const result = await exec(["issue", "update", id, "--add-label", label]);
-            if (!result.ok) {
-                return { ok: false, error: mapExecError(command, result.error) };
-            }
-            return { ok: true, value: undefined };
+        addLabel(id: string, label: string): Promise<TrackerResult<void>> {
+            return run(
+                exec,
+                `linear issue update ${id} --add-label ${label}`,
+                ["issue", "update", id, "--add-label", label],
+                mapExecError,
+            );
         },
 
-        async listLabels(): Promise<TrackerResult<TrackerLabel[]>> {
-            const command = "linear label list --all";
-            const result = await exec(["label", "list", "--all", "--json"]);
-            if (!result.ok) {
-                return { ok: false, error: mapExecError(command, result.error) };
-            }
-            return parseLabels(command, result.stdout);
+        listLabels(): Promise<TrackerResult<TrackerLabel[]>> {
+            return runJson(
+                exec,
+                "linear label list --all",
+                ["label", "list", "--all", "--json"],
+                parseLabels,
+                mapExecError,
+            );
         },
 
-        async createLabel(
-            scope: string,
-            name: string,
-            colour: string,
-        ): Promise<TrackerResult<void>> {
+        createLabel(scope: string, name: string, colour: string): Promise<TrackerResult<void>> {
             if (scope !== "workspace") {
-                return {
+                return Promise.resolve({
                     ok: false,
                     error: `linear label create: Linear labels are only created at workspace level, got scope "${scope}"`,
-                };
+                });
             }
-            const command = `linear label create -n ${name} -c ${colour}`;
-            const result = await exec(["label", "create", "-n", name, "-c", colour]);
-            if (!result.ok) {
-                return { ok: false, error: mapExecError(command, result.error) };
-            }
-            return { ok: true, value: undefined };
+            return run(
+                exec,
+                `linear label create -n ${name} -c ${colour}`,
+                ["label", "create", "-n", name, "-c", colour],
+                mapExecError,
+            );
         },
     };
 }

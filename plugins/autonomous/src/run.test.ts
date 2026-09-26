@@ -1,12 +1,12 @@
-import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { copyFileSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
 import { afterAll, describe, expect, it } from "vitest";
 
-import { CONFIG_SCHEMA } from "./config.ts";
+import { CONFIG_SCHEMA, EXAMPLE_PATH } from "./config.ts";
 import type { Tracker, TrackerLabel, Trackers } from "./label-triage/trackers/tracker.ts";
-import { NOW } from "./quota-gate/test-fixtures.ts";
+import { fakeExec, limits, NOW, provider, session, weekly } from "./quota-gate/test-fixtures.ts";
 import { main, type MainDeps } from "./run.ts";
 import type { Step, StepOutcome } from "./runner.ts";
 
@@ -25,19 +25,21 @@ function fakeStep(outcome: StepOutcome): Step<{ value: number }> {
     };
 }
 
-function deps(steps: readonly Step[], overrides: Partial<MainDeps> = {}) {
+// `steps` undefined runs the real STEPS.
+function deps(steps: readonly Step[] | undefined, overrides: Partial<MainDeps> = {}) {
     const out: string[] = [];
     const err: string[] = [];
     const d: MainDeps = {
         now: () => NOW,
-        env: {},
+        env: { AUTONOMOUS_CONFIG: join(tmpdir(), "autonomous-run-absent", "config.json") },
         openUsage: () => Promise.resolve({ ok: false, error: "unused" }),
         trackers: () => {
             throw new Error("unused");
         },
+        judgement: () => Promise.resolve({ ok: false, error: "unused" }),
         stdout: (t) => out.push(t),
         stderr: (t) => err.push(t),
-        steps,
+        ...(steps === undefined ? {} : { steps }),
         ...overrides,
     };
     return { d, out, err };
@@ -214,5 +216,74 @@ describe("main --bootstrap-labels", () => {
         const { d, err } = bootstrapDeps(broken);
         expect(await main(["--bootstrap-labels"], d)).toBe(1);
         expect(err).toEqual(["autonomous run failed: boom"]);
+    });
+});
+
+describe("main with the real steps", () => {
+    const dir = mkdtempSync(join(tmpdir(), "autonomous-steps-"));
+    const configPath = join(dir, "config.json");
+    copyFileSync(EXAMPLE_PATH, configPath);
+    afterAll(() => rmSync(dir, { recursive: true, force: true }));
+
+    const capacity = () =>
+        fakeExec(limits({ claude: provider({ session: session(20), weekly: weekly(30) }) }));
+
+    function empty(source: Tracker["source"]): Tracker {
+        const unused = () => Promise.reject(new Error("unused"));
+        return {
+            source,
+            labelScopes: [],
+            createsLabels: false,
+            listTasks: () => Promise.resolve({ ok: true, value: [] }),
+            readTask: unused,
+            addLabel: unused,
+            listLabels: unused,
+            createLabel: unused,
+        };
+    }
+
+    it("still runs the quota gate without a configuration file, the triage reporting the missing file", async () => {
+        const missing = join(dir, "absent.json");
+        const { d, out } = deps(undefined, {
+            env: { AUTONOMOUS_CONFIG: missing },
+            openUsage: capacity(),
+        });
+        expect(await main(["--json"], d)).toBe(3);
+        const report = JSON.parse(out[0] as string) as {
+            outcome: string;
+            steps: { step: string; outcome: string; reasons: string[] }[];
+        };
+        expect(report.outcome).toBe("not-evaluable");
+        expect(report.steps.map((s) => [s.step, s.outcome])).toEqual([
+            ["quota-gate", "advance"],
+            ["label-triage", "not-evaluable"],
+        ]);
+        expect(report.steps[1]?.reasons).toEqual([
+            `configuration file not found at ${missing}; create it from the example at ${EXAMPLE_PATH}`,
+        ]);
+    });
+
+    it("advances through both steps with the example configuration and empty sources", async () => {
+        let judged = 0;
+        const { d, out, err } = deps(undefined, {
+            env: { AUTONOMOUS_CONFIG: configPath },
+            openUsage: capacity(),
+            trackers: (): Trackers => ({
+                beads: empty("beads"),
+                github: empty("github"),
+                linear: empty("linear"),
+            }),
+            judgement: () => {
+                judged++;
+                return Promise.resolve({ ok: false, error: "unused" });
+            },
+        });
+        expect(await main([], d)).toBe(0);
+        expect(err).toEqual([]);
+        expect(judged).toBe(0);
+        const text = out[0] as string;
+        expect(text).toContain("outcome: advance");
+        expect(text).toContain("[quota-gate] advance (code)");
+        expect(text).toContain("[label-triage] advance (code)");
     });
 });
