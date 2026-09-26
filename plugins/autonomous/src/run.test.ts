@@ -1,6 +1,12 @@
-import { describe, expect, it } from "vitest";
+import { copyFileSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 
-import { NOW } from "./quota-gate/test-fixtures.ts";
+import { afterAll, describe, expect, it } from "vitest";
+
+import { CONFIG_SCHEMA, EXAMPLE_PATH } from "./config.ts";
+import type { Tracker, TrackerLabel, Trackers } from "./label-triage/trackers/tracker.ts";
+import { fakeExec, limits, NOW, provider, session, weekly } from "./quota-gate/test-fixtures.ts";
 import { main, type MainDeps } from "./run.ts";
 import type { Step, StepOutcome } from "./runner.ts";
 
@@ -19,15 +25,22 @@ function fakeStep(outcome: StepOutcome): Step<{ value: number }> {
     };
 }
 
-function deps(steps: readonly Step[]) {
+// `steps` undefined runs the real STEPS.
+function deps(steps: readonly Step[] | undefined, overrides: Partial<MainDeps> = {}) {
     const out: string[] = [];
     const err: string[] = [];
     const d: MainDeps = {
         now: () => NOW,
+        env: { AUTONOMOUS_CONFIG: join(tmpdir(), "autonomous-run-absent", "config.json") },
         openUsage: () => Promise.resolve({ ok: false, error: "unused" }),
+        trackers: () => {
+            throw new Error("unused");
+        },
+        judgement: () => Promise.resolve({ ok: false, error: "unused" }),
         stdout: (t) => out.push(t),
         stderr: (t) => err.push(t),
-        steps,
+        ...(steps === undefined ? {} : { steps }),
+        ...overrides,
     };
     return { d, out, err };
 }
@@ -86,5 +99,209 @@ describe("main", () => {
         const { d, err } = deps([broken]);
         expect(await main([], d)).toBe(1);
         expect(err).toEqual(["autonomous run failed: boom"]);
+    });
+});
+
+describe("main --bootstrap-labels", () => {
+    const dir = mkdtempSync(join(tmpdir(), "autonomous-run-"));
+    const configPath = join(dir, "config.json");
+    writeFileSync(
+        configPath,
+        JSON.stringify({
+            schema: CONFIG_SCHEMA,
+            sources: {
+                linear: { enabled: true },
+                beads: { enabled: false, directory: "/repo" },
+                github: { enabled: false, repos: [] },
+            },
+            judgement: {
+                model: "claude-sonnet-5",
+                effort: "medium",
+                threshold: 0.95,
+                cap: 25,
+                batch: 20,
+            },
+        }),
+    );
+    afterAll(() => rmSync(dir, { recursive: true, force: true }));
+
+    function linear(labels: TrackerLabel[] | string): Tracker {
+        const unused = () => Promise.reject(new Error("unused"));
+        return {
+            source: "linear",
+            labelScopes: ["workspace"],
+            createsLabels: true,
+            listTasks: unused,
+            readTask: unused,
+            addLabel: unused,
+            listLabels: () =>
+                Promise.resolve(
+                    typeof labels === "string"
+                        ? { ok: false, error: labels }
+                        : { ok: true, value: labels },
+                ),
+            createLabel: () => Promise.resolve({ ok: true, value: undefined }),
+        };
+    }
+
+    function bootstrapDeps(tracker: Tracker, env = { AUTONOMOUS_CONFIG: configPath }) {
+        const calls = { steps: 0, openUsage: 0 };
+        const step: Step = {
+            id: "counted",
+            run: () => {
+                calls.steps++;
+                return Promise.reject(new Error("a step ran"));
+            },
+            render: () => "",
+        };
+        const result = deps([step], {
+            env,
+            openUsage: () => {
+                calls.openUsage++;
+                return Promise.resolve({ ok: false, error: "unused" });
+            },
+            // Beads and GitHub are disabled in the configuration, so only Linear is reached.
+            trackers: (): Trackers => ({ beads: tracker, github: tracker, linear: tracker }),
+        });
+        return { ...result, calls };
+    }
+
+    it("runs only the bootstrap and prints its report", async () => {
+        const { d, out, err, calls } = bootstrapDeps(linear([]));
+        expect(await main(["--bootstrap-labels"], d)).toBe(0);
+        expect(calls).toEqual({ steps: 0, openUsage: 0 });
+        expect(err).toEqual([]);
+        expect(out).toEqual([
+            [
+                `label bootstrap — started ${NOW.toISOString()}`,
+                "outcome: advance",
+                "  linear    workspace: created work, personal, AFK, HITL, grill-me",
+            ].join("\n"),
+        ]);
+    });
+
+    it("prints one autonomous.bootstrap.v1 JSON document with --json", async () => {
+        const { d, out } = bootstrapDeps(linear([]));
+        expect(await main(["--bootstrap-labels", "--json"], d)).toBe(0);
+        expect(out).toHaveLength(1);
+        expect(JSON.parse(out[0] as string)).toMatchObject({
+            schema: "autonomous.bootstrap.v1",
+            startedAt: NOW.toISOString(),
+            outcome: "advance",
+            sources: [{ source: "linear", evaluable: true }],
+        });
+    });
+
+    it("exits 3 when a source is not evaluable", async () => {
+        const { d, out, calls } = bootstrapDeps(
+            linear("linear label list --all --json: Linear CLI is not authenticated"),
+        );
+        expect(await main(["--bootstrap-labels"], d)).toBe(3);
+        expect(calls.steps).toBe(0);
+        expect(out[0]).toContain("outcome: not-evaluable");
+    });
+
+    it("exits 3 naming the path when the configuration file is missing", async () => {
+        const missing = join(dir, "absent.json");
+        const { d, out, err, calls } = bootstrapDeps(linear([]), { AUTONOMOUS_CONFIG: missing });
+        expect(await main(["--bootstrap-labels"], d)).toBe(3);
+        expect(calls).toEqual({ steps: 0, openUsage: 0 });
+        expect(out).toEqual([]);
+        expect(err).toHaveLength(1);
+        expect(err[0]).toContain(`configuration file not found at ${missing}`);
+    });
+
+    it("prints the missing configuration as one autonomous.bootstrap.v1 document with --json", async () => {
+        const missing = join(dir, "absent.json");
+        const { d, out, calls } = bootstrapDeps(linear([]), { AUTONOMOUS_CONFIG: missing });
+        expect(await main(["--bootstrap-labels", "--json"], d)).toBe(3);
+        expect(calls).toEqual({ steps: 0, openUsage: 0 });
+        expect(out).toHaveLength(1);
+        expect(JSON.parse(out[0] as string)).toEqual({
+            schema: "autonomous.bootstrap.v1",
+            startedAt: NOW.toISOString(),
+            outcome: "not-evaluable",
+            sources: [],
+            config: {
+                path: missing,
+                error: `configuration file not found at ${missing}; create it from the example at ${EXAMPLE_PATH}`,
+            },
+        });
+    });
+
+    it("exits 1 when the bootstrap itself fails", async () => {
+        const broken = { ...linear([]), listLabels: () => Promise.reject(new Error("boom")) };
+        const { d, err } = bootstrapDeps(broken);
+        expect(await main(["--bootstrap-labels"], d)).toBe(1);
+        expect(err).toEqual(["autonomous run failed: boom"]);
+    });
+});
+
+describe("main with the real steps", () => {
+    const dir = mkdtempSync(join(tmpdir(), "autonomous-steps-"));
+    const configPath = join(dir, "config.json");
+    copyFileSync(EXAMPLE_PATH, configPath);
+    afterAll(() => rmSync(dir, { recursive: true, force: true }));
+
+    const capacity = () =>
+        fakeExec(limits({ claude: provider({ session: session(20), weekly: weekly(30) }) }));
+
+    function empty(source: Tracker["source"]): Tracker {
+        const unused = () => Promise.reject(new Error("unused"));
+        return {
+            source,
+            labelScopes: [],
+            createsLabels: false,
+            listTasks: () => Promise.resolve({ ok: true, value: [] }),
+            readTask: unused,
+            addLabel: unused,
+            listLabels: unused,
+            createLabel: unused,
+        };
+    }
+
+    it("still runs the quota gate without a configuration file, the triage reporting the missing file", async () => {
+        const missing = join(dir, "absent.json");
+        const { d, out } = deps(undefined, {
+            env: { AUTONOMOUS_CONFIG: missing },
+            openUsage: capacity(),
+        });
+        expect(await main(["--json"], d)).toBe(3);
+        const report = JSON.parse(out[0] as string) as {
+            outcome: string;
+            steps: { step: string; outcome: string; reasons: string[] }[];
+        };
+        expect(report.outcome).toBe("not-evaluable");
+        expect(report.steps.map((s) => [s.step, s.outcome])).toEqual([
+            ["quota-gate", "advance"],
+            ["label-triage", "not-evaluable"],
+        ]);
+        expect(report.steps[1]?.reasons).toEqual([
+            `configuration file not found at ${missing}; create it from the example at ${EXAMPLE_PATH}`,
+        ]);
+    });
+
+    it("advances through both steps with the example configuration and empty sources", async () => {
+        let judged = 0;
+        const { d, out, err } = deps(undefined, {
+            env: { AUTONOMOUS_CONFIG: configPath },
+            openUsage: capacity(),
+            trackers: (): Trackers => ({
+                beads: empty("beads"),
+                github: empty("github"),
+                linear: empty("linear"),
+            }),
+            judgement: () => {
+                judged++;
+                return Promise.resolve({ ok: false, error: "unused" });
+            },
+        });
+        expect(await main([], d)).toBe(0);
+        expect(err).toEqual([]);
+        expect(judged).toBe(0);
+        const text = out[0] as string;
+        expect(text).toContain("outcome: advance");
+        expect(text).toContain("[quota-gate] advance (code)");
+        expect(text).toContain("[label-triage] advance (code)");
     });
 });

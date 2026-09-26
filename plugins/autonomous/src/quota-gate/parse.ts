@@ -2,6 +2,17 @@
 // without dependencies, so no schema library is available at runtime. A missing
 // required field or a mistyped field is an error with its path, never a default.
 
+import {
+    array,
+    boolean,
+    type Json,
+    number,
+    object,
+    optional,
+    ParseError,
+    string,
+} from "../validate.ts";
+
 const SCHEMA = "openusage.limits.v1";
 
 export interface OpenUsageResource {
@@ -35,10 +46,6 @@ export interface OpenUsageLimits {
 }
 
 export type ParseResult<T> = { ok: true; value: T } | { ok: false; error: string };
-
-class ParseError extends Error {}
-
-type Json = Record<string, unknown>;
 
 export function parseLimits(input: unknown): ParseResult<OpenUsageLimits> {
     try {
@@ -116,53 +123,6 @@ function resource(input: unknown, path: string): OpenUsageResource {
     if (resetsAt !== undefined) result.resetsAt = resetsAt;
     if (windowSeconds !== undefined) result.windowSeconds = windowSeconds;
     return result;
-}
-
-function object(value: unknown, path: string): Json {
-    if (typeof value !== "object" || value === null || Array.isArray(value)) {
-        throw new ParseError(`${path} must be an object`);
-    }
-    return value as Json;
-}
-
-function array(value: unknown, path: string): unknown[] {
-    if (!Array.isArray(value)) {
-        throw new ParseError(`${path} must be an array`);
-    }
-    return value;
-}
-
-function optional<T>(
-    parent: Json,
-    key: string,
-    path: string,
-    read: (parent: Json, key: string, path: string) => T,
-): T | undefined {
-    return key in parent ? read(parent, key, path) : undefined;
-}
-
-function string(parent: Json, key: string, path: string): string {
-    const value = parent[key];
-    if (typeof value !== "string") {
-        throw new ParseError(`${path}.${key} must be a string`);
-    }
-    return value;
-}
-
-function number(parent: Json, key: string, path: string): number {
-    const value = parent[key];
-    if (typeof value !== "number" || !Number.isFinite(value)) {
-        throw new ParseError(`${path}.${key} must be a finite number`);
-    }
-    return value;
-}
-
-function boolean(parent: Json, key: string, path: string): boolean {
-    const value = parent[key];
-    if (typeof value !== "boolean") {
-        throw new ParseError(`${path}.${key} must be a boolean`);
-    }
-    return value;
 }
 
 const RFC3339 = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d+)?(?:Z|[+-]\d{2}:\d{2})$/;

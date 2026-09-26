@@ -1,41 +1,11 @@
-import { type ExecFileException, execFile } from "node:child_process";
-
+import { CLI_TIMEOUT_MS, execCommand, type Exec } from "../exec.ts";
 import { type OpenUsageLimits, parseLimits } from "./parse.ts";
 
-export type ExecResult = { ok: true; stdout: string } | { ok: false; error: string };
-
-export type OpenUsageExec = (args: string[]) => Promise<ExecResult>;
+export type OpenUsageExec = Exec;
 
 export type ReadResult = { ok: true; limits: OpenUsageLimits } | { ok: false; error: string };
 
-const TIMEOUT_MS = 120_000;
-
-export function toExecResult(
-    error: ExecFileException | null,
-    stdout: string,
-    stderr: string,
-): ExecResult {
-    if (!error) {
-        return { ok: true, stdout };
-    }
-    // Only the timeout sets `killed` (a maxBuffer overflow kills the child too, but its error
-    // carries its own code and message); the timeout's message is just "Command failed".
-    if (error.killed === true) {
-        return { ok: false, error: `openusage timed out after ${TIMEOUT_MS / 1000} s` };
-    }
-    if (error.code === "ENOENT") {
-        return { ok: false, error: "openusage CLI not found on PATH" };
-    }
-    const detail = stderr.trim() || error.message;
-    return { ok: false, error: `openusage failed: ${detail}` };
-}
-
-export const execOpenUsage: OpenUsageExec = (args) =>
-    new Promise((resolve) => {
-        execFile("openusage", args, { timeout: TIMEOUT_MS }, (error, stdout, stderr) => {
-            resolve(toExecResult(error, stdout, stderr));
-        });
-    });
+export const execOpenUsage: OpenUsageExec = execCommand("openusage", CLI_TIMEOUT_MS);
 
 export async function readOpenUsage(exec: OpenUsageExec, force: boolean): Promise<ReadResult> {
     // `--force` refreshes providers; the default reads OpenUsage's shared cache.
