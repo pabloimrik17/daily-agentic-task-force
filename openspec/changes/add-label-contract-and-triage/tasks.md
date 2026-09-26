@@ -34,8 +34,8 @@
 
 ## 6. Command and documentation
 
-- [ ] 6.1 Update `commands/run.md`: argument hint with `--apply` and `--bootstrap-labels`, rules unchanged (relay only, no reinterpretation); verify the documented command lines match `USAGE`
-- [ ] 6.2 Update the plugin README: requirements (`bd` 1.3.0, `gh`, schpet/linear-cli 2.6.0 with `linear auth login`, `claude` ≥ 2.1.283) and the dotfiles note, configuration file and example, flags and exit codes, the label contract summary with colours, the triage tiering table with the `claude -p` judgement marked as the LLM tier to be replaced by Jev, and the active-account caveat; verify `bun run lint:markdown` passes
+- [x] 6.1 Update `commands/run.md`: argument hint with `--apply` and `--bootstrap-labels`, rules unchanged (relay only, no reinterpretation); verify the documented command lines match `USAGE`
+- [x] 6.2 Update the plugin README: requirements (`bd` 1.3.0, `gh`, schpet/linear-cli 2.6.0 with `linear auth login`, `claude` ≥ 2.1.283) and the dotfiles note, configuration file and example, flags and exit codes, the label contract summary with colours, the triage tiering table with the `claude -p` judgement marked as the LLM tier to be replaced by Jev, and the active-account caveat; verify `bun run lint:markdown` passes
 
 ## 7. Verification
 
