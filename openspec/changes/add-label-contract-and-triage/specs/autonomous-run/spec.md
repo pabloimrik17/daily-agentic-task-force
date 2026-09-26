@@ -4,7 +4,7 @@
 
 ### Requirement: Label bootstrap mode
 
-With `--bootstrap-labels`, the run SHALL execute only the label bootstrap of the label contract and exit; no step runs. The flag MAY be combined with `--json` only; any other flag with it is a usage error. The exit code SHALL be 0 when every enabled source has every contract label present or created, 3 when any source was not evaluable, and 1 for a usage error or a failure of the runner itself. The report SHALL list, per source, the labels created, present and failed.
+With `--bootstrap-labels`, the run SHALL execute only the label bootstrap of the label contract and exit; no step runs. The flag MAY be combined with `--json` only; any other flag with it is a usage error. The exit code SHALL be 0 when every enabled source has every contract label present or created, 3 when the configuration cannot be loaded, any source was not evaluable, or any label could not be created, and 1 for a usage error or a failure of the runner itself. The report SHALL list, per source, the labels created, present and failed.
 
 #### Scenario: Bootstrap only
 
@@ -15,6 +15,11 @@ With `--bootstrap-labels`, the run SHALL execute only the label bootstrap of the
 
 - **WHEN** the run is invoked with `--bootstrap-labels --apply`
 - **THEN** the run prints a usage message and exits with code 1
+
+#### Scenario: Label creation fails
+
+- **WHEN** a label cannot be created
+- **THEN** it is reported as failed and the process exits with code 3
 
 ### Requirement: Explicit apply flag
 
