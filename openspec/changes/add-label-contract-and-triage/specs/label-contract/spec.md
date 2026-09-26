@@ -64,7 +64,7 @@ The configuration MAY declare, per source, alias labels that count as evidence f
 
 ### Requirement: Structural rules
 
-The configuration MAY declare that every task of a source, of a Linear team or of a GitHub repository has a given scope. A structural rule SHALL count as evidence for that scope for every task it covers.
+The configuration MAY declare that every task of a source has a given scope. A structural rule SHALL count as evidence for that scope for every task of that source.
 
 #### Scenario: Whole source rule
 
