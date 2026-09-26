@@ -24,7 +24,7 @@ export interface Tracker {
     source: Source;
     labelScopes: readonly string[]; // scopes the bootstrap must process: beads [], github the configured repos, linear ["workspace"]
     createsLabels: boolean; // beads false (labels exist by use), github true, linear true
-    listTasks(): Promise<TrackerResult<TrackerTask[]>>; // only open tasks (see cli-facts.md per source)
+    listTasks(): Promise<TrackerResult<TrackerTask[]>>; // only open tasks (per source: see beads.ts, github.ts, linear.ts)
     readTask(id: string): Promise<TrackerResult<TrackerTask>>;
     addLabel(id: string, label: string): Promise<TrackerResult<void>>;
     listLabels(): Promise<TrackerResult<TrackerLabel[]>>; // all scopes at once

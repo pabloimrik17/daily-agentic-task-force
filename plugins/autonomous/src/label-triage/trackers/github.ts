@@ -1,7 +1,7 @@
 // GitHub tracker (spec label-triage, "Read the open tasks"; label-contract,
-// "Label bootstrap"): reads and writes through `gh`, one configured repo at a
-// time. A task id is `<owner/name>#<number>` so a write can be routed back to
-// its repo.
+// "Label bootstrap"): reads and writes through `gh` (v2.100.0), one configured
+// repo at a time. A task id is `<owner/name>#<number>` so a write can be routed
+// back to its repo.
 
 import type { GithubConfig } from "../../config.ts";
 import type { Exec } from "../../exec.ts";

@@ -31,8 +31,8 @@ detect a change.
   (`not-evaluable`).
 - [`bd`](https://github.com/steveyegge/beads) on `PATH`, verified against
   1.3.0.
-- [`gh`](https://cli.github.com) on `PATH`, authenticated through its own
-  keyring.
+- [`gh`](https://cli.github.com) on `PATH`, verified against 2.100.0,
+  authenticated through its own keyring.
 - [`linear`](https://github.com/schpet/linear-cli) (schpet/linear-cli) on
   `PATH`, verified against 2.6.0, authenticated with `linear auth login`
   (credentials in the macOS keychain, or `LINEAR_API_KEY`). No official

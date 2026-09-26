@@ -1,7 +1,8 @@
 // Linear tracker (spec label-triage, "Read the open tasks"; label-contract,
-// "Label bootstrap"): reads and writes through `linear`, across the whole
-// workspace. Completed, canceled and Duplicate issues are dropped from the
-// listing; a description is only available from `issue view`.
+// "Label bootstrap"): reads and writes through `linear` (schpet/linear-cli
+// v2.6.0), across the whole workspace. Completed, canceled and Duplicate issues
+// are dropped from the listing; a description is only available from
+// `issue view`.
 
 import type { LinearConfig } from "../../config.ts";
 import type { Exec } from "../../exec.ts";

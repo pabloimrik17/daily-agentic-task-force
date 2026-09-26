@@ -1,7 +1,7 @@
 // Beads tracker (spec label-triage, "Read the open tasks"): reads and writes
-// through `bd`'s own CLI. Beads has no label objects and no label colours —
-// labels exist by use — so `listLabels` synthesises `TrackerLabel`s with a
-// null colour and `createLabel` always refuses.
+// through `bd`'s own CLI (v1.3.0). Beads has no label objects and no label
+// colours — labels exist by use — so `listLabels` synthesises `TrackerLabel`s
+// with a null colour and `createLabel` always refuses.
 
 import type { BeadsConfig } from "../../config.ts";
 import type { Exec } from "../../exec.ts";
