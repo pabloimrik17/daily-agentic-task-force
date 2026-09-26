@@ -215,6 +215,35 @@ describe("label triage: detection and counts", () => {
         expect(result.data.conflicts.map((c) => [c.taskId, c.group])).toEqual([["B-3", "entry"]]);
     });
 
+    it("lists conflicting scope evidence for the human with both details, judging only the entry group", async () => {
+        const settings = config();
+        settings.sources.beads.scope = "personal";
+        const judgement = judgeAll();
+        const result = await labelTriageStep.run(
+            triageContext({
+                config: settings,
+                trackers: trackers([], { beads: [task("beads", "X-12", ["nazaries"])] }),
+                judgement,
+            }),
+        );
+        expect(result.outcome).toBe("advance");
+        expect(judgement.requests.map((r) => r.tasks.map((t) => [t.id, t.groups]))).toEqual([
+            [["X-12", ["entry"]]],
+        ]);
+        expect(result.data.records[1]).toEqual({
+            source: "beads",
+            taskId: "X-12",
+            title: "Task X-12",
+            group: "scope",
+            labels: ["work", "personal"],
+            confidence: 0,
+            reason: "conflicting evidence: alias nazaries; every beads task is personal",
+            tier: "code",
+            status: "asked",
+            detail: "invalid under the contract: two scope labels: work, personal",
+        });
+    });
+
     it("skips a disabled source and omits it from the counts", async () => {
         const calls: string[] = [];
         const disabled = config();
