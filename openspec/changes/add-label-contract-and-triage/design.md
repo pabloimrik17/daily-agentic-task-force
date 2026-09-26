@@ -32,7 +32,7 @@ See proposal.md for motivation. What shapes the approach:
 
 ### D2 — Every source through its CLI, one module per tracker
 
-`src/label-triage/trackers/{beads,github,linear}.ts` each export the same small shape: `listTasks()`, `listLabels()`, `addLabel(id, label)`, `readTask(id)`, `createLabel(name, colour)` — built on an injected `exec(args)` like `execOpenUsage`, with the same 120 s timeout, `ENOENT` and non-zero handling, and a strict parser for each command's JSON that keeps only the fields used (id, title, description, labels, state, updated time). Tracker-specific facts stay inside the module: Linear's `--all-teams` and workspace-level labels, GitHub's per-repo labels and `--repo`, Beads' `-C <dir>` and the absence of label objects. The parsers are versioned by the CLI version they were verified against, as OpenUsage is.
+`src/label-triage/trackers/{beads,github,linear}.ts` each export the same small shape: `listTasks()`, `listLabels()`, `addLabel(id, label)`, `readTask(id)`, `createLabel(scope, name, colour)` (the scope is a GitHub repo or Linear's workspace) — built on an injected `exec(args)` like `execOpenUsage`, with the same 120 s timeout, `ENOENT` and non-zero handling, and a strict parser for each command's JSON that keeps only the fields used (id, title, description, labels, state, updated time). Tracker-specific facts stay inside the module: Linear's `--all-teams` and workspace-level labels, GitHub's per-repo labels and `--repo`, Beads' `-C <dir>` and the absence of label objects. The parsers are versioned by the CLI version they were verified against, as OpenUsage is.
 
 **Alternatives rejected**: Linear over GraphQL with `fetch` — kept as the documented fallback if `linear issue query --json` turns out not to carry labels, since it needs no dependency; Linear over MCP — not reachable from the script and not reproducible. A generic `Tracker` registry — the three modules are listed in one array in the step.
 
@@ -86,7 +86,7 @@ An unreadable source makes the step `not-evaluable`, as the quota gate does with
 
 ### D8 — Report and run context
 
-`RunContext.io` becomes `{ openUsage, trackers: { beads, github, linear }, judgement }` plus `config` (loaded once in `run.ts`, `null` when absent so the quota gate keeps working without a file and the triage step reports the missing file). The report schema stays `autonomous.run.v1`: a new entry in `steps[]` with its own `data` is additive. `handoff` remains reserved and unemitted. Step id: `label-triage`; order: after `quota-gate`.
+`RunContext.io` becomes `{ openUsage, trackers, judgement }`, where `trackers` is a `TrackerFactory` that builds `{ beads, github, linear }` from the loaded configuration. `RunContext` gains `config: ConfigLoad`, loaded once in `run.ts`: the configuration, or its path and the error when the file is missing or invalid, so the quota gate keeps working without a file and the triage step reports which file failed and why. The report schema stays `autonomous.run.v1`: a new entry in `steps[]` with its own `data` is additive. `handoff` remains reserved and unemitted. Step id: `label-triage`; order: after `quota-gate`.
 
 ### D9 — Bootstrap is a mode, not a step
 
