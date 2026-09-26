@@ -211,6 +211,24 @@ describe("main --bootstrap-labels", () => {
         expect(err[0]).toContain(`configuration file not found at ${missing}`);
     });
 
+    it("prints the missing configuration as one autonomous.bootstrap.v1 document with --json", async () => {
+        const missing = join(dir, "absent.json");
+        const { d, out, calls } = bootstrapDeps(linear([]), { AUTONOMOUS_CONFIG: missing });
+        expect(await main(["--bootstrap-labels", "--json"], d)).toBe(3);
+        expect(calls).toEqual({ steps: 0, openUsage: 0 });
+        expect(out).toHaveLength(1);
+        expect(JSON.parse(out[0] as string)).toEqual({
+            schema: "autonomous.bootstrap.v1",
+            startedAt: NOW.toISOString(),
+            outcome: "not-evaluable",
+            sources: [],
+            config: {
+                path: missing,
+                error: `configuration file not found at ${missing}; create it from the example at ${EXAMPLE_PATH}`,
+            },
+        });
+    });
+
     it("exits 1 when the bootstrap itself fails", async () => {
         const broken = { ...linear([]), listLabels: () => Promise.reject(new Error("boom")) };
         const { d, err } = bootstrapDeps(broken);

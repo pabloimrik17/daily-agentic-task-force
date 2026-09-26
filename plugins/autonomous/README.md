@@ -53,13 +53,13 @@ DOT-82 sub-issue 7.
 /autonomous:run --bootstrap-labels [--json]
 ```
 
-| Flag                       | Effect                                                                                                    |
-| -------------------------- | --------------------------------------------------------------------------------------------------------- |
-| `--account <provider-key>` | Claude account to evaluate (`claude` or `claude@<id>`). Required when several Claude accounts are present |
-| `--force`                  | Ask OpenUsage to bypass its shared cache                                                                  |
-| `--json`                   | Print one `autonomous.run.v1` JSON document instead of the text report                                    |
-| `--apply`                  | Let steps write. Without it a run has no side effects beyond the CLIs' own caches                         |
-| `--bootstrap-labels`       | Run only the label bootstrap and exit. Only combines with `--json`                                        |
+| Flag                       | Effect                                                                                                                                    |
+| -------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------- |
+| `--account <provider-key>` | Claude account to evaluate (`claude` or `claude@<id>`). Required when several Claude accounts are present                                 |
+| `--force`                  | Ask OpenUsage to bypass its shared cache                                                                                                  |
+| `--json`                   | Print one `autonomous.run.v1` JSON document instead of the text report; with `--bootstrap-labels`, one `autonomous.bootstrap.v1` document |
+| `--apply`                  | Let steps write. Without it a run has no side effects beyond the CLIs' own caches                                                         |
+| `--bootstrap-labels`       | Run only the label bootstrap and exit. Only combines with `--json`                                                                        |
 
 The script can also be run directly, which is what a shell or `/loop` should
 branch on:

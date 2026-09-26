@@ -5,6 +5,7 @@ import {
     bootstrapLabels,
     renderBootstrapJson,
     renderBootstrapText,
+    unconfiguredBootstrap,
 } from "./label-contract/bootstrap.ts";
 import {
     claudeJudgement,
@@ -68,6 +69,11 @@ async function runBootstrap(args: RunArgs, deps: MainDeps): Promise<number> {
     const load = loadConfig(deps.env);
     if (!load.ok) {
         deps.stderr(load.error);
+        if (args.json) {
+            deps.stdout(
+                renderBootstrapJson(unconfiguredBootstrap(load.path, load.error, deps.now())),
+            );
+        }
         return exitCodeFor("not-evaluable");
     }
     const report = await bootstrapLabels(deps.trackers(load.config), load.config, deps.now());

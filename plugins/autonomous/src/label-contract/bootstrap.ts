@@ -30,6 +30,8 @@ export interface BootstrapReport {
     startedAt: string;
     outcome: "advance" | "not-evaluable";
     sources: BootstrapSource[];
+    // Present only when the configuration failed to load, leaving no sources.
+    config?: { path: string; error: string };
 }
 
 const SOURCES: readonly Source[] = ["beads", "github", "linear"];
@@ -55,6 +57,22 @@ export async function bootstrapLabels(
         startedAt: startedAt.toISOString(),
         outcome: complete ? "advance" : "not-evaluable",
         sources,
+    };
+}
+
+// With --json a configuration that fails to load still yields one document,
+// as it does inside the run report.
+export function unconfiguredBootstrap(
+    path: string,
+    error: string,
+    startedAt: Date,
+): BootstrapReport {
+    return {
+        schema: "autonomous.bootstrap.v1",
+        startedAt: startedAt.toISOString(),
+        outcome: "not-evaluable",
+        sources: [],
+        config: { path, error },
     };
 }
 
