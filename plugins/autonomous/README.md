@@ -38,7 +38,9 @@ detect a change.
   (credentials in the macOS keychain, or `LINEAR_API_KEY`). No official
   Linear CLI exists.
 - [`claude`](https://claude.com/product/claude-code) 2.1.283 or later, for
-  `-p`, `--json-schema` and `--effort`.
+  `-p`, `--model`, `--effort`, `--output-format json`, `--json-schema`,
+  `--safe-mode`, `--tools`, `--strict-mcp-config` and
+  `--no-session-persistence`.
 
 Every CLI's output is validated by hand; there are still no runtime
 dependencies. Each call is bounded by a 120 s timeout, except the LLM
