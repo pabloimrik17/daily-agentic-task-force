@@ -43,4 +43,4 @@
 - [x] 7.1 Run `bun run lint:oxfmt`, `lint:eslint`, `lint:markdown`, `lint:knip`, `lint:fallow`, `lint:marketplace`, `lint:types` and `bun run test`; all pass
 - [x] 7.2 Run `openspec validate add-label-contract-and-triage --strict`; it passes
 - [x] 7.3 Create the real configuration from the example, run `--bootstrap-labels` and check on each tracker that the five labels exist with their colour (Linear only once the CLI is installed and authenticated; before that, expect Linear `not-evaluable` naming `linear auth login` with the other sources processed)
-- [ ] 7.4 Run `/autonomous:run --account <key>` without `--apply` and check the counts per source and group by hand against the trackers, then run once with `--apply`, pick three applied labels per source and confirm the read-back by opening the tasks; keep the JSON report as the first judgement baseline
+- [x] 7.4 Run `/autonomous:run --account <key>` without `--apply` and check the counts per source and group by hand against the trackers, then run once with `--apply`, pick three applied labels per source and confirm the read-back by opening the tasks; keep the JSON report as the first judgement baseline
