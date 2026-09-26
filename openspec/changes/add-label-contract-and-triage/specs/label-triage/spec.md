@@ -41,7 +41,7 @@ For every task read, the step SHALL determine, per group of the label contract, 
 
 ### Requirement: Derive labels by rule first, then by judgement
 
-For a missing group, the step SHALL first apply the contract's evidence: a structural rule or an alias yields the corresponding label with confidence 1 and tier `code`. When no evidence decides a group, the step SHALL obtain a judgement from an LLM run in print mode with a JSON schema, given the task's title, description, existing labels and source, and returning per group the labels, a confidence between 0 and 1 and a one-sentence reason, at tier `llm`. Judgements SHALL be requested in batches of the configured size, for at most the configured number of tasks per run, taking tasks with `work` evidence first and then the most recently updated; tasks beyond the cap SHALL be reported as a count. A judgement whose output is missing, invalid or that names a label outside the contract SHALL be discarded for that task and reported; the outcome of the step is not affected. The model and effort used SHALL be reported.
+For a missing group, the step SHALL first apply the contract's evidence: a structural rule or an alias yields the corresponding label with confidence 1 and tier `code`. When a group has no evidence, the step SHALL obtain a judgement from an LLM run in print mode with a JSON schema, given the task's title, description, existing labels and source, and returning per group the labels, a confidence between 0 and 1 and a one-sentence reason, at tier `llm`. A group whose evidence conflicts SHALL NOT be judged and SHALL be listed for the human with the conflicting evidence. Judgements SHALL be requested in batches of the configured size, for at most the configured number of tasks per run, taking tasks with `work` evidence first and then the most recently updated; tasks beyond the cap SHALL be reported as a count. A judgement whose output is missing, invalid or that names a label outside the contract SHALL be discarded for that task and reported; the outcome of the step is not affected. The model and effort used SHALL be reported.
 
 #### Scenario: Scope by structural rule
 
@@ -52,6 +52,11 @@ For a missing group, the step SHALL first apply the contract's evidence: a struc
 
 - **WHEN** a task lacks an entry label and no evidence decides it
 - **THEN** the LLM is asked and its labels, confidence and reason are recorded for that task
+
+#### Scenario: Conflicting evidence
+
+- **WHEN** a task's alias evidence and a structural rule point to different scopes
+- **THEN** the scope group is listed for the human with both pieces of evidence and no judgement is requested for it
 
 #### Scenario: Cap reached
 
