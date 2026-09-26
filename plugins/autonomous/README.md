@@ -286,7 +286,9 @@ tiering:
 
 The judgement (`claude -p`) is the step's only LLM work, and the only part
 expected to move: it is meant to be replaced by Jev (TypeSafe AI) once that
-work lands, without touching the contract, threshold or report. The
+work lands, without touching the contract or threshold. In the report only
+the tier changes: judged tasks and the step itself record `llm` today, and
+the swap must change that too. The
 command's own only LLM work is relaying the script's output.
 
 ## Versioning
