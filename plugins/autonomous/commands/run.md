@@ -15,7 +15,10 @@ on every enabled tracker and exits instead of running the steps.
 
 1. Run exactly this, once, with the Bash tool's `timeout` set to `600000`
    (10 minutes, the maximum) and never in the background: a judgement batch
-   alone may take 300 s.
+   alone may take 300 s. A run that needs more than one batch, as the shipped
+   `cap` 25 and `batch` 20 allow when many tasks are left to judge, can exceed
+   the command's timeout; the user should start such a run from a shell, like
+   the first `--apply` (see Rules).
 
     ```bash
     bun "${CLAUDE_PLUGIN_ROOT}/src/run.ts" $ARGUMENTS
