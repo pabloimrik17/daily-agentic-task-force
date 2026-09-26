@@ -1,8 +1,8 @@
 ## 1. Shared validation and configuration
 
-- [ ] 1.1 Move the primitive validators of `src/quota-gate/parse.ts` (object, string, number, boolean, path-carrying errors) to `src/validate.ts` and import them back; verify the existing quota-gate tests pass unchanged
-- [ ] 1.2 Implement `src/config.ts`: path resolution (`~/.config/autonomous/config.json`, `AUTONOMOUS_CONFIG` override) and the strict `autonomous.config.v1` parser (sources with enabled, aliases, structural scope, Beads directory, GitHub repos; judgement model, effort, threshold, cap, batch; unknown fields rejected); verify with tests for a valid file, a missing file whose error names the path and the example, a missing field, a mistyped field and an unknown field
-- [ ] 1.3 Add `plugins/autonomous/config.example.json` with placeholder aliases and repos; verify with a test that the example parses
+- [x] 1.1 Move the primitive validators of `src/quota-gate/parse.ts` (object, string, number, boolean, path-carrying errors) to `src/validate.ts` and import them back; verify the existing quota-gate tests pass unchanged
+- [x] 1.2 Implement `src/config.ts`: path resolution (`~/.config/autonomous/config.json`, `AUTONOMOUS_CONFIG` override) and the strict `autonomous.config.v1` parser (sources with enabled, aliases, structural scope, Beads directory, GitHub repos; judgement model, effort, threshold, cap, batch; unknown fields rejected); verify with tests for a valid file, a missing file whose error names the path and the example, a missing field, a mistyped field and an unknown field
+- [x] 1.3 Add `plugins/autonomous/config.example.json` with placeholder aliases and repos; verify with a test that the example parses
 
 ## 2. Label contract
 
