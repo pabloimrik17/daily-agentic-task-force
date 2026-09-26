@@ -116,7 +116,8 @@ plugins/autonomous/
 ## Risks / Trade-offs
 
 - [schpet/linear-cli has almost no automated tests] → strict parsing against 2.6.0, additive commands only, read-back with stop-on-mismatch; GraphQL fallback documented.
-- [`linear issue query --json` may not include labels] → verified first in the dotfiles sub-issue; fallback is the GraphQL module behind the same tracker shape.
+- [`linear issue query --json` might stop including labels] → confirmed against 2.6.0: each issue carries `labels.nodes[].name`, which the strict parser requires; the GraphQL module behind the same tracker shape stays the fallback if a later version drops them.
+- [The bootstrap counts a same-name Linear team label as present (`findExisting` in `bootstrap.ts`), but the workspace has two teams, DOT and MON, and a team-only label may not apply to the other team's issues: the first such write fails and stops Linear's writes for that run] → today all five contract labels are workspace-level; keep them there, and revisit `findExisting` if a team-only one appears.
 - [LLM confidence is self-reported] → recorded per judgement in the JSON; `AFK` always shown with confidence; threshold and model are configuration; Jev replacement planned.
 - [`claude -p` runs on the active account, not `--account`] → documented requirement; `claude-swap` integration stays deferred.
 - [Bun loses a child's exit notification (oven-sh/bun#41024, #34069; seen on 1.3.14 during the first `--apply`, reported up to 1.4.x): `execFile` never calls back and its own timeout cannot end the call] → `execCommand` carries a watchdog at the timeout plus 5 s that kills the child and settles the call as a timeout, so the 120 s bound holds and a write stops only its source.
@@ -131,5 +132,5 @@ Additive. New flags, a new step and a configuration file. Without the file the q
 
 ## Open Questions
 
-- The exact JSON envelope `claude -p --output-format json` wraps around a `--json-schema` answer in 2.1.283: verified at implementation; the parser is strict either way.
-- Whether `linear label create` without `--team` creates a workspace label in 2.6.0, or needs an explicit workspace flag: verified in the dotfiles sub-issue.
+- **Resolved.** The JSON envelope `claude -p --output-format json` wraps around a `--json-schema` answer in 2.1.283 is an object with `type: "result"`, `subtype: "success"`, `is_error: false` and the answer in `structured_output`; `judgement.ts` checks all four and reports anything else as a failed judgement.
+- **Resolved.** `linear label create -n -c` without `--team` creates a workspace label in 2.6.0; no workspace flag is needed. Verified in task 7.3: `linear label list --all --json` shows the five contract labels with `team: null`.
