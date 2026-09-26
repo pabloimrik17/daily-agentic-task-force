@@ -1,14 +1,14 @@
+import { readFileSync } from "node:fs";
+
 import { describe, expect, it } from "vitest";
 
-import {
-    COLOURS,
-    GROUPS,
-    groupOf,
-    isContractLabel,
-    isValidGroup,
-    LABELS,
-    MEANINGS,
-} from "./contract.ts";
+import { COLOURS, GROUPS, isContractLabel, isValidGroup, LABELS, MEANINGS } from "./contract.ts";
+
+// criteria.md wraps lines, backticks label names and lowercases the first
+// letter of each meaning, so both sides are compared without those.
+function normalise(text: string): string {
+    return text.replaceAll("`", "").replaceAll(/\s+/g, " ").toLowerCase();
+}
 
 describe("LABELS, GROUPS and COLOURS", () => {
     it("lists exactly the five contract labels", () => {
@@ -35,6 +35,21 @@ describe("LABELS, GROUPS and COLOURS", () => {
             expect(MEANINGS[label]).toBeTruthy();
         }
     });
+
+    it.each(LABELS)("states the meaning of %s as criteria.md does", (label) => {
+        const criteria = normalise(
+            readFileSync(new URL("../label-triage/criteria.md", import.meta.url), "utf8"),
+        );
+        const statements = [
+            `${label} is ${MEANINGS[label]}`,
+            `${label} means ${MEANINGS[label]}`,
+        ].map(normalise);
+
+        expect(
+            statements.some((statement) => criteria.includes(statement)),
+            `criteria.md does not state the meaning of ${label} given in MEANINGS`,
+        ).toBe(true);
+    });
 });
 
 describe("isContractLabel", () => {
@@ -48,19 +63,6 @@ describe("isContractLabel", () => {
 
     it("is case-sensitive", () => {
         expect(isContractLabel("afk")).toBe(false);
-    });
-});
-
-describe("groupOf", () => {
-    it("assigns work and personal to scope", () => {
-        expect(groupOf("work")).toBe("scope");
-        expect(groupOf("personal")).toBe("scope");
-    });
-
-    it("assigns AFK, HITL and grill-me to entry", () => {
-        expect(groupOf("AFK")).toBe("entry");
-        expect(groupOf("HITL")).toBe("entry");
-        expect(groupOf("grill-me")).toBe("entry");
     });
 });
 

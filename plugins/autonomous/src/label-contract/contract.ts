@@ -33,10 +33,6 @@ export function isContractLabel(name: string): name is ContractLabel {
     return (LABELS as readonly string[]).includes(name);
 }
 
-export function groupOf(label: ContractLabel): Group {
-    return GROUPS.scope.includes(label) ? "scope" : "entry";
-}
-
 export function isValidGroup(group: Group, labels: readonly string[]): boolean {
     if (group === "scope") {
         return (
