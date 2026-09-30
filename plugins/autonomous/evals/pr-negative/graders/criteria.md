@@ -1,6 +1,5 @@
 ---
 type: regex
 target: last_message
-pattern: "pull request|PR|branch"
-flags: i
+pattern: '[Pp]ull [Rr]equests?\b|\bPRs?\b'
 ---
