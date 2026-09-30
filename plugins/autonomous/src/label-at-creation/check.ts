@@ -29,12 +29,11 @@ function inspection(input: CheckInput, load: ConfigLoad) {
         status: "",
         updatedAt: "",
     };
+    const repo = input.repo?.toLowerCase() ?? "";
     const configured =
-        load.ok &&
-        input.source === "github" &&
-        !load.config.sources.github.repos.includes(input.repo ?? "")
-            ? false
-            : true;
+        !load.ok ||
+        input.source !== "github" ||
+        load.config.sources.github.repos.some((name) => name.toLowerCase() === repo);
     const rules: SourceRules = load.ok
         ? {
               ...load.config.sources[input.source],

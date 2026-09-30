@@ -203,8 +203,10 @@ closure or pull requests. It checks labels before creation. For an unresolved
 group in an interactive session, it asks one question using that group's
 options and reason, then checks the answer. When it cannot ask, it creates
 with the confident labels and names each omitted group in its reply for the
-next triage run. `/context` or `/doctor` can confirm that its description is
-present in a crowded skill listing.
+next triage run. A Beads task created under a parent gets `--no-inherit-labels`
+and the parent's non-contract labels listed explicitly, so its contract labels
+are exactly the ones the helper decided. `/context` or `/doctor` can confirm
+that its description is present in a crowded skill listing.
 
 The creation-time helper checks the same label contract before a new Linear,
 Beads or GitHub task is written. It reads `~/.config/autonomous/config.json`
@@ -233,6 +235,14 @@ each group the creating agent judges; the confidence must be from 0 to 1.
 modes name a missing configuration. An unconfigured GitHub repository is noted
 because the contract labels may not exist there. A printed decision exits 0;
 invalid usage prints the usage text and exits 1.
+
+Its parts are tiered by the same rule as the run's steps:
+
+| Part                                  | Tier |
+| ------------------------------------- | ---- |
+| evidence, validity and threshold      | code |
+| judgement from the conversation       | llm  |
+| questions and the tracker create call | llm  |
 
 ### Local eval suite
 
@@ -344,9 +354,6 @@ tiering:
 | threshold, validity, ordering, cap              | code |
 | writes and read-back                            | code |
 | report                                          | code |
-| creation-time evidence, validity and threshold  | code |
-| creation-time judgement from the conversation   | llm  |
-| creation-time questions and tracker create call | llm  |
 
 The judgement (`claude -p`) is the step's only LLM work, and the only part
 expected to move: it is meant to be replaced by Jev (TypeSafe AI) once that

@@ -1,5 +1,5 @@
 ---
 type: tool_used
 tool: Bash
-input_match: "(?=.*linear issue create)(?=.*personal)(?!.*(?:AFK|HITL|grill-me))"
+input_match: '(?=.*linear issue create)(?=.*(?:--label|-l)[ =]\S*\bpersonal\b)(?!.*(?:AFK|HITL|grill-me))'
 ---

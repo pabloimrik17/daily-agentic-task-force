@@ -36,6 +36,17 @@ describe("prepare", () => {
         ]);
     });
 
+    it("uses the GitHub structural rule in a configured repository, in any letter case", () => {
+        const load = { ...configured, config: config() };
+        if (load.ok) load.config.sources.github.scope = "personal";
+        for (const repo of ["owner/repo", "Owner/Repo"]) {
+            expect(prepare(input("github", [], repo), load)).toEqual([
+                "scope: derived personal (every github task is personal)",
+                "entry: judge (AFK, HITL, grill-me)",
+            ]);
+        }
+    });
+
     it("recognises user-named labels and labels inherited from a parent", () => {
         expect(prepare(input("linear", ["HITL"]), configured)[1]).toBe("entry: present HITL");
         expect(prepare(input("beads", ["work", "AFK"]), configured)).toEqual([

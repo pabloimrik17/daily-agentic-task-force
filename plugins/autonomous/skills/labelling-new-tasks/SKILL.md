@@ -45,13 +45,16 @@ or pull requests.
    ask one question before creation with that group's listed options and
    reason. Run `decide` again with that group's `--label` values replaced by
    the answer and its `--judged` removed. When that tool is absent, do not ask
-   in plain text and stop: create now with the returned `apply` labels (`none`
+   in plain text or wait for a reply: create now with the returned `apply` labels (`none`
    means no contract label), then name each omitted group and its reason in the
    reply for later `/autonomous:run --apply` triage. If a group is still asked
    about after the second `decide`, take that same path.
 5. Create the task with all non-contract labels originally intended plus the
    helper's `apply` labels in the create call itself, using the session's
-   tracker tool. Decide and create each task separately.
+   tracker tool. With `bd create --parent`, also pass `--no-inherit-labels`:
+   the parent's non-contract labels are already in that list, and Beads would
+   otherwise copy the parent's contract labels back beside `apply`. Decide and
+   create each task separately.
 
 | Tool                  | Label input at creation                            |
 | --------------------- | -------------------------------------------------- |
