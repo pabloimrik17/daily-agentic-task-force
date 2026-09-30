@@ -420,6 +420,14 @@ with an `error` is a failure even if a grader reports a passing score. The
 results are ignored by git. The runs that built the skill are recorded in
 `openspec/changes/archive/2026-09-30-add-label-at-creation-skill/evidence/`.
 
+One case, `run-nobody-to-ask`, covers `/autonomous:run` instead: a run with
+`--apply` whose report carries a handoff, in a session that cannot ask, must
+end without answer mode. Its scaffold puts a stand-in `openusage` ahead of the
+real one through the sandbox's shell start-up files, so the quota gate
+advances without real credentials, and enables only a scaffolded Beads
+database. The run that built it is recorded in
+`openspec/changes/add-interactive-handoff/evidence/interactive-check.md`.
+
 ## The `label-triage` step
 
 Second in the run, after `quota-gate`. It reads the open tasks of every
