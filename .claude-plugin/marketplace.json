@@ -12,13 +12,13 @@
         {
             "name": "datf-lab",
             "source": "./plugins/datf-lab",
-            "version": "0.2.0",
+            "version": "0.2.1",
             "description": "Staging area for skills and commands under validation — contents are provisional and may be promoted or removed"
         },
         {
             "name": "autonomous",
             "source": "./plugins/autonomous",
-            "version": "1.0.0",
+            "version": "1.1.0",
             "description": "Autonomous loop entry point with deterministic gate steps and a skill that labels new Linear, Beads and GitHub tasks at creation"
         }
     ]
