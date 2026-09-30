@@ -6,5 +6,3 @@
 ### Features
 
 * initialise the plugin marketplace and its toolchain ([#1](https://github.com/pabloimrik17/daily-agentic-task-force/issues/1)) ([e6aeadd](https://github.com/pabloimrik17/daily-agentic-task-force/commit/e6aeaddca699cf2b687f9920712452e7c5564bef))
-
-## Changelog
