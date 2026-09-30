@@ -272,8 +272,8 @@ ID for comparing runs. The suite is run locally on demand because every case
 and grader consumes account usage, and the tracker CLIs in the sandbox cannot
 reach real credentials. Judge the attempted create call in the trace. A run
 with an `error` is a failure even if a grader reports a passing score. The
-results are ignored by git; the evidence log for this change is under
-`openspec/changes/add-label-at-creation-skill/evidence/`.
+results are ignored by git. The runs that built the skill are recorded in
+`openspec/changes/archive/2026-09-30-add-label-at-creation-skill/evidence/`.
 
 ## The `label-triage` step
 
