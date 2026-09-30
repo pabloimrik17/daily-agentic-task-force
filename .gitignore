@@ -5,3 +5,4 @@ node_modules/
 .fallow/
 .claude/settings.local.json
 coverage/
+plugins/autonomous/evals/results/

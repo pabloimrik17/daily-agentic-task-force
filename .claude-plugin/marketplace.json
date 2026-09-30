@@ -19,7 +19,7 @@
             "name": "autonomous",
             "source": "./plugins/autonomous",
             "version": "1.0.0",
-            "description": "Autonomous loop entry point — runs deterministic gate steps, starting with a Claude quota gate, before any work is delegated"
+            "description": "Autonomous loop entry point with deterministic gate steps and a skill that labels new Linear, Beads and GitHub tasks at creation"
         }
     ]
 }
