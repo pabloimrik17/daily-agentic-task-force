@@ -88,7 +88,16 @@ export function validateMarketplace(repoRoot: string): string[] {
     const metadata = isRecord(marketplace.value["metadata"])
         ? marketplace.value["metadata"]
         : undefined;
-    const pluginRoot = nonEmptyString(metadata?.["pluginRoot"]) ?? DEFAULT_PLUGIN_ROOT;
+
+    // Nothing updates a marketplace-level version, so any value goes stale.
+    if (marketplace.value["version"] !== undefined || metadata?.["version"] !== undefined) {
+        problems.push(
+            `Marketplace manifest ${MARKETPLACE_MANIFEST} declares a marketplace-level version; only plugins are versioned`,
+        );
+    }
+
+    const declaredPluginRoot = nonEmptyString(metadata?.["pluginRoot"]);
+    const pluginRoot = declaredPluginRoot ?? DEFAULT_PLUGIN_ROOT;
     const pluginRootPath = join(root, pluginRoot);
 
     const entries = marketplace.value["plugins"];
@@ -98,7 +107,7 @@ export function validateMarketplace(repoRoot: string): string[] {
         problems.push(`Marketplace manifest ${MARKETPLACE_MANIFEST} has no "plugins" array`);
     } else {
         for (const [index, entry] of entries.entries()) {
-            checkEntry({ root, entry, index, problems, listedSources });
+            checkEntry({ root, declaredPluginRoot, entry, index, problems, listedSources });
         }
     }
 
@@ -107,14 +116,37 @@ export function validateMarketplace(repoRoot: string): string[] {
     return problems;
 }
 
+/**
+ * Resolves a relative source the way Claude Code does: `./` paths from the
+ * repository root, bare names under a declared `metadata.pluginRoot`.
+ *
+ * @returns undefined when Claude Code would reject the source.
+ */
+function resolveSource(
+    root: string,
+    source: string,
+    declaredPluginRoot: string | undefined,
+): string | undefined {
+    if (source === "." || source.startsWith("./")) {
+        return resolve(root, source);
+    }
+
+    if (declaredPluginRoot !== undefined && !source.includes("/")) {
+        return resolve(root, declaredPluginRoot, source);
+    }
+
+    return undefined;
+}
+
 function checkEntry(args: {
     root: string;
+    declaredPluginRoot: string | undefined;
     entry: unknown;
     index: number;
     problems: string[];
     listedSources: Set<string>;
 }): void {
-    const { root, entry, index, problems, listedSources } = args;
+    const { root, declaredPluginRoot, entry, index, problems, listedSources } = args;
     const position = `Marketplace entry #${index + 1}`;
 
     if (!isRecord(entry)) {
@@ -127,7 +159,14 @@ function checkEntry(args: {
         return;
     }
 
-    const pluginDir = resolve(root, source);
+    const pluginDir = resolveSource(root, source, declaredPluginRoot);
+    if (pluginDir === undefined) {
+        problems.push(
+            `${label} source "${source}" must start with "./", or be a bare name under metadata.pluginRoot`,
+        );
+        return;
+    }
+
     listedSources.add(pluginDir);
 
     if (!isDirectory(pluginDir)) {
@@ -166,6 +205,10 @@ function readEntryFields(entry: JsonRecord, position: string, problems: string[]
     const listedVersion = nonEmptyString(entry["version"]);
     if (listedVersion === undefined) {
         problems.push(`${label} has no "version" in the marketplace manifest`);
+    }
+
+    if (nonEmptyString(entry["description"]) === undefined) {
+        problems.push(`${label} has no "description" in the marketplace manifest`);
     }
 
     const source = nonEmptyString(entry["source"]);

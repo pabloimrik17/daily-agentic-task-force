@@ -23,10 +23,13 @@ is `datf-lab` and not `experiments`, which `monolab` already publishes.
 
 ## Plugins
 
-| Plugin       | Version | Purpose                                                                     |
-| ------------ | ------- | --------------------------------------------------------------------------- |
-| `autonomous` | 0.0.0   | Autonomous loop entry point — gate steps, starting with a Claude quota gate |
-| `datf-lab`   | 0.2.0   | Staging area for skills and commands under validation                       |
+| Plugin       | Purpose                                                                     |
+| ------------ | --------------------------------------------------------------------------- |
+| `autonomous` | Autonomous loop entry point — gate steps, starting with a Claude quota gate |
+| `datf-lab`   | Staging area for skills and commands under validation                       |
+
+Current versions live in `.claude-plugin/marketplace.json`, which release-please
+keeps up to date.
 
 ## Plugin lifecycle
 
@@ -75,7 +78,7 @@ bun install
 | `bun run lint:knip`        | Unused files, exports and dependencies                 |
 | `bun run lint:fallow`      | Dead code, full repository                             |
 | `bun run lint:marketplace` | Marketplace consistency and version agreement          |
-| `bun run lint:types`       | TypeScript                                             |
+| `bun run typecheck`        | TypeScript                                             |
 | `bun run test`             | Vitest, across repo scripts and every plugin workspace |
 
 Commits are gated by husky: `validate-branch-name` and `lint-staged` on
@@ -89,7 +92,7 @@ pre-commit, `commitlint` on commit-msg. Branches must match
    description, author, license, repository, homepage.
 3. Write `plugins/<name>/package.json` — private, name-scoped, same version.
 4. Add a `plugins[]` entry to `.claude-plugin/marketplace.json` with the same
-   name, `./plugins/<name>` as source, and the same version.
+   name, `./plugins/<name>` as source, the same version, and a description.
 5. Add matching entries to `release-please-config.json` and
    `.release-please-manifest.json`.
 6. Run `bun run lint:marketplace`.

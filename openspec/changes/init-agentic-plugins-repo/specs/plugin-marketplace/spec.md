@@ -36,7 +36,7 @@ A plugin's version is recorded in more than one place: its own plugin manifest, 
 
 ### Requirement: Marketplace validation gate
 
-The repository SHALL provide a validation check, run automatically on every proposed and integrated change, that verifies the marketplace is internally consistent before it can be published. The check SHALL fail when the marketplace manifest is absent or not parseable, when a listed plugin's source path does not resolve to a directory containing a plugin manifest, when a plugin manifest is not parseable or omits its name or version, when a plugin manifest's name disagrees with the name under which it is listed, or when a plugin directory exists under the plugin root but is not listed in the marketplace.
+The repository SHALL provide a validation check, run automatically on every proposed and integrated change, that verifies the marketplace is internally consistent before it can be published. The check SHALL fail when the marketplace manifest is absent or not parseable, when it declares a marketplace-level version, when a marketplace entry omits its description, when a listed plugin's source path does not resolve to a directory containing a plugin manifest, when a plugin manifest is not parseable or omits its name or version, when a plugin manifest's name disagrees with the name under which it is listed, or when a plugin directory exists under the plugin root but is not listed in the marketplace. Source paths SHALL resolve as Claude Code resolves them: a `./` path from the repository root, and a bare name under the manifest's declared plugin root.
 
 The check SHALL exit non-zero on any failure and report every problem it finds rather than stopping at the first.
 
@@ -49,6 +49,11 @@ The check SHALL exit non-zero on any failure and report every problem it finds r
 
 - **WHEN** a directory under the plugin root contains a plugin manifest but has no entry in the marketplace manifest
 - **THEN** validation fails and identifies the unpublished plugin
+
+#### Scenario: The marketplace declares its own version
+
+- **WHEN** the marketplace manifest carries a marketplace-level version field
+- **THEN** validation fails, because nothing updates that value and it would go stale
 
 #### Scenario: Multiple problems are present
 
