@@ -32,6 +32,10 @@ jobs:
             - name: 🔍 Lint
               run: bun run lint:eslint
 
+            # Type-aware ESLint rules and vitest do not report type errors.
+            - name: 🔍 Type check
+              run: bun run typecheck
+
             - name: 🔍 Lint Markdown
               run: bun run lint:markdown
 

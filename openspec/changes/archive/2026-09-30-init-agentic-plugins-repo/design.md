@@ -41,11 +41,11 @@ Claude Code keys installs as `<plugin>@<marketplace>`, so two same-named plugins
 
 *Alternatives:* reuse `experiments` and never enable both (a latent trap — it fails the first time a skill from each is wanted together); rename `monolab`'s plugin instead (breaks its existing release tags for no benefit here).
 
-### Both knip and fallow, with a shared 40-issue margin
+### Both knip and fallow, with a 40-issue margin on knip only
 
 The two overlap substantially on dead code and unused dependencies, and running both means the same finding is reported twice. That duplication is accepted rather than divided, because splitting responsibilities (fallow for the PR ratchet, knip for dependency checks only) adds configuration that has to be kept true as both tools evolve.
 
-The `--max-issues 40` margin is inherited from `monolab` and applies to both.
+The `--max-issues 40` margin is inherited from `monolab` and applies to knip only. fallow has no margin: `fallow dead-code --fail-on-issues` fails the push gate on any finding, and the PR audit (`gate: new-only`) fails on any finding the change introduces.
 
 *Alternatives:* fallow alone (simpler, and it is what `dotfiles` uses — the fallback if the duplicate reporting proves noisy); an explicit split of concerns.
 
@@ -99,9 +99,9 @@ A Claude Code plugin needs only `.claude-plugin/plugin.json` to function; the pa
 
 ## Risks / Trade-offs
 
-- **Duplicate dead-code findings from knip and fallow** → Accepted knowingly. Both carry the same 40-issue margin; if the noise outweighs the value, drop knip and keep fallow, which has the GitHub Action with PR comments.
+- **Duplicate dead-code findings from knip and fallow** → Accepted knowingly. If the noise outweighs the value, drop knip and keep fallow, which has the GitHub Action with PR comments and no issue margin.
 - **Type-aware linting is slower and needs every linted `.ts` inside the project** → A file added outside `include: ["**/*.ts"]` fails the parser rather than being skipped quietly, so the failure is loud and local.
-- **The 40-issue margin is imported debt on an empty repository** → It permits up to 40 findings before failing, which on a repository this size is effectively no gate. Tighten toward zero once the real baseline is known.
+- **knip's 40-issue margin is imported debt on an empty repository** → It permits up to 40 knip findings before failing, which on a repository this size is effectively no gate; fallow, with no margin, is what actually gates dead code. Tighten knip toward zero once the real baseline is known.
 - **A Markdown-only repository leaves eslint, knip, and vitest gating almost nothing at seed time** → They are configured now so the first real code lands on working gates instead of retrofitting them; the validation script and its test give each one at least one genuine subject.
 - **Ignore lists must cover the agent scaffolding** (`openspec/`, `.agents/`, `.claude/`, `.junie/`, `.opencode/`, `.pi/`) **in five separate places** — eslint, knip, fallow, markdownlint, oxfmt → Divergence between them shows up as one tool failing on files the others skip. Keep the lists identical.
 - **`datf-lab` is fixed at first release** → The name is written into the directory, the manifests, every command prefix, and the release tags. Renaming after the first tag orphans it.

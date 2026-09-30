@@ -64,3 +64,10 @@
 - [x] 9.2 Add repo-level `CLAUDE.md` and `AGENTS.md` covering plugin conventions, the toolchain, and the version-sync invariant; confirm no beads database and no `.mcp.json` are created
 - [x] 9.3 Run the full gate set locally in one pass (oxfmt, eslint, markdownlint, knip, fallow, vitest, validate-marketplace, `openspec validate --changes`) and verify every command exits zero
 - [x] 9.4 Verify `git status` shows only intended files and report the changed-file list, validation results, and proposed commit for approval — do not commit or push without it
+
+## 10. Verification follow-ups
+
+- [x] 10.1 Extend `scripts/validate-marketplace.ts` to fail on a marketplace-level version, on a marketplace entry without a description, and on a source that is neither `./`-relative nor a bare name under `metadata.pluginRoot` (bare names resolve under it, as Claude Code resolves them); cover each case with a test
+- [x] 10.2 Rename the `lint:types` script to `typecheck` and run it in `ci.yml`, since type-aware ESLint and vitest do not report type errors
+- [x] 10.3 Correct `design.md`: the 40-issue margin applies to knip only; fallow has none
+- [x] 10.4 Drop the README's plugin version column, which release-please does not update, and the stray `## Changelog` heading release-please left at the end of both plugin changelogs

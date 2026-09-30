@@ -44,7 +44,7 @@ Create the plugin first, then move the material into it:
    `0.1.0`, description, author, license, repository, and homepage.
 3. Write `plugins/<new>/package.json` — private, name-scoped, same version.
 4. Add a `plugins[]` entry to `.claude-plugin/marketplace.json` with the same
-   name, `./plugins/<new>` as its source, and the same version.
+   name, `./plugins/<new>` as its source, the same version, and a description.
 5. Add a `packages` entry to `release-please-config.json` mirroring the
    `plugins/datf-lab` block, with the JSONPath filter pointing at the new name.
 6. Add the new path to `.release-please-manifest.json` at `0.1.0`.

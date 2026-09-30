@@ -17,7 +17,7 @@ function writeJson(relativePath: string, value: unknown): void {
     write(relativePath, JSON.stringify(value, null, 4));
 }
 
-function marketplace(plugins: unknown[]): unknown {
+function marketplace(plugins: unknown[]): Record<string, unknown> {
     return {
         name: "daily-agentic-task-force",
         owner: { name: "Owner", email: "owner@example.invalid" },
@@ -175,6 +175,77 @@ describe("validateMarketplace", () => {
 
         expect(
             problems.some((p) => /datf-orphan.*no entry in the marketplace manifest/.test(p)),
+        ).toBe(true);
+    });
+
+    it.each([
+        ["top-level", { version: "0.1.0" }],
+        [
+            "metadata",
+            {
+                metadata: {
+                    description: "test marketplace",
+                    pluginRoot: "./plugins",
+                    version: "0.1.0",
+                },
+            },
+        ],
+    ])("fails when the marketplace manifest declares a %s version", (_where, extra) => {
+        writeJson(".claude-plugin/marketplace.json", { ...marketplace([entry()]), ...extra });
+        writePlugin("datf-lab");
+
+        const problems = validateMarketplace(root);
+
+        expect(problems).toHaveLength(1);
+        expect(problems[0]).toMatch(/declares a marketplace-level version/);
+    });
+
+    it("fails when a listed plugin has no description", () => {
+        writeJson(
+            ".claude-plugin/marketplace.json",
+            marketplace([entry({ description: undefined })]),
+        );
+        writePlugin("datf-lab");
+
+        const problems = validateMarketplace(root);
+
+        expect(problems).toEqual([
+            'Plugin "datf-lab" has no "description" in the marketplace manifest',
+        ]);
+    });
+
+    it("resolves a bare source name under metadata.pluginRoot", () => {
+        writeJson(".claude-plugin/marketplace.json", marketplace([entry({ source: "datf-lab" })]));
+        writePlugin("datf-lab");
+
+        expect(validateMarketplace(root)).toEqual([]);
+    });
+
+    it("fails when a bare source name is used without metadata.pluginRoot", () => {
+        writeJson(".claude-plugin/marketplace.json", {
+            ...marketplace([entry({ source: "datf-lab" })]),
+            metadata: { description: "test marketplace" },
+        });
+        writePlugin("datf-lab");
+
+        const problems = validateMarketplace(root);
+
+        expect(problems.some((p) => /"datf-lab" source "datf-lab" must start with/.test(p))).toBe(
+            true,
+        );
+    });
+
+    it("fails when a source path does not start with ./", () => {
+        writeJson(
+            ".claude-plugin/marketplace.json",
+            marketplace([entry({ source: "plugins/datf-lab" })]),
+        );
+        writePlugin("datf-lab");
+
+        const problems = validateMarketplace(root);
+
+        expect(
+            problems.some((p) => /source "plugins\/datf-lab" must start with "\.\/"/.test(p)),
         ).toBe(true);
     });
 

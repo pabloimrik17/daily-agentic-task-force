@@ -67,7 +67,7 @@ version and no changelog — only plugins are versioned.
 | `bun run lint:knip`        | Unused files, exports and dependencies                 |
 | `bun run lint:fallow`      | Dead code, full repository                             |
 | `bun run lint:marketplace` | Marketplace consistency and version agreement          |
-| `bun run lint:types`       | TypeScript                                             |
+| `bun run typecheck`        | TypeScript                                             |
 | `bun run test`             | Vitest, across repo scripts and every plugin workspace |
 
 Type-aware linting is real here: the root `tsconfig.json` uses

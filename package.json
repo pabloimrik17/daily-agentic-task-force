@@ -18,8 +18,8 @@
         "lint:marketplace": "bun run scripts/validate-marketplace.ts",
         "lint:oxfmt": "oxfmt --check --ignore-path .oxfmtignore",
         "lint:oxfmt:fix": "oxfmt --ignore-path .oxfmtignore",
-        "lint:types": "tsc --noEmit",
-        "test": "vitest run"
+        "test": "vitest run",
+        "typecheck": "tsc --noEmit"
     },
     "devDependencies": {
         "@commitlint/cli": "21.2.2",
