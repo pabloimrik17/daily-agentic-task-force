@@ -194,6 +194,87 @@ per repo on GitHub, and not at all on Beads, where labels exist only by use. An 
 untouched and reported, never overwritten. Legacy names configured as
 `aliases` are evidence for a rule and are never removed.
 
+## Labelling at creation
+
+With the plugin installed and enabled, `labelling-new-tasks` loads when a
+session is about to create a new Linear, Beads or GitHub issue or task, whether
+it uses a tracker CLI or Linear MCP. It does not apply to comments, edits,
+closure or pull requests. It checks labels before creation. For an unresolved
+group in an interactive session, it asks one question using that group's
+options and reason, then checks the answer. When it cannot ask, it creates
+with the confident labels and names each omitted group in its reply for the
+next triage run. A Beads task created under a parent gets `--no-inherit-labels`
+and the parent's non-contract labels listed explicitly, so its contract labels
+are exactly the ones the helper decided.
+
+The skill triggers from its description, and a crowded skill listing can drop
+it. When the listing exceeds its budget, Claude Code shortens descriptions to
+fit: in a session listing 419 skills, `/context all` showed this one at
+`< 20 tokens`, without its description, although it still triggered.
+`/context` or `/doctor` shows whether the description is listed. Raising
+`skillListingBudgetFraction` in user settings (the share of the context window
+reserved for the listing, default `0.01`) makes room for it, and so does
+setting other skills to `"name-only"` in `skillOverrides`. `skillOverrides`
+does not apply to plugin skills, so this skill is turned off only by disabling
+the plugin (`claude plugin disable autonomous`).
+
+The creation-time helper checks the same label contract before a new Linear,
+Beads or GitHub task is written. It reads `~/.config/autonomous/config.json`
+(or `AUTONOMOUS_CONFIG`) for structural rules, aliases and
+`judgement.threshold`, and prints the criteria from
+`src/label-triage/criteria.md`. It does not read or write a tracker. If the
+configuration is missing, it names the path and error, keeps valid labels
+already supplied, and asks about the other groups without applying a
+judgement.
+
+```text
+bun plugins/autonomous/src/label-at-creation/cli.ts prepare --source <linear|beads|github> [--repo <owner/name>] [--label <name>]...
+bun plugins/autonomous/src/label-at-creation/cli.ts decide  --source <linear|beads|github> [--repo <owner/name>] [--label <name>]... [--judged <group>=<label>[,<label>]@<confidence>]...
+```
+
+`--source` is required. `--repo` is required for GitHub and rejected for the
+other sources. Repeat `--label` for every label the new task will carry,
+including user-named and inherited labels. In `decide`, repeat `--judged` for
+each group the creating agent judges; the confidence must be from 0 to 1.
+`prepare` rejects `--judged`.
+
+`prepare` prints the criteria verbatim, then `scope:` and `entry:` lines as
+`present`, `derived <labels> (<evidence>)`, `conflict <labels>` or `judge
+(<group labels>)`. `decide` prints `apply: <labels>` (or `apply: none`) and an
+`ask <group>: <reason>; options <labels>` line for each unresolved group. Both
+modes name a missing configuration. An unconfigured GitHub repository is noted
+because the contract labels may not exist there. A printed decision exits 0;
+invalid usage prints the usage text and exits 1.
+
+Its parts are tiered by the same rule as the run's steps:
+
+| Part                                  | Tier |
+| ------------------------------------- | ---- |
+| evidence, validity and threshold      | code |
+| judgement from the conversation       | llm  |
+| questions and the tracker create call | llm  |
+
+### Local eval suite
+
+Run the creation-time evals from the repository root:
+
+```bash
+claude plugin eval plugins/autonomous \
+  --scaffold --allow-tools 'Bash(*)' \
+  --model claude-sonnet-5 --max-cost-usd 10 \
+  --no-publish --trust-plugin
+```
+
+The cases run in isolated sessions. Some seed a temporary configuration or
+Beads database with `--scaffold`; the Bash grant lets the agent inspect those
+fixtures and attempt the create command. `claude-sonnet-5` is the pinned model
+ID for comparing runs. The suite is run locally on demand because every case
+and grader consumes account usage, and the tracker CLIs in the sandbox cannot
+reach real credentials. Judge the attempted create call in the trace. A run
+with an `error` is a failure even if a grader reports a passing score. The
+results are ignored by git. The runs that built the skill are recorded in
+`openspec/changes/archive/2026-09-30-add-label-at-creation-skill/evidence/`.
+
 ## The `label-triage` step
 
 Second in the run, after `quota-gate`. It reads the open tasks of every

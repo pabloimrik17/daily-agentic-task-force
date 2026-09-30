@@ -27,7 +27,7 @@
     },
     "plugins/autonomous": {
       "name": "@daily-agentic-task-force/plugin-autonomous",
-      "version": "0.0.0",
+      "version": "1.0.0",
     },
     "plugins/datf-lab": {
       "name": "@daily-agentic-task-force/plugin-datf-lab",
