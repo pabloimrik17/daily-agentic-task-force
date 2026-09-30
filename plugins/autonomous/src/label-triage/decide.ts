@@ -23,23 +23,27 @@ function updatedAtMs(detection: Detection): number {
     return Number.isNaN(ms) ? -Infinity : ms;
 }
 
+// Work evidence first, then the most recently updated, then by id. Also orders the
+// step's questions for the human (handoff design D4).
+export function compareForJudgement(a: Detection, b: Detection): number {
+    const workRank = (d: Detection) => (hasWorkEvidence(d) ? 0 : 1);
+    const rankDiff = workRank(a) - workRank(b);
+    if (rankDiff !== 0) {
+        return rankDiff;
+    }
+    const aMs = updatedAtMs(a);
+    const bMs = updatedAtMs(b);
+    if (aMs !== bMs) {
+        return aMs < bMs ? 1 : -1;
+    }
+    if (a.task.id !== b.task.id) {
+        return a.task.id < b.task.id ? -1 : 1;
+    }
+    return 0;
+}
+
 export function orderForJudgement(detections: Detection[]): Detection[] {
-    return [...detections].sort((a, b) => {
-        const workRank = (d: Detection) => (hasWorkEvidence(d) ? 0 : 1);
-        const rankDiff = workRank(a) - workRank(b);
-        if (rankDiff !== 0) {
-            return rankDiff;
-        }
-        const aMs = updatedAtMs(a);
-        const bMs = updatedAtMs(b);
-        if (aMs !== bMs) {
-            return aMs < bMs ? 1 : -1;
-        }
-        if (a.task.id !== b.task.id) {
-            return a.task.id < b.task.id ? -1 : 1;
-        }
-        return 0;
-    });
+    return [...detections].sort(compareForJudgement);
 }
 
 export function selectForJudgement(
@@ -53,7 +57,7 @@ export function selectForJudgement(
     };
 }
 
-function violation(group: Group, labels: string[]): string {
+export function violation(group: Group, labels: readonly string[]): string {
     if (labels.length === 0) {
         return "no label";
     }

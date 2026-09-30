@@ -4,8 +4,9 @@ The autonomous loop: it reads the work the user defined in Linear, Beads and
 GitHub, checks it against the label contract, and will eventually delegate it
 to agents.
 
-Stage labels, stage prompts and transitions are agreed but not implemented yet
-(DOT-110, [ADR 0001](docs/adr/0001-properties-persist-stages-replace.md)).
+The split of today's `entry` group (`AFK`, `HITL`, `grill-me`) into autonomy
+and stage labels, stage prompts and transitions are agreed but not implemented
+yet (DOT-110, [ADR 0001](docs/adr/0001-properties-persist-stages-replace.md)).
 
 ## Language
 
@@ -62,7 +63,8 @@ _Avoid_: ask (as a noun)
 
 **Left for the human**:
 A label group a step could not decide and lists in its report for a human to
-settle (`asked` in the report data). Only some of these become questions.
+settle: an `asked` record, or a conflict between labels already on the task,
+in the report data. Only some of these become questions.
 _Avoid_: asked question, pending question
 
 **Round**:
@@ -79,4 +81,4 @@ _Avoid_: re-run
 
 **Unattended run**:
 A run with no human present to answer, such as one driven by `/loop`. It
-carries no handoff.
+passes `--no-handoff`, so it carries no handoff.

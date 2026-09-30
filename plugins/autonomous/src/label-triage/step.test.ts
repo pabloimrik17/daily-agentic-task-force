@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 
-import type { Group } from "../label-contract/contract.ts";
-import type { JudgementAnswer, JudgementRequest } from "./judgement.ts";
+import { type Group, MEANINGS } from "../label-contract/contract.ts";
+import type { GroupAnswer, JudgementAnswer, JudgementRequest } from "./judgement.ts";
 import { labelTriageStep } from "./step.ts";
 import { config, triageContext, fakeJudgement, task, trackers } from "./test-fixtures.ts";
 
@@ -37,6 +37,25 @@ function judgeAll(confidence = 0.97, calls?: string[]) {
         };
     });
 }
+
+// Answers every requested group of every task with the judgement given for that group.
+function judgeWith(given: Partial<Record<Group, GroupAnswer>>) {
+    return fakeJudgement((request: JudgementRequest) => ({
+        ok: true,
+        answers: request.tasks.map((t) => {
+            const answer: JudgementAnswer = { id: t.id };
+            for (const group of t.groups) {
+                const judged = given[group];
+                if (judged !== undefined) {
+                    answer[group] = judged;
+                }
+            }
+            return answer;
+        }),
+    }));
+}
+
+const UNSURE_HITL = { entry: { labels: ["HITL"], confidence: 0.8, reason: "Needs review" } };
 
 describe("label triage: reading fails closed", () => {
     it("is not evaluable naming beads and bd when bd cannot be executed, reading no other source", async () => {
@@ -496,5 +515,245 @@ describe("label triage: writing only with --apply", () => {
             ["entry", "proposed"],
         ]);
         expect(result.reasons).toContain("1 write failure");
+    });
+});
+
+describe("label triage: questions for the human", () => {
+    it("asks a judgement below the threshold with the contract's entry options, prefixing the judged one", async () => {
+        const result = await labelTriageStep.run(
+            triageContext({
+                trackers: trackers([], { beads: [task("beads", "X-12", ["nazaries"])] }),
+                judgement: judgeWith(UNSURE_HITL),
+                args: { apply: true },
+            }),
+        );
+        expect(result.questions).toEqual([
+            {
+                id: "label-triage:beads:X-12:entry",
+                step: "label-triage",
+                header: "X-12",
+                question: [
+                    'beads X-12 "Task X-12": which entry label?',
+                    "Seen: labels [nazaries] → HITL (llm, 0.80) → below threshold 0.95: 0.80 — Needs review",
+                    "Description: About X-12",
+                ].join("\n"),
+                options: [
+                    { label: "AFK", value: "AFK", description: MEANINGS.AFK },
+                    {
+                        label: "HITL",
+                        value: "HITL",
+                        description: `judged 0.80 · Needs review — ${MEANINGS.HITL}`,
+                    },
+                    { label: "grill-me", value: "grill-me", description: MEANINGS["grill-me"] },
+                    { label: "Later", value: null, description: "Leave it for a later run" },
+                ],
+                multiSelect: false,
+            },
+        ]);
+        expect(result.questions?.[0]?.options[1]?.description).toMatch(
+            /^judged 0\.80 · Needs review — An agent may advance/,
+        );
+    });
+
+    it("asks a scope with conflicting evidence, showing both pieces and prefixing no option", async () => {
+        const settings = config();
+        settings.sources.beads.scope = "personal";
+        const result = await labelTriageStep.run(
+            triageContext({
+                config: settings,
+                trackers: trackers([], { beads: [task("beads", "X-12", ["nazaries", "AFK"])] }),
+                args: { apply: true },
+            }),
+        );
+        expect(result.questions).toEqual([
+            {
+                id: "label-triage:beads:X-12:scope",
+                step: "label-triage",
+                header: "X-12",
+                question: [
+                    'beads X-12 "Task X-12": which scope label?',
+                    "Seen: labels [nazaries, AFK] → work, personal (code, 0.00) → invalid under the contract: " +
+                        "two scope labels: work, personal — conflicting evidence: alias nazaries; every beads task is personal",
+                    "Description: About X-12",
+                ].join("\n"),
+                options: [
+                    { label: "work", value: "work", description: MEANINGS.work },
+                    { label: "personal", value: "personal", description: MEANINGS.personal },
+                    { label: "Later", value: null, description: "Leave it for a later run" },
+                ],
+                multiSelect: false,
+            },
+        ]);
+    });
+
+    it("lists present labels in conflict for the human without asking a question for them", async () => {
+        const result = await labelTriageStep.run(
+            triageContext({
+                trackers: trackers([], {
+                    beads: [task("beads", "B-3", ["work", "personal", "AFK"])],
+                }),
+                args: { apply: true },
+            }),
+        );
+        expect(result.data.conflicts.map((c) => [c.taskId, c.group])).toEqual([["B-3", "scope"]]);
+        expect(result.reasons).toContain("1 group for the human");
+        expect(result.questions).toEqual([]);
+    });
+
+    it("asks nothing for any task of a source whose writes stopped, still asking the others", async () => {
+        const error = "linear issue update DOT-1 --label personal: linear failed";
+        const result = await labelTriageStep.run(
+            triageContext({
+                trackers: trackers(
+                    [],
+                    {
+                        beads: [task("beads", "X-12", ["nazaries"])],
+                        linear: [task("linear", "DOT-1", []), task("linear", "DOT-2", [])],
+                    },
+                    { linear: { addLabelError: error } },
+                ),
+                judgement: judgeWith(UNSURE_HITL),
+                args: { apply: true },
+            }),
+        );
+        expect(result.data.failures.map((f) => [f.source, f.taskId])).toEqual([
+            ["linear", "DOT-1"],
+        ]);
+        expect(
+            result.data.records.filter((r) => r.status === "asked").map((r) => r.taskId),
+        ).toEqual(["X-12", "DOT-1", "DOT-2"]);
+        expect(result.questions?.map((q) => q.id)).toEqual(["label-triage:beads:X-12:entry"]);
+    });
+
+    it("asks a task with work evidence updated yesterday before a personal task updated today", async () => {
+        const result = await labelTriageStep.run(
+            triageContext({
+                trackers: trackers([], {
+                    beads: [
+                        task("beads", "P-1", ["personal"], { updatedAt: "2026-09-23T09:00:00Z" }),
+                        task("beads", "W-1", ["nazaries"], { updatedAt: "2026-09-22T09:00:00Z" }),
+                    ],
+                }),
+                judgement: judgeWith(UNSURE_HITL),
+                args: { apply: true },
+            }),
+        );
+        expect(result.questions?.map((q) => q.id)).toEqual([
+            "label-triage:beads:W-1:entry",
+            "label-triage:beads:P-1:entry",
+        ]);
+    });
+
+    it("asks a task's scope before its entry", async () => {
+        const result = await labelTriageStep.run(
+            triageContext({
+                trackers: trackers([], { github: [task("github", "owner/repo#12", [])] }),
+                judgement: judgeWith({
+                    scope: { labels: ["work"], confidence: 0.6, reason: "Looks like work" },
+                    ...UNSURE_HITL,
+                }),
+                args: { apply: true },
+            }),
+        );
+        expect(result.questions?.map((q) => [q.id, q.header])).toEqual([
+            ["label-triage:github:owner/repo#12:scope", "scope"],
+            ["label-triage:github:owner/repo#12:entry", "entry"],
+        ]);
+        expect(result.questions?.[0]?.options.map((o) => o.description)).toEqual([
+            `judged 0.60 · Looks like work — ${MEANINGS.work}`,
+            MEANINGS.personal,
+            "Leave it for a later run",
+        ]);
+    });
+
+    it("heads a question with a task id of at most 12 characters, and with the group otherwise", async () => {
+        const result = await labelTriageStep.run(
+            triageContext({
+                trackers: trackers([], {
+                    beads: [task("beads", "agentic-task-8v0", ["nazaries"])],
+                    linear: [task("linear", "DOT-104", [])],
+                }),
+                judgement: judgeWith(UNSURE_HITL),
+                args: { apply: true },
+            }),
+        );
+        expect(result.questions?.map((q) => [q.id, q.header])).toEqual([
+            ["label-triage:beads:agentic-task-8v0:entry", "entry"],
+            ["label-triage:linear:DOT-104:entry", "DOT-104"],
+        ]);
+    });
+
+    it("quotes the description readTask returned for a Linear task listed without one", async () => {
+        const result = await labelTriageStep.run(
+            triageContext({
+                trackers: trackers(
+                    [],
+                    { linear: [task("linear", "DOT-2", [])] },
+                    { linear: { descriptions: { "DOT-2": "Refine the plan with me" } } },
+                ),
+                judgement: judgeWith(UNSURE_HITL),
+                args: { apply: true },
+            }),
+        );
+        expect(result.questions?.map((q) => q.question)).toEqual([
+            [
+                'linear DOT-2 "Task DOT-2": which entry label?',
+                "Seen: labels [] → HITL (llm, 0.80) → below threshold 0.95: 0.80 — Needs review",
+                "Description: Refine the plan with me",
+            ].join("\n"),
+        ]);
+    });
+
+    it("asks nothing for a task whose judgement failed or whose description could not be read", async () => {
+        const failed = await labelTriageStep.run(
+            triageContext({
+                trackers: trackers([], { beads: [task("beads", "X-12", ["nazaries"])] }),
+                judgement: fakeJudgement(() => ({
+                    ok: false,
+                    error: "claude timed out after 300 s",
+                })),
+                args: { apply: true },
+            }),
+        );
+        expect(failed.data.notJudged.map((n) => n.taskId)).toEqual(["X-12"]);
+        expect(failed.questions).toEqual([]);
+
+        const unreadable = await labelTriageStep.run(
+            triageContext({
+                trackers: trackers(
+                    [],
+                    { linear: [task("linear", "DOT-2", [])] },
+                    {
+                        linear: {
+                            readErrors: { "DOT-2": "linear issue view DOT-2 --json: timed out" },
+                        },
+                    },
+                ),
+                judgement: judgeWith(UNSURE_HITL),
+                args: { apply: true },
+            }),
+        );
+        expect(unreadable.data.notJudged.map((n) => n.taskId)).toEqual(["DOT-2"]);
+        expect(unreadable.questions).toEqual([]);
+    });
+
+    it("asks nothing for a task beyond the cap", async () => {
+        const settings = config();
+        settings.judgement.cap = 1;
+        const result = await labelTriageStep.run(
+            triageContext({
+                config: settings,
+                trackers: trackers([], {
+                    beads: [
+                        task("beads", "W-1", ["nazaries"]),
+                        task("beads", "W-2", ["nazaries"], { updatedAt: "2026-09-19T10:00:00Z" }),
+                    ],
+                }),
+                judgement: judgeWith(UNSURE_HITL),
+                args: { apply: true },
+            }),
+        );
+        expect(result.data.remainder).toBe(1);
+        expect(result.questions?.map((q) => q.id)).toEqual(["label-triage:beads:W-1:entry"]);
     });
 });

@@ -27,9 +27,9 @@ autonomy was decided ahead of the grill.
   the answer replaces. Triage and answers to triage questions stay additive.
 - The history of stages lives in each tracker's own activity log, not in
   labels.
-- `proposal` enters the contract before any stage runs, revisiting "lifecycle
-  labels wait for the step that uses them" (DOT-101), because the grill needs
-  a stage to end in.
+- `proposal` enters the contract before the stage it names exists, revisiting
+  "lifecycle labels wait for the step that uses them" (DOT-101) for this one
+  label, because the grill needs a stage to end in.
 - Colours follow the same split. Properties keep their colours, and stages
   follow a progression: warm while a human is needed before starting, moving
   towards green as the task nears completion.
