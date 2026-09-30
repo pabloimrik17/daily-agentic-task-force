@@ -572,3 +572,66 @@ The first commit attempt was stopped by the pre-commit `fallow audit`, which als
 - `check` now uses `resolveGroup`, `resolveEvidence` and `resolveJudgement`, with the same checks in the same order.
 
 After the split, `bun run fallow audit` reported "No issues in 57 changed files". The eight gates exited 0 again (344 tests), and a manual `prepare`/`decide` smoke against the real configuration printed the same lines as before. This is code-tier only, and `SKILL.md` is unchanged, so no eval was re-run.
+
+## PR review fixes, 2026-09-30
+
+PR #15's review raised six threads (pullfrog, greptile) and one later CodeRabbit thread. The fixes touch the model-facing text and the graders:
+
+- `SKILL.md` step 5 now passes `--no-inherit-labels` on `bd create --parent`. A direct probe on `bd` 1.3.0 showed the gap: a child created with `--parent <AFK parent> --labels HITL` carried `AFK`, `HITL` and the parent's `bug`, while `--no-inherit-labels --labels HITL,bug` gave exactly `HITL`, `bug`. Step 4 now reads "do not ask in plain text or wait for a reply".
+- `check.ts` matches configured GitHub repositories case-insensitively; `check.test.ts` covers a configured repository in both spellings.
+- The positive label assertions in `beads-work-afk`, `linear-rule` and `linear-unclear-entry/scope-only` are anchored to the label flag, so a description mentioning "network" or "personal" no longer passes. The negative result graders now require "pull request" or a whole-word PR (`pr-negative`) and `DOT-12` (`comment-negative`); the old case-insensitive `PR` matched "pr" inside any word, including "Error: the process exited with code 1".
+
+The eight gates exited 0 (Vitest: 345 tests), as did `openspec validate add-label-at-creation-skill --strict` and `claude plugin validate --strict plugins/autonomous`.
+
+Because `SKILL.md` and five graders changed, the full suite was re-run: `claude plugin eval plugins/autonomous --ablation with-without --runs 1 -j 4 --scaffold --model claude-sonnet-5 --max-cost-usd 5 --allow-tools "Bash(*)" --no-publish --trust-plugin --keep-temp`, Claude Code 2.1.285, 165 s. All 16 runs had `error: null`.
+
+| Case | With | Without | Δ | Cost USD | Error | Skill fired |
+| --- | ---: | ---: | ---: | ---: | --- | --- |
+| beads-work-afk | 1.00 | 0.00 | +1.00 | 0.2815 | none | True |
+| comment-negative | 1.00 | 1.00 | +0.00 | 0.3465 | none | absent in both arms |
+| entry-conflict | 1.00 | 0.00 | +1.00 | 0.1959 | none | True |
+| github-scope-conflict | 1.00 | 0.00 | +1.00 | 0.1876 | none | True |
+| grill-me-spelling | 1.00 | 0.50 | +0.50 | 0.2547 | none | True |
+| linear-rule | 1.00 | 0.00 | +1.00 | 0.2243 | none | True |
+| linear-unclear-entry | 1.00 | 0.00 | +1.00 | 0.2548 | none | True |
+| pr-negative | 1.00 | 1.00 | +0.00 | 0.2289 | none | absent in both arms |
+
+Total estimated cost: $1.9723. Eight of eight cases passed; mean Δ 0.6875.
+
+With-arm helper and create calls (worktree path shortened to `<worktree>`, descriptions elided):
+
+~~~~text
+beads-work-afk
+bun <worktree>/plugins/autonomous/src/label-at-creation/cli.ts prepare --source beads
+bun <worktree>/plugins/autonomous/src/label-at-creation/cli.ts decide --source beads --judged entry=AFK@0.97
+bd create --title "Add a retry when the Nazaries sync job times out" --description "…" --labels work,AFK
+
+entry-conflict
+bun <worktree>/plugins/autonomous/src/label-at-creation/cli.ts prepare --source beads --label AFK --label HITL
+bun <worktree>/plugins/autonomous/src/label-at-creation/cli.ts decide --source beads --label AFK --label HITL
+bd create --title "Check the release notes" --labels work 2>&1
+
+github-scope-conflict
+bun <worktree>/plugins/autonomous/src/label-at-creation/cli.ts prepare --source github --repo pabloimrik17/daily-agentic-task-force --label work --label personal --label HITL
+bun <worktree>/plugins/autonomous/src/label-at-creation/cli.ts decide --source github --repo pabloimrik17/daily-agentic-task-force --label work --label personal --label HITL
+gh issue create --repo pabloimrik17/daily-agentic-task-force --title "Review my home backup plan" --body "Review my home backup plan." --label HITL
+
+grill-me-spelling
+bun <worktree>/plugins/autonomous/src/label-at-creation/cli.ts prepare --source linear --label grill-me
+bun <worktree>/plugins/autonomous/src/label-at-creation/cli.ts decide --source linear --label grill-me --judged scope=work@0.7
+linear issue create --title "Figure out what the new dashboard should show" --label grill-me --no-interactive 2>&1
+
+linear-rule
+bun <worktree>/plugins/autonomous/src/label-at-creation/cli.ts prepare --source linear
+bun <worktree>/plugins/autonomous/src/label-at-creation/cli.ts decide --source linear --judged entry=HITL@0.75
+linear issue create --title "Review the layout of my home office" --label personal --no-interactive 2>&1
+
+linear-unclear-entry
+bun <worktree>/plugins/autonomous/src/label-at-creation/cli.ts prepare --source linear
+bun <worktree>/plugins/autonomous/src/label-at-creation/cli.ts decide --source linear --judged "entry=AFK,HITL@0.3"
+linear issue create --no-interactive --title "Decide how to organise the next research sprint" --description "…" --label personal
+~~~~
+
+Both negative cases matched the tightened graders on genuine refusals: every `pr-negative` reply explained that the empty sandbox repository has nothing to open a pull request for, and every `comment-negative` reply named DOT-12 and the missing Linear authentication. The no-plugin `beads-work-afk` run used all 12 turns with `error: null`.
+
+No case creates a Beads task under a parent, so this run shows that the edited `SKILL.md` and graders do not regress; it does not exercise `--no-inherit-labels`. That instruction rests on the `bd` probe above.
