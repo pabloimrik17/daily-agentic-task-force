@@ -635,3 +635,75 @@ linear issue create --no-interactive --title "Decide how to organise the next re
 Both negative cases matched the tightened graders on genuine refusals: every `pr-negative` reply explained that the empty sandbox repository has nothing to open a pull request for, and every `comment-negative` reply named DOT-12 and the missing Linear authentication. The no-plugin `beads-work-afk` run used all 12 turns with `error: null`.
 
 No case creates a Beads task under a parent, so this run shows that the edited `SKILL.md` and graders do not regress; it does not exercise `--no-inherit-labels`. That instruction rests on the `bd` probe above.
+
+## Verification follow-ups, 2026-09-30
+
+`/opsx:verify` found no critical issue, four warnings and five suggestions. The fixes below cover all four warnings and four of the five suggestions. Traces are not quoted in this section: this session was not allowed to read the eval temp directories, so each run is recorded by its scores and grader verdicts.
+
+**Skill listing settings (warning).** The design and README named `skillOverrides`, `skillListingBudgetFraction` and `skillListingMaxDescChars` without checking them. The settings schema in Claude Code 2.1.285 has all three:
+
+- `skillListingBudgetFraction` is the share of the context window reserved for the listing, `0.01` by default; descriptions are shortened when the listing exceeds it.
+- `skillListingMaxDescChars` caps each description at 1,536 characters, far above this skill's 200.
+- `skillOverrides` takes `on`, `name-only`, `user-invocable-only` or `off`, but the listing code returns `on` for every skill whose source is a plugin.
+
+So `skillOverrides` can make room by demoting other skills but cannot reach this one, and the design's rollback through it would not work. The README now explains how to keep the description listed and says the skill is turned off by disabling the plugin. The design's risk and rollback lines are corrected the same way.
+
+**Code and graders (suggestions).**
+
+- A missing configuration's `ask` reason is now `configuration unavailable`; the path and error stay on the configuration note, which named them already.
+- `check.test.ts` covers a judgement exactly at the threshold.
+- `grill-me-spelling/graders/invalid-pair-absent.md` is renamed `variant-absent.md`; earlier sections keep the old name as it was recorded.
+
+**Probe.** A temporary `probe-gh-stub` case (`--ablation none --runs 1`, $0.07, `error: null`) showed that a scaffold can put a stand-in command on the isolated agent's `PATH` by writing `$HOME/bin` and exporting it from the temporary home's shell startup files. The case was deleted.
+
+**New cases (warnings).**
+
+- `github-missing-label`: a scaffolded `gh` stand-in knows only GitHub's default labels. Like `gh`, it names one missing label per failed `issue create`. The user asks for `personal` and `HITL`. Graders:
+  - a create without either label;
+  - no `gh label create`;
+  - `--bootstrap-labels` in the reply.
+
+  The sandbox never reaches GitHub.
+- `beads-nothing-certain`: no Beads scope rule, and a prompt leaving both scope and entry open. Graders: a `bd create` with no contract label, and an `llm` rubric that the reply names both groups as left for triage.
+- `beads-several-tasks`: three tasks in one request. Two are `AFK` and one is `HITL`, all `work` by the Beads rule. There is one grader per task, and `decide-per-task` requires at least three `decide` calls. It is scored (`arm: both`), because the spec requires a decision per task.
+
+RED, against the `SKILL.md` of commit 2f2a764 (`--ablation with-without --runs 1`, same model, grants and flags as the suite):
+
+| Case | With | Without | Δ | Cost USD | Error |
+| --- | ---: | ---: | ---: | ---: | --- |
+| github-missing-label | 1.00 | 0.33 | +0.67 | 0.1872 | none |
+| beads-nothing-certain | 1.00 | 0.50 | +0.50 | 0.2153 | none |
+| beads-several-tasks, homogeneous first draft | 1.00 | 0.00 | +1.00 | 0.2970 | none |
+| beads-several-tasks, one `HITL` task, indicator unscored | 1.00 | 0.00 | +1.00 | 0.2805 | none |
+| beads-several-tasks, `decide-per-task` scored | 0.75 | 0.00 | +0.75 | 0.3686 | none |
+
+- `github-missing-label` probed a suspected gap: `gh` names one missing label per failure, and the skill says "retry once". The with-arm still passed. After `prepare` noted the unconfigured repository, the agent dropped both labels in its single retry. With no failing run, the retry sentence was left as it is. The no-plugin arm made no create without the rejected labels and never pointed to `--bootstrap-labels`.
+- `beads-several-tasks` was a body failure. Its first draft had three identical tasks, and the unscored indicator showed one `prepare` and one `decide` for all three. With the tasks made to differ, the agent still ran one `prepare` and one `decide`, then applied `HITL` to the third task by itself; the labels were right, but the helper never checked them. With the grader scored, the with-arm fell to 0.75 on two `decide` calls for three tasks. The intro of `SKILL.md` now says that when one request creates several tasks, every step runs once per task, with its own `prepare` and `decide` calls, even when tasks look alike or share labels. Step 5's "Decide and create each task separately" was removed as a duplicate.
+
+GREEN for that case (`--runs 2`, $0.5801): both with-arm runs scored 1.0 with three and four `decide` calls, and both no-plugin runs scored 0. No run had an `error`. The agent still ran `prepare` once or twice rather than three times; with identical `prepare` inputs its output does not change, and `decide` per task is what the spec requires.
+
+Full suite after the `SKILL.md` change: `claude plugin eval plugins/autonomous --ablation with-without --runs 1 -j 4 --scaffold --model claude-sonnet-5 --max-cost-usd 5 --allow-tools "Bash(*)" --no-publish --trust-plugin`, Claude Code 2.1.285, 256 s, $2.6807.
+
+| Case | With | Without | Δ | Cost USD | Error |
+| --- | ---: | ---: | ---: | ---: | --- |
+| beads-nothing-certain | 1.00 | 0.50 | +0.50 | 0.2099 | none |
+| beads-several-tasks | 1.00 | 0.00 | +1.00 | 0.3374 | none |
+| beads-work-afk | 1.00 | 0.00 | +1.00 | 0.3355 | with: `exit 1: Reached maximum number of turns (12)` |
+| comment-negative | 1.00 | 1.00 | +0.00 | 0.1412 | none |
+| entry-conflict | 1.00 | 0.00 | +1.00 | 0.2187 | none |
+| github-missing-label | 1.00 | 0.33 | +0.67 | 0.2813 | none |
+| github-scope-conflict | 1.00 | 0.00 | +1.00 | 0.2080 | none |
+| grill-me-spelling | 1.00 | 0.50 | +0.50 | 0.2501 | none |
+| linear-rule | 1.00 | 0.00 | +1.00 | 0.2484 | none |
+| linear-unclear-entry | 1.00 | 0.00 | +1.00 | 0.2424 | none |
+| pr-negative | 1.00 | 1.00 | +0.00 | 0.2124 | none |
+
+The `beads-work-afk` with-arm run hit its turn cap after three labelled `bd create` calls, where earlier runs made one in six turns. An errored run is a failure, so this suite is not a clean pass on its own. A targeted re-run (`--case beads-work-afk --ablation none --runs 3`, $0.3064) scored 1.0 three times, each in 6 turns with one `bd create` and `error: null`. Without the trace, the cause of the one errored run is not known. Both negative cases kept the skill absent in both arms.
+
+**Cost and size.** `wc -w` reports 586 words for `SKILL.md`, up from 533 after the skill review. `claude --plugin-dir plugins/autonomous plugin details autonomous` still reports about 134 always-on tokens, about 90 of them for `labelling-new-tasks`, and about 1,400 on invocation (was 1,300).
+
+**Gates.** `bun run lint:oxfmt`, `lint:eslint`, `lint:markdown`, `lint:knip`, `lint:fallow`, `lint:marketplace`, `lint:types` and `test` exited 0 (Vitest: 346 tests). So did the pre-commit `bun run fallow audit` ("No issues in 30 changed files"), `openspec validate add-label-at-creation-skill --strict`, `claude plugin validate --strict plugins/autonomous` and `git diff --check`.
+
+Model spend in this section: $4.99, including the probe.
+
+**Not done.** No eval applies a judged scope at or above the threshold. `beads-work-afk` and `beads-several-tasks` derive `work` from the Beads rule, and `beads-nothing-certain` judges scope below the threshold. Dropping the rule from `beads-work-afk` would make a passing case depend on a 0.95 scope judgement; that trade-off is left to the user.

@@ -9,7 +9,9 @@ allowed-tools: Bash(bun ${CLAUDE_PLUGIN_ROOT}/src/label-at-creation/cli.ts *)
 For each task being created, keep its intended tracker, title, description,
 parent, and other fields. Decide its contract labels before the create call.
 This skill applies to task creation, not comments, edits, relabelling, closure,
-or pull requests.
+or pull requests. When one request creates several tasks, run every step below
+once per task, with its own `prepare` and `decide` calls, even when tasks look
+alike or share labels.
 
 1. Collect every label the task will carry: labels the user names and other
    planned labels. For `bd create --parent <id>` without
@@ -53,8 +55,7 @@ or pull requests.
    helper's `apply` labels in the create call itself, using the session's
    tracker tool. With `bd create --parent`, also pass `--no-inherit-labels`:
    the parent's non-contract labels are already in that list, and Beads would
-   otherwise copy the parent's contract labels back beside `apply`. Decide and
-   create each task separately.
+   otherwise copy the parent's contract labels back beside `apply`.
 
 | Tool                  | Label input at creation                            |
 | --------------------- | -------------------------------------------------- |

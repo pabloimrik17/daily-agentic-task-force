@@ -100,6 +100,12 @@ describe("decide", () => {
         );
     });
 
+    it("applies a judgement exactly at the threshold", () => {
+        expect(check(input("linear"), configured, [judged("entry", ["AFK"], 0.95)])[0]).toBe(
+            "apply: personal, AFK",
+        );
+    });
+
     it("uses the configured threshold of 0.9", () => {
         const load = { ...configured, config: config() };
         if (load.ok) load.config.judgement.threshold = 0.9;
@@ -125,7 +131,7 @@ describe("decide", () => {
         );
         const result = check(input("linear", ["personal"]), missing, [judged("entry", ["AFK"], 1)]);
         expect(result[0]).toBe("apply: personal");
-        expect(result[1]).toContain("ask entry: configuration unavailable at /missing/config.json");
+        expect(result[1]).toBe("ask entry: configuration unavailable; options AFK, HITL, grill-me");
         expect(result[2]).toContain("configuration /missing/config.json:");
     });
 });

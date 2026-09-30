@@ -109,6 +109,12 @@ The RED → GREEN → REFACTOR loop of `superpowers:writing-skills`, run through
     5. the user says "tag it Grill Me": `grill-me` on the command and `Grill Me` absent;
     6. and 7. negative triggers, "open a PR for this branch" and "comment on DOT-12": `tool_used: Skill` with `min: 0`, `max: 0` and `arm: both`.
 
+  Added after verification, for spec scenarios no case reached:
+
+    8. a GitHub issue labelled `personal` and `HITL` in a repository that has neither. A scaffolded stand-in `gh` on `PATH` names one missing label per failure, as `gh` does. Expected: the issue is created without both, no label is created, and the reply points to `--bootstrap-labels`;
+    9. a Beads task whose scope and entry are both uncertain, with no Beads scope rule: a `bd create` with no contract label, and a reply naming both groups as left for triage;
+    10. three Beads tasks in one request: each `bd create` carries `work` and `AFK`.
+
   Every positive case also asserts that the helper ran (`tool_used` on `Bash` matching `label-at-creation/cli.ts`).
 - **Run**:
 
@@ -136,7 +142,7 @@ The README gains a section on the skill: its trigger, the helper, and its depend
 
 ## Risks / Trade-offs
 
-- **The description is dropped from a crowded skill listing** → Claude Code drops descriptions of the least-invoked skills first when the listing exceeds its budget. This machine lists hundreds of skills, and a new skill starts at zero invocations. *Mitigation*: a short, front-loaded description. The README names `/doctor` and `/context` to check that the description is listed, and `skillOverrides`, `skillListingBudgetFraction` or `skillListingMaxDescChars` (user settings, outside this repo) to protect it. After some use, `/skill-doctor` shows whether it is invoked. The CLAUDE.md or AGENTS.md of a project can also mention the skill.
+- **The description is dropped from a crowded skill listing** → Claude Code drops descriptions of the least-invoked skills first when the listing exceeds its budget. This machine lists hundreds of skills, and a new skill starts at zero invocations. *Mitigation*: a short, front-loaded description. The README names `/doctor` and `/context` to check that the description is listed, and two user settings, outside this repo, to protect it: a higher `skillListingBudgetFraction`, or other skills set to `"name-only"` in `skillOverrides`. `skillListingMaxDescChars` caps each description at 1,536 characters by default, far above this one, so it does not help. Claude Code 2.1.285 ignores `skillOverrides` for plugin skills, so it cannot target this skill itself. After some use, `/skill-doctor` shows whether it is invoked. The CLAUDE.md or AGENTS.md of a project can also mention the skill.
 - **Evals pass in isolation but the skill does not trigger among real skills** → isolated runs load only this plugin. *Mitigation*: the manual interactive check (D4) runs in a normal session with the full listing.
 - **Eval spend** → each case costs about cases × runs × 2 agent runs plus judge calls, on the user's plan. The spend limit was hit during planning. *Mitigation*: `--max-cost-usd` on every run, `--ablation none` while iterating on graders, `--runs 1` for smoke passes, and the full `with-without` run only for the GREEN and final verification. A run that ends in an account error is read as a failure, never as a pass: check `error` in the JSON result.
 - **The agent passes a wrong confidence** → a judged label at or above the threshold is written unasked. *Mitigation*: the same risk the triage judgement carries, and the same threshold. The reply names every applied label, and triage never removes labels, so a wrong one is visible and fixable. Every `AFK` the agent judges is named in the reply.
@@ -145,4 +151,4 @@ The README gains a section on the skill: its trigger, the helper, and its depend
 
 ## Migration Plan
 
-Additive only. The skill takes effect when a user installs or updates the `autonomous` plugin to the release that carries it (release-please minor from `feat(autonomous): …`). Rollback: disable the skill through `skillOverrides`, or pin the previous plugin version. The helper has no state and writes nothing.
+Additive only. The skill takes effect when a user installs or updates the `autonomous` plugin to the release that carries it (release-please minor from `feat(autonomous): …`). Rollback: disable the plugin (`claude plugin disable autonomous`), or pin the previous plugin version. `skillOverrides` does not reach plugin skills. The helper has no state and writes nothing.

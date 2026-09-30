@@ -205,8 +205,18 @@ options and reason, then checks the answer. When it cannot ask, it creates
 with the confident labels and names each omitted group in its reply for the
 next triage run. A Beads task created under a parent gets `--no-inherit-labels`
 and the parent's non-contract labels listed explicitly, so its contract labels
-are exactly the ones the helper decided. `/context` or `/doctor` can confirm
-that its description is present in a crowded skill listing.
+are exactly the ones the helper decided.
+
+The skill triggers from its description, and a crowded skill listing can drop
+it. When the listing exceeds its budget, Claude Code shortens descriptions to
+fit: in a session listing 419 skills, `/context all` showed this one at
+`< 20 tokens`, without its description, although it still triggered.
+`/context` or `/doctor` shows whether the description is listed. Raising
+`skillListingBudgetFraction` in user settings (the share of the context window
+reserved for the listing, default `0.01`) makes room for it, and so does
+setting other skills to `"name-only"` in `skillOverrides`. `skillOverrides`
+does not apply to plugin skills, so this skill is turned off only by disabling
+the plugin (`claude plugin disable autonomous`).
 
 The creation-time helper checks the same label contract before a new Linear,
 Beads or GitHub task is written. It reads `~/.config/autonomous/config.json`

@@ -91,3 +91,10 @@
 
 - [x] 7.1 Run the full toolchain (`bun run lint:oxfmt`, `lint:eslint`, `lint:markdown`, `lint:knip`, `lint:fallow`, `lint:marketplace`, `lint:types`, `test`), then `openspec validate add-label-at-creation-skill --strict` and the CI pin `bunx @fission-ai/openspec@1.11.0 validate --changes --no-interactive`. Verify that all pass.
 - [x] 7.2 After the user confirms, update Linear DOT-103's status section with what shipped and a pointer to `evidence/eval-log.md`, and DOT-82's "Where the next refinement should resume", through the `linear` CLI. Verify with `linear issue view DOT-103 --json` that the new status is present.
+
+## 8. Verification follow-ups
+
+- [x] 8.1 Check the skill listing settings against the Claude Code settings schema, and correct the README section and the design's risk and rollback lines. `skillOverrides` does not reach plugin skills. Verify that `bun run lint:markdown` passes.
+- [x] 8.2 Shorten the missing-configuration `ask` reason to `configuration unavailable`, add a test for a judgement exactly at the threshold, and rename the `grill-me-spelling` variant grader. Verify with `bun run test`.
+- [x] 8.3 Add the `github-missing-label` (scaffolded `gh` stand-in), `beads-nothing-certain` and `beads-several-tasks` eval cases, and list them in design D4. Run each with the baseline arm before any `SKILL.md` change. Fix any body failure they show, and re-run the full suite if `SKILL.md` changes. Verify that the runs, costs and the word count and token cost are recorded in `evidence/eval-log.md`.
+- [x] 8.4 Re-run the toolchain, `bun run fallow audit`, `openspec validate add-label-at-creation-skill --strict` and `claude plugin validate --strict plugins/autonomous`. Verify that all pass.

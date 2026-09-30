@@ -109,7 +109,7 @@ function resolveJudgement(
     answer: JudgedGroup | undefined,
 ): Resolution {
     if (!load.ok) {
-        return { reason: `configuration unavailable at ${load.path}: ${load.error}` };
+        return { reason: "configuration unavailable" };
     }
     if (!answer) {
         return { reason: "no judgement given" };
