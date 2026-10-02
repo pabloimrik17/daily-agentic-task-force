@@ -85,7 +85,7 @@
 
 - [x] 8.1 Run the full toolchain: `bun run test`, `typecheck`, `lint:eslint`, `lint:knip`, `lint:fallow`, `lint:oxfmt`, `lint:markdown`, `lint:marketplace`. Also run `bunx @fission-ai/openspec@1.11.0 validate --changes --no-interactive`, the CI pin. Verify that all pass.
 - [x] 8.2 Attempt the eval case for the "nobody to ask" path (design D7). Keep it only if its scaffold makes the run reach `label-triage` without real OpenUsage credentials. Otherwise delete it and record why in `openspec/changes/add-interactive-handoff/evidence/interactive-check.md`. Verify that either the case passes under `claude plugin eval` with a cost ceiling and no `error` run, or the reason is recorded.
-- [ ] 8.3 Manual interactive check against the real trackers, with the plugin installed from the branch:
+- [x] 8.3 Manual interactive check against the real trackers, with the plugin installed from the branch:
     - a `/autonomous:run --account <key> --apply` round that applies one answer and leaves one for `Later`;
     - the same run with `--no-handoff`;
     - a round with `--json`.
