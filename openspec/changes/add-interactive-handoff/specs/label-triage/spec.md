@@ -26,7 +26,7 @@ Each question SHALL:
 #### Scenario: Judgement below the threshold
 
 - **WHEN** a run with `--apply` judges `HITL` at 0.80 for the entry group of a Beads task
-- **THEN** its question offers `AFK`, `HITL`, `grill-me` and `Later` in that order, and the description of `HITL` begins with 0.80 and the judgement's reason
+- **THEN** its question offers `AFK`, `HITL`, `grill-me` and `Later` in that order, and the description of `HITL` begins with `judged 0.80 ·` and the judgement's reason
 
 #### Scenario: Scope with conflicting evidence
 
