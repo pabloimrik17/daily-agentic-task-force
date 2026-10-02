@@ -29,4 +29,4 @@ jobs:
                   bun-version-file: .bun-version
 
             - name: 🔍 Validate Renovate config
-              run: bunx --package renovate@43.227.0 renovate-config-validator --strict renovate.json
+              run: bunx --package renovate@44.101.2 renovate-config-validator --strict renovate.json
