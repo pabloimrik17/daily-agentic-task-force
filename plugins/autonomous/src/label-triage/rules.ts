@@ -7,7 +7,9 @@ import type { Source } from "../config.ts";
 import { type Detection, type Evidence } from "../label-contract/detect.ts";
 import { type Group, GROUPS, isValidGroup } from "../label-contract/contract.ts";
 
-export type Tier = "code" | "llm";
+// `human`: an answer to a question of the handoff, applied in answer mode; no triage
+// report renders it.
+export type Tier = "code" | "llm" | "human";
 
 export interface Derivation {
     source: Source;
