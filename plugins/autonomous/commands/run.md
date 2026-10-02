@@ -28,6 +28,7 @@ the steps.
 
 2. Relay the script's stdout and stderr verbatim, in a code block, followed by
    its exit code: 0 advance, 2 wait, 3 not evaluable, 1 usage or runner error.
+   Write nothing else around it.
 
 3. Find the handoff. With `--json`, it is the `handoff` field of the JSON
    document on stdout. Without `--json`, it is the last line of stdout when
@@ -63,11 +64,14 @@ the steps.
     user typed: answer mode rejects them. Relay the script's stdout and stderr
     verbatim, in a code block, followed by its exit code: 0 every answer
     applied or skipped, 3 an answer rejected or failed or the configuration
-    could not be loaded, 1 usage or runner error. Then end the command.
+    could not be loaded, 1 usage or runner error. Then end the command,
+    writing nothing after it.
 
 ## Rules
 
-- Do not summarise, reinterpret, recompute or second-guess the report.
+- Do not summarise, reinterpret, recompute or second-guess the report. Add no
+  text of your own before or after a relayed output: not why no question was
+  asked, not how many tasks were left, not which answer was not passed on.
 - Do not retry with different arguments; the answer invocation of step 6 is
   not a retry. If the report says an account must be chosen, show it and stop;
   the user picks the account.
@@ -87,4 +91,4 @@ the steps.
 - When the report carries no `handoff`, or AskUserQuestion is not available,
   take no further action: show the report and end the command. Otherwise run
   steps 4 to 6 once; when step 5 keeps no answer, end after relaying the first
-  report.
+  report. Ending means writing nothing more.
