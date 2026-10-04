@@ -4,6 +4,8 @@ Cross-repo dependency: groups 3 and 12 need the dotfiles changes `add-stonks-too
 
 Personal data rule for every task: real identifiers, URLs, tickers, quantities and prices never enter this repository. Fixtures and examples are fictional. Real captures stay in the local state directory.
 
+First-connect handoff from dotfiles: read [first-connect-observations.md](first-connect-observations.md) before groups 3 and 5. It records verified tool identifiers, the instruction-write guards and a fictional missing-unit trailing fragment. Full captures, pagination and the reauthentication interval remain pending in this plugin change.
+
 ## 1. Spike: mod pane, feed, persistence and capture (first)
 
 - [ ] 1.1 Create a minimal loadable skeleton:
