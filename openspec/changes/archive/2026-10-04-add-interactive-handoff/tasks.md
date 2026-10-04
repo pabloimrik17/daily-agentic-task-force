@@ -91,4 +91,4 @@
     - a round with `--json`.
 
   Record the questions shown, the answer invocation and its report, and a read-back of the answered task in `evidence/interactive-check.md`. Verify that the applied label is on the task, that the `Later` task is unchanged, and that the `--no-handoff` run asked nothing.
-- [ ] 8.4 Update DOT-104's status in Linear with the PR, the evidence file and the release note (`feat(autonomous): …`, a minor release). After merge and before archiving, replace DOT-82's glossary with a link to `plugins/autonomous/CONTEXT.md` on `main`. Verify with `linear issue view DOT-104 --json` and `linear issue view DOT-82 --json`.
+- [x] 8.4 Update DOT-104's status in Linear with the PR, the evidence file and the release note (`feat(autonomous): …`, a minor release). After merge and before archiving, replace DOT-82's glossary with a link to `plugins/autonomous/CONTEXT.md` on `main`. Verify with `linear issue view DOT-104 --json` and `linear issue view DOT-82 --json`.

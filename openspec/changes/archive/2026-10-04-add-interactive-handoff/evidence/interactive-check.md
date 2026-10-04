@@ -36,6 +36,31 @@ flags plus `--scaffold --allow-tools 'Bash(*)'`: with plugin score 1.00 (all
 three graders pass), without plugin 0.00 (`handoff-reported` fails), cost USD
 0.33 for both arms.
 
+None of those graders checks the rule `2d50056` tightened: the command adds no
+text of its own around a relayed report. A fourth grader, `no-own-text`,
+requires the last message to be the relayed code block followed by one
+exit-code line and nothing else. It was added during verification on
+2026-10-04, after `2d50056`, and it fails:
+
+- With `run.md` as committed (one run, with/without ablation, USD 0.24), the
+  reply ended with "This session is non-interactive, so no question was asked
+  and no answer was submitted."
+- Three rewordings of steps 2, 3 and 5 were tried (3 runs each,
+  `--ablation none`, about USD 0.30 per batch). 3 of the 9 replies were clean.
+  The rest added a sentence after the report, added one before it, or relayed
+  only the exit code and a sentence, without the report. None of the
+  rewordings was kept.
+- In the committed-wording run, the relayed `handoff:` line was not the JSON
+  the script printed: a fragment of the `options` array was repeated, which
+  `JSON.stringify` cannot produce. The model re-types the report when it
+  relays it.
+
+So the relay is not reliably verbatim, and the rule against the command's own
+text does not hold. Wording alone did not fix either; the design choice is
+tracked in DOT-114. The questions themselves
+are taken from the Bash output, not from the relay, and in every round of the
+manual check below they equalled the handoff field by field.
+
 ## Manual interactive check (task 8.3)
 
 Session: Claude Code 2.1.287 started from this worktree with
@@ -163,7 +188,9 @@ Read-back with `bd show <id> --json`:
 - In rounds 2, 3 and 4 the session ended with a sentence of its own after the
   relayed report (for example, why no question was asked, or how many tasks
   were left unjudged, or which answer it did not send). It reinterprets nothing and writes nothing, but
-  `run.md`'s rule is not to summarise.
+  `run.md`'s rule is not to summarise. `2d50056` tightened that rule after this
+  check; the `no-own-text` eval grader shows it still does not hold (see Eval
+  case).
 - When the judgement chose two entry labels (`HITL`, `grill-me` for
   `tdhc.12`), both options carry the judged prefix while the question takes a
   single choice, as the spec defines.
