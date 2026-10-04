@@ -489,7 +489,10 @@ Questions are ordered like the judgement:
 
 For the same task, the scope question comes before the entry question. The
 handoff takes the first 4; the others stay in the report's "for the human"
-list.
+list. `Later` is not remembered and the order does not depend on earlier
+answers, so a question left for `Later` comes back at the same place in the
+next round, and the questions after it wait until those ahead are answered or
+labelled some other way.
 
 The question text has up to three lines:
 
