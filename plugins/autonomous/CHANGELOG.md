@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.2.0](https://github.com/pabloimrik17/daily-agentic-task-force/compare/autonomous--v1.1.0...autonomous--v1.2.0) (2026-10-04)
+
+
+### Features
+
+* **autonomous:** ask the triage questions after a run and apply the answers (DOT-104) ([#22](https://github.com/pabloimrik17/daily-agentic-task-force/issues/22)) ([d641835](https://github.com/pabloimrik17/daily-agentic-task-force/commit/d64183584348084fedeba03518b3445d6f6ff9c4))
+
 ## [1.1.0](https://github.com/pabloimrik17/daily-agentic-task-force/compare/autonomous--v1.0.0...autonomous--v1.1.0) (2026-09-30)
 
 
