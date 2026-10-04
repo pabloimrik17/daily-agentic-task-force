@@ -534,7 +534,7 @@ describe("label triage: questions for the human", () => {
                 header: "X-12",
                 question: [
                     'beads X-12 "Task X-12": which entry label?',
-                    "Seen: labels [nazaries] → HITL (llm, 0.80) → below threshold 0.95: 0.80 — Needs review",
+                    "Seen: labels [nazaries] + written [work] → HITL (llm, 0.80) → below threshold 0.95: 0.80 — Needs review",
                     "Description: About X-12",
                 ].join("\n"),
                 options: [
@@ -572,7 +572,7 @@ describe("label triage: questions for the human", () => {
                 header: "X-12",
                 question: [
                     'beads X-12 "Task X-12": which scope label?',
-                    "Seen: labels [nazaries, AFK] → work, personal (code, 0.00) → invalid under the contract: " +
+                    "Seen: labels [nazaries, AFK] → work, personal (code) → invalid under the contract: " +
                         "two scope labels: work, personal — conflicting evidence: alias nazaries; every beads task is personal",
                     "Description: About X-12",
                 ].join("\n"),
@@ -698,7 +698,7 @@ describe("label triage: questions for the human", () => {
         expect(result.questions?.map((q) => q.question)).toEqual([
             [
                 'linear DOT-2 "Task DOT-2": which entry label?',
-                "Seen: labels [] → HITL (llm, 0.80) → below threshold 0.95: 0.80 — Needs review",
+                "Seen: labels [] + written [personal] → HITL (llm, 0.80) → below threshold 0.95: 0.80 — Needs review",
                 "Description: Refine the plan with me",
             ].join("\n"),
         ]);

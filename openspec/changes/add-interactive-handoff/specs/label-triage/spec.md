@@ -15,7 +15,7 @@ For the same task, the scope question comes before the entry question.
 Each question SHALL:
 
 - name the source, the task id and title, and the group;
-- show what the run saw for the group: the labels, the tier, the confidence and the reason;
+- show what the run saw for the group: the task's labels, the labels this run has already written to the task, the group's labels, the tier, the confidence when the tier is a judgement, and the reason;
 - include the first 300 characters of the task's description when the run read it;
 - offer the group's contract labels in the contract's order, each described by its meaning, plus one option labelled `Later` whose value is null;
 - prefix the description of each option the judgement chose with its confidence and reason, without moving the option;
@@ -32,6 +32,11 @@ Each question SHALL:
 
 - **WHEN** a task's alias `nazaries` and the structural rule `personal` disagree on its scope
 - **THEN** its question offers `work`, `personal` and `Later`, and shows both pieces of evidence
+
+#### Scenario: Scope written in the same run
+
+- **WHEN** a run with `--apply` writes `work` to a Beads task through its alias `nazaries` and leaves its entry group for the human
+- **THEN** the entry question shows the task's labels as `nazaries` plus `work` written by this run
 
 #### Scenario: Present labels in conflict
 

@@ -495,12 +495,15 @@ The question text has up to three lines:
 
 ```text
 <source> <taskId> "<title>": which <group> label?
-Seen: labels [<labels on the task>] → <labels> (<tier>, <confidence>) → <why it was left for the human> — <reason>
+Seen: labels [<labels on the task>] + written [<labels this run added>] → <labels> (<tier>, <confidence>) → <why it was left for the human> — <reason>
 Description: <the first 300 characters of the description>
 ```
 
 The second line shows what the run saw for the group, with the arrows of the
-report's "for the human" line. The third appears only when the run read a
+report's "for the human" line. `+ written [...]` names the labels this run has
+already added to the task, such as a scope written by an alias rule, and is
+left out when there are none. Only a judgement (`llm`) shows a confidence; a
+rule's record (`code`) computes none and shows the tier alone. The third appears only when the run read a
 description: the listing's, or for Linear, whose listing carries none, the one
 the judgement read. Its whitespace is collapsed, and `…` marks a cut.
 

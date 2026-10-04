@@ -22,6 +22,7 @@ const LATER: HandoffOption = {
 interface Asked {
     record: TriageRecord;
     detection: Detection;
+    written: string[]; // labels this run has already added to the task
 }
 
 export function questionsFor(
@@ -37,11 +38,19 @@ export function questionsFor(
             detection,
         ]),
     );
+    const written = new Map<string, string[]>();
+    for (const record of records) {
+        if (record.status === "applied") {
+            const key = taskKey(record.source, record.taskId);
+            written.set(key, [...(written.get(key) ?? []), ...record.labels]);
+        }
+    }
     const asked: Asked[] = [];
     for (const record of records) {
-        const detection = byTask.get(taskKey(record.source, record.taskId));
+        const key = taskKey(record.source, record.taskId);
+        const detection = byTask.get(key);
         if (record.status === "asked" && !stopped.has(record.source) && detection !== undefined) {
-            asked.push({ record, detection });
+            asked.push({ record, detection, written: written.get(key) ?? [] });
         }
     }
     const groupRank = (item: Asked) => (item.record.group === "scope" ? 0 : 1);
@@ -52,15 +61,18 @@ export function questionsFor(
 }
 
 function question(
-    { record, detection }: Asked,
+    { record, detection, written }: Asked,
     descriptions: ReadonlyMap<string, string>,
 ): HandoffQuestion {
     const { task } = detection;
     const confidence = record.confidence.toFixed(2);
     const seen = record.labels.length > 0 ? record.labels.join(", ") : "no label";
+    const added = written.length > 0 ? ` + written [${written.join(", ")}]` : "";
+    // A rule computes no confidence, so only a judgement shows one.
+    const tier = record.tier === "llm" ? `llm, ${confidence}` : record.tier;
     const lines = [
         `${record.source} ${record.taskId} "${record.title}": which ${record.group} label?`,
-        `Seen: labels [${task.labels.join(", ")}] → ${seen} (${record.tier}, ${confidence}) → ${record.detail ?? ""} — ${record.reason}`,
+        `Seen: labels [${task.labels.join(", ")}]${added} → ${seen} (${tier}) → ${record.detail ?? ""} — ${record.reason}`,
     ];
     const description = excerpt(
         task.description ?? descriptions.get(taskKey(task.source, task.id)) ?? "",

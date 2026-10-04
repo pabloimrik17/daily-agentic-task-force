@@ -98,6 +98,48 @@ describe("label triage questions: selection and order", () => {
     });
 });
 
+describe("label triage questions: what the run saw", () => {
+    it("adds the labels this run wrote to the same task, and only those", () => {
+        const listed = task("beads", "B-1", ["nazaries"]);
+        const other = task("beads", "B-2", []);
+        const [question] = questionsFor(
+            [
+                asked(listed, "scope", { status: "applied", detail: null, labels: ["work"] }),
+                asked(other, "scope", { status: "applied", detail: null, labels: ["personal"] }),
+                asked(listed, "entry", { status: "proposed", detail: null, labels: ["AFK"] }),
+                asked(listed, "entry"),
+            ],
+            [],
+            [detect(listed, config().sources.beads), detect(other, config().sources.beads)],
+            new Map(),
+        );
+        expect(question?.question.split("\n")[1]).toBe(
+            "Seen: labels [nazaries] + written [work] → HITL (llm, 0.80) → below threshold 0.95: 0.80 — Needs review",
+        );
+    });
+
+    it("shows no confidence for a rule's record", () => {
+        const listed = task("beads", "B-1", ["nazaries", "personal"]);
+        const [question] = questionsFor(
+            [
+                asked(listed, "scope", {
+                    labels: ["work", "personal"],
+                    confidence: 0,
+                    tier: "code",
+                    detail: "invalid under the contract: two scope labels: work, personal",
+                    reason: "conflicting evidence",
+                }),
+            ],
+            [],
+            [detect(listed, config().sources.beads)],
+            new Map(),
+        );
+        expect(question?.question.split("\n")[1]).toBe(
+            "Seen: labels [nazaries, personal] → work, personal (code) → invalid under the contract: two scope labels: work, personal — conflicting evidence",
+        );
+    });
+});
+
 describe("label triage questions: the description excerpt", () => {
     it("collapses every run of whitespace to one space and trims it", () => {
         expect(descriptionLine("  Line one\n\n\tline   two  \n")).toBe(
