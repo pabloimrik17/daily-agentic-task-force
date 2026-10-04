@@ -28,6 +28,14 @@ plugin 0.50, cost USD 0.21. The trace shows the report ending in a `handoff:` li
 with question `label-triage:beads:eval-pes:scope`; the agent looked for
 AskUserQuestion, found none, showed the report and ended without any `--answer` call.
 
+Both graders read only the Bash calls, so a run that stopped at the quota gate
+or failed before `label-triage` would also pass them (Greptile, PR #22). A third
+grader, `handoff-reported`, requires the last message to carry the relayed
+`handoff:` line with a Beads scope question. Re-run on 2026-10-04 with the same
+flags plus `--scaffold --allow-tools 'Bash(*)'`: with plugin score 1.00 (all
+three graders pass), without plugin 0.00 (`handoff-reported` fails), cost USD
+0.33 for both arms.
+
 ## Manual interactive check (task 8.3)
 
 Session: Claude Code 2.1.287 started from this worktree with
