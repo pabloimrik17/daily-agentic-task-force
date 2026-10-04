@@ -1,3 +1,9 @@
+import {
+    applyAnswers,
+    renderAnswersJson,
+    renderAnswersText,
+    unconfiguredAnswers,
+} from "./answer-mode.ts";
 import { parseArgs, type RunArgs, USAGE } from "./args.ts";
 import { loadConfig } from "./config.ts";
 import { execCommand } from "./exec.ts";
@@ -45,6 +51,9 @@ export async function main(argv: readonly string[], deps: MainDeps): Promise<num
         if (parsed.args.bootstrapLabels) {
             return await runBootstrap(parsed.args, deps);
         }
+        if (parsed.args.answers.length > 0) {
+            return await runAnswers(parsed.args, steps, deps);
+        }
         const startedAt = deps.now();
         const run = await runSteps(steps, {
             args: parsed.args,
@@ -52,7 +61,7 @@ export async function main(argv: readonly string[], deps: MainDeps): Promise<num
             config: loadConfig(deps.env),
             io: { openUsage: deps.openUsage, trackers: deps.trackers, judgement: deps.judgement },
         });
-        const report = buildReport(startedAt, run);
+        const report = buildReport(startedAt, run, parsed.args);
         deps.stdout(parsed.args.json ? renderJson(report) : renderText(report, steps));
         return exitCodeFor(report.outcome);
     } catch (error) {
@@ -78,6 +87,24 @@ async function runBootstrap(args: RunArgs, deps: MainDeps): Promise<number> {
     }
     const report = await bootstrapLabels(deps.trackers(load.config), load.config, deps.now());
     deps.stdout(args.json ? renderBootstrapJson(report) : renderBootstrapText(report));
+    return exitCodeFor(report.outcome);
+}
+
+// Handoff design D3: answer mode, like the bootstrap, needs the configuration
+// and the trackers but runs no step, no quota gate and no judgement.
+async function runAnswers(args: RunArgs, steps: readonly Step[], deps: MainDeps): Promise<number> {
+    const startedAt = deps.now();
+    const load = loadConfig(deps.env);
+    if (!load.ok) {
+        deps.stderr(load.error);
+        if (args.json) {
+            deps.stdout(renderAnswersJson(unconfiguredAnswers(load.path, load.error, startedAt)));
+        }
+        return exitCodeFor("not-evaluable");
+    }
+    const ctx = { config: load.config, trackers: deps.trackers(load.config) };
+    const report = await applyAnswers(steps, args.answers, ctx, startedAt);
+    deps.stdout(args.json ? renderAnswersJson(report) : renderAnswersText(report));
     return exitCodeFor(report.outcome);
 }
 

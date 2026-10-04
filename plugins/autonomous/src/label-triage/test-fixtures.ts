@@ -45,6 +45,8 @@ interface FakeOptions {
     descriptions?: Record<string, string>; // what readTask fills in for a task listed without one
     readErrors?: Record<string, string>;
     addLabelError?: string;
+    addLabelErrors?: Record<string, string>; // per label, for a write cut short after its first label
+    dropsOnAdd?: string; // a label every addLabel loses, as a tracker replacing labels would
 }
 
 // A tracker over an in-memory listing: addLabel really adds, so readTask reads
@@ -87,10 +89,12 @@ function fakeTracker(
         },
         addLabel: (id, label) => {
             calls.push(`${source}:addLabel:${id}:${label}`);
-            if (options.addLabelError !== undefined) {
-                return Promise.resolve({ ok: false, error: options.addLabelError });
+            const error = options.addLabelErrors?.[label] ?? options.addLabelError;
+            if (error !== undefined) {
+                return Promise.resolve({ ok: false, error });
             }
-            labels.set(id, [...(labels.get(id) ?? []), label]);
+            const kept = (labels.get(id) ?? []).filter((name) => name !== options.dropsOnAdd);
+            labels.set(id, [...kept, label]);
             return Promise.resolve({ ok: true, value: undefined });
         },
         listLabels: () => Promise.resolve({ ok: true, value: [] }),
@@ -140,6 +144,8 @@ export function triageContext(options: {
             json: false,
             apply: false,
             bootstrapLabels: false,
+            noHandoff: false,
+            answers: [],
             ...options.args,
         },
         now: NOW,

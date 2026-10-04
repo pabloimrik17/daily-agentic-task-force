@@ -3,12 +3,14 @@
 // and then by judgement, and writes only with --apply. Reading fails closed —
 // a source that cannot be read makes the step not evaluable, with no partial
 // evaluation — while judging degrades: a failed judgement leaves its tasks not
-// judged and the outcome unaffected. The step never returns `wait`.
+// judged and the outcome unaffected. The step never returns `wait`. The groups
+// it leaves for the human become its questions (handoff design D4).
 
 import type { AutonomousConfig, Source } from "../config.ts";
 import { GROUPS, type Group } from "../label-contract/contract.ts";
 import { type Detection, detect } from "../label-contract/detect.ts";
 import type { Step, StepResult, StepTier } from "../runner.ts";
+import { answerLabelTriage } from "./answer.ts";
 import { decide, selectForJudgement } from "./decide.ts";
 import {
     interpretAnswers,
@@ -16,6 +18,8 @@ import {
     type JudgementRequest,
     type JudgementTask,
 } from "./judgement.ts";
+import { LABEL_TRIAGE } from "./question-id.ts";
+import { questionsFor } from "./questions.ts";
 import { plural, renderLabelTriage } from "./render.ts";
 import { type Derivation, deriveByRule } from "./rules.ts";
 import type { Trackers } from "./trackers/tracker.ts";
@@ -59,11 +63,11 @@ function result(
     data: LabelTriageData,
     tier: StepTier = "code",
 ): StepResult<LabelTriageData> {
-    return { step: "label-triage", tier, outcome, reasons, data };
+    return { step: LABEL_TRIAGE, tier, outcome, reasons, data };
 }
 
 export const labelTriageStep: Step<LabelTriageData> = {
-    id: "label-triage",
+    id: LABEL_TRIAGE,
     async run(ctx) {
         if (!ctx.config.ok) {
             return result("not-evaluable", [ctx.config.error], EMPTY);
@@ -143,11 +147,19 @@ export const labelTriageStep: Step<LabelTriageData> = {
             },
             failures: written.failures,
         };
+        const questions = questionsFor(
+            data.records,
+            data.failures,
+            detections,
+            judged.descriptions,
+        );
         // The step's tier is the highest its parts used in this run: `llm` once a
         // judgement batch was requested, `code` otherwise.
-        return result("advance", reasonsFor(data), data, judged.batches > 0 ? "llm" : "code");
+        const tier = judged.batches > 0 ? "llm" : "code";
+        return { ...result("advance", reasonsFor(data), data, tier), questions };
     },
     render: renderLabelTriage,
+    answer: answerLabelTriage,
 };
 
 function countSource(source: Source, detections: Detection[]): SourceCounts {
@@ -202,30 +214,13 @@ async function judge(
     derivations: Derivation[];
     notJudged: LabelTriageData["notJudged"];
     batches: number;
+    descriptions: Map<string, string>;
 }> {
-    const notJudged: LabelTriageData["notJudged"] = [];
-    const ready: JudgementTask[] = [];
-    for (const detection of selected) {
-        const { task } = detection;
-        let description = task.description;
-        if (description === null) {
-            const read = await trackers[task.source].readTask(task.id);
-            if (!read.ok) {
-                notJudged.push({ source: task.source, taskId: task.id, reason: read.error });
-                continue;
-            }
-            description = read.value.description;
-        }
-        ready.push({
-            id: task.id,
-            source: task.source,
-            title: task.title,
-            description,
-            labels: task.labels,
-            groups: candidates.get(detection) ?? [],
-        });
-    }
-
+    const { ready, notJudged, descriptions } = await readForJudgement(
+        selected,
+        candidates,
+        trackers,
+    );
     const derivations: Derivation[] = [];
     let batches = 0;
     for (let start = 0; start < ready.length; start += config.judgement.batch) {
@@ -256,7 +251,47 @@ async function judge(
             })),
         );
     }
-    return { derivations, notJudged, batches };
+    return { derivations, notJudged, batches, descriptions };
+}
+
+// A listing without descriptions (Linear) is completed task by task. The
+// descriptions read here, keyed by `taskKey`, also go into the questions.
+async function readForJudgement(
+    selected: Detection[],
+    candidates: Map<Detection, Group[]>,
+    trackers: Trackers,
+): Promise<{
+    ready: JudgementTask[];
+    notJudged: LabelTriageData["notJudged"];
+    descriptions: Map<string, string>;
+}> {
+    const ready: JudgementTask[] = [];
+    const notJudged: LabelTriageData["notJudged"] = [];
+    const descriptions = new Map<string, string>();
+    for (const detection of selected) {
+        const { task } = detection;
+        let description = task.description;
+        if (description === null) {
+            const read = await trackers[task.source].readTask(task.id);
+            if (!read.ok) {
+                notJudged.push({ source: task.source, taskId: task.id, reason: read.error });
+                continue;
+            }
+            description = read.value.description;
+            if (description !== null) {
+                descriptions.set(taskKey(task.source, task.id), description);
+            }
+        }
+        ready.push({
+            id: task.id,
+            source: task.source,
+            title: task.title,
+            description,
+            labels: task.labels,
+            groups: candidates.get(detection) ?? [],
+        });
+    }
+    return { ready, notJudged, descriptions };
 }
 
 function labelCount(records: TriageRecord[]): number {

@@ -65,6 +65,8 @@ export function context(exec: OpenUsageExec, args: Partial<RunArgs> = {}): RunCo
             json: false,
             apply: false,
             bootstrapLabels: false,
+            noHandoff: false,
+            answers: [],
             ...args,
         },
         now: NOW,
