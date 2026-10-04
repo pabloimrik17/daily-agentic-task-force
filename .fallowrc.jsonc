@@ -9,6 +9,8 @@
         "scripts/validate-marketplace.ts",
         "validate-branch-name.config.cjs",
         "plugins/*/scripts/**/*.ts",
+        // Loaded by the GitHub Pages HTML documents, not a JavaScript import.
+        "docs/styles.css",
     ],
     // Agent scaffolding, not source. Mirrored in 4 sibling configs; see CLAUDE.md.
     "ignorePatterns": [

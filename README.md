@@ -99,3 +99,31 @@ pre-commit, `commitlint` on commit-msg. Branches must match
 
 Step 6 is not optional: a plugin directory that exists but is unlisted fails
 validation, and so does one whose three versions disagree.
+
+## Stonks OAuth documentation site
+
+`docs/` contains the public homepage and privacy policy for **Stonks personal**,
+whose plugin is in development. These static pages support the personal Google
+Sheets OAuth setup; they do not collect portfolio data.
+
+To publish after merging the pages, open repository **Settings → Pages**, select
+**Deploy from a branch**, choose **main** and **/docs**, and save. The expected URLs
+are:
+
+- Homepage: <https://pabloimrik17.github.io/daily-agentic-task-force/>
+- Privacy policy: <https://pabloimrik17.github.io/daily-agentic-task-force/privacy.html>
+
+Use those URLs in Google Auth Platform's Branding settings only once they are
+publicly reachable. Google decides whether the OAuth branding meets its
+requirements; hosting the pages does not guarantee approval.
+
+If Google requests ownership verification, use the same Google account that owns
+the OAuth project to add the homepage as a **URL-prefix** property in Search
+Console. Choose HTML-file or HTML-tag verification, publish the exact file in
+`docs/` or add the supplied tag to `docs/index.html`, then verify. Keep the file or
+tag present afterward. This verifies the project site rather than the entire
+`github.io` domain.
+
+Review the privacy policy whenever the plugin's data handling changes, including
+AI-provider processing and local storage. Keep the OAuth app name consistent with
+**Stonks personal** on these pages.

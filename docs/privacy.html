@@ -1,0 +1,162 @@
+<!doctype html>
+<html lang="es">
+    <head>
+        <meta charset="utf-8" />
+        <meta
+            name="viewport"
+            content="width=device-width, initial-scale=1"
+        />
+        <meta
+            name="description"
+            content="Cómo Stonks personal accede, utiliza y conserva los datos de Google Sheets."
+        />
+        <title>Política de privacidad · Stonks personal</title>
+        <link
+            rel="stylesheet"
+            href="styles.css"
+        />
+    </head>
+    <body>
+        <a
+            class="skip"
+            href="#content"
+            >Ir al contenido</a
+        >
+        <header>
+            <a
+                href="./"
+                class="brand"
+                >Daily Agentic Task Force</a
+            >
+            <nav aria-label="Navegación principal">
+                <a href="./">Stonks personal</a>
+                <a href="https://github.com/pabloimrik17/daily-agentic-task-force">Repositorio</a>
+            </nav>
+        </header>
+        <main id="content">
+            <h1>Política de privacidad</h1>
+            <p class="intro">Stonks personal</p>
+            <p>Actualizada el 4 de octubre de 2026.</p>
+            <p>
+                Esta política describe la integración personal de Google Sheets prevista para
+                Stonks, un plugin de Claude Code en desarrollo mantenido por pabloimrik17 en Daily
+                Agentic Task Force. Se aplica a esa integración y a esta web de documentación; los
+                servicios externos tienen sus propias condiciones.
+            </p>
+            <section>
+                <h2>Acceso a Google Sheets</h2>
+                <p>
+                    Con tu consentimiento, Google Workspace CLI (<code>gws</code>) obtiene acceso
+                    con el permiso
+                    <code>https://www.googleapis.com/auth/spreadsheets.readonly</code>. Google
+                    permite leer las hojas de cálculo accesibles a la cuenta autorizada; este
+                    permiso no queda restringido a un único archivo o pestaña. Stonks lee la hoja y
+                    pestaña indicadas por ti para obtener los registros de seguimiento: símbolos,
+                    estados, cantidades, precios y otros valores presentes en el rango configurado.
+                </p>
+                <p>
+                    La integración no solicita acceso a Gmail ni permisos para editar Google Sheets
+                    o Drive. No crea, modifica ni elimina hojas de cálculo.
+                </p>
+            </section>
+            <section>
+                <h2>Finalidad y procesamiento</h2>
+                <p>
+                    Los datos se usan para comparar tus registros de seguimiento con las otras
+                    fuentes que conectas, detectar discrepancias y generar informes dentro de Claude
+                    Code. No se venden ni se utilizan para publicidad.
+                </p>
+                <p>
+                    El motor de comparación se ejecuta en tu ordenador. Los datos e informes que se
+                    expongan como resultados de herramientas, mensajes o contexto de Claude Code
+                    pueden enviarse a Anthropic o al proveedor de modelos que hayas configurado para
+                    preparar el informe que solicitas. Los datos de Google Sheets y los derivados de
+                    ellos no se utilizan para desarrollar, entrenar ni mejorar modelos generales de
+                    IA. Antes de conectar tu cuenta, utiliza un proveedor y una configuración que
+                    excluyan ese uso: desactiva las opciones de entrenamiento o de compartir datos
+                    para mejorar modelos, o utiliza un servicio cuyas condiciones excluyan ese uso.
+                    Si no puedes garantizarlo, no conectes Sheets. El procesamiento y la
+                    conservación para prestar el servicio se rigen por las condiciones de tu cuenta.
+                    Consulta la
+                    <a href="https://www.anthropic.com/legal/privacy">política de Anthropic</a>; sus
+                    ofertas empresariales se rigen por los acuerdos aplicables.
+                </p>
+                <p>
+                    Esta integración no publica datos de Sheets en GitHub ni en esta web y no tiene
+                    un servidor propio que reciba tus registros. El acceso a Google se realiza
+                    mediante sus APIs. Las conexiones que autorices con otros servicios, como
+                    Interactive Brokers, se rigen también por sus condiciones.
+                </p>
+                <p>
+                    El uso que Stonks personal hace de la información recibida de las APIs de Google
+                    se ajustará a la
+                    <a href="https://developers.google.com/terms/api-services-user-data-policy"
+                        >Google API Services User Data Policy</a
+                    >, incluidos los requisitos de uso limitado (Limited Use), y a la
+                    <a
+                        href="https://developers.google.com/workspace/workspace-api-user-data-developer-policy"
+                        >política de datos de Google Workspace</a
+                    >.
+                </p>
+            </section>
+            <section>
+                <h2>Almacenamiento y eliminación</h2>
+                <p>
+                    La configuración, capturas e informes de ejecución se guardan en tu ordenador.
+                    El diseño del plugin prevé estado bajo
+                    <code>~/.local/state/stonks</code> o la ubicación que configures. La
+                    conservación local y la limpieza dependen de la versión del plugin; puedes
+                    borrar esos archivos cuando ya no los necesites. Los historiales de Claude Code
+                    y del proveedor de IA se gestionan por separado mediante las opciones de esos
+                    productos.
+                </p>
+                <p>
+                    El cliente OAuth de Google se guarda en tu equipo. Si lo sincronizas con
+                    chezmoi, el repositorio contiene únicamente su copia cifrada con age. Los tokens
+                    se mantienen en el almacén cifrado de gws; en macOS la clave de cifrado se
+                    conserva en el Keychain. No se incluyen tokens ni datos financieros reales en el
+                    código, ejemplos o fixtures del proyecto.
+                </p>
+            </section>
+            <section>
+                <h2>Revocar el acceso</h2>
+                <p>
+                    Puedes retirar el permiso desde las
+                    <a href="https://myaccount.google.com/connections"
+                        >conexiones de terceros de tu cuenta de Google</a
+                    >, seleccionando tu aplicación OAuth y eliminando su acceso. La revocación
+                    impide nuevas lecturas con ese permiso; no borra por sí sola informes, capturas
+                    o conversaciones existentes. Elimina también las copias locales y los
+                    historiales que quieras retirar.
+                </p>
+            </section>
+            <section>
+                <h2>Visitas a esta web</h2>
+                <p>
+                    Estas páginas no incorporan analítica, formularios, scripts de seguimiento ni
+                    recursos de terceros. GitHub Pages presta el alojamiento y registra información
+                    técnica, incluida la dirección IP, por motivos de seguridad. Consulta la
+                    <a
+                        href="https://docs.github.com/en/site-policy/privacy-policies/github-general-privacy-statement"
+                        >política de privacidad de GitHub</a
+                    >.
+                </p>
+            </section>
+            <section>
+                <h2>Contacto y cambios</h2>
+                <p>
+                    Para consultas sobre el proyecto o esta política, contacta con
+                    <a href="https://github.com/pabloimrik17">pabloimrik17</a> mediante las
+                    <a href="https://github.com/pabloimrik17/daily-agentic-task-force/issues"
+                        >incidencias del repositorio</a
+                    >. No incluyas secretos ni datos financieros en mensajes públicos. Esta política
+                    se actualizará cuando cambie el uso de los datos; la fecha de actualización
+                    aparece al principio.
+                </p>
+            </section>
+        </main>
+        <footer>
+            <a href="./">Stonks personal</a> · <a href="privacy.html">Política de privacidad</a>
+        </footer>
+    </body>
+</html>

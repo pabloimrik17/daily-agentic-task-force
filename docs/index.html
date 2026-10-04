@@ -1,0 +1,94 @@
+<!doctype html>
+<html lang="es">
+    <head>
+        <meta charset="utf-8" />
+        <meta
+            name="viewport"
+            content="width=device-width, initial-scale=1"
+        />
+        <meta
+            name="description"
+            content="Stonks personal: seguimiento de cartera con lectura de Google Sheets dentro de Claude Code."
+        />
+        <title>Stonks personal · Daily Agentic Task Force</title>
+        <link
+            rel="stylesheet"
+            href="styles.css"
+        />
+    </head>
+    <body>
+        <a
+            class="skip"
+            href="#content"
+            >Ir al contenido</a
+        >
+        <header>
+            <a
+                href="./"
+                class="brand"
+                >Daily Agentic Task Force</a
+            >
+            <nav aria-label="Navegación principal">
+                <a href="privacy.html">Privacidad</a>
+                <a href="https://github.com/pabloimrik17/daily-agentic-task-force">Repositorio</a>
+            </nav>
+        </header>
+        <main id="content">
+            <h1>Stonks personal</h1>
+            <p class="intro">Tus registros de inversión, en acuerdo con tu cartera.</p>
+            <p>
+                Stonks es un plugin de Claude Code en desarrollo dentro de Daily Agentic Task Force.
+                Su propósito es comparar una hoja de seguimiento de Google Sheets con posiciones y
+                órdenes de Interactive Brokers y otros registros que mantienes, para señalar
+                discrepancias en un informe.
+            </p>
+            <p class="notice">
+                El plugin todavía está en desarrollo. Esta página documenta la integración personal
+                de Google Sheets que lo acompaña.
+            </p>
+            <section aria-labelledby="google">
+                <h2 id="google">Qué acceso pide a Google</h2>
+                <p>
+                    La integración utiliza Google Workspace CLI (<code>gws</code>) para leer las
+                    celdas de la hoja y pestaña que configuras. El único permiso solicitado es
+                    <code>spreadsheets.readonly</code>: permite ver las hojas de cálculo accesibles
+                    a tu cuenta. El permiso de Google no queda limitado a una sola hoja, aunque
+                    Stonks utiliza la que indicas en su configuración.
+                </p>
+                <p>
+                    No solicita permisos de Gmail ni de edición de Drive o Sheets. No crea, modifica
+                    ni elimina hojas de cálculo. La conexión es voluntaria y puedes revocarla desde
+                    tu cuenta de Google.
+                </p>
+            </section>
+            <section aria-labelledby="processing">
+                <h2 id="processing">Cómo se usan los datos</h2>
+                <p>
+                    Los datos se utilizan para preparar el informe de seguimiento. El motor se
+                    ejecuta en tu ordenador; los informes y datos expuestos a Claude Code pueden ser
+                    procesados por el proveedor de IA para generar el informe que solicitas. Los
+                    datos de Google Sheets y los derivados de ellos no se utilizan para desarrollar,
+                    entrenar ni mejorar modelos generales de IA. Antes de conectar tu cuenta,
+                    utiliza un proveedor y una configuración que excluyan ese uso; si no puedes
+                    garantizarlo, no conectes Sheets. Esta web solo contiene documentación y no
+                    recibe datos de tu cartera.
+                </p>
+                <p>
+                    Consulta la <a href="privacy.html">política de privacidad</a> antes de conectar
+                    tu cuenta.
+                </p>
+            </section>
+            <section aria-labelledby="contact">
+                <h2 id="contact">Proyecto y contacto</h2>
+                <p>
+                    Mantenido por <a href="https://github.com/pabloimrik17">pabloimrik17</a>. Puedes
+                    consultar el código y contactar mediante las
+                    <a href="https://github.com/pabloimrik17/daily-agentic-task-force/issues"
+                        >incidencias del repositorio</a
+                    >. No publiques credenciales ni datos financieros en las incidencias.
+                </p>
+            </section>
+        </main>
+        <footer><a href="privacy.html">Política de privacidad</a> · Stonks personal</footer>
+    </body>
+</html>
