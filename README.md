@@ -23,10 +23,11 @@ is `datf-lab` and not `experiments`, which `monolab` already publishes.
 
 ## Plugins
 
-| Plugin       | Purpose                                                                     |
-| ------------ | --------------------------------------------------------------------------- |
-| `autonomous` | Autonomous loop entry point — gate steps, starting with a Claude quota gate |
-| `datf-lab`   | Staging area for skills and commands under validation                       |
+| Plugin       | Purpose                                                                                                    |
+| ------------ | ---------------------------------------------------------------------------------------------------------- |
+| `autonomous` | Autonomous loop entry point — gate steps, starting with a Claude quota gate                                |
+| `datf-lab`   | Staging area for skills and commands under validation                                                      |
+| `stonks`     | Swing-trading bookkeeping — reconciles mirrors against IBKR and keeps the Simply Wall St watchlist in step |
 
 Current versions live in `.claude-plugin/marketplace.json`, which release-please
 keeps up to date.

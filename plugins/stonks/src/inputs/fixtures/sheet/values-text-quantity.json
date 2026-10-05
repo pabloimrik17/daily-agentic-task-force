@@ -1,0 +1,5 @@
+[
+    ["Ticker", "Sector", "Estado", "Cantidad", "$/u"],
+    ["ACME", "Industria ficticia", "Invertido", 10, 25.5],
+    ["HOOL", "Software ficticio", "Invertido", "dos", 120]
+]

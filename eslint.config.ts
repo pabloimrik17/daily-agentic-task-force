@@ -16,6 +16,11 @@ export default tseslint.config(
             ".opencode/**",
             ".pi/**",
             "**/CHANGELOG.md",
+            // Vendored Claude Code mod API declarations, third-party code pinned to
+            // the tested Claude Code version (stonks design D17).
+            "plugins/stonks/mod/types/claude-code.d.ts",
+            // Written by Claude Code beside a plugin manifest on every load; git-ignored.
+            "plugins/*/.claude-plugin/types/**",
         ],
     },
     eslint.configs.recommended,

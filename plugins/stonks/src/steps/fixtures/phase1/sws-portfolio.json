@@ -1,0 +1,22 @@
+{
+    "stonks": "sws-portfolio.v1",
+    "run": "run-fixture-1",
+    "url": "https://simplywall.st/portfolios/1234567/fixture",
+    "loginWall": false,
+    "data": {
+        "path": "/portfolios/1234567/fixture",
+        "count": 6,
+        "links": [
+            {
+                "href": "/stocks/us/tech/nasdaqgs-hool/hoolihan-systems",
+                "text": "Hoolihan Systems"
+            },
+            { "href": "/stocks/us/software/nyse-acme/acme-corp", "text": "Acme Corp" },
+            { "href": "/stocks/ca/materials/tsx-strk/strike-metals", "text": "Strike Metals" },
+            { "href": "/stocks/us/energy/nyse-glbx/globex-energy", "text": "Globex Energy" },
+            { "href": "/stocks/us/industrials/nyse-init/initech-holdings", "text": "INIT" },
+            { "href": "/stocks/us/funds/nysearca-etfx/etfx-index-fund", "text": "ETFX" }
+        ],
+        "footerText": "Trending today: WNYE"
+    }
+}

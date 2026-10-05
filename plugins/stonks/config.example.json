@@ -1,0 +1,8 @@
+{
+    "schema": "stonks.config.v1",
+    "trackingSheet": { "spreadsheetId": "<SPREADSHEET_ID>", "tab": "<TAB_NAME>" },
+    "swsPortfolio": { "url": "https://simplywall.st/portfolio/<PORTFOLIO_ID>" },
+    "watchlist": { "name": "<WATCHLIST_NAME>", "url": "https://simplywall.st/watchlist" },
+    "carteraViva": { "url": "https://<CARTERA_VIVA_PAGE>" },
+    "excludedTickers": ["<TICKER>"]
+}

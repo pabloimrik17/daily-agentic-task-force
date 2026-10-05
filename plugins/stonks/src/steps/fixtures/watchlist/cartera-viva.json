@@ -1,0 +1,40 @@
+{
+    "stonks": "cartera-viva.v1",
+    "run": "run-fixture-1",
+    "url": "https://example-trader.test/cartera",
+    "loginWall": false,
+    "data": {
+        "heading": "Cartera Viva",
+        "cards": [
+            {
+                "texts": [
+                    "STRK",
+                    "Strike Metals",
+                    "Precio medio",
+                    "$12.50",
+                    "Trailing activado",
+                    "8,5%"
+                ]
+            },
+            {
+                "texts": [
+                    "INIT",
+                    "Initech Holdings",
+                    "Precio medio: $1,234.56",
+                    "Trailing no activado"
+                ]
+            },
+            {
+                "texts": ["CYBD", "Precio medio", "45.2 $", "Trailing activado"]
+            }
+        ],
+        "closedSection": {
+            "heading": "Posiciones cerradas recientemente",
+            "cards": [
+                {
+                    "texts": ["UMBR", "Umbrella Labs", "Precio medio", "$3.10"]
+                }
+            ]
+        }
+    }
+}

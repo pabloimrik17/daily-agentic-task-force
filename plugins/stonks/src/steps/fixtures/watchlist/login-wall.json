@@ -1,0 +1,7 @@
+{
+    "stonks": "cartera-viva.v1",
+    "run": "run-fixture-1",
+    "url": "https://example-trader.test/login",
+    "loginWall": true,
+    "data": {}
+}

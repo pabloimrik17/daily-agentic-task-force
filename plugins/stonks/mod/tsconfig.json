@@ -1,0 +1,24 @@
+{
+    // The hooks module runs in Claude Code's own environment (no Node, no DOM),
+    // so it is type-checked as a program of its own against the vendored API
+    // in `types/`, whose global declarations (URL, crypto, h) clash with Bun's
+    // in the root program. `bun run typecheck` runs both (design D17).
+    "compilerOptions": {
+        "target": "ESNext",
+        "lib": ["ESNext"],
+        "types": [],
+        "module": "ESNext",
+        "moduleResolution": "bundler",
+        "moduleDetection": "force",
+        "allowImportingTsExtensions": true,
+        "verbatimModuleSyntax": true,
+        "noEmit": true,
+        "strict": true,
+        "noUncheckedIndexedAccess": true,
+        "noImplicitOverride": true,
+        "noFallthroughCasesInSwitch": true,
+        "skipLibCheck": true,
+        "forceConsistentCasingInFileNames": true
+    },
+    "include": ["./**/*.ts"]
+}

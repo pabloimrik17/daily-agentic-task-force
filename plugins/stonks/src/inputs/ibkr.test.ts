@@ -1,0 +1,267 @@
+import { mkdirSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import { describe, expect, it } from "vitest";
+
+import { parseOrders, parsePositions, readIbkr } from "./ibkr.ts";
+
+const fixture = (name: string): string =>
+    readFileSync(new URL(`./fixtures/ibkr/${name}.json`, import.meta.url), "utf8");
+
+const hookResponse = (name: string): string =>
+    (JSON.parse(fixture(name)) as { tool_response: string }).tool_response;
+
+describe("IBKR positions", () => {
+    it("reads the held lines", () => {
+        const result = parsePositions(fixture("positions"));
+        expect(result).toMatchObject({ ok: true });
+        if (result.ok) {
+            expect(result.value).toHaveLength(6);
+            expect(result.value[1]).toEqual({ ticker: "ACME", quantity: 2.5 });
+        }
+    });
+
+    it("drops a closed line", () => {
+        const text = JSON.stringify({
+            positions: [
+                { contract_description: "HOOL", position: 0 },
+                { contract_description: "brk b", position: 3 },
+            ],
+        });
+        expect(parsePositions(text)).toEqual({
+            ok: true,
+            value: [{ ticker: "BRK.B", quantity: 3 }],
+        });
+    });
+
+    it("names the missing root", () => {
+        expect(parsePositions(fixture("orders-unknown-shape"))).toEqual({
+            ok: false,
+            error: { kind: "unreadable", message: "IBKR positions: positions must be an array" },
+        });
+    });
+
+    it("names a mistyped quantity", () => {
+        const result = parsePositions(
+            JSON.stringify({ positions: [{ contract_description: "HOOL", position: "8" }] }),
+        );
+        expect(result).toMatchObject({
+            ok: false,
+            error: { message: expect.stringContaining("positions[0].position") as string },
+        });
+    });
+
+    it("treats a login text as needs-login", () => {
+        expect(parsePositions("Unauthorized: token expired")).toEqual({
+            ok: false,
+            error: { kind: "needs-login" },
+        });
+    });
+
+    it("treats other text as unreadable", () => {
+        expect(parsePositions("not json")).toMatchObject({
+            ok: false,
+            error: { kind: "unreadable" },
+        });
+    });
+});
+
+describe("IBKR orders", () => {
+    const orders = (): ReturnType<typeof parseOrders> => parseOrders(fixture("orders"));
+
+    it("excludes a replaced order", () => {
+        const result = orders();
+        expect(result.ok && result.value.map((order) => order.ticker)).toEqual([
+            "CYBD",
+            "INIT",
+            "HOOL",
+            "VNDL",
+        ]);
+    });
+
+    it("reads a limit buy with its price", () => {
+        const result = orders();
+        expect(result.ok && result.value[0]).toEqual({
+            ticker: "CYBD",
+            side: "buy",
+            quantity: 1,
+            orderType: "limit",
+            limitPrice: 41.85,
+            trailPercent: null,
+        });
+    });
+
+    it("reads a trailing stop with a percent trail", () => {
+        const result = orders();
+        expect(result.ok && result.value[2]).toMatchObject({
+            ticker: "HOOL",
+            side: "sell",
+            orderType: "trailing-stop",
+            trailPercent: 12.5,
+        });
+    });
+
+    it("keeps the trail unknown without a percent sign", () => {
+        const result = orders();
+        expect(result.ok && result.value[1]).toMatchObject({
+            ticker: "INIT",
+            orderType: "trailing-stop",
+            trailPercent: null,
+        });
+    });
+
+    it("names the missing quantity field", () => {
+        expect(parseOrders(fixture("orders-missing-quantity"))).toMatchObject({
+            ok: false,
+            error: {
+                kind: "unreadable",
+                message: expect.stringContaining("orders[0].total_shares_qty") as string,
+            },
+        });
+    });
+
+    it("fails on an unknown shape", () => {
+        expect(parseOrders(fixture("orders-unknown-shape"))).toEqual({
+            ok: false,
+            error: { kind: "unreadable", message: "IBKR orders: orders must be an array" },
+        });
+    });
+
+    it("accepts no orders", () => {
+        expect(parseOrders(fixture("orders-empty"))).toEqual({ ok: true, value: [] });
+    });
+
+    it("counts an unknown status as active and maps order types", () => {
+        const row = (type: string, extra: object = {}): object => ({
+            order_status: "PENDING_SUBMIT",
+            order_type: type,
+            side: "SELL",
+            total_shares_qty: 3,
+            primary_description: "Sell 3 acme",
+            ...extra,
+        });
+        const result = parseOrders(
+            JSON.stringify({
+                orders: [row("STP"), row("MKT"), row("PEG"), row("TRAIL")],
+            }),
+        );
+        expect(result.ok && result.value.map((order) => order.orderType)).toEqual([
+            "stop",
+            "market",
+            "other",
+            "trailing-stop",
+        ]);
+        expect(result.ok && result.value[0]?.ticker).toBe("ACME");
+    });
+
+    it("prefers the remaining quantity", () => {
+        const result = parseOrders(
+            JSON.stringify({
+                orders: [
+                    {
+                        order_status: "NEW",
+                        order_type: "MKT",
+                        side: "BUY",
+                        total_shares_qty: "5",
+                        remaining_shares_qty: "2",
+                        primary_description: "Buy 5 ACME",
+                    },
+                ],
+            }),
+        );
+        expect(result.ok && result.value[0]?.quantity).toBe(2);
+    });
+
+    it("names an unreadable side and description", () => {
+        const base = {
+            order_status: "NEW",
+            order_type: "MKT",
+            total_shares_qty: 1,
+        };
+        const side = parseOrders(
+            JSON.stringify({
+                orders: [{ ...base, side: "HOLD", primary_description: "Buy 1 ACME" }],
+            }),
+        );
+        const description = parseOrders(
+            JSON.stringify({ orders: [{ ...base, side: "BUY", primary_description: "odd" }] }),
+        );
+        expect(side).toMatchObject({
+            error: { message: expect.stringContaining("orders[0].side") as string },
+        });
+        expect(description).toMatchObject({
+            error: { message: expect.stringContaining("orders[0].primary_description") as string },
+        });
+    });
+
+    it("needs a numeric limit price on a limit order", () => {
+        const result = parseOrders(
+            JSON.stringify({
+                orders: [
+                    {
+                        order_status: "NEW",
+                        order_type: "LIMIT",
+                        side: "BUY",
+                        total_shares_qty: 1,
+                        primary_description: "Buy 1 ACME",
+                    },
+                ],
+            }),
+        );
+        expect(result).toMatchObject({
+            ok: false,
+            error: { message: expect.stringContaining("orders[0].limit_price") as string },
+        });
+    });
+
+    it("treats a login text as needs-login", () => {
+        expect(parseOrders("401")).toEqual({ ok: false, error: { kind: "needs-login" } });
+    });
+});
+
+describe("readIbkr", () => {
+    const rawWith = (files: Record<string, string>): string => {
+        const dir = join(mkdtempSync(join(tmpdir(), "stonks-ibkr-")), "raw");
+        mkdirSync(dir);
+        for (const [name, text] of Object.entries(files)) {
+            writeFileSync(join(dir, name), text);
+        }
+        return dir;
+    };
+
+    it("reads the newest capture of each read", () => {
+        const dir = rawWith({
+            "000000000000001-mcp__ibkr__get_account_positions.json": JSON.stringify({
+                positions: [{ contract_description: "OLDX", position: 1 }],
+            }),
+            "000000000000002-mcp__ibkr__get_account_positions.json": hookResponse("hook-positions"),
+            "000000000000003-mcp__ibkr__get_account_orders.json": hookResponse("hook-orders"),
+        });
+        const result = readIbkr(dir);
+        expect(result.ok && result.value.provenance).toBe("mcp");
+        expect(result.ok && result.value.positions).toHaveLength(6);
+        expect(result.ok && result.value.orders).toHaveLength(4);
+    });
+
+    it("names the missing capture", () => {
+        expect(readIbkr(rawWith({}))).toEqual({
+            ok: false,
+            error: { kind: "unreadable", message: "IBKR positions: no capture in this run" },
+        });
+        const onlyPositions = rawWith({
+            "000000000000002-mcp__ibkr__get_account_positions.json": hookResponse("hook-positions"),
+        });
+        expect(readIbkr(onlyPositions)).toEqual({
+            ok: false,
+            error: { kind: "unreadable", message: "IBKR orders: no capture in this run" },
+        });
+    });
+
+    it("returns the first failure", () => {
+        const dir = rawWith({
+            "000000000000002-mcp__ibkr__get_account_positions.json": "Unauthorized",
+            "000000000000003-mcp__ibkr__get_account_orders.json": "garbage",
+        });
+        expect(readIbkr(dir)).toEqual({ ok: false, error: { kind: "needs-login" } });
+    });
+});

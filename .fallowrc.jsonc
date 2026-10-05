@@ -9,6 +9,12 @@
         "scripts/validate-marketplace.ts",
         "validate-branch-name.config.cjs",
         "plugins/*/scripts/**/*.ts",
+        // A plugin's hooks module: loaded by Claude Code from hooks.json `modules`.
+        "plugins/*/mod/register.ts",
+        // A plugin's PostToolUse command hook: run by Claude Code from hooks.json (stonks design D5).
+        "plugins/*/src/capture.ts",
+        // Spike stub run by hand to show the fictional report in the pane; removed in stonks task 10.1.
+        "plugins/stonks/src/spike-stub.ts",
         // Loaded by the GitHub Pages HTML documents, not a JavaScript import.
         "docs/styles.css",
     ],
@@ -21,8 +27,16 @@
         ".opencode/**",
         ".pi/**",
         "coverage/**",
+        // Vendored Claude Code mod API declarations (stonks design D17).
+        "plugins/stonks/mod/types/claude-code.d.ts",
     ],
-    "ignoreDependencies": ["@types/bun", "validate-branch-name"],
+    // `claude-code` is the engine's own module a hooks module imports types from (stonks design D17).
+    "ignoreDependencies": ["@types/bun", "validate-branch-name", "claude-code"],
+    // Deliberate copies of `autonomous`'s validation primitives and configuration loader:
+    // plugins install independently, so nothing is imported across them (stonks task 4.1).
+    "duplicates": {
+        "ignore": ["plugins/stonks/src/validate.ts", "plugins/stonks/src/config.ts"],
+    },
     "rules": {
         // suppression comments must carry a reason
         "require-suppression-reason": "warn",

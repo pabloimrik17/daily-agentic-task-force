@@ -1,0 +1,55 @@
+{
+    "schema": "stonks.ibkr-screenshots.v1",
+    "positions": [
+        [
+            { "ticker": "HOOL", "quantity": 8 },
+            { "ticker": "ACME", "quantity": 2.5 },
+            { "ticker": "STRK", "quantity": 3 },
+            { "ticker": "GLBX", "quantity": 5 }
+        ],
+        [
+            { "ticker": "GLBX", "quantity": 5 },
+            { "ticker": "INIT", "quantity": 4 },
+            { "ticker": "ETFX", "quantity": 14 }
+        ]
+    ],
+    "orders": [
+        [
+            {
+                "ticker": "CYBD",
+                "side": "buy",
+                "quantity": 1,
+                "orderType": "limit",
+                "limitPrice": 41.85,
+                "trailPercent": null
+            },
+            {
+                "ticker": "INIT",
+                "side": "sell",
+                "quantity": 4,
+                "orderType": "trailing-stop",
+                "limitPrice": null,
+                "trailPercent": null
+            }
+        ],
+        [
+            {
+                "ticker": "HOOL",
+                "side": "sell",
+                "quantity": 8,
+                "orderType": "trailing-stop",
+                "limitPrice": null,
+                "trailPercent": 12.5
+            },
+            {
+                "ticker": "VNDL",
+                "side": "buy",
+                "quantity": 6,
+                "orderType": "limit",
+                "limitPrice": 18.65,
+                "trailPercent": null
+            }
+        ]
+    ],
+    "noActiveOrders": false
+}

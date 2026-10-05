@@ -1,0 +1,324 @@
+[
+    {
+        "check": "B8",
+        "ticker": "GEKKO",
+        "sides": {
+            "tracking-sheet": "Vender 3",
+            "ibkr": "no sell order"
+        },
+        "severity": "alert",
+        "affectsWatchlist": false
+    },
+    {
+        "check": "B8",
+        "ticker": "KRYPT",
+        "sides": {
+            "tracking-sheet": "Vender 3",
+            "ibkr": "sell cover 2"
+        },
+        "severity": "alert",
+        "affectsWatchlist": false
+    },
+    {
+        "check": "B8",
+        "ticker": "STRK",
+        "sides": {
+            "tracking-sheet": "Vender 3",
+            "ibkr": "sell cover 2"
+        },
+        "severity": "alert",
+        "affectsWatchlist": false
+    },
+    {
+        "check": "A1",
+        "ticker": "ETFX",
+        "sides": {
+            "ibkr": "holds 10",
+            "sws-portfolio": "not listed"
+        },
+        "severity": "discrepancy",
+        "affectsWatchlist": false
+    },
+    {
+        "check": "A1",
+        "ticker": "MOMCP",
+        "sides": {
+            "ibkr": "holds 1",
+            "sws-portfolio": "not listed"
+        },
+        "severity": "discrepancy",
+        "affectsWatchlist": false
+    },
+    {
+        "check": "A2",
+        "ticker": "BLUTH",
+        "sides": {
+            "ibkr": "not held",
+            "sws-portfolio": "listed"
+        },
+        "severity": "discrepancy",
+        "affectsWatchlist": false
+    },
+    {
+        "check": "B1",
+        "ticker": "ENCMX",
+        "sides": {
+            "tracking-sheet": "position 1",
+            "ibkr": "not held"
+        },
+        "severity": "discrepancy",
+        "affectsWatchlist": true
+    },
+    {
+        "check": "B1",
+        "ticker": "WNYE",
+        "sides": {
+            "tracking-sheet": "position 3",
+            "ibkr": "not held"
+        },
+        "severity": "discrepancy",
+        "affectsWatchlist": true
+    },
+    {
+        "check": "B2",
+        "ticker": "HOOL",
+        "sides": {
+            "ibkr": "holds 2",
+            "tracking-sheet": "no Invertido or Vender entry"
+        },
+        "severity": "discrepancy",
+        "affectsWatchlist": true
+    },
+    {
+        "check": "B3",
+        "ticker": "GLBX",
+        "sides": {
+            "ibkr": "holds 2",
+            "tracking-sheet": "position 1"
+        },
+        "severity": "discrepancy",
+        "affectsWatchlist": false
+    },
+    {
+        "check": "B3",
+        "ticker": "KRYPT",
+        "sides": {
+            "ibkr": "holds 2",
+            "tracking-sheet": "position 3"
+        },
+        "severity": "discrepancy",
+        "affectsWatchlist": false
+    },
+    {
+        "check": "B4",
+        "ticker": "HLYSN",
+        "sides": {
+            "tracking-sheet": "Comprar 1 at 12.50",
+            "ibkr": "no buy order"
+        },
+        "severity": "discrepancy",
+        "affectsWatchlist": true
+    },
+    {
+        "check": "B4",
+        "ticker": "WONKA",
+        "sides": {
+            "tracking-sheet": "Comprar 1 at 43.00",
+            "ibkr": "no buy order"
+        },
+        "severity": "discrepancy",
+        "affectsWatchlist": true
+    },
+    {
+        "check": "B5",
+        "ticker": "VNDL",
+        "sides": {
+            "ibkr": "buy order 1 limited at 20.00",
+            "tracking-sheet": "no Comprar entry"
+        },
+        "severity": "discrepancy",
+        "affectsWatchlist": true
+    },
+    {
+        "check": "B6",
+        "ticker": "CYBD",
+        "sides": {
+            "tracking-sheet": "Comprar 1 at 42.00",
+            "ibkr": "buy order 1 limited at 41.50"
+        },
+        "severity": "discrepancy",
+        "affectsWatchlist": false
+    },
+    {
+        "check": "B6",
+        "ticker": "WONKA",
+        "sides": {
+            "tracking-sheet": "Comprar 1 at 42.00",
+            "ibkr": "buy order 1 limited at 41.50"
+        },
+        "severity": "discrepancy",
+        "affectsWatchlist": false
+    },
+    {
+        "check": "B7",
+        "ticker": "ACME",
+        "sides": {
+            "ibkr": "sell cover 2",
+            "tracking-sheet": "no Vender entry"
+        },
+        "severity": "discrepancy",
+        "affectsWatchlist": true
+    },
+    {
+        "check": "C1",
+        "ticker": "UMBR",
+        "sides": {
+            "tracking-sheet": "Roger entry",
+            "cartera-viva": "not listed"
+        },
+        "severity": "discrepancy",
+        "affectsWatchlist": true
+    },
+    {
+        "check": "C2",
+        "ticker": "CRUX",
+        "sides": {
+            "cartera-viva": "listed",
+            "ibkr": "not held",
+            "tracking-sheet": "no entry"
+        },
+        "severity": "discrepancy",
+        "affectsWatchlist": true
+    },
+    {
+        "check": "C2",
+        "ticker": "PIEDP",
+        "sides": {
+            "cartera-viva": "listed",
+            "ibkr": "not held",
+            "tracking-sheet": "entries in Operativa"
+        },
+        "severity": "discrepancy",
+        "affectsWatchlist": true
+    },
+    {
+        "check": "C3",
+        "ticker": "ENCMX",
+        "sides": {
+            "cartera-viva": "listed",
+            "ibkr": "not held",
+            "tracking-sheet": "position 1"
+        },
+        "severity": "discrepancy",
+        "affectsWatchlist": true
+    },
+    {
+        "check": "C4",
+        "ticker": "HOOL",
+        "sides": {
+            "cartera-viva": "listed",
+            "tracking-sheet": "Comprar entry",
+            "ibkr": "live buy order"
+        },
+        "severity": "informational",
+        "affectsWatchlist": false
+    },
+    {
+        "check": "C4",
+        "ticker": "WONKA",
+        "sides": {
+            "cartera-viva": "listed",
+            "tracking-sheet": "Comprar entry",
+            "ibkr": "live buy order"
+        },
+        "severity": "informational",
+        "affectsWatchlist": false
+    },
+    {
+        "check": "C5",
+        "ticker": "ROXXN",
+        "sides": {
+            "cartera-viva": "trailing activated at 12%",
+            "tracking-sheet": "Invertido without Vender",
+            "ibkr": "no sell order"
+        },
+        "severity": "warning",
+        "affectsWatchlist": false
+    },
+    {
+        "check": "C6",
+        "ticker": "INIT",
+        "sides": {
+            "cartera-viva": "trailing activated at 10%",
+            "ibkr": "trailing sell order at 15%"
+        },
+        "severity": "warning",
+        "affectsWatchlist": false
+    },
+    {
+        "check": "C6",
+        "ticker": "SRNSX",
+        "sides": {
+            "cartera-viva": "trailing activated at 10%",
+            "ibkr": "trailing sell order with unknown trail"
+        },
+        "severity": "not-evaluable",
+        "affectsWatchlist": false,
+        "reason": "the user's trailing sell order has an unknown trail percentage"
+    },
+    {
+        "check": "C6",
+        "ticker": "VRTCX",
+        "sides": {
+            "cartera-viva": "trailing activated at 8%",
+            "ibkr": "sell order of type stop, not a trailing stop"
+        },
+        "severity": "not-evaluable",
+        "affectsWatchlist": false,
+        "reason": "the user's sell order is not a trailing stop"
+    },
+    {
+        "check": "C7",
+        "ticker": "TYRL",
+        "sides": {
+            "ibkr": "holds 1",
+            "tracking-sheet": "Invertido entry",
+            "cartera-viva": "not listed"
+        },
+        "severity": "discrepancy",
+        "affectsWatchlist": true
+    },
+    {
+        "check": "C8",
+        "ticker": "WNYE",
+        "sides": {
+            "tracking-sheet": "Vender entry",
+            "ibkr": "not held",
+            "cartera-viva": "not listed"
+        },
+        "severity": "discrepancy",
+        "affectsWatchlist": true
+    },
+    {
+        "check": "C9",
+        "ticker": "CYBD",
+        "sides": {
+            "cartera-viva": "not listed",
+            "tracking-sheet": "Comprar entry",
+            "ibkr": "live buy order"
+        },
+        "severity": "informational",
+        "affectsWatchlist": false
+    },
+    {
+        "check": "C9",
+        "ticker": "VNDL",
+        "sides": {
+            "cartera-viva": "not listed",
+            "tracking-sheet": "no Comprar entry",
+            "ibkr": "live buy order"
+        },
+        "severity": "informational",
+        "affectsWatchlist": false
+    }
+]

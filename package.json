@@ -19,7 +19,7 @@
         "lint:oxfmt": "oxfmt --check --ignore-path .oxfmtignore",
         "lint:oxfmt:fix": "oxfmt --ignore-path .oxfmtignore",
         "test": "vitest run",
-        "typecheck": "tsc --noEmit"
+        "typecheck": "tsc --noEmit && bun run --filter './plugins/*' typecheck"
     },
     "devDependencies": {
         "@commitlint/cli": "21.2.2",

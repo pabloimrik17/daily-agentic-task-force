@@ -19,5 +19,5 @@
         "forceConsistentCasingInFileNames": true
     },
     "include": ["**/*.ts"],
-    "exclude": ["node_modules"]
+    "exclude": ["node_modules", "plugins/*/.claude-plugin/types", "plugins/*/mod"]
 }

@@ -15,8 +15,8 @@ export default {
     ],
     // pinned per-invocation via `bunx --package renovate@<version>`, never installed
     ignoreDependencies: ["renovate"],
-    // external CLIs the autonomous plugin requires on the consumer machine
-    ignoreBinaries: ["openusage", "bd", "gh", "linear", "claude"],
+    // external CLIs the autonomous and stonks plugins require on the consumer machine
+    ignoreBinaries: ["openusage", "bd", "gh", "linear", "claude", "gws"],
     ignoreExportsUsedInFile: {
         interface: true,
         type: true,
@@ -30,6 +30,21 @@ export default {
         "plugins/*": {
             entry: ["scripts/**/*.ts", "**/*.test.ts"],
             project: ["**/*.ts"],
+        },
+        // The stonks hooks module is loaded by Claude Code from hooks.json
+        // `modules`; `claude-code` is the engine's own module, present at run
+        // time and vendored as types under mod/types/ (design D17).
+        "plugins/stonks": {
+            entry: [
+                "scripts/**/*.ts",
+                "**/*.test.ts",
+                "mod/register.ts",
+                "src/spike-stub.ts",
+                // The PostToolUse command hook, run from hooks.json (design D5).
+                "src/capture.ts",
+            ],
+            project: ["**/*.ts", "!mod/types/claude-code.d.ts"],
+            ignoreDependencies: ["claude-code"],
         },
     },
 } satisfies KnipConfig;

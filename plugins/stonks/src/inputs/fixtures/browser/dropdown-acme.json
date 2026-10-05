@@ -1,0 +1,20 @@
+{
+    "stonks": "dropdown.v1",
+    "run": "run-fixture-1",
+    "url": "https://simplywall.st/watchlists/fixture",
+    "loginWall": false,
+    "data": {
+        "rows": [
+            {
+                "index": 0,
+                "label": "Acme Corp",
+                "symbol": "TSX:ACME"
+            },
+            {
+                "index": 1,
+                "label": "Acme Corp",
+                "symbol": "NYSE:ACME"
+            }
+        ]
+    }
+}

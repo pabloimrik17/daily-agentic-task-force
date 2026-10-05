@@ -1,0 +1,12 @@
+[
+    ["Ticker", "Sector", "Estado", "Cantidad", "$/u"],
+    ["ACME", "Industria ficticia", "Invertido", 10, 25.5],
+    ["HOOL", "Software ficticio", "Comprar", "", 120],
+    ["CRUX", "Energia ficticia", "Vender", 4, 9.75],
+    ["STRK", "Software ficticio", "Operativa", 3, 41],
+    ["WNYE", "Consumo ficticio", "En espera", "", 15.2],
+    ["GLBX", "Energia ficticia", "Roger", 0, 7],
+    ["", "", "", "", ""],
+    ["INIT", "Industria ficticia", "Invertido", 2, 18.4],
+    ["INIT", "Industria ficticia", "Comprar", 1, 16.9]
+]

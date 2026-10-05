@@ -20,6 +20,12 @@
             "source": "./plugins/autonomous",
             "version": "1.2.0",
             "description": "Autonomous loop entry point with deterministic gate steps and a skill that labels new Linear, Beads and GitHub tasks at creation"
+        },
+        {
+            "name": "stonks",
+            "source": "./plugins/stonks",
+            "version": "0.0.0",
+            "description": "Swing-trading bookkeeping: reconciles the user's mirrors against IBKR and keeps the Simply Wall St watchlist in step with the tracking sheet, with code making every decision"
         }
     ]
 }

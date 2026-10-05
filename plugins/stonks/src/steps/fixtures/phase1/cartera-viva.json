@@ -1,0 +1,42 @@
+{
+    "stonks": "cartera-viva.v1",
+    "run": "run-fixture-1",
+    "url": "https://example-trader.test/cartera",
+    "loginWall": false,
+    "data": {
+        "heading": "Cartera Viva",
+        "cards": [
+            { "texts": ["ACME", "Acme Corp", "Precio medio", "$44.20", "Trailing no activado"] },
+            {
+                "texts": ["STRK", "Strike Metals", "Precio medio", "$60.90", "Trailing no activado"]
+            },
+            {
+                "texts": ["GLBX", "Globex Energy", "Precio medio", "$25.30", "Trailing no activado"]
+            },
+            {
+                "texts": [
+                    "INIT",
+                    "Initech Holdings",
+                    "Precio medio",
+                    "$47.10",
+                    "Trailing no activado"
+                ]
+            },
+            {
+                "texts": [
+                    "HOOL",
+                    "Hoolihan Systems",
+                    "Precio medio",
+                    "$120.50",
+                    "Trailing activado",
+                    "10%"
+                ]
+            },
+            { "texts": ["CYBD", "Cyberdyne Systems", "Precio medio", "$41.85"] }
+        ],
+        "closedSection": {
+            "heading": "Posiciones cerradas recientemente",
+            "cards": [{ "texts": ["UMBR", "Umbrella Labs", "Precio medio", "$3.10"] }]
+        }
+    }
+}

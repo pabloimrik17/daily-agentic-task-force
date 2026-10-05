@@ -1,0 +1,17 @@
+{
+    "session_id": "00000000-0000-4000-8000-000000000001",
+    "transcript_path": "/home/example/.claude/projects/example/session.jsonl",
+    "cwd": "/home/example/project",
+    "prompt_id": "00000000-0000-4000-8000-000000000002",
+    "permission_mode": "default",
+    "hook_event_name": "PostToolUse",
+    "tool_name": "mcp__ibkr__get_account_positions",
+    "tool_input": {},
+    "tool_response": "{\"positions\":[{\"contract_id\":700001,\"contract_description\":\"HOOL\",\"position\":8,\"market_price\":150.25,\"market_value\":1202.0,\"currency\":\"USD\",\"average_price\":120.5,\"unrealized_pnl\":238.0,\"asset_class\":\"STK\"},{\"contract_id\":700002,\"contract_description\":\"ACME\",\"position\":2.5,\"market_price\":40.8,\"market_value\":102.0,\"currency\":\"USD\",\"average_price\":44.2,\"unrealized_pnl\":-8.5,\"asset_class\":\"STK\"},{\"contract_id\":700003,\"contract_description\":\"STRK\",\"position\":3,\"market_price\":81.4,\"market_value\":244.2,\"currency\":\"USD\",\"average_price\":60.9,\"unrealized_pnl\":61.5,\"asset_class\":\"STK\"},{\"contract_id\":700004,\"contract_description\":\"GLBX\",\"position\":5,\"market_price\":19.6,\"market_value\":98.0,\"currency\":\"USD\",\"average_price\":25.3,\"unrealized_pnl\":-28.5,\"asset_class\":\"STK\"},{\"contract_id\":700005,\"contract_description\":\"INIT\",\"position\":4,\"market_price\":52.7,\"market_value\":210.8,\"currency\":\"USD\",\"average_price\":47.1,\"unrealized_pnl\":22.4},{\"contract_id\":700006,\"contract_description\":\"ETFX\",\"position\":14,\"market_price\":98.3,\"market_value\":1376.2,\"currency\":\"USD\",\"average_price\":90.6,\"unrealized_pnl\":107.8,\"asset_class\":\"STK\"}]}",
+    "tool_use_id": "toolu_01EXAMPLE",
+    "duration_ms": 1874,
+    "mcp_server": {
+        "name": "ibkr",
+        "source": "user"
+    }
+}
