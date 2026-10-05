@@ -31,7 +31,7 @@ Every decision in those tasks is deterministic: recomputing the 23 watchlist run
 
   It is tested with Vitest on fictional fixtures. It has no runtime dependencies.
 - Add a capture mechanism so that the LLM never transcribes data. A plugin `PostToolUse` hook writes the raw IBKR MCP responses and browser collector outputs into a local run directory, and the engine validates them there. The only exception is the IBKR screenshot fallback. When the MCP fails or needs login, the command first offers re-authentication through `/mcp`; only if that fails or is declined does Claude transcribe a table from screenshots, and the engine uses it only after the user confirms the engine's own rendering of it.
-- Pre-approve only what the command needs. Its frontmatter `allowed-tools` lists exactly `mcp__ibkr__get_account_positions`, `mcp__ibkr__get_orders` and `Bash(bun:*)` for the engine. No global allow rule is added anywhere, and the dotfiles side only denies `mcp__ibkr__get_order_instructions`.
+- Pre-approve only what the command needs. Its frontmatter `allowed-tools` lists exactly `mcp__ibkr__get_account_positions`, `mcp__ibkr__get_account_orders` and `Bash(bun:*)` for the engine. No global allow rule is added anywhere, and the dotfiles side only denies `mcp__ibkr__create_order_instruction` and `mcp__ibkr__delete_order_instruction`.
 - Warn about unknown IBKR tools. The engine holds the set of known `ibkr` tools, and each run reports a WARNING, never blocking, if the session exposes any other `mcp__ibkr__*` tool, so that a new order-capable tool is noticed.
 - Add a Claude Code **mod pane** that renders the report:
     - alerts first;
@@ -86,5 +86,5 @@ None. `plugin-marketplace` does not enumerate plugins; adding `stonks` follows i
     - Claude in Chrome;
     - the configuration file;
     - Claude Code at or above the version the spike pins, which is at least 2.1.287 if the pane ships.
-- **Cross-repo dependency**: the dotfiles changes `add-plugin-configs` (the encrypted `~/.config/stonks/config.json`) and `add-stonks-tooling` (`gws` in `BREW_PACKAGES`, `claude mcp add --scope user ibkr …`, and a deny on `mcp__ibkr__get_order_instructions`). The contract between them is the server name `ibkr`, the configuration path and schema id, and `gws` on `PATH`. **This PR merges after both.**
+- **Cross-repo dependency**: the dotfiles changes `add-plugin-configs` (the encrypted `~/.config/stonks/config.json`) and `add-stonks-tooling` (`gws` in `BREW_PACKAGES`, `claude mcp add --scope user ibkr …`, and a deny on `mcp__ibkr__create_order_instruction` and `mcp__ibkr__delete_order_instruction`). The contract between them is the server name `ibkr`, the configuration path and schema id, and `gws` on `PATH`. **This PR merges after both.**
 - **Data handling**: personal financial data lives only in the encrypted configuration, the local state directory and the user's own services. Fixtures and examples are fictional.

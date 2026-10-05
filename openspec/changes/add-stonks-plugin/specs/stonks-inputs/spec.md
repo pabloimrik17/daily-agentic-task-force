@@ -135,13 +135,13 @@ The report SHALL state that IBKR came from user-confirmed screenshots.
 
 ### Requirement: Unknown IBKR tools are reported
 
-The engine SHALL hold the set of IBKR MCP tools known to exist: the position read, the order read and the order-drafting tool. At the start of every run, the command SHALL pass the names of the `mcp__ibkr__*` tools available in the session to the engine. If any is outside the known set, the engine SHALL print a WARNING naming it, and the report SHALL carry it. The warning SHALL NOT stop the run, trip the gate or change any check. The tool is never called.
+The engine SHALL hold the set of IBKR MCP tools known to exist: the catalog the `ibkr` server exposed at first connect, 34 tools, among them the two reads, the three order-instruction tools and the alert, watchlist and feedback mutations. At the start of every run, the command SHALL pass the names of the `mcp__ibkr__*` tools available in the session to the engine. If any is outside the known set, the engine SHALL print a WARNING naming it, and the report SHALL carry it. The warning SHALL NOT stop the run, trip the gate or change any check. The tool is never called.
 
-The check exists because the managed settings deny exactly one IBKR tool by name, while IBKR's authorisation already advertises an order-submission scope that no public tool uses yet. A new order-capable tool would otherwise go unnoticed.
+The check exists because the managed settings deny exactly two IBKR tools by name, while IBKR's authorisation already advertises an order-submission scope that no public tool uses yet. A new order-capable tool would otherwise go unnoticed.
 
 #### Scenario: Known tools only
 
-- **WHEN** the session exposes only the position read, the order read and the order-drafting tool of the `ibkr` server
+- **WHEN** the session exposes only tools of the recorded catalog
 - **THEN** no warning is printed
 
 #### Scenario: New tool appears

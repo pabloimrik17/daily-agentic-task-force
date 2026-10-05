@@ -124,20 +124,21 @@ The recovery paths are logging in again after a login wall, and, for IBKR, re-au
 The command SHALL pre-approve, for the duration of its own run, exactly these tools, and no others:
 
 - the IBKR position read, `mcp__ibkr__get_account_positions`;
-- the IBKR order read, `mcp__ibkr__get_orders`;
+- the IBKR order read, `mcp__ibkr__get_account_orders`;
 - the invocation of the plugin's engine through `bun`.
 
-The plugin and the user's managed settings SHALL NOT add a global allow rule for any IBKR tool. The only IBKR rule in the managed settings SHALL be the existing deny of `mcp__ibkr__get_order_instructions`. Any other tool the run needs asks for permission as usual.
+The plugin and the user's managed settings SHALL NOT add a global allow rule for any IBKR tool. The only IBKR rules in the managed settings SHALL be the existing denies of `mcp__ibkr__create_order_instruction` and `mcp__ibkr__delete_order_instruction`. Any other tool the run needs asks for permission as usual.
 
 #### Scenario: IBKR reads without prompts
 
 - **WHEN** the command calls the IBKR position read and the IBKR order read
 - **THEN** neither call asks the user for permission
 
-#### Scenario: Order drafting tool
+#### Scenario: Order instruction tools
 
-- **WHEN** anything in a run tries to call `mcp__ibkr__get_order_instructions`
-- **THEN** it is denied by the managed settings, and the command does not pre-approve it
+- **WHEN** anything in a run tries to call `mcp__ibkr__create_order_instruction` or `mcp__ibkr__delete_order_instruction`
+- **THEN** it is denied by the managed settings, and the command pre-approves neither
+- **AND** `mcp__ibkr__get_order_instructions` is not pre-approved either, and the command never calls it
 
 #### Scenario: Outside the command
 
