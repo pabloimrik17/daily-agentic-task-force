@@ -66,16 +66,16 @@ The personal values live in one JSON file outside the plugin, validated before a
 }
 ```
 
-| Field                         | Meaning                                                                                    |
-| ----------------------------- | ------------------------------------------------------------------------------------------ |
-| `schema`                      | Always `stonks.config.v1`.                                                                 |
-| `trackingSheet.spreadsheetId` | The Google spreadsheet `gws` reads.                                                        |
-| `trackingSheet.tab`           | The tab of that spreadsheet, addressed by name.                                            |
-| `swsPortfolio.url`            | The Simply Wall St portfolio page.                                                         |
-| `watchlist.name`              | The name of the watchlist phase 2 manages. The engine refuses a watchlist of another name. |
-| `watchlist.url`               | The Simply Wall St watchlist page.                                                         |
-| `carteraViva.url`             | The Cartera Viva page.                                                                     |
-| `excludedTickers`             | Tickers kept out of the watchlist's candidate set.                                         |
+| Field                         | Meaning                                                                                                                                                          |
+| ----------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `schema`                      | Always `stonks.config.v1`.                                                                                                                                       |
+| `trackingSheet.spreadsheetId` | The Google spreadsheet `gws` reads.                                                                                                                              |
+| `trackingSheet.tab`           | The tab of that spreadsheet, addressed by name.                                                                                                                  |
+| `swsPortfolio.url`            | The Simply Wall St portfolio page.                                                                                                                               |
+| `watchlist.name`              | The name of the watchlist phase 2 manages. The engine refuses a watchlist of another name.                                                                       |
+| `watchlist.url`               | The Simply Wall St watchlist page.                                                                                                                               |
+| `carteraViva.url`             | The Cartera Viva page.                                                                                                                                           |
+| `excludedTickers`             | Positions outside the swing strategy, e.g. a long-term ETF. Checks B and C ignore them. Check A still compares them, since the SWS portfolio mirrors IBKR fully. |
 
 The validation is strict:
 
@@ -104,12 +104,16 @@ stonks/
   active.json            # { runId, startedAt, mode } while a run is open
   runs/<runId>/          # one run only
     raw/                 # hook captures, verbatim
+    warnings.json        # unknown IBKR tools reported
+    ibkr-reauth-offered.json  # the /mcp offer was made
+    ibkr-staged.json     # fallback table awaiting confirmation
     ibkr-confirmed.json  # fallback table, after confirmation
     report.json          # stonks.report.v1, read by the pane
+    gate-resumed.json    # `sigue` ran
     plan.json            # watchlist plan
-    previous.json        # snapshot of the previous run, consumed once
+    previous.json        # snapshot handed over from the previous run, consumed once
+  previous.json          # handoff from the pane, moved into the next run by `begin`
   listings.json          # learnt TICKER -> { symbol, name, url }
-  snapshot.json          # markdown-only variant only
 ```
 
 - Directories are created with mode `0700` and files with `0600`, whatever the umask.
@@ -175,9 +179,9 @@ Phase 2 makes the private Simply Wall St watchlist equal the candidate set. A ti
 
 - **Plan.** In a full run, planning starts only after phase 1, and after "sigue" when the gate paused the run: the engine refuses to plan otherwise, so the pause does not rest on the command alone. The engine reads the tracking sheet and the watchlist live, and plans from those two reads, never from a list remembered from an earlier run. The removals are the watchlist tickers that are not candidates. The additions are the candidates the watchlist lacks. The plan is applied in the same run without asking: invoking the command is the authorisation.
 - **Order and capacity.** Every removal is applied before any addition. The capacity is the one the watchlist page shows. If the candidate set is larger, nothing is changed and the report states both numbers.
-- **Exact listing.** Each addition is resolved to one `EXCHANGE:TICKER` listing, preferring the US primary one (NYSE, NasdaqGS, NasdaqGM or NasdaqCM). The engine supplies the search term when it knows the company name; otherwise the term is a hint chosen by the LLM. Only the search result whose symbol equals the listing is clicked. The first result, a similar ticker or a position on screen never decides.
+- **Exact listing.** Each addition is resolved to one `EXCHANGE:TICKER` listing, preferring the US primary one (NYSE, NasdaqGS, NasdaqGM or NasdaqCM). The engine supplies the search term when it knows the company name; otherwise it asks the LLM to search by the company's name, as a hint. Only the search result whose symbol equals the listing is clicked. The first result, a similar ticker or a position on screen never decides.
 - **Per-change verification.** After each removal and each addition the engine checks that a fresh watchlist read differs from the previous one by exactly that change. Simply Wall St's confirmations name no ticker, so they are not read.
-- **Final comparison.** The watchlist is read once more and compared with the candidate set exactly. The report lists the tickers removed, the tickers added, any left unresolved, the final list, and the count against the capacity, each ticker linked to its Simply Wall St page.
+- **Final comparison.** The final step refuses to run while a change is still pending. The watchlist is read once more and compared with the candidate set exactly. The report lists the tickers removed, the tickers added, any left unresolved, the final list, and the count against the capacity, each ticker linked to its Simply Wall St page.
 - **Resumption.** An interrupted phase 2 is resumed with `/stonks:sync --only watchlist`. It plans again from the live sheet and the live watchlist, so changes already made are not repeated.
 
 Guardrails:
@@ -203,7 +207,7 @@ report after `phase1`; `sigue` and `watchlist-final` replace it. A
 `watchlist-final` that names no report, because it stopped, leaves the pane as
 it is. With `--only watchlist` there is no phase-1 report: the pane says so,
 and phase 2's result is in the transcript only. A new run replaces the previous
-run's report and clears every tick.
+run's report and clears every tick. The ticks also clear when the report that "sigue" recomputes loads. The checklist asks for "sigue" only on a full run's phase-1 report. A pane that fails to open does not stop the command.
 
 Keys, while the pane holds the keyboard (`ctrl+x tab` moves the focus into
 it):

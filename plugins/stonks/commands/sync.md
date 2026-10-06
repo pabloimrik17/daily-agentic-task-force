@@ -26,6 +26,7 @@ A step prints markdown, a blank line, then `directive: <JSON>`.
 - Read the last `directive:` line and follow it (see Directives).
 - A step that exits 1 is a usage error. Show its stderr and stop.
 - Add nothing of your own to the report beyond the questions the directives require.
+- Never put the report or any read into an Artifact, a hosted document or any other hosted page. It stays in the terminal and the local state directory.
 
 Start with `begin $ARGUMENTS`. The engine reads the tracking sheet itself;
 you do nothing for it.
@@ -51,8 +52,9 @@ A hook captures every IBKR read and every collector result. Never retype a resul
     - On explicit confirmation, run `ibkr-screenshots-confirm`, then `phase1`.
     - On rejection, ask for corrected screenshots and stage again.
     - Never continue without that confirmation.
+    - If the user declines to give screenshots, say that IBKR could not be read, run `end` and finish.
 - `gate-wait`: the whole report is already relayed. Tell the user to fix the tracking sheet and reply "sigue", or to stop. On "sigue", run `sigue`, relay what remains, and continue to phase 2 without pausing again. On a stop, run `end`.
-- `ask-login <source>`: ask the user to log in to that site. Wait for their reply. Run that source's collector again, then run again the step that asked. Never type credentials, and never touch a login form.
+- `ask-login <source>`: ask the user to log in to that site. Wait for their reply. Run that source's collector again, then run again the step that asked. Never type credentials, and never touch a login form. If the user declines to log in, say which source could not be read, run `end` and finish.
 - `remove <T>`: run the browser steps the markdown lists for T, in order: `action watchlist-row-menu <index> <path>`, `action remove-from-menu`, `collector watchlist`, then `watchlist-verify`.
 - `add <T>` from `watchlist-plan`, `watchlist-verify` or an unresolved `watchlist-resolve`: run `watchlist-search T`, then the browser steps it lists, then `collector dropdown`, then `watchlist-resolve T`.
 - `add <T>` from a selected `watchlist-resolve`: run `action click-row <index> <listing>` as told, then `collector watchlist`, then `watchlist-verify`.
@@ -83,7 +85,7 @@ JSON
 ```
 
 - `positions` holds one array per screenshot, top to bottom. Include the rows two screenshots share.
-- `orders` holds one array per screenshot. Set `orders: null` and `noActiveOrders: true` only if the user states that no orders are active.
+- `orders` holds one array per screenshot. Set `noActiveOrders: true` and `orders: null` only if the user states that no orders are active. With no orders screenshot, set `orders: null` and `noActiveOrders: false`: the engine asks for it ("the screenshots show no active orders section; ask for the orders screenshot, or confirm that no orders are active").
 - `side` is `buy` or `sell`. `limitPrice` and `trailPercent` are a number or `null`.
 - Copy what the screenshots show. Do not infer, complete or correct a value.
 
@@ -92,7 +94,7 @@ JSON
 - At the start of each site, call `tabs_context_mcp` with `{createIfEmpty: true}`, then `navigate` afresh to the URL `begin` lists for that site. Never reuse a tab left from an earlier run.
 - Poll for readiness instead of waiting a fixed time. When a collector's result shows `"loading": true`, run that collector again.
 - Never scroll the watchlist page. It renders black.
-- Open a row's menu only through `action watchlist-row-menu <index> <path>`, exactly as the engine printed it. It refuses a row that no longer links to that path.
+- Open a row's menu only through `action watchlist-row-menu <index> <path>`, exactly as the engine printed it. It refuses a row that no longer links to that path, and any row but the planned removal's. A refusal is a stop.
 - Open and reposition the Add stock search box through `action reposition-add-panel`. When it answers that the box is not open yet, run it once more.
 - Type the search term with real keystrokes (`computer` `type`) once `action reposition-add-panel` has answered `done`: it leaves the search box focused. Synthetic input events do not reach it. Run `collector dropdown` once the results show, not while they load.
 - Click a search result only through the engine's `action click-row <index> <listing>`, exactly as printed. It refuses a row that no longer shows that listing. Never click by screen coordinates.
@@ -106,4 +108,4 @@ JSON
 - Never remove a keeper, not even to diagnose the page.
 - Never improvise after a failure: no repair, no retry of a different recipe. Relay the reason, run `end`, and finish.
 - When the engine marks a ticker unresolved, relay the question for its exact listing and continue with the next directive. Do not pick a listing yourself, and do not act on the user's answer in this run: no step takes it. Tell the user to add the listing by hand once the run has ended; the next run learns it from the watchlist.
-- The search term is only a hint. The engine selects the listing.
+- The search term is the company's name, and only a hint. The engine selects the listing.
