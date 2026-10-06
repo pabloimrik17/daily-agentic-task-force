@@ -2,8 +2,10 @@
 // (design D4). Inactive orders are dropped by a deny list, so an unknown status
 // counts as active (a false finding beats a missed one, design D16). REPLACED
 // is not on it: IBKR marks a user-modified order that way and it keeps working.
-// A trail is a percentage only when the description says `%`; otherwise it
-// stays unknown rather than derived.
+// A trail is a percentage only when the description says `%` (`Trailing 15%
+// Stop …`); otherwise it stays unknown rather than derived. A login hint is
+// read only from a response without the expected root: a row that fails
+// validation is named, whatever words the rest of the response holds.
 
 import { readdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
@@ -22,7 +24,7 @@ const ORDERS_TOOL = "mcp__ibkr__get_account_orders";
 const LOGIN_HINT = /auth|login|unauthori[sz]ed|\b401\b|token|expired|session/i;
 const INACTIVE = new Set(["FILLED", "CANCELLED", "CANCELED", "INACTIVE", "REJECTED", "EXPIRED"]);
 const DESCRIPTION = /^(?:Buy|Sell)\s+[\d.,]+\s+(\S+)$/i;
-const TRAIL_PERCENT = /TRAIL\s+([\d.]+)\s*%/i;
+const TRAIL_PERCENT = /\bTRAIL(?:ING)?\s+([\d.]+)\s*%/i;
 
 const failure = (error: IbkrFailure): { ok: false; error: IbkrFailure } => ({ ok: false, error });
 
@@ -69,22 +71,22 @@ function readRoot<T>(
     key: string,
     read: (rows: unknown[]) => T,
 ): IbkrResult<T> {
-    let parsed: unknown;
+    let rows: unknown[];
     try {
-        parsed = JSON.parse(text);
-    } catch {
-        return LOGIN_HINT.test(text)
-            ? failure({ kind: "needs-login" })
-            : unreadable(`${input}: response is not JSON`);
+        rows = array(object(JSON.parse(text) as unknown, "response")[key], key);
+    } catch (error) {
+        if (LOGIN_HINT.test(text)) {
+            return failure({ kind: "needs-login" });
+        }
+        return unreadable(
+            `${input}: ${error instanceof ParseError ? error.message : "response is not JSON"}`,
+        );
     }
     try {
-        const root = object(parsed, "response");
-        return { ok: true, value: read(array(root[key], key)) };
+        return { ok: true, value: read(rows) };
     } catch (error) {
         if (error instanceof ParseError) {
-            return LOGIN_HINT.test(text)
-                ? failure({ kind: "needs-login" })
-                : unreadable(`${input}: ${error.message}`);
+            return unreadable(`${input}: ${error.message}`);
         }
         throw error;
     }

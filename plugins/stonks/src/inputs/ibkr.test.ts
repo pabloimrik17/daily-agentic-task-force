@@ -113,6 +113,22 @@ describe("IBKR orders", () => {
         });
     });
 
+    it("keeps the trail unknown in the first connect's unit-less form", () => {
+        const text = JSON.stringify({
+            orders: [
+                {
+                    order_status: "NEW",
+                    order_type: "TRAILING_STOP",
+                    side: "SELL",
+                    total_shares_qty: "3",
+                    primary_description: "Sell 3 WNYE",
+                    secondary_description: "Trailing 6.40, stop 142.60",
+                },
+            ],
+        });
+        expect(parseOrders(text)).toMatchObject({ ok: true, value: [{ trailPercent: null }] });
+    });
+
     it("names the missing quantity field", () => {
         expect(parseOrders(fixture("orders-missing-quantity"))).toMatchObject({
             ok: false,
@@ -219,6 +235,46 @@ describe("IBKR orders", () => {
 
     it("treats a login text as needs-login", () => {
         expect(parseOrders("401")).toEqual({ ok: false, error: { kind: "needs-login" } });
+    });
+
+    // An inactive order's status reads EXPIRED, a word the login hint knows;
+    // it must not hide the field the other row lacks.
+    it("names a row's missing field beside an expired order", () => {
+        const text = JSON.stringify({
+            orders: [
+                {
+                    order_status: "EXPIRED",
+                    order_type: "LIMIT",
+                    side: "BUY",
+                    total_shares_qty: "1",
+                    limit_price: 10,
+                    primary_description: "Buy 1 ACME",
+                    secondary_description: "Limit 10.00, DAY",
+                },
+                {
+                    order_status: "NEW",
+                    order_type: "LIMIT",
+                    side: "BUY",
+                    limit_price: 41.85,
+                    primary_description: "Buy 1 CYBD",
+                    secondary_description: "Limit 41.85, GTC",
+                },
+            ],
+        });
+        expect(parseOrders(text)).toMatchObject({
+            ok: false,
+            error: {
+                kind: "unreadable",
+                message: expect.stringContaining("orders[1].total_shares_qty") as string,
+            },
+        });
+    });
+
+    it("reads a login hint from an error body without the orders root", () => {
+        expect(parseOrders(JSON.stringify({ error: "Unauthorized" }))).toEqual({
+            ok: false,
+            error: { kind: "needs-login" },
+        });
     });
 });
 
