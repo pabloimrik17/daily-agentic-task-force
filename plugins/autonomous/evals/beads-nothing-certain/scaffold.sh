@@ -16,6 +16,10 @@ cat > "$HOME/.config/autonomous/config.json" <<EOF
     "threshold": 0.95,
     "cap": 25,
     "batch": 20
+  },
+  "selection": {
+    "model": "sonnet",
+    "effort": "high"
   }
 }
 EOF
