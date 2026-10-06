@@ -4,39 +4,137 @@
     "url": "https://example-trader.test/cartera",
     "loginWall": false,
     "data": {
-        "heading": "Cartera Viva",
         "cards": [
-            { "texts": ["ACME", "Acme Corp", "Precio medio", "$44.20", "Trailing no activado"] },
             {
-                "texts": ["STRK", "Strike Metals", "Precio medio", "$60.90", "Trailing no activado"]
+                "texts": [
+                    "ACME",
+                    "Industrial",
+                    "Acme Corp",
+                    "90 días",
+                    "PM",
+                    "44,20",
+                    "ACTUAL",
+                    "46,00",
+                    "OBJETIVO",
+                    "59,00",
+                    "+4,07%",
+                    "PESO 2,50%",
+                    "CARRERA AL OBJETIVO",
+                    "12%",
+                    "Ver análisis en Telegram",
+                    "En carrera",
+                    "Trailing sin activar"
+                ]
             },
             {
-                "texts": ["GLBX", "Globex Energy", "Precio medio", "$25.30", "Trailing no activado"]
+                "texts": [
+                    "STRK",
+                    "Materiales",
+                    "Strike Metals",
+                    "60 días",
+                    "PM",
+                    "60,90",
+                    "ACTUAL",
+                    "62,10",
+                    "OBJETIVO",
+                    "79,00",
+                    "+1,97%",
+                    "PESO 2,50%",
+                    "CARRERA AL OBJETIVO",
+                    "6%",
+                    "Ver análisis en Telegram",
+                    "En carrera",
+                    "Trailing sin activar"
+                ]
+            },
+            {
+                "texts": [
+                    "GLBX",
+                    "Energía",
+                    "Globex Energy",
+                    "45 días",
+                    "PM",
+                    "25,30",
+                    "ACTUAL",
+                    "24,10",
+                    "OBJETIVO",
+                    "34,00",
+                    "−4,74%",
+                    "PESO 2,50%",
+                    "BAJO PRECIO DE ENTRADA",
+                    "—",
+                    "Ver análisis en Telegram",
+                    "Bajo el agua",
+                    "Trailing sin activar"
+                ]
             },
             {
                 "texts": [
                     "INIT",
+                    "Consumo",
                     "Initech Holdings",
-                    "Precio medio",
-                    "$47.10",
-                    "Trailing no activado"
+                    "30 días",
+                    "PM",
+                    "47,10",
+                    "ACTUAL",
+                    "47,90",
+                    "OBJETIVO",
+                    "59,00",
+                    "+1,70%",
+                    "PESO 2,50%",
+                    "CARRERA AL OBJETIVO",
+                    "6%",
+                    "Ver análisis en Telegram",
+                    "En carrera",
+                    "Trailing sin activar"
                 ]
             },
             {
                 "texts": [
                     "HOOL",
+                    "Tecnología",
                     "Hoolihan Systems",
-                    "Precio medio",
-                    "$120.50",
-                    "Trailing activado",
-                    "10%"
+                    "200 días",
+                    "PM",
+                    "120,50",
+                    "ACTUAL",
+                    "150,20",
+                    "OBJETIVO",
+                    "169,00",
+                    "+24,65%",
+                    "PESO 2,50%",
+                    "CARRERA AL OBJETIVO",
+                    "61%",
+                    "Ver análisis en Telegram",
+                    "En carrera",
+                    "Trailing 10%"
                 ]
             },
-            { "texts": ["CYBD", "Cyberdyne Systems", "Precio medio", "$41.85"] }
+            {
+                "texts": [
+                    "CYBD",
+                    "Tecnología",
+                    "Cyberdyne Systems",
+                    "12 días",
+                    "PM",
+                    "41,85",
+                    "ACTUAL",
+                    "40,10",
+                    "OBJETIVO",
+                    "59,00",
+                    "−4,18%",
+                    "PESO 2,50%",
+                    "BAJO PRECIO DE ENTRADA",
+                    "—",
+                    "Ver análisis en Telegram",
+                    "Bajo el agua",
+                    "Trailing sin activar"
+                ]
+            }
         ],
-        "closedSection": {
-            "heading": "Posiciones cerradas recientemente",
-            "cards": [{ "texts": ["UMBR", "Umbrella Labs", "Precio medio", "$3.10"] }]
-        }
+        "counter": "6 posiciones",
+        "heading": "Posiciones abiertas",
+        "loading": false,
+        "title": "Cartera Viva"
     }
 }

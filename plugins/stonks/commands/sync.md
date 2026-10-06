@@ -46,7 +46,7 @@ A hook captures every IBKR read and every collector result. Never retype a resul
 ## Directives
 
 - `done` after `phase1` or `sigue`: with `--only sources`, run `end` and finish. Otherwise run `collector watchlist`, then `watchlist-plan`.
-- `ibkr-reauth`: the markdown says why IBKR could not be read. Explain it and offer to re-authenticate through `/mcp`. Wait. When the user says it is done, call the two reads again and run `phase1` again. If the user declines, run `phase1` again at once.
+- `ibkr-reauth`: the markdown says why IBKR could not be read. Explain it and offer to re-authenticate through `/mcp`. Wait. When the user says it is done, run `ibkr-tools` again with the name of every `mcp__ibkr__*` tool now in this session, call the two reads again and run `phase1` again. If the user declines, run `phase1` again at once.
 - `ibkr-fallback`: ask for screenshots of the positions and of the active orders. Transcribe them into the JSON below and pipe it to the engine. Then relay the engine's rendering and ask the user to confirm it.
     - On explicit confirmation, run `ibkr-screenshots-confirm`, then `phase1`.
     - On rejection, ask for corrected screenshots and stage again.
@@ -89,11 +89,11 @@ JSON
 ## Browser rules
 
 - At the start of each site, call `tabs_context_mcp` with `{createIfEmpty: true}`, then `navigate` afresh to the URL `begin` lists for that site. Never reuse a tab left from an earlier run.
-- Poll for readiness instead of waiting a fixed time.
+- Poll for readiness instead of waiting a fixed time. When a collector's result shows `"loading": true`, run that collector again.
 - Never scroll the watchlist page. It renders black.
 - Open a row's menu only through `action watchlist-row-menu <index>`.
-- Reposition the Add stock panel through `action reposition-add-panel`.
-- Type the search term with real keystrokes (`computer` `type`), after focusing the search box with `find`. Synthetic input events do not reach it.
+- Open and reposition the Add stock search box through `action reposition-add-panel`. When it answers that the box is not open yet, run it once more.
+- Type the search term with real keystrokes (`computer` `type`) once `action reposition-add-panel` has answered `done`: it leaves the search box focused. Synthetic input events do not reach it. Run `collector dropdown` once the results show, not while they load.
 - Click a search result only through the engine's `action click-row <index>`. Never click by screen coordinates.
 - Run each collector and action with `javascript_tool` alone, one call per source, with the exact source the engine printed. Never put one inside `browser_batch`, and never edit it.
 

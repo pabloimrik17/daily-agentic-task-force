@@ -1,7 +1,9 @@
 // Reads of the two IBKR tools (design D4): the captured `tool_response` text
 // is parsed for the fields the checks use and nothing else, because IBKR owns
 // the schema. Inactive orders are dropped by a deny list, so an unknown status
-// counts as active (a false finding beats a missed one, design D16). A trail
+// counts as active (a false finding beats a missed one, design D16). REPLACED
+// is not on it: IBKR marks an order the user modified that way, and the order
+// keeps working (observed on the first real run, design Context). A trail
 // is a percentage only when the description says `%`; otherwise it stays
 // unknown rather than derived.
 
@@ -20,15 +22,7 @@ const POSITIONS_TOOL = "mcp__ibkr__get_account_positions";
 const ORDERS_TOOL = "mcp__ibkr__get_account_orders";
 
 const LOGIN_HINT = /auth|login|unauthori[sz]ed|\b401\b|token|expired|session/i;
-const INACTIVE = new Set([
-    "FILLED",
-    "CANCELLED",
-    "CANCELED",
-    "REPLACED",
-    "INACTIVE",
-    "REJECTED",
-    "EXPIRED",
-]);
+const INACTIVE = new Set(["FILLED", "CANCELLED", "CANCELED", "INACTIVE", "REJECTED", "EXPIRED"]);
 const DESCRIPTION = /^(?:Buy|Sell)\s+[\d.,]+\s+(\S+)$/i;
 const TRAIL_PERCENT = /TRAIL\s+([\d.]+)\s*%/i;
 

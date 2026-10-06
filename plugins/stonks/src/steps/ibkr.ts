@@ -6,7 +6,7 @@
 import { existsSync, renameSync, rmSync } from "node:fs";
 
 import { stageScreenshots } from "../inputs/ibkr-screenshots.ts";
-import { ibkrToolWarnings } from "../inputs/ibkr-tools.ts";
+import { awaitsLogin, ibkrToolWarnings } from "../inputs/ibkr-tools.ts";
 import { ibkrConfirmedPath, stagedPath, warningsPath, writePrivate } from "../state.ts";
 import { openRun, stop } from "./shared.ts";
 import { type Step, type StepOutput, type StepTable, UsageError } from "./types.ts";
@@ -21,6 +21,9 @@ function toolsMarkdown(names: readonly string[], warnings: string[]): string {
     const next = "Continue with the reads `begin` listed, then run `phase1`.";
     if (names.length === 0) {
         return `No IBKR tool names were passed.\n\n${next}`;
+    }
+    if (awaitsLogin(names)) {
+        return `The \`ibkr\` server awaits login, so its tools are not visible yet. Run \`ibkr-tools\` again once it is re-authenticated.\n\n${next}`;
     }
     if (warnings.length === 0) {
         return `All ${new Set(names).size} IBKR tools named are known.\n\n${next}`;

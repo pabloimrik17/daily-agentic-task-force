@@ -23,6 +23,14 @@ describe("ibkr tools", () => {
         ]);
     });
 
+    // Claude Code exposes these two for a server that awaits login; they are
+    // the client's, not the server's.
+    it("ignores the client's own login tools", () => {
+        expect(
+            ibkrToolWarnings(["mcp__ibkr__authenticate", "mcp__ibkr__complete_authentication"]),
+        ).toEqual([]);
+    });
+
     it("sorts unknown tools and ignores other servers", () => {
         expect(
             unknownIbkrTools(["mcp__ibkr__zeta", "mcp__other__thing", "mcp__ibkr__alpha"]),

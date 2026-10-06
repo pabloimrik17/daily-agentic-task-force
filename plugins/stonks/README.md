@@ -176,7 +176,7 @@ Phase 2 makes the private Simply Wall St watchlist equal the candidate set. A ti
 - **Plan.** The engine reads the tracking sheet and the watchlist live, and plans from those two reads, never from a list remembered from an earlier run. The removals are the watchlist tickers that are not candidates. The additions are the candidates the watchlist lacks. The plan is applied in the same run without asking: invoking the command is the authorisation.
 - **Order and capacity.** Every removal is applied before any addition. The capacity is the one the watchlist page shows. If the candidate set is larger, nothing is changed and the report states both numbers.
 - **Exact listing.** Each addition is resolved to one `EXCHANGE:TICKER` listing, preferring the US primary one (NYSE, NasdaqGS, NasdaqGM or NasdaqCM). The engine supplies the search term when it knows the company name; otherwise the term is a hint chosen by the LLM. Only the search result whose symbol equals the listing is clicked. The first result, a similar ticker or a position on screen never decides.
-- **Per-change verification.** After each removal and each addition the engine checks that the confirmation names the expected ticker and that a fresh watchlist read differs from the previous one by exactly that change.
+- **Per-change verification.** After each removal and each addition the engine checks that a fresh watchlist read differs from the previous one by exactly that change. Simply Wall St's confirmations name no ticker, so they are not read.
 - **Final comparison.** The watchlist is read once more and compared with the candidate set exactly. The report lists the tickers removed, the tickers added, any left unresolved, the final list, and the count against the capacity.
 - **Resumption.** An interrupted phase 2 is resumed with `/stonks:sync --only watchlist`. It plans again from the live sheet and the live watchlist, so changes already made are not repeated.
 
@@ -188,4 +188,34 @@ Guardrails:
 
 ## Report pane
 
-Written in task 10.3.
+When `/stonks:sync` runs in a terminal or in the Desktop app's Code tab, the
+plugin's hooks module (`mod/register.ts`) opens a pane above the prompt, or
+beside the transcript where the layout docks panes, and draws the same report
+as the markdown: alerts first, one collapsible section per mirror, ticker
+links, Movimientos and, when the gate pauses the run, the checklist. The
+markdown stays the run's output. The pane adds interaction only, so a run is
+complete without it: when mods are disabled, the surface places no panes or
+the pane fails, the markdown report is all there is.
+
+The pane opens in a "syncing" state when the command starts and shows the
+report after `phase1`; `sigue` and `watchlist-final` replace it. A new run
+replaces the previous run's report and clears every tick.
+
+Keys, while the pane holds the keyboard (`ctrl+x tab` moves the focus into
+it):
+
+| Key           | Action                                                                |
+| ------------- | --------------------------------------------------------------------- |
+| `1`, `2`, `3` | Collapse or expand the SWS portfolio, tracking sheet and Cartera Viva |
+| `a` to `z`    | Tick or untick the checklist item in that position (gate only)        |
+| Tab, Enter    | Walk the links and buttons; Enter follows a link or presses a button  |
+| Esc           | Return the focus to the prompt                                        |
+| `ctrl+x x`    | Close the pane                                                        |
+
+Ticks live in the session only. They are never stored and never change a
+result: after "sigue" every finding is recomputed from the re-read sheet.
+
+- **Tested version.** Claude Code 2.1.289. The mod API is early access and may change between releases; the vendored declarations under `mod/types/` are pinned to that version.
+- **Local only.** The pane, its session state and its store (the previous-run snapshot, kept in the plugin's own store under the Claude Code configuration directory) stay on this machine. Nothing is published.
+- **Snapshot handoff.** When the command starts, the mod writes its stored snapshot to `<state>/previous.json`; `begin` moves it into the run directory, where the engine reads it once for Movimientos and the repeat counters. After each report-producing step the mod stores the report's snapshot again, so the store follows the last report of the run.
+- **Mod tests.** `bun run test:mod` in `plugins/stonks` runs `mod/register.test.ts` under `claude plugin test`, on a scratch plugin root holding the manifest and `mod/` alone (the runner loads every `*.test.ts` beneath its root, and the Vitest suites cannot run there). The tests run locally, not in CI. The runner needs the hooks-modules rollout switch on; when the cached switch is off it refuses with "hooks modules are turned off in this process", and starting `claude` once with network access refreshes the cache.

@@ -13,8 +13,6 @@
         "plugins/*/mod/register.ts",
         // A plugin's PostToolUse command hook: run by Claude Code from hooks.json (stonks design D5).
         "plugins/*/src/capture.ts",
-        // Spike stub run by hand to show the fictional report in the pane; removed in stonks task 10.1.
-        "plugins/stonks/src/spike-stub.ts",
         // Loaded by the GitHub Pages HTML documents, not a JavaScript import.
         "docs/styles.css",
     ],

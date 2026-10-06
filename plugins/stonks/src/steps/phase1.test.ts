@@ -313,7 +313,7 @@ describe("phase1, IBKR", () => {
         captureIbkr(runId);
         const out = await step("phase1", ctx());
         expect(out.directive).toEqual({ kind: "done" });
-        expect(report(runId).ibkr).toEqual({ provenance: "mcp", positions: 6, orders: 4 });
+        expect(report(runId).ibkr).toEqual({ provenance: "mcp", positions: 6, orders: 5 });
         expect(out.markdown).toContain("IBKR read through the MCP server");
     });
 
@@ -331,7 +331,7 @@ describe("phase1, IBKR", () => {
         expect(existsSync(ibkrConfirmedPath(stateDir, runId))).toBe(true);
         const out = await step("phase1", ctx());
         expect(out.directive).toEqual({ kind: "done" });
-        expect(report(runId).ibkr).toEqual({ provenance: "screenshots", positions: 6, orders: 4 });
+        expect(report(runId).ibkr).toEqual({ provenance: "screenshots", positions: 6, orders: 5 });
         expect(keys(report(runId))).toEqual(["C4 CYBD", "C6 HOOL", "C9 VNDL"]);
         expect(out.markdown).toContain("IBKR from user-confirmed screenshots");
     });

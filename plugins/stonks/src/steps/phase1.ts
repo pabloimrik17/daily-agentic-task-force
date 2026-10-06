@@ -86,7 +86,7 @@ const NEXT_END = "Next: run `end`; `--only sources` ends after this report.";
 const NEXT_GATE =
     'Next: the gate paused the run. Relay this whole report and wait for the user: on "sigue" run `sigue`; on "stop" or "para" run `end`.';
 const REAUTH =
-    "Next: offer to re-authenticate the `ibkr` server through `/mcp`, and wait. When the user says it is done, call `mcp__ibkr__get_account_positions` and `mcp__ibkr__get_account_orders` again, then run `phase1`. If the user declines, run `phase1` again at once.";
+    "Next: offer to re-authenticate the `ibkr` server through `/mcp`, and wait. When the user says it is done, run `ibkr-tools` again with the name of every `mcp__ibkr__*` tool now in this session, call `mcp__ibkr__get_account_positions` and `mcp__ibkr__get_account_orders` again, then run `phase1`. If the user declines, run `phase1` again at once.";
 const FALLBACK =
     "Next: ask the user for screenshots of their positions and of their active orders, transcribe them into the screenshots JSON and send it to `ibkr-screenshots-stage` on stdin. Only after the user explicitly confirms the engine's rendering, run `ibkr-screenshots-confirm`, then `phase1`.";
 

@@ -110,11 +110,11 @@ function watchlist(tickers: string[], counter?: string): Record<string, unknown>
     };
 }
 
-const action = (kind: string, toast: string | null): Record<string, unknown> => ({
+const action = (kind: string): Record<string, unknown> => ({
     stonks: `${kind}.v1`,
     url: "https://example.com/watchlist",
     loginWall: false,
-    data: { done: true, toast },
+    data: { done: true },
 });
 
 const call = (ctx: StepContext, step: string, ...args: string[]) => {
@@ -252,7 +252,7 @@ describe("watchlist-search", () => {
         expect(out.directive).toEqual({ kind: "add", ticker: "HOOL" });
         const steps = [
             "`action reposition-add-panel`",
-            "`find`",
+            "`computer` `type`",
             "`action expand-listings`",
             "`collector dropdown`",
             "`watchlist-resolve HOOL`",
@@ -354,7 +354,7 @@ describe("watchlist-verify", () => {
     it("verifies a removal and directs to the next change", async () => {
         const ctx = open();
         await planAdditions(ctx, ["ACME", "HOOL", "CRUX", "GLBX"]);
-        capture("remove-from-menu", action("remove-from-menu", "ACME removed from Trader Picks"));
+        capture("remove-from-menu", action("remove-from-menu"));
         capture("watchlist", watchlist(["HOOL", "CRUX", "GLBX"]));
         const out = await call(ctx, "watchlist-verify");
         expect(out.directive).toEqual({ kind: "remove", ticker: "CRUX" });
@@ -368,20 +368,20 @@ describe("watchlist-verify", () => {
         expect(stateOf().current).toEqual(["HOOL", "CRUX", "GLBX"]);
     });
 
-    it("stops naming both tickers when the confirmation names another", async () => {
+    it("stops naming both tickers when another ticker was added", async () => {
         const ctx = open();
         await planAdditions(ctx, ["GLBX", "HOOL"]);
-        capture("click-row", action("click-row", "HOOL added to Trader Picks"));
-        capture("watchlist", watchlist(["GLBX", "HOOL", "STRK"]));
+        capture("click-row", action("click-row"));
+        capture("watchlist", watchlist(["GLBX", "HOOL", "CRUX"]));
         const out = await call(ctx, "watchlist-verify");
         const reason = isStop(out.directive);
-        expect(reason).toContain("HOOL was added instead of STRK");
+        expect(reason).toContain("CRUX was added instead of STRK");
     });
 
     it("stops naming a keeper that disappeared", async () => {
         const ctx = open();
         await planAdditions(ctx, ["ACME", "HOOL", "CRUX", "GLBX"]);
-        capture("remove-from-menu", action("remove-from-menu", "ACME removed"));
+        capture("remove-from-menu", action("remove-from-menu"));
         capture("watchlist", watchlist(["HOOL", "CRUX"]));
         const out = await call(ctx, "watchlist-verify");
         expect(isStop(out.directive)).toContain("missing: GLBX");
@@ -391,27 +391,9 @@ describe("watchlist-verify", () => {
     it("stops without a fresh watchlist read", async () => {
         const ctx = open();
         await planAdditions(ctx, ["ACME", "HOOL", "CRUX", "GLBX"]);
-        capture("remove-from-menu", action("remove-from-menu", "ACME removed"));
+        capture("remove-from-menu", action("remove-from-menu"));
         const out = await call(ctx, "watchlist-verify");
         expect(isStop(out.directive)).toContain("no fresh watchlist read");
-    });
-
-    it("stops when the toast is null", async () => {
-        const ctx = open();
-        await planAdditions(ctx, ["ACME", "HOOL", "CRUX", "GLBX"]);
-        capture("remove-from-menu", action("remove-from-menu", null));
-        capture("watchlist", watchlist(["HOOL", "CRUX", "GLBX"]));
-        const out = await call(ctx, "watchlist-verify");
-        expect(isStop(out.directive)).toContain("the confirmation names no ticker");
-    });
-
-    it("does not accept the toast of an earlier change", async () => {
-        const ctx = open();
-        capture("remove-from-menu", action("remove-from-menu", "ACME removed"));
-        await planAdditions(ctx, ["ACME", "HOOL", "CRUX", "GLBX"]);
-        capture("watchlist", watchlist(["HOOL", "CRUX", "GLBX"]));
-        const out = await call(ctx, "watchlist-verify");
-        expect(isStop(out.directive)).toContain("the confirmation names no ticker");
     });
 
     it("learns the listing of a verified addition", async () => {
@@ -424,7 +406,7 @@ describe("watchlist-verify", () => {
             data: { rows: [{ index: 3, label: "Strike Metals Inc", symbol: "NYSE:STRK" }] },
         });
         await call(ctx, "watchlist-resolve", "STRK");
-        capture("click-row", action("click-row", "Added STRK to Trader Picks"));
+        capture("click-row", action("click-row"));
         capture("watchlist", watchlist(["GLBX", "HOOL", "STRK"]));
         const out = await call(ctx, "watchlist-verify");
         expect(out.directive).toEqual({ kind: "done" });

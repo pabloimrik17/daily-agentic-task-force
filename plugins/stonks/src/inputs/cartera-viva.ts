@@ -1,97 +1,88 @@
-// Cartera Viva parser. The collector returns each card's visible text lines;
-// everything below is a DRAFT heuristic, to be confirmed on the real page in
-// task 3.4:
-//   - ticker: the first line that is only 1-5 upper-case letters, optionally
-//     with a class suffix (`BRK.B`), and is not a known label such as `USD`;
-//   - name: the first line that is not the ticker, not a number and not a
-//     label (a `Label:` line or one starting with a known label word), else null;
-//   - average price: the first number on a line matching
-//     /precio|medio|avg|average/i (or on the next line when that one has no
-//     number), else the first currency-looking number outside a trailing line;
-//   - trailing: a /trailing/i line, together with the line after it, that
-//     matches /activ/i without a negation ("no activado", "desactivado") is
-//     activated, its percentage taken from /(\d+(?:[.,]\d+)?)\s*%/ when shown
-//     (null otherwise); anything else is not activated.
+// Cartera Viva parser, on the card layout observed in task 3.4. Each card's
+// lines read: ticker, sector, company name, "N días", "PM" and the average
+// price, the current price, the target, the return, the weight, the race to
+// the target, a link, a status, and the trailing line. The parser anchors on
+// the labels rather than on positions:
+//   - ticker: the first line that is a ticker;
+//   - name: the line just before "N días", when it is not the ticker;
+//   - average price: the line after "PM", in the page's es-ES format
+//     (`1.234,56`);
+//   - trailing: "Trailing N%" is activated with N, "Trailing sin activar" is
+//     not activated; any other trailing text, or none, is unreadable.
+// The page's own "N posiciones" counter must equal the cards read, and a
+// collector that saw the cards still loading is unreadable, never empty.
 
 import type { CarteraVivaCard, CarteraVivaRead, TraderTrailing } from "../domain.ts";
 import { normaliseTicker } from "../ticker.ts";
 import { array, object, stringArray } from "../validate.ts";
 import { guard, type ReadResult, unreadable, validateEnvelope } from "./envelope.ts";
 
-const TICKER = /^[A-Z]{1,5}(?:[./-][A-Z])?$/;
-const NOT_TICKERS = new Set(["USD", "EUR", "GBP", "ROI", "PNL", "TSL", "SL", "TP", "N/A", "NA"]);
-const NUMBER_LINE = /^[-+]?[$€£]?\s*[\d.,]+\s*[$€£%]?$/;
-const LABEL_LINE =
-    /:$|^(?:precio|trailing|stop|cantidad|beneficio|rentabilidad|average|avg|entrada|estado)\b|precio|medio|avg|average|trailing|activ/i;
-const PRICE_LABEL = /precio|medio|avg|average/i;
-const CURRENCY_NUMBER = /[$€£]\s*[\d.,]*\d|[\d.,]*\d\s*[$€£]/;
-const PERCENT = /(\d+(?:[.,]\d+)?)\s*%/;
-const NEGATED_ACTIVE = /no\s+activ|desactiv|inactiv|not\s+activ/i;
+const TICKER = /^[A-Z][A-Z0-9]{0,5}(?:[./-][A-Z0-9]{1,2})?$/;
+const LABELS = new Set(["PM", "ACTUAL", "OBJETIVO"]);
+const DAYS = /^\d+\s+días?$/i;
+const ES_NUMBER = /^(?:\d{1,3}(?:\.\d{3})+|\d+)(?:,\d+)?$/;
+const TRAILING_PERCENT = /^trailing\s+(\d+(?:,\d+)?)\s*%$/i;
+const TRAILING_OFF = /^trailing\s+sin\s+activar$/i;
+const COUNTER = /^(\d+)\s+posici/i;
 
-/** `1,234.56`, `1.234,56` and `12,5` all read; null when no number is found. */
-function parseAmount(text: string): number | null {
-    const match = /\d[\d.,]*/.exec(text);
-    if (match === null) {
+type CardResult = { ok: true; card: CarteraVivaCard } | { ok: false; message: string };
+
+/** `1.234,56` → 1234.56; null for anything else. */
+function esNumber(text: string | undefined): number | null {
+    if (text === undefined || !ES_NUMBER.test(text)) {
         return null;
     }
-    let digits = match[0].replace(/[.,]+$/, "");
-    const lastDot = digits.lastIndexOf(".");
-    const lastComma = digits.lastIndexOf(",");
-    if (lastDot !== -1 && lastComma !== -1) {
-        const decimal = lastDot > lastComma ? "." : ",";
-        digits = digits.split(decimal === "." ? "," : ".").join("");
-        digits = digits.replace(decimal, ".");
-    } else if (lastComma !== -1) {
-        digits = /,\d{3}$/.test(digits) ? digits.replaceAll(",", "") : digits.replace(",", ".");
-    }
-    const value = Number(digits);
-    return Number.isFinite(value) ? value : null;
+    return Number(text.replaceAll(".", "").replace(",", "."));
 }
 
-function averagePrice(lines: string[]): number | null {
-    for (const [index, line] of lines.entries()) {
-        if (PRICE_LABEL.test(line)) {
-            const value = parseAmount(line) ?? parseAmount(lines[index + 1] ?? "");
-            if (value !== null) {
-                return value;
-            }
-        }
+function trailingOf(lines: string[]): TraderTrailing | null {
+    const line = lines.find((candidate) => /^trailing\b/i.test(candidate));
+    if (line === undefined) {
+        return null;
     }
-    const priced = lines.find((line) => CURRENCY_NUMBER.test(line) && !/%|trailing/i.test(line));
-    return priced === undefined ? null : parseAmount(priced);
+    if (TRAILING_OFF.test(line)) {
+        return { activated: false };
+    }
+    const percent = TRAILING_PERCENT.exec(line)?.[1];
+    return percent === undefined ? null : { activated: true, percent: esNumber(percent) };
 }
 
-function trailingOf(lines: string[]): TraderTrailing {
-    for (const [index, line] of lines.entries()) {
-        if (!/trailing/i.test(line)) {
-            continue;
-        }
-        const group = `${line} ${lines[index + 1] ?? ""}`;
-        if (/activ/i.test(group) && !NEGATED_ACTIVE.test(group)) {
-            const percent = PERCENT.exec(group);
-            return {
-                activated: true,
-                percent: percent === null ? null : Number(percent[1]?.replace(",", ".")),
-            };
-        }
-    }
-    return { activated: false };
+function nameOf(lines: string[], tickerAt: number): string | null {
+    const days = lines.findIndex((line) => DAYS.test(line));
+    return days - 1 > tickerAt ? (lines[days - 1] ?? null) : null;
 }
 
-function parseCard(lines: string[]): CarteraVivaCard | null {
-    const tickerLine = lines.find((line) => TICKER.test(line) && !NOT_TICKERS.has(line));
+function parseCard(lines: string[], index: number): CardResult {
+    const tickerAt = lines.findIndex((line) => TICKER.test(line) && !LABELS.has(line));
+    const tickerLine = lines[tickerAt];
     if (tickerLine === undefined) {
-        return null;
+        return { ok: false, message: `Cartera Viva card ${index} shows no ticker` };
     }
-    const name = lines.find(
-        (line) => line !== tickerLine && !NUMBER_LINE.test(line) && !LABEL_LINE.test(line),
-    );
-    return {
-        ticker: normaliseTicker(tickerLine),
-        averagePrice: averagePrice(lines),
-        trailing: trailingOf(lines),
-        name: name ?? null,
-    };
+    const ticker = normaliseTicker(tickerLine);
+    const pm = lines.indexOf("PM");
+    const averagePrice = pm === -1 ? null : esNumber(lines[pm + 1]);
+    if (averagePrice === null) {
+        return { ok: false, message: `Cartera Viva card ${ticker} shows no average price` };
+    }
+    const trailing = trailingOf(lines);
+    if (trailing === null) {
+        return { ok: false, message: `Cartera Viva card ${ticker} shows no known trailing line` };
+    }
+    return { ok: true, card: { ticker, averagePrice, trailing, name: nameOf(lines, tickerAt) } };
+}
+
+/** The page checks: the right page, loaded, with its counter. */
+function pageError(data: Record<string, unknown>): string | null {
+    if (data.loading === true) {
+        return "the Cartera Viva positions are still loading; run its collector again";
+    }
+    if (typeof data.title !== "string" || !/cartera viva/i.test(data.title)) {
+        return `the page is not the Cartera Viva (title ${JSON.stringify(data.title ?? null)})`;
+    }
+    if (typeof data.heading !== "string" || typeof data.counter !== "string") {
+        return "the page shows no open positions with their counter";
+    }
+    return COUNTER.test(data.counter) ? null : `unrecognised positions counter ${data.counter}`;
 }
 
 export function parseCarteraViva(envelope: unknown, runId: string): ReadResult<CarteraVivaRead> {
@@ -101,21 +92,27 @@ export function parseCarteraViva(envelope: unknown, runId: string): ReadResult<C
     }
     return guard(() => {
         const data = checked.value.data;
-        if (typeof data.heading !== "string" || !/cartera viva/i.test(data.heading)) {
-            return unreadable("the page has no Cartera Viva section");
+        const problem = pageError(data);
+        if (problem !== null) {
+            return unreadable(problem);
         }
         const cards: CarteraVivaCard[] = [];
         for (const [index, raw] of array(data.cards, "cartera-viva.data.cards").entries()) {
-            const lines = stringArray(
-                object(raw, `cartera-viva.data.cards[${index}]`),
-                "texts",
-                `cartera-viva.data.cards[${index}]`,
-            ).map((line) => line.trim());
-            const card = parseCard(lines.filter((line) => line !== ""));
-            if (card === null) {
-                return unreadable(`Cartera Viva card ${index} shows no ticker`);
+            const path = `cartera-viva.data.cards[${index}]`;
+            const lines = stringArray(object(raw, path), "texts", path)
+                .map((line) => line.trim())
+                .filter((line) => line !== "");
+            const card = parseCard(lines, index);
+            if (!card.ok) {
+                return unreadable(card.message);
             }
-            cards.push(card);
+            cards.push(card.card);
+        }
+        const shown = Number(COUNTER.exec(String(data.counter))?.[1]);
+        if (cards.length !== shown) {
+            return unreadable(
+                `Cartera Viva shows ${shown} positions but ${cards.length} cards were read`,
+            );
         }
         return { ok: true, value: { cards } };
     });

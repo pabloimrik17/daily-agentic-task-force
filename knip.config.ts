@@ -39,7 +39,6 @@ export default {
                 "scripts/**/*.ts",
                 "**/*.test.ts",
                 "mod/register.ts",
-                "src/spike-stub.ts",
                 // The PostToolUse command hook, run from hooks.json (design D5).
                 "src/capture.ts",
             ],

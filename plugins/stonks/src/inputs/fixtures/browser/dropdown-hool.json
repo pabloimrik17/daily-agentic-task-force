@@ -1,7 +1,7 @@
 {
     "stonks": "dropdown.v1",
     "run": "run-fixture-1",
-    "url": "https://simplywall.st/watchlists/fixture",
+    "url": "https://simplywall.st/watchlist",
     "loginWall": false,
     "data": {
         "rows": [
@@ -19,6 +19,11 @@
                 "index": 2,
                 "label": "Hoolihan Systems",
                 "symbol": "NasdaqGS:HOOL"
+            },
+            {
+                "index": 3,
+                "label": "Hoolihan (HOOL) Yield Shares ETF",
+                "symbol": "NEOE:HOOY"
             }
         ]
     }

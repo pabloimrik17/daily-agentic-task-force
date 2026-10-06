@@ -1,6 +1,9 @@
-// Watchlist collector and row actions (design D9, D10). Drafts; task 3.4
-// confirms them on the real page. Nothing here scrolls: the page renders
-// black when scrolled (D10), so only the rows already in the DOM are read.
+// Watchlist collector and row actions (design D9, D10), confirmed on the real
+// page in task 3.4; the Remove click was observed on a real removal in task
+// 12.2. Its confirmation, "Removed from watchlist", names no ticker and stays
+// in the page for minutes, so no action reads it: a fresh read verifies each
+// change. Nothing here scrolls: the page renders black when scrolled (D10),
+// and every row is already in the DOM.
 
 import { envelope } from "./envelope.ts";
 
@@ -41,15 +44,11 @@ const COLLECT = String.raw`(function () {
     ${UNIQUE_SYMBOL}
     var heading = document.querySelector("main h1, h1, main h2");
     var counter = null;
-    var all = document.querySelectorAll("main *, body *");
+    var all = document.querySelectorAll("body *");
     for (var c = 0; c < all.length && counter === null; c++) {
-        if (all[c].children.length === 0 && /^\d+\s*\/\s*\d+$/.test(txt(all[c]))) {
+        if (all[c].children.length === 0 && /^\d+\s*\/\s*\d+(\s+stocks?)?$/i.test(txt(all[c]))) {
             counter = txt(all[c]);
         }
-    }
-    if (counter === null) {
-        var m = /(\d+)\s*\/\s*(\d+)/.exec(document.body.innerText || "");
-        counter = m ? m[0] : null;
     }
     var items = [];
     for (var i = 0; i < rows.length; i++) {
@@ -69,7 +68,12 @@ export function watchlistCollector(runId: string): string {
 
 const POINTER_EVENTS = '["pointerdown", "mousedown", "pointerup", "mouseup", "click"]';
 
-/** Opens a row's menu: pointer events on the row's last button (design D10). */
+/**
+ * Opens a row's menu: mouse-typed pointer events on the row's "More Options"
+ * button (design D10). On the real page (task 3.4) events without a
+ * `pointerType` leave the menu closed, and the menu renders after this
+ * returns, so the result cannot report it open.
+ */
 export function watchlistRowMenuAction(runId: string, index: number): string {
     return envelope(
         "watchlist-row-menu",
@@ -80,42 +84,50 @@ export function watchlistRowMenuAction(runId: string, index: number): string {
     if (!row) {
         return { done: false, reason: "no such row" };
     }
-    var buttons = row.querySelectorAll("button");
-    var button = buttons[buttons.length - 1];
+    var button = row.querySelector('button[aria-label="More Options"]');
     if (!button) {
-        return { done: false, reason: "row has no button" };
+        return { done: false, reason: "row has no More Options button" };
     }
     var names = ${POINTER_EVENTS};
     for (var e = 0; e < names.length; e++) {
         var type = names[e];
         var Ctor = type.indexOf("pointer") === 0 && window.PointerEvent ? PointerEvent : MouseEvent;
-        button.dispatchEvent(new Ctor(type, { bubbles: true, cancelable: true, view: window }));
+        button.dispatchEvent(
+            new Ctor(type, {
+                bubbles: true,
+                cancelable: true,
+                view: window,
+                pointerId: 1,
+                pointerType: "mouse",
+                isPrimary: true,
+                button: 0,
+                buttons: type === "pointerdown" || type === "mousedown" ? 1 : 0
+            })
+        );
     }
     return { done: true };
 })()`,
     );
 }
 
-/** Clicks the visible "remove" menu item and returns the toast text seen, if any. */
+/** Clicks the open menu's "Remove" item, and only a menu item whose whole text is that word. */
 export function removeFromMenuAction(runId: string): string {
     return envelope(
         "remove-from-menu",
         runId,
         String.raw`(function () {
-    var candidates = document.querySelectorAll("[role=menuitem], [role=option], li, button, a, div");
+    var candidates = document.querySelectorAll("[role=menu] [role=menuitem]");
     var item = null;
     for (var i = 0; i < candidates.length && item === null; i++) {
-        var text = txt(candidates[i]);
-        if (text.length > 0 && text.length < 40 && /remove|eliminar|quitar/i.test(text) && visible(candidates[i])) {
+        if (/^(remove|eliminar|quitar)$/i.test(txt(candidates[i])) && visible(candidates[i])) {
             item = candidates[i];
         }
     }
     if (item === null) {
-        return { done: false, toast: null };
+        return { done: false };
     }
     item.click();
-    var toast = document.querySelector("[role=status], [role=alert], [class*=toast i], [class*=snackbar i]");
-    return { done: true, toast: toast ? txt(toast) : null };
+    return { done: true };
 })()`,
     );
 }

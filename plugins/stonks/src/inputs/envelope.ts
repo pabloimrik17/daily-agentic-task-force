@@ -29,12 +29,44 @@ export function guard<T>(read: () => ReadResult<T>): ReadResult<T> {
     }
 }
 
+/**
+ * `javascript_tool` cuts a result before the hook sees it (task 1.5): an array
+ * after 100 items (`"[TRUNCATED: N more items]"`), a string after 1,000
+ * characters (`"… [TRUNCATED]"`) and a value nested six levels deep
+ * (`"[TRUNCATED: Max depth exceeded]"`). Every marker ends a string.
+ */
+const TRUNCATION_MARKER = /\[TRUNCATED(?::[^\]]*)?\]$/;
+
+/** The path of the first truncation marker in `value`, or null. */
+function truncatedAt(value: unknown, path: string): string | null {
+    if (typeof value === "string") {
+        return TRUNCATION_MARKER.test(value) ? path : null;
+    }
+    if (typeof value !== "object" || value === null) {
+        return null;
+    }
+    const entries = Array.isArray(value)
+        ? value.map((item, index): [string, unknown] => [`${path}[${index}]`, item])
+        : Object.entries(value).map(([key, item]): [string, unknown] => [`${path}.${key}`, item]);
+    for (const [at, item] of entries) {
+        const found = truncatedAt(item, at);
+        if (found !== null) {
+            return found;
+        }
+    }
+    return null;
+}
+
 export function validateEnvelope(
     raw: unknown,
     collector: string,
     runId: string,
 ): { ok: true; value: ValidEnvelope } | { ok: false; error: ReadError } {
     return guard(() => {
+        const cut = truncatedAt(raw, collector);
+        if (cut !== null) {
+            return unreadable(`${collector}: javascript_tool truncated the result at ${cut}`);
+        }
         const root = object(raw, collector);
         const stonks = string(root, "stonks", collector);
         if (stonks !== `${collector}.v1`) {

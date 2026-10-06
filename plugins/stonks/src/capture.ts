@@ -42,22 +42,31 @@ function parseCandidate(text: string): unknown {
     }
 }
 
+/**
+ * The content blocks of a tool result. Claude in Chrome's `javascript_tool`
+ * hands the hook a bare array of `{ type: "text", text }` blocks, the result
+ * first and a "Tab Context" block after it (task 1.5); a `{ content }` object
+ * is the MCP result shape.
+ */
+function blocksOf(response: unknown): unknown[] {
+    if (Array.isArray(response)) {
+        return response as unknown[];
+    }
+    return isObject(response) && Array.isArray(response.content)
+        ? (response.content as unknown[])
+        : [];
+}
+
 function candidates(response: unknown): unknown[] {
     if (typeof response === "string") {
         return [parseCandidate(response)];
     }
-    if (!isObject(response)) {
-        return [];
+    const found = blocksOf(response)
+        .filter((item) => isObject(item) && typeof item.text === "string")
+        .map((item) => parseCandidate((item as { text: string }).text));
+    if (isObject(response)) {
+        found.push(response);
     }
-    const found: unknown[] = [];
-    if (Array.isArray(response.content)) {
-        for (const item of response.content as unknown[]) {
-            if (isObject(item) && typeof item.text === "string") {
-                found.push(parseCandidate(item.text));
-            }
-        }
-    }
-    found.push(response);
     return found;
 }
 

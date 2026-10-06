@@ -42,6 +42,14 @@
                 "trailPercent": 12.5
             },
             {
+                "ticker": "STRK",
+                "side": "sell",
+                "quantity": 2,
+                "orderType": "trailing-stop",
+                "limitPrice": null,
+                "trailPercent": null
+            },
+            {
                 "ticker": "VNDL",
                 "side": "buy",
                 "quantity": 6,

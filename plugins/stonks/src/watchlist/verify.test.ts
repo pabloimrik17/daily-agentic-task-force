@@ -13,54 +13,40 @@ const watchlist = (tickers: string[]): WatchlistRead => ({
 
 describe("verifyChange", () => {
     it("accepts exactly the expected addition", () => {
-        expect(
-            verifyChange(["GLBX"], ["GLBX", "HOOL"], { kind: "add", ticker: "HOOL" }, "HOOL"),
-        ).toEqual({ ok: true });
+        expect(verifyChange(["GLBX"], ["GLBX", "HOOL"], { kind: "add", ticker: "HOOL" })).toEqual({
+            ok: true,
+        });
     });
 
     it("accepts exactly the expected removal", () => {
         expect(
-            verifyChange(["GLBX", "OSCP"], ["GLBX"], { kind: "remove", ticker: "OSCP" }, "oscp"),
+            verifyChange(["GLBX", "OSCP"], ["GLBX"], { kind: "remove", ticker: "OSCP" }),
         ).toEqual({ ok: true });
     });
 
-    it("fails when the confirmation names HOO instead of HOOL", () => {
-        const result = verifyChange(
-            ["GLBX"],
-            ["GLBX", "HOO"],
-            { kind: "add", ticker: "HOOL" },
-            "HOO",
-        );
+    // Simply Wall St's confirmations name no ticker (design D10), so the fresh
+    // read alone tells a wrong listing from the right one.
+    it("fails when HOO was added instead of HOOL", () => {
+        const result = verifyChange(["GLBX"], ["GLBX", "HOO"], { kind: "add", ticker: "HOOL" });
         expect(result).toMatchObject({ ok: false });
         expect(!result.ok && result.reason).toContain("HOO was added instead of HOOL");
     });
 
-    it("fails without a confirmation", () => {
-        expect(verifyChange([], ["HOOL"], { kind: "add", ticker: "HOOL" }, null).ok).toBe(false);
-    });
-
     it("fails naming a keeper that disappeared", () => {
-        const result = verifyChange(
-            ["GLBX", "OSCP"],
-            [],
-            { kind: "remove", ticker: "OSCP" },
-            "OSCP",
-        );
+        const result = verifyChange(["GLBX", "OSCP"], [], { kind: "remove", ticker: "OSCP" });
         expect(!result.ok && result.reason).toContain("missing: GLBX");
     });
 
-    it("fails when a different ticker appeared", () => {
-        const result = verifyChange(
-            ["GLBX"],
-            ["GLBX", "HOO"],
-            { kind: "add", ticker: "HOOL" },
-            "HOOL",
-        );
+    it("fails when a ticker appeared beside the expected one", () => {
+        const result = verifyChange(["GLBX"], ["GLBX", "HOO", "HOOL"], {
+            kind: "add",
+            ticker: "HOOL",
+        });
         expect(!result.ok && result.reason).toContain("unexpectedly added: HOO");
     });
 
     it("fails when the change did not happen", () => {
-        const result = verifyChange(["OSCP"], ["OSCP"], { kind: "remove", ticker: "OSCP" }, "OSCP");
+        const result = verifyChange(["OSCP"], ["OSCP"], { kind: "remove", ticker: "OSCP" });
         expect(!result.ok && result.reason).toContain("OSCP is still on the watchlist");
     });
 });

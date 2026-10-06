@@ -4,7 +4,6 @@
 // memory between steps; nothing is repaired, a mismatch stops (design D16).
 
 import { existsSync, readFileSync } from "node:fs";
-import { basename } from "node:path";
 
 import {
     type BrowserSource,
@@ -333,7 +332,7 @@ const searchStep = (ctx: StepContext, args: readonly string[]): StepOutput => {
             "",
             "Run, in order:",
             `1. ${code("action reposition-add-panel")}`,
-            `2. Focus the search box with ${code("find")}, then type the term with ${code("computer")} ${code("type")}.`,
+            `2. Type the term with ${code("computer")} ${code("type")}: the action leaves the search box focused.`,
             `3. ${code("action expand-listings")}, where "+ N listings" shows.`,
             `4. ${code("collector dropdown")}`,
             `5. ${code(`watchlist-resolve ${ticker}`)}`,
@@ -440,31 +439,6 @@ const resolveStep = (ctx: StepContext, args: readonly string[]): StepOutput => {
         : selectedOutput(scope, state, ticker, selection.row);
 };
 
-/** The first token of the confirmation toast that names a ticker of the before/after sets. */
-function confirmationTicker(toast: unknown, known: Set<string>): string | null {
-    if (typeof toast !== "string") {
-        return null;
-    }
-    for (const token of toast.split(/\s+/)) {
-        const bare = token.replace(/^[^a-z0-9]+|[^a-z0-9]+$/gi, "");
-        const ticker = bare === "" ? "" : normaliseTicker(bare);
-        if (known.has(ticker)) {
-            return ticker;
-        }
-    }
-    return null;
-}
-
-/** The toast of the newest action envelope that ran after the previous watchlist read. */
-function toastOf(scope: RunScope, kind: string, lastCapture: string): unknown {
-    const capture = latestCapture(scope, kind);
-    if (capture === null || basename(capture.path) <= basename(lastCapture)) {
-        return null;
-    }
-    const envelope = captureJson(capture) as { data?: { toast?: unknown } } | null;
-    return envelope?.data?.toast ?? null;
-}
-
 /** Learn the listing `watchlist-resolve` selected, from the link the verified read shows. */
 function learnSelected(
     scope: RunScope,
@@ -488,20 +462,12 @@ function learnSelected(
 
 /** The change's verdict against the fresh read: the tickers now on the watchlist, or the reason to stop. */
 function verifyAgainst(
-    scope: RunScope,
     state: PlanState,
     change: ChangeDirective,
     read: WatchlistRead,
 ): Outcome<string[]> {
-    const before = state.current;
     const after = read.items.map(tickerOf);
-    const toast = toastOf(
-        scope,
-        change.kind === "remove" ? "remove-from-menu" : "click-row",
-        state.lastCapture,
-    );
-    const named = confirmationTicker(toast, new Set([...before, ...after]));
-    const verdict = verifyChange(before, after, change, named);
+    const verdict = verifyChange(state.current, after, change);
     return verdict.ok ? { ok: true, value: after } : { ok: false, output: stop(verdict.reason) };
 }
 
@@ -520,7 +486,7 @@ const verifyStep = (ctx: StepContext): StepOutput => {
         return fresh.output;
     }
     const { path, read } = fresh.value;
-    const after = verifyAgainst(scope, state, change, read);
+    const after = verifyAgainst(state, change, read);
     if (!after.ok) {
         return after.output;
     }

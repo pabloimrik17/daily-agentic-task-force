@@ -1,7 +1,6 @@
-// SWS portfolio collector (design D8). Draft written from the design's
-// description of the page; task 3.4 confirms it on the real one. It gathers
-// facts only: the holding rows' stock links, the page's own holdings counter
-// and the path. Links outside the holdings table or list (footer, navigation)
+// SWS portfolio collector (design D8), confirmed on the real page in task
+// 3.4. It gathers facts only: the holding rows' stock links, the page's own
+// holdings counter and the path. Links outside the holdings table or list (footer, navigation)
 // are not gathered, so a footer ticker never reaches the engine.
 
 import { envelope } from "./envelope.ts";

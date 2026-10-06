@@ -69,12 +69,15 @@ describe("IBKR positions", () => {
 describe("IBKR orders", () => {
     const orders = (): ReturnType<typeof parseOrders> => parseOrders(fixture("orders"));
 
-    it("excludes a replaced order", () => {
+    // IBKR reports an order the user modified as REPLACED, and it keeps working:
+    // a replaced trailing stop still covers its position (design Context).
+    it("keeps a replaced order, which is still working", () => {
         const result = orders();
         expect(result.ok && result.value.map((order) => order.ticker)).toEqual([
             "CYBD",
             "INIT",
             "HOOL",
+            "STRK",
             "VNDL",
         ]);
     });
@@ -240,7 +243,7 @@ describe("readIbkr", () => {
         const result = readIbkr(dir);
         expect(result.ok && result.value.provenance).toBe("mcp");
         expect(result.ok && result.value.positions).toHaveLength(6);
-        expect(result.ok && result.value.orders).toHaveLength(4);
+        expect(result.ok && result.value.orders).toHaveLength(5);
     });
 
     it("names the missing capture", () => {

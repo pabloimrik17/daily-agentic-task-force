@@ -1,7 +1,7 @@
 // The known set of IBKR tools (design D4a): the 33 identifiers recorded at the
 // first connect plus `get_order_instructions`, which the UI lists as
 // read-only. A tool of the `ibkr` server outside this set is reported as a
-// warning and never called.
+// warning and never called; the client's own login tools are not the server's.
 
 export const KNOWN_IBKR_TOOLS: readonly string[] = [
     "mcp__ibkr__get_account_summary",
@@ -42,12 +42,25 @@ export const KNOWN_IBKR_TOOLS: readonly string[] = [
 
 const IBKR_PREFIX = "mcp__ibkr__";
 
+// Claude Code's own tools for a server that awaits login. They stand in for
+// the server's catalog until the user authenticates, and are not IBKR's.
+const CLIENT_LOGIN_TOOLS: readonly string[] = [
+    "mcp__ibkr__authenticate",
+    "mcp__ibkr__complete_authentication",
+];
+
+const isServerTool = (name: string): boolean =>
+    name.startsWith(IBKR_PREFIX) && !CLIENT_LOGIN_TOOLS.includes(name);
+
 /** The `ibkr` tools among `names` that are not in the known set; unique and sorted. */
 export function unknownIbkrTools(names: readonly string[]): string[] {
-    const unknown = names.filter(
-        (name) => name.startsWith(IBKR_PREFIX) && !KNOWN_IBKR_TOOLS.includes(name),
-    );
+    const unknown = names.filter((name) => isServerTool(name) && !KNOWN_IBKR_TOOLS.includes(name));
     return [...new Set(unknown)].sort();
+}
+
+/** The session showed the client's login tools alone: the server's catalog is not visible yet. */
+export function awaitsLogin(names: readonly string[]): boolean {
+    return names.some((name) => CLIENT_LOGIN_TOOLS.includes(name)) && !names.some(isServerTool);
 }
 
 export function ibkrToolWarnings(names: readonly string[]): string[] {

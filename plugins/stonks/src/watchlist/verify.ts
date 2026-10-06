@@ -14,21 +14,16 @@ const sortedUnique = (tickers: string[]): string[] =>
 
 const fail = (reason: string): Verdict => ({ ok: false, reason });
 
+/**
+ * The change against a fresh read alone: Simply Wall St's confirmations name
+ * no ticker (design D10), so the read is what tells the right change apart.
+ */
 export function verifyChange(
     before: string[],
     after: string[],
     expected: ChangeDirective,
-    confirmationTicker: string | null,
 ): Verdict {
     const ticker = normaliseTicker(expected.ticker);
-    const verb = expected.kind === "add" ? "added" : "removed";
-    if (confirmationTicker === null) {
-        return fail(`the confirmation names no ticker, expected ${ticker} ${verb}`);
-    }
-    const named = normaliseTicker(confirmationTicker);
-    if (named !== ticker) {
-        return fail(`the confirmation names ${named}: ${named} was ${verb} instead of ${ticker}`);
-    }
     const was = sortedUnique(before);
     const now = sortedUnique(after);
     const gone = was.filter((t) => !now.includes(t));
@@ -41,6 +36,15 @@ export function verifyChange(
     const parts: string[] = [];
     const missing = gone.filter((t) => !expectedGone.includes(t));
     const extra = appeared.filter((t) => !expectedAppeared.includes(t));
+    // A wrong listing: one other ticker arrived in place of the expected one.
+    if (
+        expected.kind === "add" &&
+        gone.length === 0 &&
+        appeared.length === 1 &&
+        extra.length === 1
+    ) {
+        return fail(`${extra[0]} was added instead of ${ticker}`);
+    }
     if (missing.length > 0) {
         parts.push(`missing: ${missing.join(", ")}`);
     }

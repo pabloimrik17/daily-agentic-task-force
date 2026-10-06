@@ -81,6 +81,18 @@ describe("capture", () => {
         });
     });
 
+    it("finds an envelope in the content blocks javascript_tool returns (task 1.5)", () => {
+        const result = capture(forRun(fixture("capture", "hook-envelope-blocks")), {
+            env: env(),
+            now: NOW,
+        });
+        expect(result.written).toBe(join(rawDir(stateDir, runId), `${SEQ}-sws-portfolio.json`));
+        expect(JSON.parse(readFileSync(result.written ?? "", "utf8"))).toMatchObject({
+            run: runId,
+            data: { count: 1 },
+        });
+    });
+
     it("finds an envelope when the response is itself an object", () => {
         const payload = JSON.stringify({
             tool_name: "mcp__claude-in-chrome__javascript_tool",

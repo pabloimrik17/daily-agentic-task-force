@@ -84,6 +84,17 @@ describe("ibkr-tools", () => {
         expect(warnings()).toEqual([]);
     });
 
+    it("says the check runs again when the server awaits login", async () => {
+        const out = await step("ibkr-tools", ctx(), [
+            "mcp__ibkr__authenticate",
+            "mcp__ibkr__complete_authentication",
+        ]);
+        expect(out.directive).toEqual({ kind: "done" });
+        expect(out.markdown).toContain("The `ibkr` server awaits login");
+        expect(out.markdown).not.toContain("WARNING");
+        expect(warnings()).toEqual([]);
+    });
+
     it("ignores a tool of another server", async () => {
         await step("ibkr-tools", ctx(), ["mcp__other__thing"]);
         expect(warnings()).toEqual([]);
@@ -102,7 +113,7 @@ describe("ibkr-screenshots-stage", () => {
         const staged = JSON.parse(readFileSync(stagedPath(stateDir, runId), "utf8")) as IbkrRead;
         expect(staged.provenance).toBe("screenshots");
         expect(staged.positions).toHaveLength(6);
-        expect(staged.orders).toHaveLength(4);
+        expect(staged.orders).toHaveLength(5);
     });
 
     it("asks for the orders screenshot when the orders are missing", async () => {

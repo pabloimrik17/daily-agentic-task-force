@@ -1,18 +1,15 @@
 // The report pane (design D13, D14). `command.run` on `stonks:sync` opens the
-// pane and hands the stored snapshot to the engine as `<state>/previous.json`;
-// `tool.call` on Bash recognises the engine's report-producing steps and loads
-// `report.json` into `$.state`; `ui.render` draws it. The engine always prints
-// the markdown as well, so nothing here is required for a run to complete.
+// pane in its "syncing" state and hands the stored snapshot to the engine as
+// `<state>/previous.json`; `tool.call` on Bash recognises the engine's
+// report-producing steps, reads the `report.json` they name on their
+// `stonks-report-path:` line with `$.fs.read` into `$.state`, and keeps the
+// snapshot in `$.store`; `ui.render` draws it. The engine always prints the
+// markdown as well, so nothing here is required for a run to complete.
 //
 // `$.state` is read and written directly, each call naming one of the file's
 // reference constants: the validators of both the CI-pinned and the running
 // Claude Code follow that form, while the `claude-code` state library
 // (`atom`, `read`, `update`) is unknown to the pinned one (design D17).
-//
-//
-// The engine names the file it wrote on a `stonks-report-path:` line and the
-// mod reads it with `$.fs.read` (design D13); the pane's `[spike]` line shows
-// the diagnostics the steps log.
 
 import type { EngineInterface, Register, RenderElement } from "claude-code";
 
@@ -31,13 +28,12 @@ const STATUS = { plugin: "stonks", key: "status" } as const;
 const REPORT = { plugin: "stonks", key: "report" } as const;
 const COLLAPSED = { plugin: "stonks", key: "collapsed" } as const;
 const TICKS = { plugin: "stonks", key: "ticks" } as const;
-const FEED = { plugin: "stonks", key: "feed" } as const;
 
 // A Bash command running one of the engine's report-producing steps.
-const STEP =
-    /stonks\/src\/(?:cli|spike-stub)\.ts"?\s+(phase1|sigue|watchlist-final|spike-report)\b/;
+const STEP = /stonks\/src\/cli\.ts"?\s+(?:phase1|sigue|watchlist-final)\b/;
 // The engine names the file it wrote.
 const PATH_LINE = /^stonks-report-path: (.+)$/m;
+const REPORT_SCHEMA = "stonks.report.v1";
 
 const MIRROR_TITLE: Record<PaneSection["mirror"], string> = {
     "sws-portfolio": "SWS portfolio",
@@ -59,9 +55,26 @@ const SEVERITY_LABEL: Record<PaneFinding["severity"], string> = {
     "not-evaluable": "not evaluable",
 };
 
-async function log($: EngineInterface, line: string): Promise<void> {
-    const held = await $.state.get(FEED);
-    await $.state.set(FEED, [...(held.value ?? []), line]);
+const isRecord = (value: unknown): value is Record<string, unknown> =>
+    typeof value === "object" && value !== null;
+
+// What the pane reads of `report.json`; anything else is an invalid report.
+const REPORT_SHAPE: Record<string, (value: unknown) => boolean> = {
+    schema: (value) => value === REPORT_SCHEMA,
+    ibkr: isRecord,
+    counts: isRecord,
+    warnings: Array.isArray,
+    alerts: Array.isArray,
+    sections: Array.isArray,
+    movements: isRecord,
+    gate: isRecord,
+    links: isRecord,
+};
+
+function isReport(value: unknown): value is PaneReport {
+    return (
+        isRecord(value) && Object.entries(REPORT_SHAPE).every(([key, holds]) => holds(value[key]))
+    );
 }
 
 function firstNonEmpty(...values: (string | undefined)[]): string {
@@ -83,32 +96,10 @@ async function stateDir($: EngineInterface): Promise<string> {
     return `${firstNonEmpty(xdg, `${home ?? ""}/.local/state`)}/stonks`;
 }
 
-function tickerCell(f: PaneFinding, links: Record<string, string>): string {
-    const url = links[f.ticker];
-    return url === undefined ? f.ticker : `[${f.ticker}](${url})`;
-}
-
 function sidesText(f: PaneFinding): string {
     return Object.entries(f.sides)
         .map(([source, says]) => `${source}: ${says}`)
         .join("; ");
-}
-
-function findingRow(f: PaneFinding, links: Record<string, string>): string {
-    const repeat = f.repeat === undefined ? "" : ` ×${f.repeat}`;
-    const gate = f.affectsWatchlist ? " ⚑" : "";
-    const reason = f.reason === undefined ? "" : ` (${f.reason})`;
-    return `| ${f.check}${gate} | ${tickerCell(f, links)} | ${SEVERITY_LABEL[f.severity]}${repeat} | ${sidesText(f)}${reason} |`;
-}
-
-function findingsTable(findings: PaneFinding[], links: Record<string, string>): string {
-    if (findings.length === 0) {
-        return "_Agrees with IBKR._";
-    }
-    const rows = findings.map((f) => findingRow(f, links));
-    return ["| Check | Ticker | Severity | Sides |", "| --- | --- | --- | --- |", ...rows].join(
-        "\n",
-    );
 }
 
 function checklistItems(r: PaneReport): { key: string; label: string }[] {
@@ -123,6 +114,55 @@ function checklistItems(r: PaneReport): { key: string; label: string }[] {
 
 type Ui = ReturnType<EngineInterface["ui"]["resolve"]>;
 
+// The findings are a grid, not a `Markdown` table: Markdown lays a table out
+// for the terminal's width, and a wide one breaks in a pane docked beside the
+// transcript. The first three cells are fixed; the sides take what is left of
+// the pane's body and wrap inside it.
+const ROW = { flexDirection: "row", columnGap: 1 } as const;
+const CHECK_CELL = { width: 5, flexShrink: 0 } as const;
+const TICKER_CELL = { width: 7, flexShrink: 0 } as const;
+const SEVERITY_CELL = { width: 16, flexShrink: 0 } as const;
+const SIDES_CELL = { flexGrow: 1, flexShrink: 1 } as const;
+
+function tickerCell(ui: Ui, f: PaneFinding, links: Record<string, string>) {
+    const href = links[f.ticker];
+    return href === undefined ? h(ui.Text, null, f.ticker) : h(ui.Link, { href, label: f.ticker });
+}
+
+function findingRow(ui: Ui, f: PaneFinding, links: Record<string, string>) {
+    const repeat = f.repeat === undefined ? "" : ` ×${f.repeat}`;
+    const gate = f.affectsWatchlist ? " ⚑" : "";
+    const reason = f.reason === undefined ? "" : ` (${f.reason})`;
+    return h(
+        ui.Box,
+        ROW,
+        h(ui.Box, CHECK_CELL, h(ui.Text, null, `${f.check}${gate}`)),
+        h(ui.Box, TICKER_CELL, tickerCell(ui, f, links)),
+        h(ui.Box, SEVERITY_CELL, h(ui.Text, null, `${SEVERITY_LABEL[f.severity]}${repeat}`)),
+        h(ui.Box, SIDES_CELL, h(ui.Text, { wrap: "wrap" }, `${sidesText(f)}${reason}`)),
+    );
+}
+
+function headerRow(ui: Ui) {
+    const head = (text: string) => h(ui.Text, { bold: true, dimColor: true }, text);
+    return h(
+        ui.Box,
+        ROW,
+        h(ui.Box, CHECK_CELL, head("Check")),
+        h(ui.Box, TICKER_CELL, head("Ticker")),
+        h(ui.Box, SEVERITY_CELL, head("Severity")),
+        h(ui.Box, SIDES_CELL, head("Sides")),
+    );
+}
+
+function findingsGrid(ui: Ui, key: string, findings: PaneFinding[], links: Record<string, string>) {
+    const rows =
+        findings.length === 0
+            ? [h(ui.Text, { dimColor: true }, "Agrees with IBKR.")]
+            : [headerRow(ui), ...findings.map((f) => findingRow(ui, f, links))];
+    return h(ui.Box, { key, flexDirection: "column" }, ...rows);
+}
+
 const SECTION_BOX = {
     flexDirection: "column",
     borderStyle: "single",
@@ -136,28 +176,18 @@ function stdoutOf(ran: { result?: unknown; text?: string }): string {
     return result?.stdout ?? ran.text ?? "";
 }
 
-function reportPathOf(stdout: string): string | undefined {
-    return PATH_LINE.exec(stdout)?.[1]?.trim();
-}
-
-async function readReport($: EngineInterface, reportPath: string): Promise<PaneReport | null> {
-    try {
-        const loaded = JSON.parse(await $.fs.read(reportPath)) as PaneReport;
-        await log($, `feed A (fs.read): ok, ${reportPath}`);
-        return loaded;
-    } catch (error) {
-        await log($, `feed A (fs.read): failed, ${String(error)}`);
-        return null;
-    }
-}
-
+/** The report the step named, or null when the line, the file or its shape is missing. */
 async function loadReport($: EngineInterface, stdout: string): Promise<PaneReport | null> {
-    const reportPath = reportPathOf(stdout);
+    const reportPath = PATH_LINE.exec(stdout)?.[1]?.trim();
     if (reportPath === undefined) {
-        await log($, "feed A (fs.read): no path line in stdout");
         return null;
     }
-    return readReport($, reportPath);
+    try {
+        const parsed: unknown = JSON.parse(await $.fs.read(reportPath));
+        return isReport(parsed) ? parsed : null;
+    } catch {
+        return null;
+    }
 }
 
 async function storeReport($: EngineInterface, loaded: PaneReport): Promise<void> {
@@ -167,7 +197,20 @@ async function storeReport($: EngineInterface, loaded: PaneReport): Promise<void
     // recognised step rewrites `report.json` with the run's current
     // snapshot, so the store follows the last report of the run.
     await $.store.set("snapshot", loaded.snapshot);
-    await log($, "store: snapshot replaced");
+}
+
+/** A missing or invalid `report.json`: the pane points at the markdown instead. */
+async function showUnloaded($: EngineInterface): Promise<void> {
+    await $.state.set(REPORT, null);
+    await $.state.set(STATUS, "error");
+}
+
+/** D14 handoff: the stored snapshot goes to the engine, consumed once by `begin`. */
+async function handOver($: EngineInterface): Promise<void> {
+    const snapshot = await $.store.get("snapshot");
+    if (snapshot !== undefined) {
+        await $.fs.write(`${await stateDir($)}/previous.json`, JSON.stringify(snapshot));
+    }
 }
 
 function emptyHint(status: PaneStatus): string {
@@ -180,14 +223,11 @@ function emptyHint(status: PaneStatus): string {
 }
 
 async function emptyPane($: EngineInterface, ui: Ui) {
-    const { Box, Text } = ui;
     const { value: status = "idle" } = await $.state.get(STATUS);
-    const { value: lines = [] } = await $.state.get(FEED);
     return h(
-        Box,
+        ui.Box,
         { flexDirection: "column", paddingX: 1 },
-        h(Text, { dimColor: true }, emptyHint(status)),
-        ...lines.map((line) => h(Text, { dimColor: true }, line)),
+        h(ui.Text, { dimColor: true }, emptyHint(status)),
     );
 }
 
@@ -200,14 +240,14 @@ function headerLine(ui: Ui, r: PaneReport) {
 }
 
 function alertsBox(ui: Ui, r: PaneReport) {
-    const { Box, Text, Markdown } = ui;
+    const { Box, Text } = ui;
     return r.alerts.length === 0
         ? h(Text, { dimColor: true }, "No alerts.")
         : h(
               Box,
               { flexDirection: "column", borderStyle: "round", borderColor: "red", paddingX: 1 },
               h(Text, { bold: true, color: "red" }, `Alerts (${r.alerts.length})`),
-              h(Markdown, { text: findingsTable(r.alerts, r.links) }),
+              findingsGrid(ui, "findings:alerts", r.alerts, r.links),
           );
 }
 
@@ -234,7 +274,7 @@ function sectionBox(
     collapsed: Record<string, boolean>,
 ) {
     const isCollapsed = collapsed[s.mirror] === true;
-    const body = isCollapsed ? [] : [h(ui.Markdown, { text: findingsTable(s.findings, links) })];
+    const body = isCollapsed ? [] : [findingsGrid(ui, `findings:${s.mirror}`, s.findings, links)];
     return h(ui.Box, SECTION_BOX, mirrorToggle($, ui, s, isCollapsed), ...body);
 }
 
@@ -312,13 +352,13 @@ function checklistBox($: EngineInterface, ui: Ui, r: PaneReport, ticks: Record<s
     ];
 }
 
-async function reportPane($: EngineInterface, ui: Ui, r: PaneReport) {
+async function reportPane($: EngineInterface, ui: Ui, r: PaneReport, bodyColumns: number) {
     const { value: collapsed = {} } = await $.state.get(COLLAPSED);
     const { value: ticks = {} } = await $.state.get(TICKS);
-    const { value: lines = [] } = await $.state.get(FEED);
     return h(
         ui.Box,
-        { flexDirection: "column", gap: 1, paddingX: 1 },
+        // Sized to the pane's body, which is narrower than the terminal while docked.
+        { flexDirection: "column", gap: 1, paddingX: 1, width: bodyColumns },
         headerLine(ui, r),
         ...r.warnings.map((w) => h(ui.Text, { color: "yellow" }, `WARNING: ${w}`)),
         alertsBox(ui, r),
@@ -326,46 +366,36 @@ async function reportPane($: EngineInterface, ui: Ui, r: PaneReport) {
         linksRow(ui, r),
         movementsBox(ui, r),
         ...checklistBox($, ui, r, ticks),
-        h(ui.Text, { dimColor: true }, `[spike] ${lines.join(" | ")}`),
     );
 }
 
 export const register: Register = (on) => {
     on("command.run", { command: "stonks:sync" }, async ($, e, next) => {
+        // A new run: its report replaces the previous one, and no earlier tick shows.
         await $.state.set(STATUS, "syncing");
+        await $.state.set(REPORT, null);
         await $.state.set(TICKS, {});
-        await $.state.set(FEED, []);
-        // D14 handoff: the stored snapshot goes to the engine, consumed once by `begin`.
-        const snapshot = await $.store.get("snapshot");
-        if (snapshot !== undefined) {
-            const dir = await stateDir($);
-            await $.fs.write(`${dir}/previous.json`, JSON.stringify(snapshot));
-            await log($, `handoff: wrote ${dir}/previous.json`);
-        } else {
-            await log($, "handoff: no stored snapshot");
-        }
+        await $.state.set(COLLAPSED, {});
+        await handOver($);
         await $.ui.open({ id: PANE, title: "Stonks" });
         return next(e);
     });
 
     on("tool.call", { tool: "Bash" }, async ($, e, next) => {
         const ran = await next(e);
-        if (STEP.exec(e.command) === null || ran.deny !== undefined) {
+        if (!STEP.test(e.command) || ran.deny !== undefined) {
             return ran;
         }
         const loaded = await loadReport($, stdoutOf(ran));
-        if (loaded === null) {
-            await $.state.set(STATUS, "error");
-            return ran;
-        }
-        await storeReport($, loaded);
+        await (loaded === null ? showUnloaded($) : storeReport($, loaded));
         return ran;
     });
 
     on("ui.render", { component: "Pane", requestId: PANE }, async ($, e) => {
         const ui = $.ui.resolve(e);
         const { value: r = null } = await $.state.get(REPORT);
-        const pane = r === null ? await emptyPane($, ui) : await reportPane($, ui, r);
+        const pane =
+            r === null ? await emptyPane($, ui) : await reportPane($, ui, r, e.props.bodyColumns);
         return pane as RenderElement;
     });
 };

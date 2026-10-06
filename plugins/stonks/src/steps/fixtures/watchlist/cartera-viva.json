@@ -4,37 +4,74 @@
     "url": "https://example-trader.test/cartera",
     "loginWall": false,
     "data": {
-        "heading": "Cartera Viva",
         "cards": [
             {
                 "texts": [
                     "STRK",
+                    "Materiales",
                     "Strike Metals",
-                    "Precio medio",
-                    "$12.50",
-                    "Trailing activado",
-                    "8,5%"
+                    "64 días",
+                    "PM",
+                    "12,50",
+                    "ACTUAL",
+                    "14,10",
+                    "OBJETIVO",
+                    "19,00",
+                    "+12,80%",
+                    "PESO 2,50%",
+                    "CARRERA AL OBJETIVO",
+                    "23%",
+                    "Ver análisis en Telegram",
+                    "En carrera",
+                    "Trailing 8,5%"
                 ]
             },
             {
                 "texts": [
                     "INIT",
+                    "Consumo",
                     "Initech Holdings",
-                    "Precio medio: $1,234.56",
-                    "Trailing no activado"
+                    "19 días",
+                    "PM",
+                    "1.234,56",
+                    "ACTUAL",
+                    "1.190,00",
+                    "OBJETIVO",
+                    "1.598,00",
+                    "−3,61%",
+                    "PESO 2,50%",
+                    "BAJO PRECIO DE ENTRADA",
+                    "—",
+                    "Ver análisis en Telegram",
+                    "Bajo el agua",
+                    "Trailing sin activar"
                 ]
             },
             {
-                "texts": ["CYBD", "Precio medio", "45.2 $", "Trailing activado"]
+                "texts": [
+                    "CYBD",
+                    "Tecnología",
+                    "Cyberdyne Systems",
+                    "101 días",
+                    "PM",
+                    "45,20",
+                    "ACTUAL",
+                    "51,30",
+                    "OBJETIVO",
+                    "59,00",
+                    "+13,50%",
+                    "PESO 2,50%",
+                    "CARRERA AL OBJETIVO",
+                    "43%",
+                    "Ver análisis en Telegram",
+                    "En carrera",
+                    "Trailing 12%"
+                ]
             }
         ],
-        "closedSection": {
-            "heading": "Posiciones cerradas recientemente",
-            "cards": [
-                {
-                    "texts": ["UMBR", "Umbrella Labs", "Precio medio", "$3.10"]
-                }
-            ]
-        }
+        "counter": "3 posiciones",
+        "heading": "Posiciones abiertas",
+        "loading": false,
+        "title": "Cartera Viva"
     }
 }

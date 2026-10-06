@@ -1,33 +1,32 @@
 {
     "stonks": "sws-portfolio.v1",
     "run": "run-fixture-1",
-    "url": "https://simplywall.st/portfolios/1234567/fixture",
+    "url": "https://simplywall.st/portfolio/11111111-2222-4333-8444-555555555555",
     "loginWall": false,
     "data": {
-        "path": "/portfolios/1234567/fixture",
-        "count": 4,
+        "count": 5,
         "links": [
             {
                 "href": "/stocks/us/software/nyse-acme/acme-corp",
                 "text": "ACME"
             },
             {
-                "href": "/stocks/us/software/nyse-acme/acme-corp",
-                "text": "Acme Corp"
+                "href": "/stocks/us/tech/nasdaq-hool/hoolihan-systems",
+                "text": "HOOL"
             },
             {
-                "href": "/stocks/us/tech/nasdaqgs-hool/hoolihan-systems",
-                "text": "Hoolihan Systems"
-            },
-            {
-                "href": "/stocks/us/tech/nasdaq-crux/cruxwell",
+                "href": "/stocks/us/healthcare/nasdaq-crux/cruxwell",
                 "text": "CRUX"
             },
             {
-                "href": "/stocks/ca/materials/tsx-strk/strike-metals",
-                "text": "Strike Metals"
+                "href": "/stocks/us/energy/nyse-glbx/globex-energy",
+                "text": "GLBX"
+            },
+            {
+                "href": "/stocks/gb/diversified-financials/lse-ffix/fixture-funds-world-ucits-etf-shares",
+                "text": "FFIX"
             }
         ],
-        "footerText": "Trending today: WNYE"
+        "path": "/portfolio/11111111-2222-4333-8444-555555555555"
     }
 }

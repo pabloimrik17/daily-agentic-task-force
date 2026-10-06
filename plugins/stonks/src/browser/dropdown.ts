@@ -1,62 +1,108 @@
-// The "Add stock" panel and its search dropdown (design D10, D11 steps 3-6).
-// Drafts; task 3.4 confirms the selectors on the real page. Typing the search
-// term is not here: it needs real keystrokes (`computer` `type`).
+// The "Add stock" search box and its dropdown (design D10, D11 steps 3-6),
+// as observed on the real page in tasks 3.4 and 12.2. Typing the search term
+// is not here: it needs real keystrokes (`computer` `type`), into the box
+// `reposition-add-panel` leaves focused. An addition shows no confirmation, so
+// `click-row` reports only that it clicked; a fresh read verifies the change.
+//
+// The page's own test hooks anchor most selectors. The results list is
+// `[data-cy-id="search-results-list"]`; each result is a
+// `[data-cy-id="<EXCHANGE>:<TICKER>-search-result"]` element whose company
+// name is its `[data-cy-id="search-results-label"]` heading. Selecting a
+// result is handled by an element inside it, so a click on the result element
+// itself adds nothing; the click goes to the label, which bubbles through that
+// handler. The "+ N listings" expander is a button inside the result that
+// stops propagation, so clicking that button alone never selects anything.
+// The listings it reveals are `li` items nested in the result, each with its
+// symbol in a `p` and its own selection handler; the company's handler is not
+// among their ancestors, so a click on a listing's symbol selects that listing
+// alone.
 
 import { envelope } from "./envelope.ts";
 
-/** Defines `rows`: the search result rows, in the order shown. */
-const ROWS = String.raw`var rows = Array.prototype.slice.call(
-        document.querySelectorAll("[role=option], [role=listbox] li, li[class*=result i], [class*=SearchResult i]")
-    ).filter(visible);`;
+const RESULT_SUFFIX = "-search-result";
 
-/** Moves the "Add stock" panel into view with CSS (design D10). */
+/**
+ * Defines `rows`: every visible result and expanded listing, in the order
+ * shown, as `{ label, symbol, target }`, where `target` is the element a
+ * selection clicks. A listing carries its company's name.
+ */
+const ROWS = String.raw`var rows = [];
+    var results = document.querySelectorAll('[data-cy-id$="${RESULT_SUFFIX}"]');
+    for (var r = 0; r < results.length; r++) {
+        if (!visible(results[r])) {
+            continue;
+        }
+        var id = results[r].getAttribute("data-cy-id") || "";
+        var label = results[r].querySelector('[data-cy-id="search-results-label"]');
+        rows.push({ label: txt(label), symbol: id.slice(0, id.length - ${JSON.stringify(RESULT_SUFFIX.length)}), target: label });
+        var listings = results[r].querySelectorAll("li");
+        for (var l = 0; l < listings.length; l++) {
+            if (visible(listings[l])) {
+                var symbol = listings[l].querySelector("p");
+                rows.push({ label: txt(label), symbol: txt(symbol), target: symbol });
+            }
+        }
+    }`;
+
+/** Defines `searchBox()`: the Add stock search box, outside header and navigation. */
+const SEARCH_BOX = String.raw`var searchBox = function () {
+        var inputs = document.querySelectorAll("input[type=search]");
+        for (var i = 0; i < inputs.length; i++) {
+            if (!inputs[i].closest("header, nav")) {
+                return inputs[i];
+            }
+        }
+        return null;
+    };`;
+
+/**
+ * Opens the Add stock search box when it is still the "Add stock" button,
+ * moves it into view with CSS (design D10) and focuses it: the box sits below
+ * the table, scrolling the watchlist page renders it black, and a click on the
+ * moved box did not focus it on the real page.
+ */
 export function repositionAddPanelAction(runId: string): string {
     return envelope(
         "reposition-add-panel",
         runId,
         String.raw`(function () {
-    var all = document.querySelectorAll("h1, h2, h3, h4, h5, h6, [role=heading], button, div, span");
-    var label = null;
-    for (var i = 0; i < all.length && label === null; i++) {
-        if (/^add stock$/i.test(txt(all[i]))) {
-            label = all[i];
+    ${SEARCH_BOX}
+    var input = searchBox();
+    if (input === null) {
+        var buttons = document.querySelectorAll("button");
+        for (var i = 0; i < buttons.length; i++) {
+            if (/^add stock$/i.test(txt(buttons[i]))) {
+                buttons[i].click();
+                break;
+            }
         }
+        input = searchBox();
     }
-    if (label === null) {
-        return { done: false, reason: "no Add stock panel" };
+    if (input === null) {
+        return { done: false, reason: "the Add stock search box is not open yet; run this action again" };
     }
-    var panel =
-        label.closest("[role=dialog], [class*=popover i], [class*=modal i], [class*=panel i]") ||
-        (label.parentElement && label.parentElement.parentElement) ||
-        label;
-    var style = {
-        position: "fixed",
-        top: "0",
-        left: "0",
-        "max-height": "100vh",
-        overflow: "auto",
-        "z-index": "99999"
-    };
+    var box = input.closest("fieldset") || input.parentElement;
+    var style = { position: "fixed", top: "120px", left: "300px", "z-index": "99999" };
     for (var name in style) {
-        panel.style.setProperty(name, style[name], "important");
+        box.style.setProperty(name, style[name], "important");
     }
-    return { done: true };
+    input.focus();
+    return { done: true, focused: document.activeElement === input };
 })()`,
     );
 }
 
-/** Clicks every "+ N listings" expander. */
+/** Clicks the "+ N listings" buttons of the search results, and nothing else. */
 export function expandListingsAction(runId: string): string {
     return envelope(
         "expand-listings",
         runId,
         String.raw`(function () {
-    var all = document.querySelectorAll("button, a, span, div, li");
+    var buttons = document.querySelectorAll('[data-cy-id="search-results-list"] button');
     var clicked = 0;
-    for (var i = 0; i < all.length; i++) {
-        var text = txt(all[i]);
-        if (text.length < 40 && /\+\s*\d+\s*listings?/i.test(text) && visible(all[i])) {
-            all[i].click();
+    for (var i = 0; i < buttons.length; i++) {
+        if (/^\+\s*\d+\s*listings?$/i.test(txt(buttons[i])) && visible(buttons[i])) {
+            buttons[i].click();
             clicked++;
         }
     }
@@ -65,7 +111,7 @@ export function expandListingsAction(runId: string): string {
     );
 }
 
-/** Every result row with its index, label and exchange-qualified symbol. */
+/** Every result row with its index, company name and exchange-qualified symbol. */
 export function dropdownCollector(runId: string): string {
     return envelope(
         "dropdown",
@@ -74,18 +120,14 @@ export function dropdownCollector(runId: string): string {
     ${ROWS}
     return {
         rows: rows.map(function (row, index) {
-            var lines = (row.innerText || "").split("\n").map(function (line) { return line.trim(); });
-            var text = lines.join(" ");
-            var symbol = /\b([A-Za-z]+:[A-Z0-9][A-Z0-9.\-]*)/.exec(text);
-            var label = lines.filter(function (line) { return line.length > 0; })[0] || "";
-            return { index: index, label: label, symbol: symbol ? symbol[1] : null };
+            return { index: index, label: row.label, symbol: row.symbol === "" ? null : row.symbol };
         })
     };
 })()`,
     );
 }
 
-/** Clicks result row `index` and returns the toast text seen, if any. */
+/** Clicks row `index` through its target. */
 export function clickRowAction(runId: string, index: number): string {
     return envelope(
         "click-row",
@@ -93,12 +135,11 @@ export function clickRowAction(runId: string, index: number): string {
         String.raw`(function () {
     ${ROWS}
     var row = rows[${JSON.stringify(index)}];
-    if (!row) {
-        return { done: false, toast: null };
+    if (!row || !row.target) {
+        return { done: false };
     }
-    row.click();
-    var toast = document.querySelector("[role=status], [role=alert], [class*=toast i], [class*=snackbar i]");
-    return { done: true, toast: toast ? txt(toast) : null };
+    row.target.click();
+    return { done: true };
 })()`,
     );
 }

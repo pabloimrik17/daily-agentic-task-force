@@ -1,0 +1,29 @@
+{
+    "session_id": "00000000-0000-4000-8000-000000000001",
+    "transcript_path": "/home/fixture/.claude/projects/fixture/00000000-0000-4000-8000-000000000001.jsonl",
+    "cwd": "/home/fixture/project",
+    "prompt_id": "00000000-0000-4000-8000-000000000002",
+    "scratchpad_dir": "/tmp/fixture/scratchpad",
+    "permission_mode": "default",
+    "effort": { "level": "high" },
+    "hook_event_name": "PostToolUse",
+    "tool_name": "mcp__claude-in-chrome__javascript_tool",
+    "tool_input": {
+        "action": "javascript_exec",
+        "tabId": 100000001,
+        "text": "(function () { return 1; })()"
+    },
+    "tool_response": [
+        {
+            "type": "text",
+            "text": "{\n  \"data\": {\n    \"count\": 1,\n    \"links\": [\n      {\n        \"href\": \"/stocks/us/software/nyse-acme/acme-corp\",\n        \"text\": \"Acme Corp\"\n      }\n    ],\n    \"path\": \"/portfolio/fixture\"\n  },\n  \"loginWall\": false,\n  \"run\": \"run-capture-1\",\n  \"stonks\": \"sws-portfolio.v1\",\n  \"url\": \"https://simplywall.st/portfolio/fixture\"\n}"
+        },
+        {
+            "type": "text",
+            "text": "\n\nTab Context:\n- Executed on tabId: 100000001\n- Available tabs:\n  • tabId 100000001: \"Fixture Portfolio\" (\"https://simplywall.st/portfolio/fixture\")"
+        }
+    ],
+    "tool_use_id": "toolu_01EXAMPLE",
+    "mcp_server": { "name": "claude-in-chrome", "source": "dynamic" },
+    "duration_ms": 42
+}

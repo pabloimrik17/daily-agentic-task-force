@@ -1,6 +1,8 @@
+import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 
 import type { DropdownRow } from "../domain.ts";
+import { parseDropdown } from "../inputs/dropdown.ts";
 import { parseListing } from "../ticker.ts";
 import type { Listings } from "./listings.ts";
 import { searchTerm, select, target } from "./resolve.ts";
@@ -98,5 +100,37 @@ describe("select", () => {
             select(dropdown, { kind: "known", listing: { exchange: "NasdaqGS", ticker: "HOOL" } })
                 .kind,
         ).toBe("unresolved");
+    });
+});
+
+describe("select on the task 3.4 dropdown fixtures", () => {
+    const dropdown = (name: string): DropdownRow[] => {
+        const text = readFileSync(
+            new URL(`../inputs/fixtures/browser/${name}.json`, import.meta.url),
+            "utf8",
+        );
+        const parsed = parseDropdown(JSON.parse(text), "run-fixture-1");
+        if (!parsed.ok) {
+            throw new Error(`fixture ${name} does not parse`);
+        }
+        return parsed.value;
+    };
+
+    it("selects NasdaqGS:HOOL among similar tickers", () => {
+        expect(select(dropdown("dropdown-hool"), target("HOOL", none))).toMatchObject({
+            kind: "selected",
+            row: { index: 2, label: "Hoolihan Systems" },
+        });
+    });
+
+    it("selects NYSE:ACME among the company's expanded listings", () => {
+        expect(select(dropdown("dropdown-acme"), target("ACME", none))).toMatchObject({
+            kind: "selected",
+            row: { index: 5, listing: { exchange: "NYSE", ticker: "ACME" } },
+        });
+    });
+
+    it("leaves CRUX unresolved when only non-US listings show", () => {
+        expect(select(dropdown("dropdown-crux"), target("CRUX", none)).kind).toBe("unresolved");
     });
 });

@@ -53,8 +53,6 @@ declare module "claude-code" {
             collapsed: Record<string, boolean>;
             /** Checklist item key → ticked. Session only, never stored. */
             ticks: Record<string, boolean>;
-            /** Spike diagnostics: which feed delivered the report. */
-            feed: string[];
         };
     }
 }

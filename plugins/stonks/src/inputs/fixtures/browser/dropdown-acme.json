@@ -1,7 +1,7 @@
 {
     "stonks": "dropdown.v1",
     "run": "run-fixture-1",
-    "url": "https://simplywall.st/watchlists/fixture",
+    "url": "https://simplywall.st/watchlist",
     "loginWall": false,
     "data": {
         "rows": [
@@ -13,7 +13,37 @@
             {
                 "index": 1,
                 "label": "Acme Corp",
+                "symbol": "BASE:ACME"
+            },
+            {
+                "index": 2,
+                "label": "Acme Corp",
+                "symbol": "BMV:ACME N"
+            },
+            {
+                "index": 3,
+                "label": "Acme Corp",
+                "symbol": "DB:AC3"
+            },
+            {
+                "index": 4,
+                "label": "Acme Corp",
+                "symbol": "LSE:0ACM"
+            },
+            {
+                "index": 5,
+                "label": "Acme Corp",
                 "symbol": "NYSE:ACME"
+            },
+            {
+                "index": 6,
+                "label": "Acme Corp",
+                "symbol": "SWX:ACME"
+            },
+            {
+                "index": 7,
+                "label": "Acme Covered Call ETF",
+                "symbol": "NEOE:ACMC"
             }
         ]
     }

@@ -6,12 +6,21 @@
 // Inside `dataExpression` these helpers are in scope: `visible(el)` and
 // `txt(el)` (trimmed, whitespace-collapsed text content).
 
-/** Text that marks a login form or heading, in English and Spanish. */
-const LOGIN_TEXT = String.raw`/log\s?in|sign\s?in|iniciar\s+sesi[oó]n|acceder/i`;
+/**
+ * Text that marks a login form or heading, in English and Spanish. The Cartera
+ * Viva's gate asks for an access code ("Introduce tu código de acceso").
+ */
+const LOGIN_TEXT = String.raw`/log\s?in|sign\s?in|iniciar\s+sesi[oó]n|acceder|c[oó]digo\s+de\s+acceso/i`;
 
-const LOGIN_PATH = String.raw`/\/(login|signin|sign-in)/i`;
+/** Simply Wall St sends a logged-out visitor to `/welcome?r=<path>` (task 3.4). */
+const LOGIN_PATH = String.raw`/\/(login|signin|sign-in|welcome)(\/|$)/i`;
 
-/** Draft heuristics (task 3.4 confirms them on the real logged-out pages). */
+/**
+ * Login-wall heuristics, confirmed on both sites' logged-out pages in task
+ * 3.4: Simply Wall St's sits at `/welcome` and shows a password field; the
+ * Cartera Viva's sits at `/login` and asks for an access code, with no
+ * password field.
+ */
 const LOGIN_WALL = String.raw`(function () {
     if (${LOGIN_PATH}.test(location.pathname)) {
         return true;
