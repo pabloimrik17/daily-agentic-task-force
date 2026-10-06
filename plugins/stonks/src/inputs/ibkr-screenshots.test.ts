@@ -37,7 +37,7 @@ describe("IBKR screenshots", () => {
     });
 
     it("accepts one screen, trivially contiguous", () => {
-        expect(stage({ positions: [[hool]], orders: [] })).toMatchObject({ ok: true });
+        expect(stage({ positions: [[hool]], orders: [[trail]] })).toMatchObject({ ok: true });
     });
 
     it("rejects screens that do not overlap", () => {
@@ -82,6 +82,13 @@ describe("IBKR screenshots", () => {
         expect(result).toMatchObject({ ok: false, kind: "orders-missing" });
         const absent = stage({ positions: [[hool]] });
         expect(absent).toMatchObject({ ok: false, kind: "orders-missing" });
+    });
+
+    it("asks for the orders screenshot when the orders hold no row", () => {
+        for (const orders of [[], [[]], [[], []]]) {
+            const result = stage({ positions: [[hool]], orders });
+            expect(result).toMatchObject({ ok: false, kind: "orders-missing" });
+        }
     });
 
     it("accepts a confirmed absence of orders", () => {

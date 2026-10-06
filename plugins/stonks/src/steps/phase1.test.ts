@@ -286,7 +286,7 @@ describe("phase1, IBKR", () => {
             failure: "an order without a quantity",
             positions: hookResponse("hook-positions.json"),
             orders: readFileSync(join(INPUTS, "ibkr", "orders-missing-quantity.json"), "utf8"),
-            names: "total_shares_qty",
+            names: "remaining_shares_qty",
         },
     ])(
         "never prints the fallback before the offer, for $failure",

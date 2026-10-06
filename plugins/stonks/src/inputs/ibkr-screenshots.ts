@@ -77,18 +77,30 @@ function readPositions(raw: unknown): Position[] {
     return merged;
 }
 
+function ordersMissing(): OrdersMissing {
+    return new OrdersMissing(
+        "the screenshots show no active orders section; ask for the orders screenshot, or confirm that no orders are active",
+    );
+}
+
 function readOrders(raw: unknown, noActiveOrders: boolean): ActiveOrder[] {
     if (raw === null) {
         if (noActiveOrders) {
             return [];
         }
-        throw new OrdersMissing(
-            "the screenshots show no active orders section; ask for the orders screenshot, or confirm that no orders are active",
-        );
+        throw ordersMissing();
     }
     if (noActiveOrders) {
         throw new ParseError("orders must be null when noActiveOrders is true");
     }
+    const orders = readOrderRows(raw);
+    if (orders.length === 0) {
+        throw ordersMissing();
+    }
+    return orders;
+}
+
+function readOrderRows(raw: unknown): ActiveOrder[] {
     return array(raw, "orders").flatMap((screen, s) =>
         array(screen, `orders[${s}]`).map((item, i): ActiveOrder => {
             const path = `orders[${s}][${i}]`;

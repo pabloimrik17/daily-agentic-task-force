@@ -120,7 +120,7 @@ describe("IBKR orders", () => {
                     order_status: "NEW",
                     order_type: "TRAILING_STOP",
                     side: "SELL",
-                    total_shares_qty: "3",
+                    remaining_shares_qty: "3",
                     primary_description: "Sell 3 WNYE",
                     secondary_description: "Trailing 6.40, stop 142.60",
                 },
@@ -134,7 +134,7 @@ describe("IBKR orders", () => {
             ok: false,
             error: {
                 kind: "unreadable",
-                message: expect.stringContaining("orders[0].total_shares_qty") as string,
+                message: expect.stringContaining("orders[0].remaining_shares_qty") as string,
             },
         });
     });
@@ -155,7 +155,7 @@ describe("IBKR orders", () => {
             order_status: "PENDING_SUBMIT",
             order_type: type,
             side: "SELL",
-            total_shares_qty: 3,
+            remaining_shares_qty: 3,
             primary_description: "Sell 3 acme",
             ...extra,
         });
@@ -173,29 +173,58 @@ describe("IBKR orders", () => {
         expect(result.ok && result.value[0]?.ticker).toBe("ACME");
     });
 
-    it("prefers the remaining quantity", () => {
+    it("takes the remaining quantity of a partly filled sell order", () => {
         const result = parseOrders(
             JSON.stringify({
                 orders: [
                     {
                         order_status: "NEW",
                         order_type: "MKT",
-                        side: "BUY",
+                        side: "SELL",
                         total_shares_qty: "5",
                         remaining_shares_qty: "2",
-                        primary_description: "Buy 5 ACME",
+                        primary_description: "Sell 5 ACME",
                     },
                 ],
             }),
         );
-        expect(result.ok && result.value[0]?.quantity).toBe(2);
+        expect(result.ok && result.value[0]).toMatchObject({ side: "sell", quantity: 2 });
+    });
+
+    it("names a missing or non-numeric remaining quantity and a missing status", () => {
+        const row = { order_status: "NEW", order_type: "MKT", side: "SELL" } as const;
+        const read = (extra: object): ReturnType<typeof parseOrders> =>
+            parseOrders(
+                JSON.stringify({
+                    orders: [{ ...row, primary_description: "Sell 5 ACME", ...extra }],
+                }),
+            );
+        const field = (name: string) => ({
+            ok: false,
+            error: { message: expect.stringContaining(`orders[0].${name}`) as string },
+        });
+        expect(read({ total_shares_qty: "5" })).toMatchObject(field("remaining_shares_qty"));
+        expect(read({ remaining_shares_qty: "many" })).toMatchObject(field("remaining_shares_qty"));
+        expect(read({ remaining_shares_qty: 2, order_status: undefined })).toMatchObject(
+            field("order_status"),
+        );
+        expect(read({ remaining_shares_qty: 2, order_status: 7 })).toMatchObject(
+            field("order_status"),
+        );
+    });
+
+    it("drops an inactive row before validating its other fields", () => {
+        const text = JSON.stringify({
+            orders: [{ order_status: "CANCELLED", primary_description: "odd" }],
+        });
+        expect(parseOrders(text)).toEqual({ ok: true, value: [] });
     });
 
     it("names an unreadable side and description", () => {
         const base = {
             order_status: "NEW",
             order_type: "MKT",
-            total_shares_qty: 1,
+            remaining_shares_qty: 1,
         };
         const side = parseOrders(
             JSON.stringify({
@@ -221,7 +250,7 @@ describe("IBKR orders", () => {
                         order_status: "NEW",
                         order_type: "LIMIT",
                         side: "BUY",
-                        total_shares_qty: 1,
+                        remaining_shares_qty: 1,
                         primary_description: "Buy 1 ACME",
                     },
                 ],
@@ -246,7 +275,7 @@ describe("IBKR orders", () => {
                     order_status: "EXPIRED",
                     order_type: "LIMIT",
                     side: "BUY",
-                    total_shares_qty: "1",
+                    remaining_shares_qty: "1",
                     limit_price: 10,
                     primary_description: "Buy 1 ACME",
                     secondary_description: "Limit 10.00, DAY",
@@ -265,7 +294,7 @@ describe("IBKR orders", () => {
             ok: false,
             error: {
                 kind: "unreadable",
-                message: expect.stringContaining("orders[1].total_shares_qty") as string,
+                message: expect.stringContaining("orders[1].remaining_shares_qty") as string,
             },
         });
     });

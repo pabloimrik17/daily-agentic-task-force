@@ -140,14 +140,13 @@ function readTrailPercent(row: Json): number | null {
 function readOrder(raw: unknown, index: number): ActiveOrder | null {
     const path = `orders[${index}]`;
     const row = object(raw, path);
-    const status = typeof row.order_status === "string" ? row.order_status.toUpperCase() : "";
+    const status = string(row, "order_status", path).toUpperCase();
     if (INACTIVE.has(status)) {
         return null;
     }
     const side = readSide(row, path);
     const type = orderType(string(row, "order_type", path));
-    const total = requireNumeric(row, "total_shares_qty", path);
-    const quantity = numeric(row.remaining_shares_qty) ?? total;
+    const quantity = requireNumeric(row, "remaining_shares_qty", path);
     const ticker = readTicker(row, path);
     return {
         ticker,

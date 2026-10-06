@@ -126,6 +126,17 @@ describe("ibkr-screenshots-stage", () => {
         expect(existsSync(stagedPath(stateDir, runId))).toBe(false);
     });
 
+    it("asks for the orders screenshot when the orders screens are empty", async () => {
+        const document = JSON.parse(fixtureText("screenshots-no-orders.json")) as object;
+        const out = await step(
+            "ibkr-screenshots-stage",
+            ctx(JSON.stringify({ ...document, orders: [] })),
+        );
+        expect(out.directive).toEqual({ kind: "ibkr-fallback" });
+        expect(out.markdown).toContain("ask for the orders screenshot");
+        expect(existsSync(stagedPath(stateDir, runId))).toBe(false);
+    });
+
     it("rejects positions screens that do not overlap", async () => {
         const out = await step("ibkr-screenshots-stage", ctx(fixtureText("screenshots-gap.json")));
         expect(out.directive).toEqual({ kind: "ibkr-fallback" });
