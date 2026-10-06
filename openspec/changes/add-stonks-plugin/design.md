@@ -136,9 +136,11 @@ The command's `allowed-tools` pre-approves only `mcp__ibkr__get_account_position
 
 **Re-authentication first.** When a read fails or the server needs login, the command first offers re-authentication through `/mcp` and repeats the reads once the user has done it. Re-authentication costs the user a click, and it keeps IBKR on the exact path that never transcribes. Only if it fails or the user declines does the fallback apply. The engine remembers that the offer was made with a marker in the run directory, `ibkr-reauth-offered.json`: the first `phase1` whose IBKR read fails prints `ibkr-reauth`, and any later one in the same run prints `ibkr-fallback`. A declined offer is the command running `phase1` again at once.
 
-**Fallback.** When re-authentication has failed or been declined, or the response does not validate, Claude transcribes the user's screenshots into JSON. It sends that JSON to `ibkr-screenshots stage` on stdin. The engine validates the table and prints its own rendering, and the user confirms that rendering before `ibkr-screenshots confirm`.
+**Fallback.** When re-authentication has failed or been declined, or the response does not validate, Claude transcribes the user's screenshots into JSON. It sends that JSON to `ibkr-screenshots-stage` on stdin. The engine validates the table and prints its own rendering, and the user confirms that rendering before `ibkr-screenshots-confirm`.
 
 Confirming the engine's rendering, rather than Claude's message, means the user checks exactly what the checks will use. The command asks for both positions and orders and checks that the positions are contiguous, which catches a missing page, the failure seen in Cowork. The report marks IBKR's provenance.
+
+*Verify fixes (2026-10-06).* An IBKR order row now needs `order_status` and `remaining_shares_qty`; a row missing either makes the read unreadable, naming the field. `total_shares_qty` is no longer read. Inactive rows are dropped before validation. The screenshot fallback also asks for the orders screenshot when `orders` holds no row (`[]`, `[[]]`), unless the user stated that no orders are active (`orders: null`, `noActiveOrders: true`). The engine's message is `the screenshots show no active orders section; ask for the orders screenshot, or confirm that no orders are active`, and the command sets `orders: null` and `noActiveOrders: false` when it has no orders screenshot, so the engine asks.
 
 *Transcription format.* The JSON sent to `ibkr-screenshots-stage` is `stonks.ibkr-screenshots.v1`: `positions` as one array of `{ ticker, quantity }` per screenshot, top to bottom, overlapping rows included; `orders` as one array of `{ ticker, side, quantity, orderType, limitPrice, trailPercent }` per screenshot, or `null` with `noActiveOrders: true` when the user states that no order is active. Contiguity is checked on the positions: each screenshot after the first must share a position with the one before it, which is what proves that no page was skipped, and the overlap is removed when the pages are merged. A missing field is never filled in.
 
@@ -153,7 +155,7 @@ Confirming the engine's rendering, rather than Claude's message, means the user 
 - **`javascript_tool`**: it keeps a result only if it parses as a collector envelope, `{"stonks": "<collector>.v1", "run": "<runId>", …}`, for the active run. The user's unrelated JavaScript is never stored.
 - **Behaviour**: synchronous, with a short timeout. It always exits 0, so it never blocks the tool and never writes to the conversation.
 
-The engine uses the last valid capture of each kind in the run. The command runs collectors with `javascript_tool` on its own, never inside `browser_batch`, so that each result arrives as one hook event.
+The engine uses the newest capture of each kind in the run; an invalid newest capture makes the input unreadable, never an older one. The command runs collectors with `javascript_tool` on its own, never inside `browser_batch`, so that each result arrives as one hook event.
 
 *Probe outcome (task 1.5, 2026-10-05).* In the user's interactive session, with the extension connected and the plugin loaded from `--plugin-dir`, a probe hook and the plugin's own capture hook both fired for `javascript_tool`:
 
@@ -186,8 +188,8 @@ stonks/
     gate-resumed.json    # `sigue` ran (D3)
     plan.json            # watchlist plan
     previous.json        # snapshot handed over by the mod (D14), consumed once
+  previous.json          # handoff from the mod (D14 step 1); `begin` moves it into the run
   listings.json          # learnt TICKER → { symbol, name, url } (D11)
-  snapshot.json          # markdown-only variant only (D14)
 ```
 
 The run id is the UTC start time plus a random suffix. A second `begin` replaces the active run, so only one sync at a time is supported.
@@ -265,7 +267,7 @@ The Cowork recipes become rules in `commands/sync.md`:
 - start with `tabs_context_mcp {createIfEmpty: true}` and a fresh `navigate`, since a tab left from the previous run fails;
 - poll for readiness instead of waiting a fixed time;
 - never scroll the watchlist page, which renders black;
-- open a row's menu with pointer events dispatched on the row's last button;
+- open a row's menu with pointer events dispatched on the row's `button[aria-label="More Options"]`;
 - reposition the "Add stock" panel into view with CSS;
 - type the search term with real keystrokes (`computer` `type`), because synthetic `input` events do not reach the React search box;
 - click by DOM element as the engine identifies it, never by screen coordinates.
@@ -273,7 +275,7 @@ The Cowork recipes become rules in `commands/sync.md`:
 *Real pages (task 3.4, 2026-10-05).* The collectors and actions ran on the user's logged-in Simply Wall St and Cartera Viva pages, and the fixtures under `src/inputs/fixtures/browser/` now mirror what they returned, with every value fictional. Nothing was added to or removed from the watchlist:
 
 - **SWS portfolio.** The holdings are the first `table`, with one stock link per holding whose text is the ticker; the page's own counter reads "N holdings". The draft collector returned every holding and the count matched. Holdings outside the US occur, for example an `lse-` slug.
-- **Watchlist.** Every row is a `tr` already in the DOM, with no virtualisation, so nothing needs scrolling. No row embeds a `uniqueSymbol`, so the listing comes from the link slug, and a Nasdaq slug is `nasdaq-` without a tier (D9). The counter reads "N/M stocks" and sits under the "Add stock" button below the table; the collector now matches that leaf text exactly and no longer falls back to the first `N/M` anywhere in the page.
+- **Watchlist.** Every row is a `tr` already in the DOM, with no virtualisation, so nothing needs scrolling. No row embeds a `uniqueSymbol`, so the listing comes from the link slug, and a Nasdaq slug is `nasdaq-` without a tier (D9). The counter reads "N/M stocks" and sits under the "Add stock" button below the table; the collector takes the first leaf element whose text is `N/M`, with "stocks" optional. It fails safe: the row count must equal the counter, or the read is unreadable.
 - **Add stock.** It is a button below the table that turns into an inline `input[type=search]`; there is no dialog. `reposition-add-panel` clicks the button and moves the box's `fieldset` into view. The box renders after the action returns, so the first call reports it not open yet and a second call moves it. A click on the box found through `find` and real keystrokes then worked in task 3.4, though not in task 12.2 (below).
 - **Dropdown.** The page's own test hooks anchor it: the list is `[data-cy-id="search-results-list"]`, each result `[data-cy-id="<EXCHANGE>:<TICKER>-search-result"]` and its company name `[data-cy-id="search-results-label"]`. The selection handler sits on an element inside the result, so `click-row` clicks the label, which bubbles through it; a click on the result element itself only logs analytics. "+ N listings" is a button that stops propagation, and the listings it reveals are `li` items nested in the result, each with its symbol in a `p` and its own selection handler. The company's handler is not among their ancestors, so a click on a listing's symbol selects that listing alone. The collector returns those listings as rows under the company's name, so an expanded `NYSE:ACME` behind a `TSX:ACME` result is selectable (D11). Symbols can hold a space (`BMV:SHOP N`).
 - **Row menu.** The row's "More Options" button opens the menu only for pointer events typed `mouse`; the menu renders after the action returns. Its items are `[role=menu] [role=menuitem]`: "Set fair value", "Move to Portfolio" and "Remove".
@@ -283,6 +285,7 @@ The Cowork recipes become rules in `commands/sync.md`:
     - **Removal.** The "Remove" item works. About 0.3 s after the click, a snackbar `section[role=alert][data-cy-id="snackbar-message"]` reads "Removed from watchlist", without the ticker, and stays in the page for minutes. The banner `div[role=alert][data-cy-id="narratives-banner"]` is on the page before any click, and the first run's generic toast selector took it.
     - **Addition.** The label click adds the listing: its row appears about 0.7 s later. No snackbar appears; a Notes prompt names the company, not the ticker.
     - **Search box.** After `reposition-add-panel`, a click on the box found through `find` did not focus it. `focus()` from JavaScript followed by real keystrokes did, and the dropdown listed the results, so `reposition-add-panel` now focuses the box itself.
+- **Row menu refusal (2026-10-06).** `action watchlist-row-menu` prints its JavaScript only for the plan's next change, a removal, and only with exactly the index and path the engine printed for it. It refuses, as a `stop` that prints nothing to run, any other row (a keeper's, a later removal's), a call with no plan and a call while the next change is an addition. A retry on the planned row is allowed until `watchlist-verify` moves the plan on.
 - **Names.** A stock link's text is its ticker, so links teach `listings.json` no company names. Names come from the dropdown label of a verified addition and from the Cartera Viva cards, which all carry one.
 - **Cartera Viva.** The page's title is "Cartera Viva". Its open positions are the `article` cards of the section headed "Posiciones abiertas", whose header shows the "N posiciones" counter; the recently closed positions sit in a section of their own, as plain lines without cards, and the collector never reads them. Each card's lines are the ticker, the sector, the company name, "N días", "PM" and the average price, the current price, the target, the return, the weight, the race to the target, a link, a status ("En carrera" or "Bajo el agua") and the trailing line, which reads "Trailing N%" when activated and "Trailing sin activar" otherwise. Numbers use the es-ES format (`386,12`). The draft parser would have misread all of it: the sector as the name, no average price, and every trailing as not activated. The parser now anchors on the labels, requires the counter to equal the cards, and makes an unknown trailing line or a missing average price unreadable rather than guessing. The cards arrive a while after the page; until then the section holds placeholders and no counter, which the collector reports as `loading`, and the command runs it again.
 
@@ -290,8 +293,8 @@ The Cowork recipes become rules in `commands/sync.md`:
 
 1. **Target.** If `listings.json` knows a US-primary listing for the ticker, that listing is the target. Otherwise the target is the ticker on any US primary exchange: NYSE, NasdaqGS, NasdaqGM or NasdaqCM.
 
-   `listings.json` is learnt from every Simply Wall St stock link the engine reads (watchlist, SWS portfolio, search results) and from each verified addition. It is reference data about public listings, never input to a check.
-2. **Search term.** The engine supplies the learnt company name, or the name on the Cartera Viva card when the card carries one. Otherwise Claude chooses the term. The term is only a hint.
+   `listings.json` is learnt from every Simply Wall St stock link the engine reads (watchlist, SWS portfolio) and from each verified addition. It is reference data about public listings, never input to a check.
+2. **Search term.** The engine supplies the learnt company name, or the name on the Cartera Viva card when the card carries one. Otherwise the engine asks Claude to search Simply Wall St by the ticker's company name. The term is only a hint.
 3. **Search.** Claude opens the repositioned "Add stock" panel, which the action leaves focused, and types the term. An action expands "+ N listings" where shown.
 4. **Read the results.** The dropdown collector returns every row with its index, label and exchange-qualified symbol.
 5. **Select.** The engine selects the row whose symbol equals the target, and only that row. Zero matching rows, or more than one, makes the ticker unresolved: it is not added, and the user is asked for the listing.
@@ -311,7 +314,9 @@ The Cowork recipes become rules in `commands/sync.md`:
 - `argument-hint: "[--only sources|watchlist]"`;
 - `allowed-tools`: exactly `mcp__ibkr__get_account_positions`, `mcp__ibkr__get_account_orders` and `Bash(bun:*)`.
 
-`Bash(bun:*)` is what the command needs to run its engine, since every step is `bun "${CLAUDE_PLUGIN_ROOT}/src/cli.ts" <step>`. A narrower pattern holding the plugin root path would depend on how that variable expands in permission matching, which is unverified; task 9.1 tightens it if the apply phase can show that it matches. Nothing else is pre-approved, so the Claude in Chrome tools follow the user's own permission settings. This is listed as an open point for the orchestrator.
+`Bash(bun:*)` is what the command needs to run its engine, since every step is `bun "${CLAUDE_PLUGIN_ROOT}/src/cli.ts" <step>`. A narrower pattern holding the plugin root path would depend on how that variable expands in permission matching, which is unverified. Nothing else is pre-approved, so the Claude in Chrome tools follow the user's own permission settings.
+
+*Verify fixes (2026-10-06).* The open point is closed and `Bash(bun:*)` stays. A narrower rule would hold the expanded plugin root, a quoted absolute path whose permission matching is unverified, and an unmatched rule would prompt on every step. The sibling plugin `autonomous` uses the same `Bash(bun:*)`. The `stonks-sync` spec now names the rule, and says it pre-approves any `bun` command for the duration of the run.
 
 The command calls `bun "${CLAUDE_PLUGIN_ROOT}/src/cli.ts" <step>`. Each step prints markdown for the user, followed by a directive the command follows. These are the step names as implemented; every step but `begin` and `end` needs the open run and a valid configuration, and prints `stop` otherwise.
 
@@ -325,6 +330,8 @@ The command calls `bun "${CLAUDE_PLUGIN_ROOT}/src/cli.ts" <step>`. Each step pri
 | `sigue`                                                                                                   | Re-reads the sheet, recomputes with the same run's captures, records that the gate was resumed, prints what remains and directs to phase 2, never to `gate-wait` again                                                                                                                    |
 | `watchlist-plan`, `watchlist-search <T>`, `watchlist-resolve <T>`, `watchlist-verify`, `watchlist-final` | Phase 2: the plan from the live sheet and the live watchlist, the search term and target listing for an addition, the exact dropdown row to click, the verification after each change, the final comparison                                                                              |
 | `end`                                                                                                     | Closes the active run                                                                                                                                                                                                                                                                     |
+
+*Verify fixes (2026-10-06).* `action watchlist-row-menu` consults `plan.json` and refuses any row but the planned removal's. `watchlist-final` stops while the plan still has a change pending, naming that change and the step that starts it, so the result never reports an unverified change as made. `watchlist-search` asks for the company's name when the engine knows none.
 
 The directives are `ask-login <source>`, `ibkr-reauth`, `ibkr-fallback`, `gate-wait`, `remove <T>`, `add <T>`, `stop` and `done`. The exit code is 0 when a directive was printed and 1 on a usage or runner error. A step's markdown names the step the command runs next for each directive, so the command never infers the sequence.
 
@@ -348,6 +355,14 @@ The pane draws:
 - phase 2's result, once `watchlist-final` has added it to `report.json`, with every ticker linked. In `--only watchlist` there is no phase-1 report: the pane says so from `command.run`, whose `args` name the mode, and the result is in the transcript only.
 
 Every ticker the report names links to its Simply Wall St page or a search: the findings, Movimientos, the checklist and the watchlist result.
+
+*Verify fixes (2026-10-06).*
+
+- The markdown's gate line "Affected tickers:" links every ticker. The pane draws no such line; each of its checklist rows links its ticker beside the tick.
+- When the Alerts hold a B finding and the tracking-sheet section has none of its own, that section reads "No other finding; see Alerts.", in the markdown and in the pane, instead of "Agrees with IBKR.".
+- On `command.run`, `next(e)` sits in a `finally` after the pane's setup (state reset, snapshot hand-over, `ui.open`). If the setup fails, the command still runs, and Claude Code still reports the hook's failure.
+- Ticks clear when the report that `sigue` writes loads, or any report whose `generatedAt` differs from the shown one. Loading the same report again, such as `watchlist-final` adding phase 2's result, keeps them.
+- The checklist heading asks for "sigue" only on a full run's `phase1` report. The mode comes from `command.run`'s args (no `--only`) and the step from `tool.call`. On an `--only sources` report and on the one `sigue` prints, it reads "Gate: findings that affect the watchlist".
 
 The engine always prints the markdown, and the command relays it.
 
@@ -452,6 +467,7 @@ This cost is accepted by the record and planned in tasks group 10:
 ```text
 plugins/stonks/
   .claude-plugin/plugin.json
+  tsconfig.json             # extends the root, for the engine sources (D17)
   package.json              # @daily-agentic-task-force/plugin-stonks, private, 0.0.0
   README.md                 # purpose, requirements, setup, usage, data handling
   CHANGELOG.md              # owned by release-please

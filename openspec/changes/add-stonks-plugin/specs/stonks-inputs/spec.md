@@ -49,7 +49,7 @@ Each input SHALL be validated against its expected shape before any check uses i
 #### Scenario: IBKR order without a quantity
 
 - **WHEN** an order in the IBKR order response has no quantity
-- **THEN** the IBKR read is treated as failed, naming the field, and the screenshot fallback is offered
+- **THEN** the IBKR read is treated as failed, naming the field, and the IBKR recovery path is offered: re-authentication through `/mcp`, then the screenshot fallback
 
 #### Scenario: Non-numeric quantity in the tracking sheet
 

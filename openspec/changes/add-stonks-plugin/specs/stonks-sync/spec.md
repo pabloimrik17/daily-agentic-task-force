@@ -125,7 +125,7 @@ The command SHALL pre-approve, for the duration of its own run, exactly these to
 
 - the IBKR position read, `mcp__ibkr__get_account_positions`;
 - the IBKR order read, `mcp__ibkr__get_account_orders`;
-- the invocation of the plugin's engine through `bun`.
+- the `bun` rule, `Bash(bun:*)`, which the engine needs because every step runs as `bun "${CLAUDE_PLUGIN_ROOT}/src/cli.ts" <step>`. It pre-approves any `bun` command for the duration of the run.
 
 The plugin and the user's managed settings SHALL NOT add a global allow rule for any IBKR tool. The only IBKR rules in the managed settings SHALL be the existing denies of `mcp__ibkr__create_order_instruction` and `mcp__ibkr__delete_order_instruction`. Any other tool the run needs asks for permission as usual.
 
