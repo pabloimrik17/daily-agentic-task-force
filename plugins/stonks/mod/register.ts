@@ -6,7 +6,7 @@
 // Claude Code follow that form, while the `claude-code` state library
 // (`atom`, `read`, `update`) is unknown to the pinned one (design D17).
 
-import type { EngineInterface, Register, RenderElement } from "claude-code";
+import type { CommandRunResult, EngineInterface, Register, RenderElement } from "claude-code";
 
 import type {
     PaneFinding,
@@ -24,12 +24,14 @@ const STATUS = { plugin: "stonks", key: "status" } as const;
 const REPORT = { plugin: "stonks", key: "report" } as const;
 const COLLAPSED = { plugin: "stonks", key: "collapsed" } as const;
 const TICKS = { plugin: "stonks", key: "ticks" } as const;
+const FULL_RUN = { plugin: "stonks", key: "fullRun" } as const;
+const GATE_WAIT = { plugin: "stonks", key: "gateWait" } as const;
 
 // The plugin root is `…/plugins/stonks` under `--plugin-dir`, and
 // `…/cache/<marketplace>/stonks/<version>` once installed from a marketplace.
-const STEP = /stonks\/(?:[^/\s"]+\/)?src\/cli\.ts"?\s+(?:phase1|sigue|watchlist-final)\b/;
-const FINAL_STEP = /src\/cli\.ts"?\s+watchlist-final\b/;
+const STEP = /stonks\/(?:[^/\s"]+\/)?src\/cli\.ts"?\s+(phase1|sigue|watchlist-final)\b/;
 const PATH_LINE = /^stonks-report-path: (.+)$/m;
+const ONLY = /--only\b/;
 const PHASE2_ONLY = /--only\s+watchlist\b/;
 const REPORT_SCHEMA = "stonks.report.v1";
 
@@ -46,6 +48,23 @@ const AGREES: Record<PaneSection["mirror"], string> = {
     "tracking-sheet": "Agrees with IBKR.",
     "cartera-viva": "The tracking sheet agrees with the Cartera Viva.",
 };
+
+// The tracking sheet's text when its B findings all went to the Alerts: the
+// engine moves every B8 there.
+const SEE_ALERTS = "No other finding; see Alerts.";
+
+function agrees(r: PaneReport, mirror: PaneMirror): string {
+    return mirror === "tracking-sheet" && r.alerts.some((f) => f.check.startsWith("B"))
+        ? SEE_ALERTS
+        : AGREES[mirror];
+}
+
+// Only a full run's `phase1` waits for "sigue": `--only sources` ends after its
+// report, and the report `sigue` prints goes on to phase 2.
+const GATE_HEADING = {
+    wait: 'Gate: fix in the tracking sheet, then say "sigue"',
+    list: "Gate: findings that affect the watchlist",
+} as const;
 
 const MIRROR_HOTKEY: Record<PaneSection["mirror"], string> = {
     "sws-portfolio": "1",
@@ -107,8 +126,10 @@ function sidesText(f: PaneFinding): string {
         .join("; ");
 }
 
+type ChecklistItem = { key: string; label: string; ticker: string };
+
 /** B4 and B5 can raise one finding per entry or order of a ticker; each later one gets its ordinal. */
-function checklistItems(r: PaneReport): { key: string; label: string }[] {
+function checklistItems(r: PaneReport): ChecklistItem[] {
     const affected = [...r.alerts, ...r.sections.flatMap((s) => s.findings)].filter(
         (f) => f.affectsWatchlist,
     );
@@ -117,7 +138,11 @@ function checklistItems(r: PaneReport): { key: string; label: string }[] {
         const key = `${f.check}:${f.ticker}`;
         const nth = (seen.get(key) ?? 0) + 1;
         seen.set(key, nth);
-        return { key: nth === 1 ? key : `${key}:${nth}`, label: `${f.check} ${f.ticker}` };
+        return {
+            key: nth === 1 ? key : `${key}:${nth}`,
+            label: `${f.check} ${f.ticker}`,
+            ticker: f.ticker,
+        };
     });
 }
 
@@ -204,8 +229,22 @@ async function loadReport($: EngineInterface, stdout: string): Promise<PaneRepor
     }
 }
 
-async function storeReport($: EngineInterface, loaded: PaneReport): Promise<void> {
+/**
+ * Ticks belong to the report they were made on: `sigue` recomputes every
+ * finding, so its report, like any other new one, starts unticked.
+ */
+async function settleTicks($: EngineInterface, step: string, loaded: PaneReport): Promise<void> {
+    const { value: shown } = await $.state.get(REPORT);
+    if (step === "sigue" || shown?.generatedAt !== loaded.generatedAt) {
+        await $.state.set(TICKS, {});
+    }
+}
+
+async function storeReport($: EngineInterface, step: string, loaded: PaneReport): Promise<void> {
+    const { value: fullRun = false } = await $.state.get(FULL_RUN);
+    await settleTicks($, step, loaded);
     await $.state.set(REPORT, loaded);
+    await $.state.set(GATE_WAIT, fullRun && step === "phase1");
     await $.state.set(STATUS, "ready");
     // D14: the store keeps the snapshot between sessions; every step rewrites
     // `report.json`, so it follows the run's last report.
@@ -216,12 +255,12 @@ async function storeReport($: EngineInterface, loaded: PaneReport): Promise<void
  * A step's report into the pane. `watchlist-final` names none in
  * `--only watchlist`, or when it stops; the pane then keeps what it shows.
  */
-async function follow($: EngineInterface, command: string, stdout: string): Promise<void> {
-    if (FINAL_STEP.test(command) && !PATH_LINE.test(stdout)) {
+async function follow($: EngineInterface, step: string, stdout: string): Promise<void> {
+    if (step === "watchlist-final" && !PATH_LINE.test(stdout)) {
         return;
     }
     const loaded = await loadReport($, stdout);
-    await (loaded === null ? showUnloaded($) : storeReport($, loaded));
+    await (loaded === null ? showUnloaded($) : storeReport($, step, loaded));
 }
 
 /** A missing or invalid `report.json`: the pane points at the markdown instead. */
@@ -299,13 +338,13 @@ function sectionBox(
     $: EngineInterface,
     ui: Ui,
     s: PaneSection,
-    links: Record<string, string>,
+    r: PaneReport,
     collapsed: Record<string, boolean>,
 ) {
     const isCollapsed = collapsed[s.mirror] === true;
     const body = isCollapsed
         ? []
-        : [findingsGrid(ui, `findings:${s.mirror}`, s.findings, links, AGREES[s.mirror])];
+        : [findingsGrid(ui, `findings:${s.mirror}`, s.findings, r.links, agrees(r, s.mirror))];
     return h(ui.Box, SECTION_BOX, mirrorToggle($, ui, s, isCollapsed), ...body);
 }
 
@@ -402,7 +441,7 @@ async function toggleTick($: EngineInterface, key: string): Promise<void> {
 function tickButton(
     $: EngineInterface,
     ui: Ui,
-    item: { key: string; label: string },
+    item: ChecklistItem,
     index: number,
     ticks: Record<string, boolean>,
 ) {
@@ -415,7 +454,13 @@ function tickButton(
     });
 }
 
-function checklistBox($: EngineInterface, ui: Ui, r: PaneReport, ticks: Record<string, boolean>) {
+function checklistBox(
+    $: EngineInterface,
+    ui: Ui,
+    r: PaneReport,
+    ticks: Record<string, boolean>,
+    heading: string,
+) {
     const items = checklistItems(r);
     if (!r.gate.tripped || items.length === 0) {
         return [];
@@ -424,8 +469,15 @@ function checklistBox($: EngineInterface, ui: Ui, r: PaneReport, ticks: Record<s
         h(
             ui.Box,
             { flexDirection: "column", borderStyle: "round", paddingX: 1 },
-            h(ui.Text, { bold: true }, 'Gate: fix in the tracking sheet, then say "sigue"'),
-            ...items.map((item, index) => tickButton($, ui, item, index, ticks)),
+            h(ui.Text, { bold: true }, heading),
+            ...items.map((item, index) =>
+                h(
+                    ui.Box,
+                    { key: `item:${item.key}`, ...ROW },
+                    tickButton($, ui, item, index, ticks),
+                    tickerLink(ui, item.ticker, r.links),
+                ),
+            ),
         ),
     ];
 }
@@ -433,6 +485,7 @@ function checklistBox($: EngineInterface, ui: Ui, r: PaneReport, ticks: Record<s
 async function reportPane($: EngineInterface, ui: Ui, r: PaneReport, bodyColumns: number) {
     const { value: collapsed = {} } = await $.state.get(COLLAPSED);
     const { value: ticks = {} } = await $.state.get(TICKS);
+    const { value: gateWait = false } = await $.state.get(GATE_WAIT);
     return h(
         ui.Box,
         // Sized to the pane's body, which is narrower than the terminal while docked.
@@ -440,31 +493,46 @@ async function reportPane($: EngineInterface, ui: Ui, r: PaneReport, bodyColumns
         headerLine(ui, r),
         ...r.warnings.map((w) => h(ui.Text, { color: "yellow" }, `WARNING: ${w}`)),
         alertsBox(ui, r),
-        ...r.sections.map((s) => sectionBox($, ui, s, r.links, collapsed)),
+        ...r.sections.map((s) => sectionBox($, ui, s, r, collapsed)),
         linksRow(ui, r),
         movementsBox(ui, r),
-        ...checklistBox($, ui, r, ticks),
+        ...checklistBox($, ui, r, ticks, gateWait ? GATE_HEADING.wait : GATE_HEADING.list),
         ...watchlistBox(ui, r),
     );
 }
 
+/** A run's start: the pane reset to syncing, the snapshot handed over, then the pane opened. */
+async function startRun($: EngineInterface, args: string): Promise<void> {
+    await $.state.set(STATUS, PHASE2_ONLY.test(args) ? "watchlist" : "syncing");
+    await $.state.set(FULL_RUN, !ONLY.test(args));
+    await $.state.set(REPORT, null);
+    await $.state.set(TICKS, {});
+    await $.state.set(COLLAPSED, {});
+    await handOver($);
+    await $.ui.open({ id: PANE, title: "Stonks" });
+}
+
 export const register: Register = (on) => {
     on("command.run", { command: "stonks:sync" }, async ($, e, next) => {
-        await $.state.set(STATUS, PHASE2_ONLY.test(e.args) ? "watchlist" : "syncing");
-        await $.state.set(REPORT, null);
-        await $.state.set(TICKS, {});
-        await $.state.set(COLLAPSED, {});
-        await handOver($);
-        await $.ui.open({ id: PANE, title: "Stonks" });
-        return next(e);
+        // The command runs whatever happens to the pane. A failure still fails
+        // the hook, so the engine reports it, but after `next`, whose result
+        // then stands.
+        let ran: CommandRunResult;
+        try {
+            await startRun($, e.args);
+        } finally {
+            ran = await next(e);
+        }
+        return ran;
     });
 
     on("tool.call", { tool: "Bash" }, async ($, e, next) => {
         const ran = await next(e);
-        if (!STEP.test(e.command) || ran.deny !== undefined) {
+        const step = STEP.exec(e.command)?.[1];
+        if (step === undefined || ran.deny !== undefined) {
             return ran;
         }
-        await follow($, e.command, stdoutOf(ran));
+        await follow($, step, stdoutOf(ran));
         return ran;
     });
 

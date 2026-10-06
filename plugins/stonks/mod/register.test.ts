@@ -145,18 +145,44 @@ const REPORT = {
     },
 };
 
+/** `sigue`'s report: the sheet re-read and every finding recomputed, B1 on WNYE still among them. */
+const RESUMED = { ...REPORT, generatedAt: "2026-10-05T12:20:00.000Z" };
+
+const WATCHLIST = {
+    removed: ["OSCP"],
+    added: ["GLBX"],
+    unresolved: [],
+    final: ["GLBX", "INIT"],
+    count: 2,
+    capacity: 50,
+    incomplete: { missing: ["STRK"], extra: [] },
+};
+
 /** The world beneath the module, held in memory and inspectable by the test. */
 interface World {
     files: Record<string, string>;
     written: Record<string, string>;
     store: Record<string, unknown>;
     opened: string[];
+    /** When set, opening a pane fails with this message. */
+    openFails: string | null;
+    /** How many times `/stonks:sync` itself ran, beneath the module's hook. */
+    commandRuns: number;
     /** What the Bash tool answers to the next step. */
     stdout: string;
 }
 
 function world(on: On, seed: Partial<World> = {}): World {
-    const w: World = { files: {}, written: {}, store: {}, opened: [], stdout: "", ...seed };
+    const w: World = {
+        files: {},
+        written: {},
+        store: {},
+        opened: [],
+        openFails: null,
+        commandRuns: 0,
+        stdout: "",
+        ...seed,
+    };
     mock.env(on, { STONKS_STATE_DIR: STATE_DIR });
     on("fs.read", (_$, e) => {
         const text = w.files[e.path];
@@ -175,10 +201,16 @@ function world(on: On, seed: Partial<World> = {}): World {
         return { value: undefined };
     });
     on("ui.open", (_$, e) => {
+        if (w.openFails !== null) {
+            throw new Error(w.openFails);
+        }
         w.opened.push(e.id);
         return { value: { isPlaced: true } };
     });
-    on("command.run", { command: "stonks:sync" }, () => ({ text: "" }));
+    on("command.run", { command: "stonks:sync" }, () => {
+        w.commandRuns += 1;
+        return { text: "" };
+    });
     on("tool.call", { tool: "Bash" }, () => ({
         result: { stdout: w.stdout, stderr: "", interrupted: false },
     }));
@@ -209,6 +241,14 @@ test("without a stored snapshot the command hands nothing over", async ($, on) =
     expect(Object.keys(w.written)).toEqual([]);
 });
 
+test("a pane that fails to open does not stop the command", async ($, on) => {
+    const w = world(on, { store: { snapshot: SNAPSHOT }, openFails: "no pane host" });
+    await $.command.run(SYNC);
+    expect(w.commandRuns).toBe(1);
+    expect(w.opened).toEqual([]);
+    expect(w.written[`${STATE_DIR}/previous.json`]).toBe(JSON.stringify(SNAPSHOT));
+});
+
 test("phase1 loads report.json into the pane and keeps its snapshot in the store", async ($, on) => {
     const w = world(on, {
         files: { [REPORT_PATH]: JSON.stringify(REPORT) },
@@ -223,10 +263,11 @@ test("phase1 loads report.json into the pane and keeps its snapshot in the store
     expect((await ui.find({ key: "toggle:tracking-sheet" }))?.text).toContain("Tracking sheet (2)");
     expect(await ui.find({ key: "findings:tracking-sheet" })).toBeDefined();
     expect(await ui.find({ type: "Text", text: /B1 ⚑/ })).toBeDefined();
-    // Each ticker links from its finding and from the row of tickers; WNYE also from Movimientos.
-    expect(await ui.findAll({ type: "Link" })).toHaveLength(2 * Object.keys(LINKS).length + 1);
+    // Each ticker links from its finding and from the row of tickers; WNYE also
+    // from Movimientos, and WNYE and UMBR from the checklist.
+    expect(await ui.findAll({ type: "Link" })).toHaveLength(2 * Object.keys(LINKS).length + 3);
     expect(await ui.find({ type: "Text", text: /^triggered-sell 3$/ })).toBeDefined();
-    expect(await ui.findAll({ type: "Link", text: "WNYE" })).toHaveLength(3);
+    expect(await ui.findAll({ type: "Link", text: "WNYE" })).toHaveLength(4);
     expect((await ui.find({ key: "tick:B1:WNYE" }))?.text).toContain("[ ] B1 WNYE");
     expect(await ui.find({ key: "tick:C1:UMBR" })).toBeDefined();
     expect(await ui.find({ key: "tick:B3:GLBX" })).toBeUndefined();
@@ -279,6 +320,100 @@ test("ticks live in the session only and a new run clears them", async ($, on) =
     expect(await ui.find({ type: "Text", text: /Syncing/ })).toBeDefined();
     await $.tool.call({ tool: "Bash", command: step("sigue") });
     expect((await ui.find({ key: "tick:B1:WNYE" }))?.text).toContain("[ ] B1 WNYE");
+    await ui.unmount();
+});
+
+test("sigue's recomputed report shows its checklist unticked", async ($, on) => {
+    const w = world(on, {
+        files: { [REPORT_PATH]: JSON.stringify(REPORT) },
+        stdout: named(REPORT_PATH),
+    });
+    await $.command.run(SYNC);
+    await $.tool.call({ tool: "Bash", command: step("phase1") });
+    const ui = await $.ui.mount(MOUNT);
+    await ui.press({ key: "tick:B1:WNYE" });
+    expect((await ui.find({ key: "tick:B1:WNYE" }))?.text).toContain("[x] B1 WNYE");
+
+    w.files[REPORT_PATH] = JSON.stringify(RESUMED);
+    await $.tool.call({ tool: "Bash", command: step("sigue") });
+    expect((await ui.find({ key: "tick:B1:WNYE" }))?.text).toContain("[ ] B1 WNYE");
+    await ui.unmount();
+});
+
+test("a tick stays while the report it was made on is loaded again", async ($, on) => {
+    const w = world(on, {
+        files: { [REPORT_PATH]: JSON.stringify(REPORT) },
+        stdout: named(REPORT_PATH),
+    });
+    await $.tool.call({ tool: "Bash", command: step("phase1") });
+    const ui = await $.ui.mount(MOUNT);
+    await ui.press({ key: "tick:B1:WNYE" });
+
+    // `watchlist-final` adds phase 2's result to the same report.
+    w.files[REPORT_PATH] = JSON.stringify({ ...REPORT, watchlist: WATCHLIST });
+    await $.tool.call({ tool: "Bash", command: step("watchlist-final") });
+    expect(await ui.find({ key: "watchlist" })).toBeDefined();
+    expect((await ui.find({ key: "tick:B1:WNYE" }))?.text).toContain("[x] B1 WNYE");
+    await ui.unmount();
+});
+
+test("only a full run's phase-1 report asks for sigue at the gate", async ($, on) => {
+    const w = world(on, {
+        files: { [REPORT_PATH]: JSON.stringify(REPORT) },
+        stdout: named(REPORT_PATH),
+    });
+    await $.command.run(SYNC);
+    await $.tool.call({ tool: "Bash", command: step("phase1") });
+    const ui = await $.ui.mount(MOUNT);
+    expect(
+        await ui.find({ type: "Text", text: 'Gate: fix in the tracking sheet, then say "sigue"' }),
+    ).toBeDefined();
+
+    // The report `sigue` prints goes on to phase 2.
+    w.files[REPORT_PATH] = JSON.stringify(RESUMED);
+    await $.tool.call({ tool: "Bash", command: step("sigue") });
+    expect(await ui.find({ type: "Text", text: /sigue/ })).toBeUndefined();
+    expect(
+        await ui.find({ type: "Text", text: "Gate: findings that affect the watchlist" }),
+    ).toBeDefined();
+    await ui.unmount();
+});
+
+test("an --only sources report lists the gate's findings without asking for sigue", async ($, on) => {
+    world(on, { files: { [REPORT_PATH]: JSON.stringify(REPORT) }, stdout: named(REPORT_PATH) });
+    await $.command.run({ ...SYNC, args: "--only sources" });
+    await $.tool.call({ tool: "Bash", command: step("phase1") });
+    const ui = await $.ui.mount(MOUNT);
+    expect(
+        await ui.find({ type: "Text", text: "Gate: findings that affect the watchlist" }),
+    ).toBeDefined();
+    expect(await ui.find({ type: "Text", text: /sigue/ })).toBeUndefined();
+    expect(await ui.find({ key: "tick:B1:WNYE" })).toBeDefined();
+    await ui.unmount();
+});
+
+test("each checklist row links its ticker, to a search when its page is unknown", async ($, on) => {
+    // GLBX's page is known; UMBR's is not, so the engine linked it to a search.
+    const report = {
+        ...REPORT,
+        sections: REPORT.sections.map((s) => ({
+            ...s,
+            findings: s.findings.map((f) =>
+                f.ticker === "GLBX" ? { ...f, affectsWatchlist: true } : f,
+            ),
+        })),
+    };
+    world(on, { files: { [REPORT_PATH]: JSON.stringify(report) }, stdout: named(REPORT_PATH) });
+    await $.tool.call({ tool: "Bash", command: step("phase1") });
+    const ui = await $.ui.mount(MOUNT);
+    expect(await ui.find({ key: "item:B3:GLBX" })).toBeDefined();
+    expect(await ui.find({ key: "item:C1:UMBR" })).toBeDefined();
+    // Each from its finding, the row of tickers and its checklist row.
+    const glbx = await ui.findAll({ type: "Link", text: "GLBX" });
+    expect(glbx.map((link) => link.props.href)).toEqual([LINKS.GLBX, LINKS.GLBX, LINKS.GLBX]);
+    const umbr = await ui.findAll({ type: "Link", text: "UMBR" });
+    const search = "https://simplywall.st/search?q=UMBR";
+    expect(umbr.map((link) => link.props.href)).toEqual([search, search, search]);
     await ui.unmount();
 });
 
@@ -351,6 +486,7 @@ test("a step the pane does not follow leaves it alone", async ($, on) => {
 test("a section without findings says what it agrees with", async ($, on) => {
     const report = {
         ...REPORT,
+        alerts: [],
         sections: REPORT.sections.map((s) => ({ ...s, findings: [] })),
     };
     world(on, { files: { [REPORT_PATH]: JSON.stringify(report) }, stdout: named(REPORT_PATH) });
@@ -363,19 +499,24 @@ test("a section without findings says what it agrees with", async ($, on) => {
     await ui.unmount();
 });
 
+test("a tracking sheet whose only B finding is an alert points at the Alerts", async ($, on) => {
+    const report = {
+        ...REPORT,
+        sections: REPORT.sections.map((s) => ({ ...s, findings: [] })),
+    };
+    world(on, { files: { [REPORT_PATH]: JSON.stringify(report) }, stdout: named(REPORT_PATH) });
+    await $.tool.call({ tool: "Bash", command: step("phase1") });
+    const ui = await $.ui.mount(MOUNT);
+    expect(await ui.find({ type: "Text", text: "No other finding; see Alerts." })).toBeDefined();
+    expect(await ui.findAll({ type: "Text", text: "Agrees with IBKR." })).toHaveLength(1);
+    await ui.unmount();
+});
+
 test("the final step adds phase 2's result to the pane, its tickers linked", async ($, on) => {
     const report = {
         ...REPORT,
         links: { ...LINKS, OSCP: "https://simplywall.st/search?q=OSCP" },
-        watchlist: {
-            removed: ["OSCP"],
-            added: ["GLBX"],
-            unresolved: [],
-            final: ["GLBX", "INIT"],
-            count: 2,
-            capacity: 50,
-            incomplete: { missing: ["STRK"], extra: [] },
-        },
+        watchlist: WATCHLIST,
     };
     world(on, { files: { [REPORT_PATH]: JSON.stringify(report) }, stdout: named(REPORT_PATH) });
     await $.tool.call({ tool: "Bash", command: step("watchlist-final") });

@@ -64,7 +64,7 @@ No previous run to compare with.
 
 ## Gate
 
-Affected tickers: ACME, CRUX, ENCMX, HLYSN, HOOL, PIEDP, TYRL, UMBR, VNDL, WNYE, WONKA
+Affected tickers: [ACME](https://simplywall.st/search?q=ACME), [CRUX](https://simplywall.st/search?q=CRUX), [ENCMX](https://simplywall.st/search?q=ENCMX), [HLYSN](https://simplywall.st/search?q=HLYSN), [HOOL](https://simplywall.st/search?q=HOOL), [PIEDP](https://simplywall.st/search?q=PIEDP), [TYRL](https://simplywall.st/search?q=TYRL), [UMBR](https://simplywall.st/search?q=UMBR), [VNDL](https://simplywall.st/search?q=VNDL), [WNYE](https://simplywall.st/search?q=WNYE), [WONKA](https://simplywall.st/search?q=WONKA)
 
 - [ ] B1 [ENCMX](https://simplywall.st/search?q=ENCMX)
 - [ ] B1 [WNYE](https://simplywall.st/search?q=WNYE)
@@ -127,7 +127,7 @@ WARNING: mcp__ibkr__submit_order is not in the known set of IBKR tools (fictiona
 
 ## Gate
 
-Affected tickers: WNYE, CRUX
+Affected tickers: [WNYE](https://simplywall.st/search?q=WNYE), CRUX
 
 - [ ] B1 [WNYE](https://simplywall.st/search?q=WNYE)
 - [ ] C2 CRUX

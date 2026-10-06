@@ -67,6 +67,10 @@ declare module "claude-code" {
             collapsed: Record<string, boolean>;
             /** Checklist item key → ticked. Session only, never stored. */
             ticks: Record<string, boolean>;
+            /** The run names no `--only`; set when it starts. */
+            fullRun: boolean;
+            /** The shown report is a full run's `phase1`, the one whose gate waits for "sigue". */
+            gateWait: boolean;
         };
     }
 }

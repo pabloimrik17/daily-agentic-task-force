@@ -135,6 +135,16 @@ describe("renderMarkdown", () => {
         expect(md).not.toContain("## Watchlist");
     });
 
+    it("sends the tracking sheet to the Alerts when its only B finding is an alert", () => {
+        const md = renderMarkdown({
+            ...fictional,
+            sections: fictional.sections.map((s) => ({ ...s, findings: [] })),
+        });
+        expect(md).toContain("## Tracking sheet\n\nNo other finding; see Alerts.");
+        expect(md).toContain("## SWS portfolio\n\nAgrees with IBKR.");
+        expect(md).toContain("## Cartera Viva\n\nThe tracking sheet agrees with the Cartera Viva.");
+    });
+
     it("lists alerts before the sections and checklists only findings affecting the watchlist", () => {
         const md = renderMarkdown(fictional);
         expect(md.indexOf("## Alerts")).toBeLessThan(md.indexOf("## SWS portfolio"));
@@ -239,6 +249,12 @@ describe("golden dataset", () => {
             .sort();
         expect(expected.length).toBeGreaterThan(0);
         expect(listed).toEqual(expected);
+    });
+
+    it("links every affected ticker on the gate's line", () => {
+        const linked = gate.affectedTickers.map((t) => `[${t}](${links[t] ?? ""})`);
+        expect(gate.affectedTickers.length).toBeGreaterThan(0);
+        expect(md).toContain(`Affected tickers: ${linked.join(", ")}\n`);
     });
 
     it("keeps every pane block within the limit", () => {

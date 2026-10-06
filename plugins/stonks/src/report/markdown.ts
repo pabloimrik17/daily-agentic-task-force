@@ -19,6 +19,15 @@ const AGREES: Record<Mirror, string> = {
     "cartera-viva": "The tracking sheet agrees with the Cartera Viva.",
 };
 
+/** The tracking sheet's text when its B findings all went to the Alerts (`buildReport` moves every B8 there). */
+const SEE_ALERTS = "No other finding; see Alerts.";
+
+function agrees(report: Report, mirror: Mirror): string {
+    return mirror === "tracking-sheet" && report.alerts.some((f) => f.check.startsWith("B"))
+        ? SEE_ALERTS
+        : AGREES[mirror];
+}
+
 const TABLE_HEAD = [
     "| Check | Ticker | Severity | Sides | Runs |",
     "| --- | --- | --- | --- | --- |",
@@ -131,8 +140,11 @@ function checklistBlock(report: Report, cap: boolean): string {
     const items = [...report.alerts, ...report.sections.flatMap((s) => s.findings)].filter(
         (f) => f.affectsWatchlist,
     );
+    const { affectedTickers } = report.gate;
     const tickers =
-        report.gate.affectedTickers.length === 0 ? "none" : report.gate.affectedTickers.join(", ");
+        affectedTickers.length === 0
+            ? "none"
+            : affectedTickers.map((t) => tickerLink(report.links, t)).join(", ");
     return block(
         ["## Gate", "", `Affected tickers: ${tickers}`, ""],
         items.map((f) => `- [ ] ${f.check} ${tickerLink(report.links, f.ticker)}`),
@@ -184,7 +196,7 @@ function header(report: Report): string {
 
 function sectionBlock(report: Report, mirror: Mirror, cap: boolean): string {
     const findings = report.sections.find((s) => s.mirror === mirror)?.findings ?? [];
-    return findingsBlock(report, MIRROR_TITLES[mirror], findings, AGREES[mirror], cap);
+    return findingsBlock(report, MIRROR_TITLES[mirror], findings, agrees(report, mirror), cap);
 }
 
 const MIRRORS: Mirror[] = ["sws-portfolio", "tracking-sheet", "cartera-viva"];
