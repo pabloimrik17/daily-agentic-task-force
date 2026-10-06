@@ -78,21 +78,22 @@ describe("collector", () => {
 });
 
 describe("action", () => {
-    it("prints the action with its row index", async () => {
-        const out = await step("action", ["click-row", "2"]);
+    it("prints the action with its row index and the listing the row must show", async () => {
+        const out = await step("action", ["click-row", "2", "NasdaqGS:HOOL"]);
         expect(out.directive).toEqual({ kind: "done" });
         expect(out.markdown).toContain("click-row.v1");
+        expect(out.markdown).toContain('"NasdaqGS:HOOL"');
         expect(out.markdown).toContain(HOW);
     });
 
     it("exits 1 for a row index that is not a number", async () => {
         let stderr = "";
-        const code = await runCli(["action", "click-row", "x"], ctx(), {
+        const code = await runCli(["action", "click-row", "x", "NasdaqGS:HOOL"], ctx(), {
             stdout: () => undefined,
             stderr: (text) => (stderr += text),
         });
         expect(code).toBe(1);
-        expect(stderr).toContain("click-row takes one row index");
+        expect(stderr).toContain("click-row takes a row index and the row's listing");
     });
 
     it("is a usage error for an unknown action", () => {

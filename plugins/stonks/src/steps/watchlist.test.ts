@@ -141,8 +141,10 @@ describe("watchlist-plan", () => {
         expect(out.markdown).toContain("- Add: STRK");
         expect(out.markdown).toContain("4/50");
         expect(out.directive).toEqual({ kind: "remove", ticker: "ACME" });
-        expect(out.markdown).toContain("`action watchlist-row-menu 0`");
-        expect(out.markdown.indexOf("`action watchlist-row-menu 0`")).toBeLessThan(
+        const menu = "`action watchlist-row-menu 0 /stocks/us/software/nyse-acme/acme-corp`";
+        expect(out.markdown).toContain(menu);
+        expect(out.markdown).toContain("`done: false` is a stop");
+        expect(out.markdown.indexOf(menu)).toBeLessThan(
             out.markdown.indexOf("`action remove-from-menu`"),
         );
         expect(out.markdown.indexOf("`action remove-from-menu`")).toBeLessThan(
@@ -159,6 +161,12 @@ describe("watchlist-plan", () => {
             { kind: "add", ticker: "STRK" },
         ]);
         expect(state.current).toEqual(["ACME", "HOOL", "CRUX", "GLBX"]);
+        expect(state.rowPaths).toEqual([
+            "/stocks/us/software/nyse-acme/acme-corp",
+            "/stocks/us/tech/nasdaqgs-hool/hoolihan-systems",
+            "/stocks/us/tech/nasdaq-crux/cruxwell",
+            "/stocks/us/energy/nyse-glbx/globex-energy",
+        ]);
     });
 
     it("names the row of a later removal in the collector's order", async () => {
@@ -290,6 +298,20 @@ async function planAdditions(ctx: StepContext, tickers: string[]): Promise<strin
     return path;
 }
 
+/** Puts an addition first in the plan by hand, for a ticker no fixture plans. */
+function addFirst(ticker: string): void {
+    const state = stateOf() as { pending: Directive[] };
+    state.pending = [{ kind: "add", ticker }, ...state.pending];
+    writeFileSync(planPath(stateDir, runId), JSON.stringify(state));
+}
+
+const STRK_DROPDOWN = {
+    stonks: "dropdown.v1",
+    url: "https://example.com/watchlist",
+    loginWall: false,
+    data: { rows: [{ index: 3, label: "Strike Metals Inc", symbol: "NYSE:STRK" }] },
+};
+
 describe("watchlist-resolve", () => {
     it("selects exactly NasdaqGS:HOOL among similar results", async () => {
         const ctx = open();
@@ -297,10 +319,10 @@ describe("watchlist-resolve", () => {
         capture("dropdown", fixture("dropdown-hool.json"));
         const out = await call(ctx, "watchlist-resolve", "HOOL");
         expect(out.directive).toEqual({ kind: "add", ticker: "HOOL" });
-        expect(out.markdown).toContain("`action click-row 2`");
-        expect(out.markdown).toContain("NasdaqGS:HOOL");
+        expect(out.markdown).toContain("`action click-row 2 NasdaqGS:HOOL`");
+        expect(out.markdown).toContain("`done: false` is a stop");
         expect(out.markdown).not.toContain("click-row 0");
-        expect(out.markdown.indexOf("`action click-row 2`")).toBeLessThan(
+        expect(out.markdown.indexOf("`action click-row 2 NasdaqGS:HOOL`")).toBeLessThan(
             out.markdown.indexOf("`collector watchlist`"),
         );
         expect(out.markdown.indexOf("`collector watchlist`")).toBeLessThan(
@@ -311,11 +333,9 @@ describe("watchlist-resolve", () => {
 
     it("records an unresolved ticker, asks the user and moves on", async () => {
         const ctx = open();
-        // The fixture shows no ZORGX row; put it first in the plan by hand.
+        // The fixture shows no ZORGX row.
         await planAdditions(ctx, ["GLBX"]);
-        const state = stateOf() as { pending: Directive[] };
-        state.pending = [{ kind: "add", ticker: "ZORGX" }, ...state.pending];
-        writeFileSync(planPath(stateDir, runId), JSON.stringify(state));
+        addFirst("ZORGX");
         capture("dropdown", fixture("dropdown-crux.json"));
         const out = await call(ctx, "watchlist-resolve", "ZORGX");
         expect(out.markdown).toContain("no result is exactly ZORGX on a US primary exchange");
@@ -333,6 +353,26 @@ describe("watchlist-resolve", () => {
         await planAdditions(ctx, ["GLBX", "STRK"]);
         const out = await call(ctx, "watchlist-resolve", "HOOL");
         expect(isStop(out.directive)).toContain("run `collector dropdown`");
+    });
+
+    it("stops on a dropdown read older than the last watchlist read", async () => {
+        const ctx = open();
+        capture("dropdown", fixture("dropdown-hool.json"));
+        await planAdditions(ctx, ["GLBX", "STRK"]);
+        const out = await call(ctx, "watchlist-resolve", "HOOL");
+        expect(isStop(out.directive)).toContain("no read since the search for HOOL");
+    });
+
+    it("stops on the dropdown read an earlier resolve used", async () => {
+        const ctx = open();
+        await planAdditions(ctx, ["GLBX"]);
+        addFirst("ZORGX");
+        capture("dropdown", fixture("dropdown-hool.json"));
+        await call(ctx, "watchlist-resolve", "ZORGX");
+        // The HOOL row of ZORGX's results must not select HOOL.
+        const out = await call(ctx, "watchlist-resolve", "HOOL");
+        expect(isStop(out.directive)).toContain("no read since the search for HOOL");
+        expect(stateOf().selected).toBeNull();
     });
 
     it("stops when the ticker is not the next addition", async () => {
@@ -359,7 +399,9 @@ describe("watchlist-verify", () => {
         const out = await call(ctx, "watchlist-verify");
         expect(out.directive).toEqual({ kind: "remove", ticker: "CRUX" });
         expect(out.markdown).toContain("Verified: remove ACME");
-        expect(out.markdown).toContain("`action watchlist-row-menu 1`");
+        expect(out.markdown).toContain(
+            "`action watchlist-row-menu 1 /stocks/us/tech/nasdaq-crux/cruxwell`",
+        );
         expect(stateOf().pending).toEqual([
             { kind: "remove", ticker: "CRUX" },
             { kind: "add", ticker: "STRK" },
@@ -399,12 +441,7 @@ describe("watchlist-verify", () => {
     it("learns the listing of a verified addition", async () => {
         const ctx = open();
         await planAdditions(ctx, ["GLBX", "HOOL"]);
-        capture("dropdown", {
-            stonks: "dropdown.v1",
-            url: "https://example.com/watchlist",
-            loginWall: false,
-            data: { rows: [{ index: 3, label: "Strike Metals Inc", symbol: "NYSE:STRK" }] },
-        });
+        capture("dropdown", STRK_DROPDOWN);
         await call(ctx, "watchlist-resolve", "STRK");
         capture("click-row", action("click-row"));
         capture("watchlist", watchlist(["GLBX", "HOOL", "STRK"]));
@@ -421,6 +458,33 @@ describe("watchlist-verify", () => {
             url: "https://simplywall.st/stocks/us/materials/nyse-strk/strike-metals",
         });
         expect(stateOf().selected).toBeNull();
+    });
+
+    it("stops when the addition landed as another listing of its ticker", async () => {
+        const ctx = open();
+        await planAdditions(ctx, ["GLBX", "HOOL"]);
+        capture("dropdown", STRK_DROPDOWN);
+        await call(ctx, "watchlist-resolve", "STRK");
+        capture("click-row", action("click-row"));
+        const read = watchlist(["GLBX", "HOOL"], "3/50") as { data: { rows: Row[] } };
+        read.data.rows.push({
+            href: "/stocks/ca/materials/tsx-strk/strike-metals",
+            text: "STRK",
+            uniqueSymbol: null,
+        });
+        capture("watchlist", read);
+        const out = await call(ctx, "watchlist-verify");
+        expect(isStop(out.directive)).toBe("tsx:STRK was added instead of NYSE:STRK");
+        expect(stateOf().done).toEqual([]);
+        expect(readFileSync(listingsPath(stateDir), "utf8")).not.toContain("tsx-strk");
+    });
+
+    it("stops on an addition no resolve selected a listing for", async () => {
+        const ctx = open();
+        await planAdditions(ctx, ["GLBX", "HOOL"]);
+        capture("watchlist", watchlist(["GLBX", "HOOL", "STRK"]));
+        const out = await call(ctx, "watchlist-verify");
+        expect(isStop(out.directive)).toContain("no listing was selected for STRK");
     });
 
     it("stops when nothing is pending", async () => {

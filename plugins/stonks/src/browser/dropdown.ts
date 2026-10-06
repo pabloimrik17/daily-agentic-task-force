@@ -126,16 +126,40 @@ export function dropdownCollector(runId: string): string {
     );
 }
 
-/** Clicks row `index` through its target. */
-export function clickRowAction(runId: string, index: number): string {
+/**
+ * Defines `listingOf(symbol)`: the symbol as the engine's `parseListing` and
+ * `formatListing` write it, upper-case ticker with class separators as `.`.
+ */
+const LISTING_OF = String.raw`var listingOf = function (symbol) {
+        var trimmed = (symbol || "").trim();
+        var colon = trimmed.indexOf(":");
+        if (colon <= 0 || colon === trimmed.length - 1) {
+            return null;
+        }
+        var ticker = trimmed.slice(colon + 1).trim();
+        ticker = ticker.slice(ticker.lastIndexOf(":") + 1).trim().toUpperCase().replace(/[\/\s]+/g, ".");
+        return trimmed.slice(0, colon).trim() + ":" + ticker;
+    };`;
+
+/**
+ * Clicks row `index` through its target. The index comes from an earlier
+ * read, so the row must still show `listing`, as `EXCHANGE:TICKER`; otherwise
+ * nothing is clicked.
+ */
+export function clickRowAction(runId: string, index: number, listing: string): string {
     return envelope(
         "click-row",
         runId,
         String.raw`(function () {
     ${ROWS}
+    ${LISTING_OF}
     var row = rows[${JSON.stringify(index)}];
     if (!row || !row.target) {
-        return { done: false };
+        return { done: false, reason: "no such row" };
+    }
+    var shown = listingOf(row.symbol);
+    if (shown !== ${JSON.stringify(listing)}) {
+        return { done: false, reason: "the row shows " + shown + ", not " + ${JSON.stringify(listing)} };
     }
     row.target.click();
     return { done: true };

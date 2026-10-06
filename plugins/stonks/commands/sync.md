@@ -53,9 +53,10 @@ A hook captures every IBKR read and every collector result. Never retype a resul
     - Never continue without that confirmation.
 - `gate-wait`: the whole report is already relayed. Tell the user to fix the tracking sheet and reply "sigue", or to stop. On "sigue", run `sigue`, relay what remains, and continue to phase 2 without pausing again. On a stop, run `end`.
 - `ask-login <source>`: ask the user to log in to that site. Wait for their reply. Run that source's collector again, then run again the step that asked. Never type credentials, and never touch a login form.
-- `remove <T>`: run the browser steps the markdown lists for T, in order: `action watchlist-row-menu <index>`, `action remove-from-menu`, `collector watchlist`, then `watchlist-verify`.
+- `remove <T>`: run the browser steps the markdown lists for T, in order: `action watchlist-row-menu <index> <path>`, `action remove-from-menu`, `collector watchlist`, then `watchlist-verify`.
 - `add <T>` from `watchlist-plan`, `watchlist-verify` or an unresolved `watchlist-resolve`: run `watchlist-search T`, then the browser steps it lists, then `collector dropdown`, then `watchlist-resolve T`.
-- `add <T>` from a selected `watchlist-resolve`: run `action click-row <index>` as told, then `collector watchlist`, then `watchlist-verify`.
+- `add <T>` from a selected `watchlist-resolve`: run `action click-row <index> <listing>` as told, then `collector watchlist`, then `watchlist-verify`.
+- When `watchlist-row-menu`, `remove-from-menu` or `click-row` answers `done: false`, that is a stop: relay its reason, run `end`, and finish. Run none of the steps after it.
 - `done` from `watchlist-plan`, `watchlist-verify` or `watchlist-resolve`: run `collector watchlist`, then `watchlist-final`.
 - `done` from `watchlist-final`: run `end` and finish.
 - `stop <reason>`: relay the reason, run `end`, and finish.
@@ -91,10 +92,10 @@ JSON
 - At the start of each site, call `tabs_context_mcp` with `{createIfEmpty: true}`, then `navigate` afresh to the URL `begin` lists for that site. Never reuse a tab left from an earlier run.
 - Poll for readiness instead of waiting a fixed time. When a collector's result shows `"loading": true`, run that collector again.
 - Never scroll the watchlist page. It renders black.
-- Open a row's menu only through `action watchlist-row-menu <index>`.
+- Open a row's menu only through `action watchlist-row-menu <index> <path>`, exactly as the engine printed it. It refuses a row that no longer links to that path.
 - Open and reposition the Add stock search box through `action reposition-add-panel`. When it answers that the box is not open yet, run it once more.
 - Type the search term with real keystrokes (`computer` `type`) once `action reposition-add-panel` has answered `done`: it leaves the search box focused. Synthetic input events do not reach it. Run `collector dropdown` once the results show, not while they load.
-- Click a search result only through the engine's `action click-row <index>`. Never click by screen coordinates.
+- Click a search result only through the engine's `action click-row <index> <listing>`, exactly as printed. It refuses a row that no longer shows that listing. Never click by screen coordinates.
 - Run each collector and action with `javascript_tool` alone, one call per source, with the exact source the engine printed. Never put one inside `browser_batch`, and never edit it.
 
 ## Phase 2

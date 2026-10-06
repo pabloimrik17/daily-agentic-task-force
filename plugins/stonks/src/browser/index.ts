@@ -16,12 +16,13 @@ type Source = (runId: string, args: string[]) => string;
 
 export type SourceResult = { ok: true; source: string } | { ok: false; error: string };
 
-function indexArg(name: string, args: string[]): number {
-    const raw = args[0] ?? "";
-    if (args.length !== 1 || !/^\d+$/.test(raw)) {
-        throw new Error(`action ${name} takes one row index`);
+/** A row index and what the engine expects that row to show, so the action can refuse another row. */
+function rowArgs(name: string, expected: string, args: string[]): [number, string] {
+    const [index = "", shown = ""] = args;
+    if (args.length !== 2 || !/^\d+$/.test(index) || shown.trim() === "") {
+        throw new Error(`action ${name} takes a row index and the row's ${expected}`);
     }
-    return Number(raw);
+    return [Number(index), shown];
 }
 
 export const COLLECTORS: Record<string, Source> = {
@@ -33,11 +34,11 @@ export const COLLECTORS: Record<string, Source> = {
 
 export const ACTIONS: Record<string, Source> = {
     "watchlist-row-menu": (runId, args) =>
-        watchlistRowMenuAction(runId, indexArg("watchlist-row-menu", args)),
+        watchlistRowMenuAction(runId, ...rowArgs("watchlist-row-menu", "link path", args)),
     "remove-from-menu": (runId) => removeFromMenuAction(runId),
     "reposition-add-panel": (runId) => repositionAddPanelAction(runId),
     "expand-listings": (runId) => expandListingsAction(runId),
-    "click-row": (runId, args) => clickRowAction(runId, indexArg("click-row", args)),
+    "click-row": (runId, args) => clickRowAction(runId, ...rowArgs("click-row", "listing", args)),
 };
 
 function lookup(

@@ -72,8 +72,11 @@ const POINTER_EVENTS = '["pointerdown", "mousedown", "pointerup", "mouseup", "cl
  * button (design D10). On the real page events without a
  * `pointerType` leave the menu closed, and the menu renders after this
  * returns, so the result cannot report it open.
+ *
+ * The index comes from an earlier read, so the row must still link to `path`,
+ * the link path that read showed for it; otherwise nothing is dispatched.
  */
-export function watchlistRowMenuAction(runId: string, index: number): string {
+export function watchlistRowMenuAction(runId: string, index: number, path: string): string {
     return envelope(
         "watchlist-row-menu",
         runId,
@@ -82,6 +85,11 @@ export function watchlistRowMenuAction(runId: string, index: number): string {
     var row = rows[${JSON.stringify(index)}];
     if (!row) {
         return { done: false, reason: "no such row" };
+    }
+    var link = row.querySelector('a[href*="/stocks/"]');
+    var shown = link ? new URL(link.getAttribute("href") || "", location.origin).pathname : null;
+    if (shown !== ${JSON.stringify(path)}) {
+        return { done: false, reason: "the row links to " + shown + ", not " + ${JSON.stringify(path)} };
     }
     var button = row.querySelector('button[aria-label="More Options"]');
     if (!button) {

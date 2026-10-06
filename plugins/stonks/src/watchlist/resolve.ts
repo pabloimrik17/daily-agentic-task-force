@@ -36,7 +36,7 @@ export function searchTerm(
 }
 
 /** A Nasdaq slug without a tier matches any Nasdaq tier. */
-function sameExchange(a: string, b: string): boolean {
+export function sameExchange(a: string, b: string): boolean {
     if (a === b) {
         return true;
     }

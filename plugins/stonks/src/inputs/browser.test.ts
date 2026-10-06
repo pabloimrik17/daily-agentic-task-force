@@ -64,7 +64,7 @@ describe("Watchlist read", () => {
         expect(result.ok).toBe(true);
         if (result.ok) {
             expect(result.value.title).toBe("Trader Picks");
-            expect(result.value.count).toBe(23);
+            expect(result.value.count).toBe(4);
             expect(result.value.capacity).toBe(50);
             expect(result.value.items.map((item) => item.listing)).toEqual([
                 { exchange: "NYSE", ticker: "ACME" },
@@ -85,6 +85,15 @@ describe("Watchlist read", () => {
         expect(result.ok && result.value.items[1]?.listing).toEqual({
             exchange: "NasdaqGS",
             ticker: "HOOL",
+        });
+    });
+
+    it("is unreadable when the rows disagree with the counter, naming both counts", () => {
+        const envelope = fixture("watchlist") as { data: { rows: unknown[] } };
+        envelope.data.rows.pop();
+        expect(parseWatchlist(envelope, RUN, CONFIG)).toEqual({
+            ok: false,
+            error: { kind: "unreadable", message: "watchlist shows 4 stocks but 3 rows were read" },
         });
     });
 

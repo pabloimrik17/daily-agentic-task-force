@@ -5,7 +5,7 @@
     "loginWall": false,
     "data": {
         "title": "Trader Picks",
-        "counter": "23/50",
+        "counter": "4/50",
         "rows": [
             {
                 "href": "/stocks/us/software/nyse-acme/acme-corp",

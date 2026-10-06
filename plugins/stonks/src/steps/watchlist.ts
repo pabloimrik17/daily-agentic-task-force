@@ -4,6 +4,7 @@
 // memory between steps; nothing is repaired, a mismatch stops (design D16).
 
 import { existsSync, readFileSync } from "node:fs";
+import { basename } from "node:path";
 
 import {
     type BrowserSource,
@@ -31,7 +32,7 @@ import {
     serialiseListings,
 } from "../watchlist/listings.ts";
 import { type Plan, plan as planChanges, steps } from "../watchlist/plan.ts";
-import { searchTerm, select, target } from "../watchlist/resolve.ts";
+import { sameExchange, searchTerm, select, target } from "../watchlist/resolve.ts";
 import { type ChangeDirective, verifyChange, verifyFinal } from "../watchlist/verify.ts";
 import {
     type Capture,
@@ -69,7 +70,11 @@ interface PlanState {
     unresolved: string[];
     /** Tickers on the watchlist as of `lastCapture`, in the collector's row order. */
     current: string[];
+    /** The link path of each row of `current`, which `watchlist-row-menu` checks before acting. */
+    rowPaths: string[];
     lastCapture: string;
+    /** The dropdown read the last `watchlist-resolve` used; the next one must be newer. */
+    lastDropdown: string | null;
     selected: Selected | null;
 }
 
@@ -83,6 +88,20 @@ const askLogin = (source: BrowserSource, again: string): StepOutput => ({
 });
 
 const tickerOf = (item: WatchlistItem): string => normaliseTicker(item.listing.ticker);
+
+function pathOf(item: WatchlistItem): string {
+    try {
+        return item.link === null ? "" : new URL(item.link.href).pathname;
+    } catch {
+        return "";
+    }
+}
+
+/** Captures sort by their `<seq>-` prefix, whatever their kind. */
+const seqOf = (path: string): string => basename(path).split("-", 1)[0] ?? "";
+
+const isAfter = (path: string, than: string | null): boolean =>
+    than === null || seqOf(path) > seqOf(than);
 
 function listingsOf(scope: RunScope): Listings {
     const path = listingsPath(scope.stateDir);
@@ -104,7 +123,7 @@ function hasPlanShape(raw: unknown): raw is Partial<PlanState> {
     return (
         isRecord(raw) &&
         raw.schema === PLAN_SCHEMA &&
-        [raw.pending, raw.done, raw.unresolved, raw.current].every(Array.isArray) &&
+        [raw.pending, raw.done, raw.unresolved, raw.current, raw.rowPaths].every(Array.isArray) &&
         typeof raw.lastCapture === "string" &&
         isRecord(raw.plan)
     );
@@ -133,7 +152,7 @@ function loadPlan(scope: RunScope, step: string): Outcome<PlanState> {
             output: stop("plan.json has an unknown shape; run `watchlist-plan` again"),
         };
     }
-    return { ok: true, value: { selected: null, ...raw } as PlanState };
+    return { ok: true, value: { selected: null, lastDropdown: null, ...raw } as PlanState };
 }
 
 /** Phase 2 never runs in `--only sources`. */
@@ -209,16 +228,20 @@ function freshWatchlist(
 
 const code = (text: string): string => `\`${text}\``;
 
+const STOP_ON_REFUSAL = `An action that answers ${code("done: false")} is a stop: relay its reason and run ${code("end")}.`;
+
 /** The numbered browser steps and the engine step to run for the next change, or the final read. */
-function nextSteps(directive: Directive, current: string[]): string {
+function nextSteps(directive: Directive, state: PlanState): string {
     if (directive.kind === "remove") {
-        const index = current.indexOf(normaliseTicker(directive.ticker));
+        const index = state.current.indexOf(normaliseTicker(directive.ticker));
         return [
             `Next: remove ${directive.ticker} (row ${index}). Run, in order:`,
-            `1. ${code(`action watchlist-row-menu ${index}`)}`,
+            `1. ${code(`action watchlist-row-menu ${index} ${state.rowPaths[index] ?? ""}`)}`,
             `2. ${code("action remove-from-menu")}`,
             `3. ${code("collector watchlist")}`,
             `4. ${code("watchlist-verify")}`,
+            "",
+            STOP_ON_REFUSAL,
         ].join("\n");
     }
     if (directive.kind === "add") {
@@ -231,7 +254,7 @@ function next(state: PlanState, lead: string[]): StepOutput {
     const [first] = state.pending;
     const directive: Directive = first ?? { kind: "done" };
     return {
-        markdown: [...lead, "", nextSteps(directive, state.current)].join("\n"),
+        markdown: [...lead, "", nextSteps(directive, state)].join("\n"),
         directive,
     };
 }
@@ -269,7 +292,9 @@ const planStep: StepTable[string]["step"] = async (ctx) => {
         done: [],
         unresolved: [],
         current: read.items.map(tickerOf),
+        rowPaths: read.items.map(pathOf),
         lastCapture: path,
+        lastDropdown: null,
         selected: null,
     };
     savePlan(scope, state);
@@ -281,7 +306,7 @@ const planStep: StepTable[string]["step"] = async (ctx) => {
                 "",
                 `${desired} tickers are desired and the capacity is ${capacity}: no change is made.`,
                 "",
-                nextSteps({ kind: "done" }, state.current),
+                nextSteps({ kind: "done" }, state),
             ].join("\n"),
             directive: { kind: "done" },
         };
@@ -386,28 +411,42 @@ function selectedOutput(
             `Selected row ${row.index}: ${row.label} (${formatListing(listing)}).`,
             "",
             "Run, in order:",
-            `1. ${code(`action click-row ${row.index}`)}`,
+            `1. ${code(`action click-row ${row.index} ${formatListing(listing)}`)}`,
             `2. ${code("collector watchlist")}`,
             `3. ${code("watchlist-verify")}`,
+            "",
+            STOP_ON_REFUSAL,
         ].join("\n"),
         directive: { kind: "add", ticker },
     };
 }
 
-/** The newest dropdown capture, parsed; the output to print when there is none or it is unusable. */
-function newestDropdown(scope: RunScope, ticker: string): Outcome<DropdownRows> {
+/**
+ * The newest dropdown capture, parsed, when it is newer than the last change
+ * and than the dropdown an earlier `watchlist-resolve` used: an older one
+ * shows another ticker's search. Otherwise the output to print.
+ */
+function freshDropdown(
+    scope: RunScope,
+    state: PlanState,
+    ticker: string,
+): Outcome<{ path: string; rows: DropdownRows }> {
     const capture = latestCapture(scope, "dropdown");
-    if (capture === null) {
+    if (
+        capture === null ||
+        !isAfter(capture.path, state.lastCapture) ||
+        !isAfter(capture.path, state.lastDropdown)
+    ) {
         return {
             ok: false,
             output: stop(
-                `dropdown: no read in this run; run \`collector dropdown\` and run watchlist-resolve ${ticker} again`,
+                `dropdown: no read since the search for ${ticker}; run \`collector dropdown\` and run watchlist-resolve ${ticker} again`,
             ),
         };
     }
     const rows = parseDropdown(captureJson(capture), scope.run.runId);
     if (rows.ok) {
-        return { ok: true, value: rows.value };
+        return { ok: true, value: { path: capture.path, rows: rows.value } };
     }
     return {
         ok: false,
@@ -429,11 +468,12 @@ const resolveStep = (ctx: StepContext, args: readonly string[]): StepOutput => {
     if (first?.kind !== "add" || first.ticker !== ticker) {
         return stop(`${ticker} is not the next addition of the plan`);
     }
-    const rows = newestDropdown(scope, ticker);
-    if (!rows.ok) {
-        return rows.output;
+    const fresh = freshDropdown(scope, state, ticker);
+    if (!fresh.ok) {
+        return fresh.output;
     }
-    const selection = select(rows.value, target(ticker, listingsOf(scope)));
+    state.lastDropdown = fresh.value.path;
+    const selection = select(fresh.value.rows, target(ticker, listingsOf(scope)));
     return selection.kind === "unresolved"
         ? unresolvedOutput(scope, state, ticker, selection)
         : selectedOutput(scope, state, ticker, selection.row);
@@ -460,6 +500,24 @@ function learnSelected(
     }
 }
 
+/** Why an addition did not land as the listing `watchlist-resolve` selected; null when it did. */
+function wrongListing(
+    state: PlanState,
+    change: ChangeDirective,
+    read: WatchlistRead,
+): string | null {
+    const selected =
+        state.selected?.ticker === change.ticker ? parseListing(state.selected.symbol) : null;
+    if (selected === null) {
+        return `no listing was selected for ${change.ticker}; run \`watchlist-resolve ${change.ticker}\` before adding it`;
+    }
+    const added = read.items.find((item) => tickerOf(item) === change.ticker);
+    if (added === undefined || sameExchange(added.listing.exchange, selected.exchange)) {
+        return null;
+    }
+    return `${formatListing(added.listing)} was added instead of ${formatListing(selected)}`;
+}
+
 /** The change's verdict against the fresh read: the tickers now on the watchlist, or the reason to stop. */
 function verifyAgainst(
     state: PlanState,
@@ -468,7 +526,11 @@ function verifyAgainst(
 ): Outcome<string[]> {
     const after = read.items.map(tickerOf);
     const verdict = verifyChange(state.current, after, change);
-    return verdict.ok ? { ok: true, value: after } : { ok: false, output: stop(verdict.reason) };
+    if (!verdict.ok) {
+        return { ok: false, output: stop(verdict.reason) };
+    }
+    const wrong = change.kind === "add" ? wrongListing(state, change, read) : null;
+    return wrong === null ? { ok: true, value: after } : { ok: false, output: stop(wrong) };
 }
 
 const verifyStep = (ctx: StepContext): StepOutput => {
@@ -494,6 +556,7 @@ const verifyStep = (ctx: StepContext): StepOutput => {
     state.pending = state.pending.slice(1);
     state.done = [...state.done, change];
     state.current = after.value;
+    state.rowPaths = read.items.map(pathOf);
     state.lastCapture = path;
     state.selected = null;
     savePlan(scope, state);

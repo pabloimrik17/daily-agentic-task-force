@@ -1,5 +1,6 @@
 // Watchlist parser (design D9). The title must be the configured watchlist's
-// name, so no other watchlist is ever planned against. Per row the exact
+// name, so no other watchlist is ever planned against, and the rows must
+// number as many as the page's own `N/M` counter. Per row the exact
 // listing is the embedded `uniqueSymbol`, else the link slug; a Nasdaq slug
 // has no tier, so its exchange is `Nasdaq` and matches any Nasdaq tier.
 
@@ -67,9 +68,10 @@ export function parseWatchlist(
             }
             items.push(item.value);
         }
-        return {
-            ok: true,
-            value: { title, items, count: Number(counter[1]), capacity: Number(counter[2]) },
-        };
+        const count = Number(counter[1]);
+        if (items.length !== count) {
+            return unreadable(`watchlist shows ${count} stocks but ${items.length} rows were read`);
+        }
+        return { ok: true, value: { title, items, count, capacity: Number(counter[2]) } };
     });
 }

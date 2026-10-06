@@ -24,7 +24,9 @@ const REPORT = { plugin: "stonks", key: "report" } as const;
 const COLLAPSED = { plugin: "stonks", key: "collapsed" } as const;
 const TICKS = { plugin: "stonks", key: "ticks" } as const;
 
-const STEP = /stonks\/src\/cli\.ts"?\s+(?:phase1|sigue|watchlist-final)\b/;
+// The plugin root is `…/plugins/stonks` under `--plugin-dir`, and
+// `…/cache/<marketplace>/stonks/<version>` once installed from a marketplace.
+const STEP = /stonks\/(?:[^/\s"]+\/)?src\/cli\.ts"?\s+(?:phase1|sigue|watchlist-final)\b/;
 const PATH_LINE = /^stonks-report-path: (.+)$/m;
 const REPORT_SCHEMA = "stonks.report.v1";
 
@@ -94,14 +96,18 @@ function sidesText(f: PaneFinding): string {
         .join("; ");
 }
 
+/** B4 and B5 can raise one finding per entry or order of a ticker; each later one gets its ordinal. */
 function checklistItems(r: PaneReport): { key: string; label: string }[] {
     const affected = [...r.alerts, ...r.sections.flatMap((s) => s.findings)].filter(
         (f) => f.affectsWatchlist,
     );
-    return affected.map((f) => ({
-        key: `${f.check}:${f.ticker}`,
-        label: `${f.check} ${f.ticker}`,
-    }));
+    const seen = new Map<string, number>();
+    return affected.map((f) => {
+        const key = `${f.check}:${f.ticker}`;
+        const nth = (seen.get(key) ?? 0) + 1;
+        seen.set(key, nth);
+        return { key: nth === 1 ? key : `${key}:${nth}`, label: `${f.check} ${f.ticker}` };
+    });
 }
 
 type Ui = ReturnType<EngineInterface["ui"]["resolve"]>;

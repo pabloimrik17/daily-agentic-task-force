@@ -301,6 +301,43 @@ test("a missing or invalid report.json points at the markdown", async ($, on) =>
     await ui.unmount();
 });
 
+test("a step of the copy installed from the marketplace loads the report too", async ($, on) => {
+    const w = world(on, {
+        files: { [REPORT_PATH]: JSON.stringify(REPORT) },
+        stdout: named(REPORT_PATH),
+    });
+    await $.tool.call({
+        tool: "Bash",
+        command: 'bun "/home/u/.claude/plugins/cache/datf/stonks/0.1.0/src/cli.ts" phase1',
+    });
+    expect(w.store.snapshot).toEqual(REPORT.snapshot);
+});
+
+test("two findings of one check and ticker tick apart", async ($, on) => {
+    const b4 = {
+        check: "B4",
+        ticker: "WNYE",
+        sides: { "tracking-sheet": "Comprar 1 at 10", ibkr: "no buy order" },
+        severity: "discrepancy",
+        affectsWatchlist: true,
+        repeat: 1,
+    };
+    const report = {
+        ...REPORT,
+        sections: REPORT.sections.map((s) =>
+            s.mirror === "tracking-sheet" ? { ...s, findings: [b4, b4] } : s,
+        ),
+    };
+    world(on, { files: { [REPORT_PATH]: JSON.stringify(report) }, stdout: named(REPORT_PATH) });
+    await $.tool.call({ tool: "Bash", command: step("phase1") });
+    const ui = await $.ui.mount(MOUNT);
+
+    await ui.press({ key: "tick:B4:WNYE:2" });
+    expect((await ui.find({ key: "tick:B4:WNYE" }))?.text).toContain("[ ] B4 WNYE");
+    expect((await ui.find({ key: "tick:B4:WNYE:2" }))?.text).toContain("[x] B4 WNYE");
+    await ui.unmount();
+});
+
 test("a step the pane does not follow leaves it alone", async ($, on) => {
     const w = world(on, {
         files: { [REPORT_PATH]: JSON.stringify(REPORT) },

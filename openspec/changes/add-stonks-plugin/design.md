@@ -238,7 +238,7 @@ The collector returns:
 - the counter `N/M`;
 - per row, the stock link and any embedded `uniqueSymbol`.
 
-The engine prefers `uniqueSymbol`, for example `NasdaqGS:HOOL`. Otherwise it derives the listing from the link slug. A Nasdaq slug carries no tier, so it matches any Nasdaq tier. The title must equal the configured watchlist name.
+The engine prefers `uniqueSymbol`, for example `NasdaqGS:HOOL`. Otherwise it derives the listing from the link slug. A Nasdaq slug carries no tier, so it matches any Nasdaq tier. The title must equal the configured watchlist name, and the rows must number `N`, as the SWS portfolio's links must match its counter (D8).
 
 **Rejected alternative: making the watchlist public** and reading the server-rendered page with a plain `fetch`. That would be deterministic and need no browser. But a public watchlist enters Simply Wall St's public Watchlist Directory, and this one would republish the Trader's paid signals: the Roger tickers.
 
@@ -289,7 +289,7 @@ The Cowork recipes become rules in `commands/sync.md`:
 3. **Search.** Claude opens the repositioned "Add stock" panel, which the action leaves focused, and types the term. An action expands "+ N listings" where shown.
 4. **Read the results.** The dropdown collector returns every row with its index, label and exchange-qualified symbol.
 5. **Select.** The engine selects the row whose symbol equals the target, and only that row. Zero matching rows, or more than one, makes the ticker unresolved: it is not added, and the user is asked for the listing.
-6. **Click and verify.** An action clicks the selected row by index. A fresh read verifies the change: it must differ from the previous read by exactly that ticker, which also catches a wrong listing. The engine then learns the listing. Simply Wall St's confirmations name no ticker, and an addition shows none at all (D10, task 12.2), so no confirmation is read.
+6. **Click and verify.** An action clicks the selected row by index, and refuses, clicking nothing, when that row no longer shows the selected `EXCHANGE:TICKER`. The removal's row action likewise refuses a row whose link differs from the one the last read showed, so a page that changed between the read and the click stops the run instead of acting on another row. The dropdown read must be newer than the last watchlist read and than the one an earlier resolve used. A fresh read verifies the change: it must differ from the previous read by exactly that ticker, and the added row must carry the selected listing, so another listing of the same ticker stops the run. The engine then learns the listing. Simply Wall St's confirmations name no ticker, and an addition shows none at all (D10, task 12.2), so no confirmation is read.
 
 **Rejected alternatives:**
 
