@@ -5,6 +5,7 @@
 import { actionSource, collectorSource, type SourceResult } from "../browser/index.ts";
 import { openRun } from "./shared.ts";
 import { type Step, type StepOutput, type StepTable, UsageError } from "./types.ts";
+import { rowMenuRefusal } from "./watchlist.ts";
 
 const HOW =
     "Pass this source to `javascript_tool` unchanged, on its own, never inside `browser_batch`.";
@@ -40,7 +41,11 @@ const action: Step = (ctx, args) => {
     if (!opened.ok) {
         return Promise.resolve(opened.output);
     }
-    return Promise.resolve(printed(actionSource(name, opened.scope.run.runId, rest)));
+    const source = actionSource(name, opened.scope.run.runId, rest);
+    // A malformed row stays a usage error; a well-formed one must be the planned removal's.
+    const refused =
+        source.ok && name === "watchlist-row-menu" ? rowMenuRefusal(opened.scope, rest) : null;
+    return Promise.resolve(refused ?? printed(source));
 };
 
 export const browserSteps: StepTable = {

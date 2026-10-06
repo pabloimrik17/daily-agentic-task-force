@@ -232,13 +232,22 @@ const code = (text: string): string => `\`${text}\``;
 
 const STOP_ON_REFUSAL = `An action that answers ${code("done: false")} is a stop: relay its reason and run ${code("end")}.`;
 
+/** A removal's row in the plan's last read: its index and the link path the row menu checks. */
+function removalRow(state: PlanState, ticker: string): { index: number; path: string } {
+    const index = state.current.indexOf(normaliseTicker(ticker));
+    return { index, path: state.rowPaths[index] ?? "" };
+}
+
+const rowMenu = (row: { index: number; path: string }): string =>
+    `action watchlist-row-menu ${row.index} ${row.path}`;
+
 /** The numbered browser steps and the engine step to run for the next change, or the final read. */
 function nextSteps(directive: Directive, state: PlanState): string {
     if (directive.kind === "remove") {
-        const index = state.current.indexOf(normaliseTicker(directive.ticker));
+        const row = removalRow(state, directive.ticker);
         return [
-            `Next: remove ${directive.ticker} (row ${index}). Run, in order:`,
-            `1. ${code(`action watchlist-row-menu ${index} ${state.rowPaths[index] ?? ""}`)}`,
+            `Next: remove ${directive.ticker} (row ${row.index}). Run, in order:`,
+            `1. ${code(rowMenu(row))}`,
             `2. ${code("action remove-from-menu")}`,
             `3. ${code("collector watchlist")}`,
             `4. ${code("watchlist-verify")}`,
@@ -259,6 +268,31 @@ function next(state: PlanState, lead: string[]): StepOutput {
         markdown: [...lead, "", nextSteps(directive, state)].join("\n"),
         directive,
     };
+}
+
+/**
+ * The stop for `action watchlist-row-menu <index> <path>`, or null when the
+ * arguments are exactly the row `nextSteps` printed for the plan's next change,
+ * a removal. The menu holds "Remove", so it opens for no other row, a keeper's
+ * least of all, not even to diagnose the page (spec stonks-watchlist).
+ */
+export function rowMenuRefusal(scope: RunScope, args: readonly string[]): StepOutput | null {
+    const loaded = loadPlan(scope, "action watchlist-row-menu");
+    if (!loaded.ok) {
+        return loaded.output;
+    }
+    const [first] = loaded.value.pending;
+    if (first?.kind !== "remove") {
+        return stop("no removal is pending; a row menu opens only for the plan's next removal");
+    }
+    const row = removalRow(loaded.value, first.ticker);
+    const [index, path] = args;
+    return args.length === 2 && index === String(row.index) && path === row.path
+        ? null
+        : stop(
+              `the plan's next removal is ${first.ticker} at row ${row.index}; ` +
+                  `a row menu opens only through ${code(rowMenu(row))}`,
+          );
 }
 
 const list = (items: string[]): string => (items.length === 0 ? "none" : items.join(", "));
@@ -392,7 +426,7 @@ const searchStep = (ctx: StepContext, args: readonly string[]): StepOutput => {
             "",
             `Target: ${wanted.kind === "known" ? formatListing(wanted.listing) : `${ticker} on a US primary exchange`}`,
             term === null
-                ? `Search term: no name known; choose a search term for ${ticker} yourself (a hint only).`
+                ? `Search term: no name known; search Simply Wall St by ${ticker}'s company name (a hint only; the engine selects the exact listing).`
                 : `Search term: ${term} (a hint only)`,
             "",
             "Run, in order:",
@@ -626,12 +660,26 @@ function resultLinks(
     });
 }
 
+/** The step that starts a pending change, the first one `nextSteps` prints for it. */
+const startOf = (state: PlanState, change: ChangeDirective): string =>
+    change.kind === "remove"
+        ? rowMenu(removalRow(state, change.ticker))
+        : `watchlist-search ${change.ticker}`;
+
 const finalStep = (ctx: StepContext): StepOutput => {
     const opened = openPlan(ctx, "watchlist-final");
     if (!opened.ok) {
         return opened.output;
     }
     const { scope, state } = opened.value;
+    // The result reports the plan's changes as made, so every one must be verified first.
+    const [pending] = state.pending;
+    if (pending !== undefined) {
+        return stop(
+            `the plan's next change, ${pending.kind} ${pending.ticker}, is not verified; ` +
+                `run ${code(startOf(state, pending))} and the steps after it before watchlist-final`,
+        );
+    }
     const fresh = freshWatchlist(scope, state, "watchlist-final");
     if (!fresh.ok) {
         return fresh.output;

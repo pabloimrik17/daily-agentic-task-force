@@ -17,6 +17,7 @@ import {
 } from "../state.ts";
 import type { RunnerResult } from "../inputs/sheet-gws.ts";
 import type { RunMode } from "../domain.ts";
+import { browserSteps } from "./browser.ts";
 import { type StepContext, UsageError } from "./types.ts";
 import { watchlistSteps } from "./watchlist.ts";
 
@@ -130,7 +131,7 @@ const action = (kind: string): Record<string, unknown> => ({
 });
 
 const call = (ctx: StepContext, step: string, ...args: string[]) => {
-    const entry = watchlistSteps[step];
+    const entry = watchlistSteps[step] ?? browserSteps[step];
     if (entry === undefined) {
         throw new Error(`no step ${step}`);
     }
@@ -317,11 +318,12 @@ describe("watchlist-search", () => {
         expect(out.markdown).toContain("Search term: Strike Metals");
     });
 
-    it("tells Claude to choose the term when no name is known", async () => {
+    it("tells Claude to search by the company's name when no name is known", async () => {
         const ctx = open();
         const out = await call(ctx, "watchlist-search", "ZORGX");
         expect(out.markdown).toContain(
-            "no name known; choose a search term for ZORGX yourself (a hint only)",
+            "Search term: no name known; search Simply Wall St by ZORGX's company name " +
+                "(a hint only; the engine selects the exact listing).",
         );
         expect(out.directive).toEqual({ kind: "add", ticker: "ZORGX" });
     });
@@ -535,6 +537,100 @@ describe("watchlist-verify", () => {
     });
 });
 
+/** A change applied in the page: a fresh read showing `after`, then `watchlist-verify`. */
+async function verified(ctx: StepContext, after: string[]) {
+    capture("watchlist", watchlist(after));
+    return call(ctx, "watchlist-verify");
+}
+
+const PATH = {
+    ACME: ROWS.ACME?.href ?? "",
+    HOOL: ROWS.HOOL?.href ?? "",
+    CRUX: ROWS.CRUX?.href ?? "",
+    GLBX: ROWS.GLBX?.href ?? "",
+};
+
+const ACME_REFUSAL =
+    "the plan's next removal is ACME at row 0; a row menu opens only through " +
+    `\`action watchlist-row-menu 0 ${PATH.ACME}\``;
+
+describe("action watchlist-row-menu", () => {
+    it("prints the planned removal's row, again on a retry", async () => {
+        const ctx = open();
+        await planAdditions(ctx, ["ACME", "HOOL", "CRUX", "GLBX"]);
+        for (const attempt of [1, 2]) {
+            const out = await call(ctx, "action", "watchlist-row-menu", "0", PATH.ACME);
+            expect(out.directive, `attempt ${attempt}`).toEqual({ kind: "done" });
+            expect(out.markdown).toContain("watchlist-row-menu.v1");
+            expect(out.markdown).toContain(JSON.stringify(PATH.ACME));
+        }
+    });
+
+    it("refuses another row's index or path, and a later removal's row", async () => {
+        const ctx = open();
+        await planAdditions(ctx, ["ACME", "HOOL", "CRUX", "GLBX"]);
+        for (const row of [
+            ["1", PATH.ACME],
+            ["0", PATH.CRUX],
+            ["2", PATH.CRUX],
+        ]) {
+            const out = await call(ctx, "action", "watchlist-row-menu", ...row);
+            expect(isStop(out.directive)).toBe(ACME_REFUSAL);
+            expect(out.markdown).not.toContain("```js");
+        }
+    });
+
+    it("refuses a keeper's row while diagnosing a failing removal", async () => {
+        const ctx = open();
+        await planAdditions(ctx, ["ACME", "HOOL", "CRUX", "GLBX"]);
+        await call(ctx, "action", "watchlist-row-menu", "0", PATH.ACME);
+        capture("remove-from-menu", { ...action("remove-from-menu"), data: { done: false } });
+        // HOOL and GLBX are desired.
+        for (const row of [
+            ["1", PATH.HOOL],
+            ["3", PATH.GLBX],
+        ]) {
+            const out = await call(ctx, "action", "watchlist-row-menu", ...row);
+            expect(isStop(out.directive)).toBe(ACME_REFUSAL);
+            expect(out.markdown).not.toContain("```js");
+        }
+    });
+
+    it("follows the plan to the next removal once one is verified", async () => {
+        const ctx = open();
+        await planAdditions(ctx, ["ACME", "HOOL", "CRUX", "GLBX"]);
+        await verified(ctx, ["HOOL", "CRUX", "GLBX"]);
+        const next = await call(ctx, "action", "watchlist-row-menu", "1", PATH.CRUX);
+        expect(next.directive).toEqual({ kind: "done" });
+        const done = await call(ctx, "action", "watchlist-row-menu", "0", PATH.ACME);
+        expect(isStop(done.directive)).toContain("the plan's next removal is CRUX at row 1");
+    });
+
+    it("refuses without a plan", async () => {
+        const ctx = open();
+        const out = await call(ctx, "action", "watchlist-row-menu", "0", PATH.ACME);
+        expect(isStop(out.directive)).toBe(
+            "no watchlist plan in this run; run `watchlist-plan` before action watchlist-row-menu",
+        );
+    });
+
+    it("refuses while the next change is an addition", async () => {
+        const ctx = open();
+        await planAdditions(ctx, ["GLBX", "HOOL"]);
+        const out = await call(ctx, "action", "watchlist-row-menu", "0", PATH.GLBX);
+        expect(isStop(out.directive)).toBe(
+            "no removal is pending; a row menu opens only for the plan's next removal",
+        );
+        expect(out.markdown).not.toContain("```js");
+    });
+
+    it("keeps a malformed row a usage error", async () => {
+        const ctx = open();
+        await planAdditions(ctx, ["ACME", "HOOL", "CRUX", "GLBX"]);
+        expect(() => call(ctx, "action", "watchlist-row-menu", "0")).toThrow(UsageError);
+    });
+});
+
 const reportWith = (watchlistResult: Report["watchlist"]): Report => ({
     schema: REPORT_SCHEMA,
     runId,
@@ -565,6 +661,13 @@ describe("watchlist-final", () => {
     it("merges the result into the report and prints its path", async () => {
         const ctx = open();
         await planAdditions(ctx, ["ACME", "HOOL", "CRUX", "GLBX"]);
+        await verified(ctx, ["HOOL", "CRUX", "GLBX"]);
+        await verified(ctx, ["HOOL", "GLBX"]);
+        capture("dropdown", STRK_DROPDOWN);
+        await call(ctx, "watchlist-resolve", "STRK");
+        expect((await verified(ctx, ["HOOL", "GLBX", "STRK"])).directive).toEqual({
+            kind: "done",
+        });
         writePrivate(reportPath(stateDir, runId), JSON.stringify(reportWith(null)));
         capture("watchlist", watchlist(["GLBX", "HOOL", "STRK"]));
         const out = await call(ctx, "watchlist-final");
@@ -607,13 +710,42 @@ describe("watchlist-final", () => {
         expect(existsSync(reportPath(stateDir, runId))).toBe(false);
     });
 
-    it("names the incomplete tickers on a mismatch", async () => {
+    it("stops naming the next pending change and the step that starts it", async () => {
         const ctx = open();
         await planAdditions(ctx, ["ACME", "HOOL", "CRUX", "GLBX"]);
         capture("watchlist", watchlist(["GLBX", "HOOL", "ACME"]));
         const out = await call(ctx, "watchlist-final");
+        expect(isStop(out.directive)).toBe(
+            "the plan's next change, remove ACME, is not verified; run " +
+                `\`action watchlist-row-menu 0 ${PATH.ACME}\` and the steps after it before watchlist-final`,
+        );
+        expect(out.markdown).not.toContain("stonks-report-path");
+        const report = JSON.parse(readFileSync(reportPath(stateDir, runId), "utf8")) as Report;
+        expect(report.watchlist).toBeNull();
+    });
+
+    it("stops on a pending addition, naming its search", async () => {
+        const ctx = open();
+        await planAdditions(ctx, ["GLBX", "HOOL"]);
+        capture("watchlist", watchlist(["GLBX", "HOOL"]));
+        const out = await call(ctx, "watchlist-final");
+        expect(isStop(out.directive)).toBe(
+            "the plan's next change, add STRK, is not verified; run `watchlist-search STRK` " +
+                "and the steps after it before watchlist-final",
+        );
+    });
+
+    it("names the incomplete tickers on a mismatch after the last verify", async () => {
+        const ctx = open();
+        await planAdditions(ctx, ["ACME", "GLBX", "HOOL", "STRK"]);
+        await verified(ctx, ["GLBX", "HOOL", "STRK"]);
+        capture("watchlist", watchlist(["GLBX", "HOOL", "CRUX"]));
+        const out = await call(ctx, "watchlist-final");
+        expect(out.markdown).toContain(
+            "- Removed: [ACME](https://simplywall.st/stocks/us/software/nyse-acme/acme-corp)",
+        );
         expect(out.markdown).toMatch(
-            /- Incomplete: missing \[STRK\]\([^)]+\); unexpected \[ACME\]\([^)]+\)/,
+            /- Incomplete: missing \[STRK\]\([^)]+\); unexpected \[CRUX\]\([^)]+\)/,
         );
         expect(out.directive).toEqual({ kind: "done" });
     });
