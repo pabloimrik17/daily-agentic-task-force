@@ -1,0 +1,32 @@
+{
+    "stonks": "watchlist.v1",
+    "run": "run-fixture-1",
+    "url": "https://simplywall.st/watchlist",
+    "loginWall": false,
+    "data": {
+        "counter": "4/50 stocks",
+        "rows": [
+            {
+                "href": "/stocks/us/software/nyse-acme/acme-corp",
+                "text": "ACME",
+                "uniqueSymbol": null
+            },
+            {
+                "href": "/stocks/us/tech/nasdaq-hool/hoolihan-systems",
+                "text": "HOOL",
+                "uniqueSymbol": null
+            },
+            {
+                "href": "/stocks/us/healthcare/nasdaq-crux/cruxwell",
+                "text": "CRUX",
+                "uniqueSymbol": null
+            },
+            {
+                "href": "/stocks/us/energy/nyse-glbx/globex-energy",
+                "text": "GLBX",
+                "uniqueSymbol": null
+            }
+        ],
+        "title": "Trader Picks"
+    }
+}

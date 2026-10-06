@@ -1,0 +1,15 @@
+{
+    "schema": "stonks.ibkr-screenshots.v1",
+    "positions": [
+        [
+            { "ticker": "HOOL", "quantity": 8 },
+            { "ticker": "ACME", "quantity": 2.5 }
+        ],
+        [
+            { "ticker": "INIT", "quantity": 4 },
+            { "ticker": "ETFX", "quantity": 14 }
+        ]
+    ],
+    "orders": null,
+    "noActiveOrders": true
+}

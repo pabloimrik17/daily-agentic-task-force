@@ -1,0 +1,8 @@
+{
+    "session_id": "00000000-0000-4000-8000-000000000001",
+    "hook_event_name": "PostToolUse",
+    "tool_name": "mcp__claude-in-chrome__javascript_tool",
+    "tool_input": { "action": "javascript_exec", "text": "6 * 7" },
+    "tool_response": "42",
+    "tool_use_id": "toolu_01EXAMPLE"
+}

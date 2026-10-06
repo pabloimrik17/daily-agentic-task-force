@@ -1,0 +1,11 @@
+{
+    "fixture_kind": "synthetic_partial_order",
+    "raw_fragment": {
+        "order_type": "<trailing-order-type>",
+        "secondary_description": "Trailing 6.40, stop 142.60"
+    },
+    "expected": {
+        "trailing_unit": "unknown",
+        "trailing_percent": null
+    }
+}

@@ -1,0 +1,98 @@
+{
+    "stonks": "cartera-viva.v1",
+    "run": "run-fixture-1",
+    "url": "https://example-trader.test/cartera",
+    "loginWall": false,
+    "data": {
+        "cards": [
+            {
+                "texts": [
+                    "HOOL",
+                    "Tecnología",
+                    "Hoolihan Systems Inc.",
+                    "120 días",
+                    "PM",
+                    "98,40",
+                    "ACTUAL",
+                    "121,30",
+                    "OBJETIVO",
+                    "139,00",
+                    "+23,27%",
+                    "PESO 2,50%",
+                    "CARRERA AL OBJETIVO",
+                    "56%",
+                    "Ver análisis en Telegram",
+                    "En carrera",
+                    "Trailing 15%"
+                ]
+            },
+            {
+                "texts": [
+                    "ACME",
+                    "Industrial",
+                    "ACME CORP",
+                    "240 días",
+                    "PM",
+                    "1.234,56",
+                    "ACTUAL",
+                    "1.310,20",
+                    "OBJETIVO",
+                    "1.598,00",
+                    "+6,13%",
+                    "PESO 2,50%",
+                    "CARRERA AL OBJETIVO",
+                    "21%",
+                    "Ver análisis en Telegram",
+                    "En carrera",
+                    "Trailing 8,5%"
+                ]
+            },
+            {
+                "texts": [
+                    "STRK",
+                    "Materiales",
+                    "Strike Metals",
+                    "33 días",
+                    "PM",
+                    "12,50",
+                    "ACTUAL",
+                    "12,80",
+                    "OBJETIVO",
+                    "19,00",
+                    "+2,40%",
+                    "PESO 2,50%",
+                    "CARRERA AL OBJETIVO",
+                    "4%",
+                    "Ver análisis en Telegram",
+                    "En carrera",
+                    "Trailing sin activar"
+                ]
+            },
+            {
+                "texts": [
+                    "INIT",
+                    "Consumo",
+                    "Initech Holdings, Inc.",
+                    "19 días",
+                    "PM",
+                    "47,10",
+                    "ACTUAL",
+                    "45,21",
+                    "OBJETIVO",
+                    "59,00",
+                    "−4,01%",
+                    "PESO 2,50%",
+                    "BAJO PRECIO DE ENTRADA",
+                    "—",
+                    "Ver análisis en Telegram",
+                    "Bajo el agua",
+                    "Trailing sin activar"
+                ]
+            }
+        ],
+        "counter": "4 posiciones",
+        "heading": "Posiciones abiertas",
+        "loading": false,
+        "title": "Cartera Viva"
+    }
+}

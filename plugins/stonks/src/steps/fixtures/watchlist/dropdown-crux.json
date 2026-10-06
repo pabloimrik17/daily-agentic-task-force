@@ -1,0 +1,20 @@
+{
+    "stonks": "dropdown.v1",
+    "run": "run-fixture-1",
+    "url": "https://simplywall.st/watchlists/fixture",
+    "loginWall": false,
+    "data": {
+        "rows": [
+            {
+                "index": 0,
+                "label": "Cruxwell",
+                "symbol": "NasdaqGS:CRUX"
+            },
+            {
+                "index": 1,
+                "label": "Crux Trust",
+                "symbol": null
+            }
+        ]
+    }
+}

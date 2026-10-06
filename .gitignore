@@ -6,3 +6,5 @@ node_modules/
 .claude/settings.local.json
 coverage/
 plugins/autonomous/evals/results/
+# Claude Code writes a plugin's mod API types beside its manifest on load
+plugins/*/.claude-plugin/types/

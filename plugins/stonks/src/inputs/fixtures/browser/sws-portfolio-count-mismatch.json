@@ -1,0 +1,32 @@
+{
+    "stonks": "sws-portfolio.v1",
+    "run": "run-fixture-1",
+    "url": "https://simplywall.st/portfolio/11111111-2222-4333-8444-555555555555",
+    "loginWall": false,
+    "data": {
+        "count": 6,
+        "links": [
+            {
+                "href": "/stocks/us/software/nyse-acme/acme-corp",
+                "text": "ACME"
+            },
+            {
+                "href": "/stocks/us/tech/nasdaq-hool/hoolihan-systems",
+                "text": "HOOL"
+            },
+            {
+                "href": "/stocks/us/healthcare/nasdaq-crux/cruxwell",
+                "text": "CRUX"
+            },
+            {
+                "href": "/stocks/us/energy/nyse-glbx/globex-energy",
+                "text": "GLBX"
+            },
+            {
+                "href": "/stocks/gb/diversified-financials/lse-ffix/fixture-funds-world-ucits-etf-shares",
+                "text": "FFIX"
+            }
+        ],
+        "path": "/portfolio/11111111-2222-4333-8444-555555555555"
+    }
+}

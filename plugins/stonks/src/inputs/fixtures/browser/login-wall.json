@@ -1,0 +1,13 @@
+{
+    "stonks": "cartera-viva.v1",
+    "run": "run-fixture-1",
+    "url": "https://example-trader.test/login?redirect=%2Fcartera",
+    "loginWall": true,
+    "data": {
+        "cards": [],
+        "counter": null,
+        "heading": null,
+        "loading": false,
+        "title": "Introduce tu código de acceso"
+    }
+}

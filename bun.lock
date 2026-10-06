@@ -27,11 +27,15 @@
     },
     "plugins/autonomous": {
       "name": "@daily-agentic-task-force/plugin-autonomous",
-      "version": "1.1.0",
+      "version": "1.2.0",
     },
     "plugins/datf-lab": {
       "name": "@daily-agentic-task-force/plugin-datf-lab",
       "version": "0.2.1",
+    },
+    "plugins/stonks": {
+      "name": "@daily-agentic-task-force/plugin-stonks",
+      "version": "0.0.0",
     },
   },
   "packages": {
@@ -80,6 +84,8 @@
     "@daily-agentic-task-force/plugin-autonomous": ["@daily-agentic-task-force/plugin-autonomous@workspace:plugins/autonomous"],
 
     "@daily-agentic-task-force/plugin-datf-lab": ["@daily-agentic-task-force/plugin-datf-lab@workspace:plugins/datf-lab"],
+
+    "@daily-agentic-task-force/plugin-stonks": ["@daily-agentic-task-force/plugin-stonks@workspace:plugins/stonks"],
 
     "@emnapi/core": ["@emnapi/core@1.11.1", "", { "dependencies": { "@emnapi/wasi-threads": "1.2.2", "tslib": "^2.4.0" } }, "sha512-RSvbQmHzdKzNsLYa/wHrbc3KN4sYLKAdPZxqiM2HATqv/SBk2/ENSHpvXGaLOMcsAyz0poEGqkmmKYG3OWiJEQ=="],
 

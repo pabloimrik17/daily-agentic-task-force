@@ -1,0 +1,13 @@
+{
+    "stonks": "cartera-viva.v1",
+    "run": "run-fixture-1",
+    "url": "https://example-trader.test/cartera",
+    "loginWall": false,
+    "data": {
+        "cards": [],
+        "counter": null,
+        "heading": "Posiciones abiertas",
+        "loading": true,
+        "title": "Cartera Viva"
+    }
+}

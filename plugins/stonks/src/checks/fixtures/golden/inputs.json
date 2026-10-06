@@ -1,0 +1,378 @@
+{
+    "sheet": {
+        "entries": [
+            {
+                "row": 2,
+                "ticker": "OSCRP",
+                "estado": "Invertido",
+                "cantidad": 2,
+                "pricePerUnit": 18.4
+            },
+            {
+                "row": 3,
+                "ticker": "ZORGX",
+                "estado": "Vender",
+                "cantidad": 3,
+                "pricePerUnit": 61.2
+            },
+            { "row": 4, "ticker": "DNDRM", "estado": "Roger", "cantidad": 0, "pricePerUnit": 9.75 },
+            {
+                "row": 5,
+                "ticker": "ACME",
+                "estado": "Invertido",
+                "cantidad": 2,
+                "pricePerUnit": 25
+            },
+            { "row": 6, "ticker": "HOOL", "estado": "Comprar", "cantidad": 1, "pricePerUnit": 30 },
+            { "row": 7, "ticker": "STRK", "estado": "Vender", "cantidad": 3, "pricePerUnit": 44.1 },
+            { "row": 8, "ticker": "WNYE", "estado": "Vender", "cantidad": 3, "pricePerUnit": 7.8 },
+            {
+                "row": 9,
+                "ticker": "GLBX",
+                "estado": "Invertido",
+                "cantidad": 1,
+                "pricePerUnit": 102.5
+            },
+            {
+                "row": 10,
+                "ticker": "INIT",
+                "estado": "Invertido",
+                "cantidad": 2,
+                "pricePerUnit": 15
+            },
+            { "row": 11, "ticker": "INIT", "estado": "Vender", "cantidad": 1, "pricePerUnit": 15 },
+            { "row": 12, "ticker": "CYBD", "estado": "Comprar", "cantidad": 1, "pricePerUnit": 42 },
+            {
+                "row": 13,
+                "ticker": "TYRL",
+                "estado": "Invertido",
+                "cantidad": 1,
+                "pricePerUnit": 88
+            },
+            { "row": 14, "ticker": "UMBR", "estado": "Roger", "cantidad": 0, "pricePerUnit": 3.2 },
+            {
+                "row": 15,
+                "ticker": "MOMCP",
+                "estado": "Invertido",
+                "cantidad": 1,
+                "pricePerUnit": 54.3
+            },
+            {
+                "row": 16,
+                "ticker": "HLYSN",
+                "estado": "Comprar",
+                "cantidad": 1,
+                "pricePerUnit": 12.5
+            },
+            {
+                "row": 17,
+                "ticker": "GEKKO",
+                "estado": "Vender",
+                "cantidad": 3,
+                "pricePerUnit": 19.9
+            },
+            {
+                "row": 18,
+                "ticker": "ROXXN",
+                "estado": "Invertido",
+                "cantidad": 2,
+                "pricePerUnit": 36
+            },
+            { "row": 19, "ticker": "SRNSX", "estado": "Vender", "cantidad": 1, "pricePerUnit": 70 },
+            {
+                "row": 20,
+                "ticker": "VRTCX",
+                "estado": "Vender",
+                "cantidad": 2,
+                "pricePerUnit": 11.11
+            },
+            {
+                "row": 21,
+                "ticker": "ENCMX",
+                "estado": "Invertido",
+                "cantidad": 1,
+                "pricePerUnit": 5.55
+            },
+            {
+                "row": 22,
+                "ticker": "WONKA",
+                "estado": "Comprar",
+                "cantidad": 1,
+                "pricePerUnit": 42
+            },
+            {
+                "row": 23,
+                "ticker": "WONKA",
+                "estado": "Comprar",
+                "cantidad": 1,
+                "pricePerUnit": 43
+            },
+            {
+                "row": 24,
+                "ticker": "PIEDP",
+                "estado": "Operativa",
+                "cantidad": 0,
+                "pricePerUnit": 27
+            },
+            {
+                "row": 25,
+                "ticker": "STRN.B",
+                "estado": "Invertido",
+                "cantidad": 0.5,
+                "pricePerUnit": 200
+            },
+            {
+                "row": 26,
+                "ticker": "KRYPT",
+                "estado": "Vender",
+                "cantidad": 3,
+                "pricePerUnit": 8.88
+            }
+        ]
+    },
+    "ibkr": {
+        "provenance": "mcp",
+        "positions": [
+            { "ticker": "OSCRP", "quantity": 2 },
+            { "ticker": "ZORGX", "quantity": 3 },
+            { "ticker": "ACME", "quantity": 2 },
+            { "ticker": "HOOL", "quantity": 2 },
+            { "ticker": "STRK", "quantity": 3 },
+            { "ticker": "GLBX", "quantity": 2 },
+            { "ticker": "INIT", "quantity": 3 },
+            { "ticker": "TYRL", "quantity": 1 },
+            { "ticker": "ETFX", "quantity": 10 },
+            { "ticker": "MOMCP", "quantity": 1 },
+            { "ticker": "GEKKO", "quantity": 3 },
+            { "ticker": "ROXXN", "quantity": 2 },
+            { "ticker": "SRNSX", "quantity": 1 },
+            { "ticker": "VRTCX", "quantity": 2 },
+            { "ticker": "STRN/B", "quantity": 0.5 },
+            { "ticker": "KRYPT", "quantity": 2 }
+        ],
+        "orders": [
+            {
+                "ticker": "ZORGX",
+                "side": "sell",
+                "quantity": 3,
+                "orderType": "trailing-stop",
+                "limitPrice": null,
+                "trailPercent": 15
+            },
+            {
+                "ticker": "ACME",
+                "side": "sell",
+                "quantity": 2,
+                "orderType": "trailing-stop",
+                "limitPrice": null,
+                "trailPercent": 12
+            },
+            {
+                "ticker": "HOOL",
+                "side": "buy",
+                "quantity": 1,
+                "orderType": "limit",
+                "limitPrice": 30,
+                "trailPercent": null
+            },
+            {
+                "ticker": "STRK",
+                "side": "sell",
+                "quantity": 2,
+                "orderType": "trailing-stop",
+                "limitPrice": null,
+                "trailPercent": 10
+            },
+            {
+                "ticker": "INIT",
+                "side": "sell",
+                "quantity": 1,
+                "orderType": "trailing-stop",
+                "limitPrice": null,
+                "trailPercent": 15
+            },
+            {
+                "ticker": "CYBD",
+                "side": "buy",
+                "quantity": 1,
+                "orderType": "limit",
+                "limitPrice": 41.5,
+                "trailPercent": null
+            },
+            {
+                "ticker": "VNDL",
+                "side": "buy",
+                "quantity": 1,
+                "orderType": "limit",
+                "limitPrice": 20,
+                "trailPercent": null
+            },
+            {
+                "ticker": "SRNSX",
+                "side": "sell",
+                "quantity": 1,
+                "orderType": "trailing-stop",
+                "limitPrice": null,
+                "trailPercent": null
+            },
+            {
+                "ticker": "VRTCX",
+                "side": "sell",
+                "quantity": 2,
+                "orderType": "stop",
+                "limitPrice": null,
+                "trailPercent": null
+            },
+            {
+                "ticker": "WONKA",
+                "side": "buy",
+                "quantity": 1,
+                "orderType": "limit",
+                "limitPrice": 41.5,
+                "trailPercent": null
+            },
+            {
+                "ticker": "KRYPT",
+                "side": "sell",
+                "quantity": 2,
+                "orderType": "trailing-stop",
+                "limitPrice": null,
+                "trailPercent": 10
+            }
+        ]
+    },
+    "sws": {
+        "tickers": [
+            "OSCRP",
+            "ZORGX",
+            "ACME",
+            "HOOL",
+            "STRK",
+            "GLBX",
+            "INIT",
+            "TYRL",
+            "GEKKO",
+            "ROXXN",
+            "SRNSX",
+            "VRTCX",
+            "NYSE:STRN.B",
+            "KRYPT",
+            "BLUTH"
+        ],
+        "links": [],
+        "count": 15
+    },
+    "carteraViva": {
+        "cards": [
+            {
+                "ticker": "OSCRP",
+                "averagePrice": 18.1,
+                "trailing": { "activated": false },
+                "name": null
+            },
+            {
+                "ticker": "ZORGX",
+                "averagePrice": 60.4,
+                "trailing": { "activated": true, "percent": 15 },
+                "name": null
+            },
+            {
+                "ticker": "DNDRM",
+                "averagePrice": 9.75,
+                "trailing": { "activated": false },
+                "name": null
+            },
+            {
+                "ticker": "ACME",
+                "averagePrice": 24.6,
+                "trailing": { "activated": false },
+                "name": null
+            },
+            {
+                "ticker": "HOOL",
+                "averagePrice": 29.5,
+                "trailing": { "activated": false },
+                "name": null
+            },
+            {
+                "ticker": "CRUX",
+                "averagePrice": 13.3,
+                "trailing": { "activated": false },
+                "name": null
+            },
+            {
+                "ticker": "GLBX",
+                "averagePrice": 101,
+                "trailing": { "activated": false },
+                "name": null
+            },
+            {
+                "ticker": "INIT",
+                "averagePrice": 14.8,
+                "trailing": { "activated": true, "percent": 10 },
+                "name": null
+            },
+            {
+                "ticker": "MOMCP",
+                "averagePrice": 53.9,
+                "trailing": { "activated": false },
+                "name": null
+            },
+            {
+                "ticker": "HLYSN",
+                "averagePrice": 12.2,
+                "trailing": { "activated": false },
+                "name": null
+            },
+            {
+                "ticker": "GEKKO",
+                "averagePrice": 19.5,
+                "trailing": { "activated": true, "percent": 10 },
+                "name": null
+            },
+            {
+                "ticker": "ROXXN",
+                "averagePrice": 35.2,
+                "trailing": { "activated": true, "percent": 12 },
+                "name": null
+            },
+            {
+                "ticker": "SRNSX",
+                "averagePrice": 69,
+                "trailing": { "activated": true, "percent": 10 },
+                "name": null
+            },
+            {
+                "ticker": "VRTCX",
+                "averagePrice": 11,
+                "trailing": { "activated": true, "percent": 8 },
+                "name": null
+            },
+            {
+                "ticker": "ENCMX",
+                "averagePrice": 5.4,
+                "trailing": { "activated": false },
+                "name": null
+            },
+            {
+                "ticker": "WONKA",
+                "averagePrice": 41.9,
+                "trailing": { "activated": false },
+                "name": null
+            },
+            {
+                "ticker": "PIEDP",
+                "averagePrice": 26.5,
+                "trailing": { "activated": false },
+                "name": null
+            },
+            {
+                "ticker": "STRN.B",
+                "averagePrice": 198,
+                "trailing": { "activated": false },
+                "name": null
+            }
+        ]
+    },
+    "excludedTickers": ["ETFX"]
+}

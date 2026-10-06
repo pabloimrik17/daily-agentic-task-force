@@ -1,0 +1,11 @@
+{
+    "stonks": "watchlist.v1",
+    "run": "run-fixture-1",
+    "url": "https://simplywall.st/welcome?r=%2Fwatchlist",
+    "loginWall": true,
+    "data": {
+        "counter": null,
+        "rows": [],
+        "title": "Continue to your Portfolio Command Center"
+    }
+}

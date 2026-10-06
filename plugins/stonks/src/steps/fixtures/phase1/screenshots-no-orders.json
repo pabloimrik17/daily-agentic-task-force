@@ -1,0 +1,10 @@
+{
+    "schema": "stonks.ibkr-screenshots.v1",
+    "positions": [
+        [
+            { "ticker": "HOOL", "quantity": 8 },
+            { "ticker": "ACME", "quantity": 2.5 }
+        ]
+    ],
+    "orders": null
+}

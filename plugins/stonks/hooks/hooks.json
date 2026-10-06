@@ -1,0 +1,17 @@
+{
+    "modules": ["../mod/register.ts"],
+    "hooks": {
+        "PostToolUse": [
+            {
+                "matcher": "mcp__ibkr__get_account_positions|mcp__ibkr__get_account_orders|mcp__claude-in-chrome__javascript_tool|mcp__Claude_in_Chrome__javascript_tool",
+                "hooks": [
+                    {
+                        "type": "command",
+                        "command": "bun \"${CLAUDE_PLUGIN_ROOT}/src/capture.ts\"",
+                        "timeout": 10
+                    }
+                ]
+            }
+        ]
+    }
+}

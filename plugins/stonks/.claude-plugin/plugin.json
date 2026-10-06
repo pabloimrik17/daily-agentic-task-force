@@ -1,0 +1,20 @@
+{
+    "name": "stonks",
+    "version": "0.0.0",
+    "description": "Swing-trading bookkeeping: reconciles the user's mirrors against IBKR and keeps the Simply Wall St watchlist in step with the tracking sheet, with code making every decision",
+    "author": {
+        "name": "Pablo F.G.",
+        "email": "pabloimrik17@users.noreply.github.com"
+    },
+    "license": "MIT",
+    "repository": "https://github.com/pabloimrik17/daily-agentic-task-force",
+    "homepage": "https://github.com/pabloimrik17/daily-agentic-task-force/tree/main/plugins/stonks",
+    "keywords": [
+        "stonks",
+        "ibkr",
+        "simply-wall-st",
+        "watchlist",
+        "reconciliation"
+    ],
+    "types": "./mod/types/stonks-state.d.ts"
+}

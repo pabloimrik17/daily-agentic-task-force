@@ -1,0 +1,30 @@
+{
+    "stonks": "dropdown.v1",
+    "run": "run-fixture-1",
+    "url": "https://simplywall.st/watchlist",
+    "loginWall": false,
+    "data": {
+        "rows": [
+            {
+                "index": 0,
+                "label": "Hoo Holdings",
+                "symbol": "NYSE:HOO"
+            },
+            {
+                "index": 1,
+                "label": "Hoolihan A Ltd",
+                "symbol": "LSE:HOOLA"
+            },
+            {
+                "index": 2,
+                "label": "Hoolihan Systems",
+                "symbol": "NasdaqGS:HOOL"
+            },
+            {
+                "index": 3,
+                "label": "Hoolihan (HOOL) Yield Shares ETF",
+                "symbol": "NEOE:HOOY"
+            }
+        ]
+    }
+}

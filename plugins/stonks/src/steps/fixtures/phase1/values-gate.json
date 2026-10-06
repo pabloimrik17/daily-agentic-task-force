@@ -1,0 +1,13 @@
+[
+    ["Ticker", "Sector", "Estado", "Cantidad", "$/u"],
+    ["HOOL", "Software ficticio", "Vender", 8, 150],
+    ["ACME", "Industria ficticia", "En espera", "", 44.2],
+    ["STRK", "Materiales ficticios", "Invertido", 1, 60.9],
+    ["STRK", "Materiales ficticios", "Vender", 2, 60.9],
+    ["GLBX", "Energia ficticia", "Invertido", 4, 25.3],
+    ["INIT", "Industria ficticia", "Vender", 4, 47.1],
+    ["CYBD", "Software ficticio", "Comprar", 1, 41.85],
+    ["VNDL", "Consumo ficticio", "Comprar", 6, 18.65],
+    ["WNYE", "Consumo ficticio", "En espera", "", 15.2],
+    ["TYRL", "Energia ficticia", "Roger", 1, 8]
+]

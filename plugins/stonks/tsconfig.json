@@ -1,0 +1,11 @@
+{
+    // The repository's options for the engine sources, so that ESLint's
+    // project service sees what `tsc -p tsconfig.json` at the root sees. The
+    // hooks module under `mod/` has a program of its own (`mod/tsconfig.json`),
+    // and `.claude-plugin/types/` is what Claude Code writes on load. The
+    // engine writes this file itself when a plugin with a hooks module has
+    // none, so it is kept under version control (design D17).
+    "extends": "../../tsconfig.json",
+    "include": ["**/*.ts"],
+    "exclude": ["node_modules", ".claude-plugin/types", "mod"]
+}

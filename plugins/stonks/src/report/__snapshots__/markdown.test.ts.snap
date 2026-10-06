@@ -1,0 +1,144 @@
+// Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
+
+exports[`golden dataset > renders the golden report 1`] = `
+"# Stonks · phase 1
+
+Run 20261004T100000Z-abcdef · 2026-10-04T10:00:00Z
+
+IBKR read through the MCP server. IBKR positions: 16 · IBKR active orders: 11 · SWS portfolio tickers: 15 · Cartera Viva tickers: 18
+
+## Alerts
+
+| Check | Ticker | Severity | Sides | Runs |
+| --- | --- | --- | --- | --- |
+| B8 | [GEKKO](https://simplywall.st/search?q=GEKKO) | alert | tracking-sheet: Vender 3; ibkr: no sell order | 1 |
+| B8 | [KRYPT](https://simplywall.st/search?q=KRYPT) | alert | tracking-sheet: Vender 3; ibkr: sell cover 2 | 1 |
+| B8 | [STRK](https://simplywall.st/search?q=STRK) | alert | tracking-sheet: Vender 3; ibkr: sell cover 2 | 1 |
+
+## SWS portfolio
+
+| Check | Ticker | Severity | Sides | Runs |
+| --- | --- | --- | --- | --- |
+| A1 | [ETFX](https://simplywall.st/search?q=ETFX) | discrepancy | ibkr: holds 10; sws-portfolio: not listed | 1 |
+| A1 | [MOMCP](https://simplywall.st/search?q=MOMCP) | discrepancy | ibkr: holds 1; sws-portfolio: not listed | 1 |
+| A2 | [BLUTH](https://simplywall.st/search?q=BLUTH) | discrepancy | ibkr: not held; sws-portfolio: listed | 1 |
+
+## Tracking sheet
+
+| Check | Ticker | Severity | Sides | Runs |
+| --- | --- | --- | --- | --- |
+| B1 ⚑ | [ENCMX](https://simplywall.st/search?q=ENCMX) | discrepancy | tracking-sheet: position 1; ibkr: not held | 1 |
+| B1 ⚑ | [WNYE](https://simplywall.st/search?q=WNYE) | discrepancy | tracking-sheet: position 3; ibkr: not held | 1 |
+| B2 ⚑ | [HOOL](https://simplywall.st/search?q=HOOL) | discrepancy | ibkr: holds 2; tracking-sheet: no Invertido or Vender entry | 1 |
+| B3 | [GLBX](https://simplywall.st/search?q=GLBX) | discrepancy | ibkr: holds 2; tracking-sheet: position 1 | 1 |
+| B3 | [KRYPT](https://simplywall.st/search?q=KRYPT) | discrepancy | ibkr: holds 2; tracking-sheet: position 3 | 1 |
+| B4 ⚑ | [HLYSN](https://simplywall.st/search?q=HLYSN) | discrepancy | tracking-sheet: Comprar 1 at 12.50; ibkr: no buy order | 1 |
+| B4 ⚑ | [WONKA](https://simplywall.st/search?q=WONKA) | discrepancy | tracking-sheet: Comprar 1 at 43.00; ibkr: no buy order | 1 |
+| B5 ⚑ | [VNDL](https://simplywall.st/search?q=VNDL) | discrepancy | ibkr: buy order 1 limited at 20.00; tracking-sheet: no Comprar entry | 1 |
+| B6 | [CYBD](https://simplywall.st/search?q=CYBD) | discrepancy | tracking-sheet: Comprar 1 at 42.00; ibkr: buy order 1 limited at 41.50 | 1 |
+| B6 | [WONKA](https://simplywall.st/search?q=WONKA) | discrepancy | tracking-sheet: Comprar 1 at 42.00; ibkr: buy order 1 limited at 41.50 | 1 |
+| B7 ⚑ | [ACME](https://simplywall.st/search?q=ACME) | discrepancy | ibkr: sell cover 2; tracking-sheet: no Vender entry | 1 |
+
+## Cartera Viva
+
+| Check | Ticker | Severity | Sides | Runs |
+| --- | --- | --- | --- | --- |
+| C1 ⚑ | [UMBR](https://simplywall.st/search?q=UMBR) | discrepancy | tracking-sheet: Roger entry; cartera-viva: not listed | 1 |
+| C2 ⚑ | [CRUX](https://simplywall.st/search?q=CRUX) | discrepancy | cartera-viva: listed; ibkr: not held; tracking-sheet: no entry | 1 |
+| C2 ⚑ | [PIEDP](https://simplywall.st/search?q=PIEDP) | discrepancy | cartera-viva: listed; ibkr: not held; tracking-sheet: entries in Operativa | 1 |
+| C3 ⚑ | [ENCMX](https://simplywall.st/search?q=ENCMX) | discrepancy | cartera-viva: listed; ibkr: not held; tracking-sheet: position 1 | 1 |
+| C4 | [HOOL](https://simplywall.st/search?q=HOOL) | informational | cartera-viva: listed; tracking-sheet: Comprar entry; ibkr: live buy order | 1 |
+| C4 | [WONKA](https://simplywall.st/search?q=WONKA) | informational | cartera-viva: listed; tracking-sheet: Comprar entry; ibkr: live buy order | 1 |
+| C5 | [ROXXN](https://simplywall.st/search?q=ROXXN) | warning | cartera-viva: trailing activated at 12%; tracking-sheet: Invertido without Vender; ibkr: no sell order | 1 |
+| C6 | [INIT](https://simplywall.st/search?q=INIT) | warning | cartera-viva: trailing activated at 10%; ibkr: trailing sell order at 15% | 1 |
+| C6 | [SRNSX](https://simplywall.st/search?q=SRNSX) | not-evaluable | not evaluable: the user's trailing sell order has an unknown trail percentage | 1 |
+| C6 | [VRTCX](https://simplywall.st/search?q=VRTCX) | not-evaluable | not evaluable: the user's sell order is not a trailing stop | 1 |
+| C7 ⚑ | [TYRL](https://simplywall.st/search?q=TYRL) | discrepancy | ibkr: holds 1; tracking-sheet: Invertido entry; cartera-viva: not listed | 1 |
+| C8 ⚑ | [WNYE](https://simplywall.st/search?q=WNYE) | discrepancy | tracking-sheet: Vender entry; ibkr: not held; cartera-viva: not listed | 1 |
+| C9 | [CYBD](https://simplywall.st/search?q=CYBD) | informational | cartera-viva: not listed; tracking-sheet: Comprar entry; ibkr: live buy order | 1 |
+| C9 | [VNDL](https://simplywall.st/search?q=VNDL) | informational | cartera-viva: not listed; tracking-sheet: no Comprar entry; ibkr: live buy order | 1 |
+
+## Movimientos
+
+No previous run to compare with.
+
+## Gate
+
+Affected tickers: [ACME](https://simplywall.st/search?q=ACME), [CRUX](https://simplywall.st/search?q=CRUX), [ENCMX](https://simplywall.st/search?q=ENCMX), [HLYSN](https://simplywall.st/search?q=HLYSN), [HOOL](https://simplywall.st/search?q=HOOL), [PIEDP](https://simplywall.st/search?q=PIEDP), [TYRL](https://simplywall.st/search?q=TYRL), [UMBR](https://simplywall.st/search?q=UMBR), [VNDL](https://simplywall.st/search?q=VNDL), [WNYE](https://simplywall.st/search?q=WNYE), [WONKA](https://simplywall.st/search?q=WONKA)
+
+- [ ] B1 [ENCMX](https://simplywall.st/search?q=ENCMX)
+- [ ] B1 [WNYE](https://simplywall.st/search?q=WNYE)
+- [ ] B2 [HOOL](https://simplywall.st/search?q=HOOL)
+- [ ] B4 [HLYSN](https://simplywall.st/search?q=HLYSN)
+- [ ] B4 [WONKA](https://simplywall.st/search?q=WONKA)
+- [ ] B5 [VNDL](https://simplywall.st/search?q=VNDL)
+- [ ] B7 [ACME](https://simplywall.st/search?q=ACME)
+- [ ] C1 [UMBR](https://simplywall.st/search?q=UMBR)
+- [ ] C2 [CRUX](https://simplywall.st/search?q=CRUX)
+- [ ] C2 [PIEDP](https://simplywall.st/search?q=PIEDP)
+- [ ] C3 [ENCMX](https://simplywall.st/search?q=ENCMX)
+- [ ] C7 [TYRL](https://simplywall.st/search?q=TYRL)
+- [ ] C8 [WNYE](https://simplywall.st/search?q=WNYE)
+"
+`;
+
+exports[`renderMarkdown > renders a fictional report 1`] = `
+"# Stonks · phase 1
+
+Run 20261004T100000 · 2026-10-04T10:00:00Z
+
+IBKR read through the MCP server. IBKR positions: 21 · IBKR active orders: 13 · SWS portfolio tickers: 21 · Cartera Viva tickers: 18
+
+WARNING: mcp__ibkr__submit_order is not in the known set of IBKR tools (fictional)
+
+## Alerts
+
+| Check | Ticker | Severity | Sides | Runs |
+| --- | --- | --- | --- | --- |
+| B8 | [STRK](https://simplywall.st/stocks/us/tech/nasdaq-strk/strk) | alert | ibkr: holds 3, sell orders cover 2; tracking-sheet: Vender 3 | 2 |
+
+## SWS portfolio
+
+| Check | Ticker | Severity | Sides | Runs |
+| --- | --- | --- | --- | --- |
+| A2 | TYRL | discrepancy | sws-portfolio: listed; ibkr: not held | 1 |
+
+## Tracking sheet
+
+| Check | Ticker | Severity | Sides | Runs |
+| --- | --- | --- | --- | --- |
+| B1 ⚑ | [WNYE](https://simplywall.st/search?q=WNYE) | discrepancy | tracking-sheet: Vender 3; ibkr: not held \\| no order | 1 |
+| B3 | GLBX | discrepancy | ibkr: holds 2; tracking-sheet: position 1 | 3 |
+
+## Cartera Viva
+
+| Check | Ticker | Severity | Sides | Runs |
+| --- | --- | --- | --- | --- |
+| C2 ⚑ | CRUX | discrepancy | cartera-viva: listed | 1 |
+| C6 | INIT | warning | cartera-viva: trailing 10% | 3 |
+| C9 | VNDL | not-evaluable | not evaluable: order side unreadable | 1 |
+
+## Movimientos since 2026-10-03T20:11:00Z
+
+- triggered sell 3 [WNYE](https://simplywall.st/search?q=WNYE)
+- fill 2 HOOL
+- new sell order 1 ACME
+- cancelled buy order 1 VNDL
+
+## Gate
+
+Affected tickers: [WNYE](https://simplywall.st/search?q=WNYE), CRUX
+
+- [ ] B1 [WNYE](https://simplywall.st/search?q=WNYE)
+- [ ] C2 CRUX
+
+## Watchlist
+
+- Removed: [WNYE](https://simplywall.st/search?q=WNYE)
+- Added: CRUX
+- Unresolved: UMBR
+- Final list: CRUX, HOOL
+- Count: 2/50
+- Incomplete: missing UMBR; unexpected none
+"
+`;
