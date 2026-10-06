@@ -27,6 +27,17 @@ export type PaneMovement = {
     side: "buy" | "sell" | null;
 };
 
+/** Phase 2's result, which `watchlist-final` adds to the report. */
+export type PaneWatchlist = {
+    removed: string[];
+    added: string[];
+    unresolved: string[];
+    final: string[];
+    count: number;
+    capacity: number;
+    incomplete: { missing: string[]; extra: string[] } | null;
+};
+
 export type PaneReport = {
     schema: string;
     runId: string;
@@ -39,10 +50,13 @@ export type PaneReport = {
     movements: { previousRunDate: string | null; items: PaneMovement[] };
     gate: { tripped: boolean; affectedTickers: string[] };
     links: Record<string, string>;
+    /** Absent from a report written before phase 2 had a place in the pane. */
+    watchlist?: PaneWatchlist | null;
     snapshot: unknown;
 };
 
-export type PaneStatus = "idle" | "syncing" | "ready" | "error";
+/** `watchlist`: an `--only watchlist` run, which has no phase-1 report to draw. */
+export type PaneStatus = "idle" | "syncing" | "watchlist" | "ready" | "error";
 
 declare module "claude-code" {
     interface PluginState {

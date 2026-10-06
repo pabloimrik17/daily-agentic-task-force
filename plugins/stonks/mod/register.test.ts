@@ -223,8 +223,10 @@ test("phase1 loads report.json into the pane and keeps its snapshot in the store
     expect((await ui.find({ key: "toggle:tracking-sheet" }))?.text).toContain("Tracking sheet (2)");
     expect(await ui.find({ key: "findings:tracking-sheet" })).toBeDefined();
     expect(await ui.find({ type: "Text", text: /B1 ⚑/ })).toBeDefined();
-    expect(await ui.findAll({ type: "Link" })).toHaveLength(2 * Object.keys(LINKS).length);
-    expect(await ui.find({ type: "Text", text: /triggered-sell 3 WNYE/ })).toBeDefined();
+    // Each ticker links from its finding and from the row of tickers; WNYE also from Movimientos.
+    expect(await ui.findAll({ type: "Link" })).toHaveLength(2 * Object.keys(LINKS).length + 1);
+    expect(await ui.find({ type: "Text", text: /^triggered-sell 3$/ })).toBeDefined();
+    expect(await ui.findAll({ type: "Link", text: "WNYE" })).toHaveLength(3);
     expect((await ui.find({ key: "tick:B1:WNYE" }))?.text).toContain("[ ] B1 WNYE");
     expect(await ui.find({ key: "tick:C1:UMBR" })).toBeDefined();
     expect(await ui.find({ key: "tick:B3:GLBX" })).toBeUndefined();
@@ -293,10 +295,6 @@ test("a missing or invalid report.json points at the markdown", async ($, on) =>
     await $.tool.call({ tool: "Bash", command: step("sigue") });
     expect(await ui.find({ type: "Text", text: /could not be loaded/ })).toBeDefined();
 
-    w.stdout = 'Stopped: no run is open\n\ndirective: {"kind":"stop","reason":"no run"}\n';
-    await $.tool.call({ tool: "Bash", command: step("watchlist-final") });
-    expect(await ui.find({ type: "Text", text: /could not be loaded/ })).toBeDefined();
-
     expect(w.store.snapshot).toBeUndefined();
     await ui.unmount();
 });
@@ -347,5 +345,82 @@ test("a step the pane does not follow leaves it alone", async ($, on) => {
     const ui = await $.ui.mount(MOUNT);
     expect(await ui.find({ type: "Text", text: /No report yet/ })).toBeDefined();
     expect(w.store.snapshot).toBeUndefined();
+    await ui.unmount();
+});
+
+test("a section without findings says what it agrees with", async ($, on) => {
+    const report = {
+        ...REPORT,
+        sections: REPORT.sections.map((s) => ({ ...s, findings: [] })),
+    };
+    world(on, { files: { [REPORT_PATH]: JSON.stringify(report) }, stdout: named(REPORT_PATH) });
+    await $.tool.call({ tool: "Bash", command: step("phase1") });
+    const ui = await $.ui.mount(MOUNT);
+    expect(await ui.findAll({ type: "Text", text: "Agrees with IBKR." })).toHaveLength(2);
+    expect(
+        await ui.find({ type: "Text", text: "The tracking sheet agrees with the Cartera Viva." }),
+    ).toBeDefined();
+    await ui.unmount();
+});
+
+test("the final step adds phase 2's result to the pane, its tickers linked", async ($, on) => {
+    const report = {
+        ...REPORT,
+        links: { ...LINKS, OSCP: "https://simplywall.st/search?q=OSCP" },
+        watchlist: {
+            removed: ["OSCP"],
+            added: ["GLBX"],
+            unresolved: [],
+            final: ["GLBX", "INIT"],
+            count: 2,
+            capacity: 50,
+            incomplete: { missing: ["STRK"], extra: [] },
+        },
+    };
+    world(on, { files: { [REPORT_PATH]: JSON.stringify(report) }, stdout: named(REPORT_PATH) });
+    await $.tool.call({ tool: "Bash", command: step("watchlist-final") });
+    const ui = await $.ui.mount(MOUNT);
+    expect(await ui.find({ key: "watchlist" })).toBeDefined();
+    expect(await ui.find({ type: "Text", text: "Watchlist 2/50" })).toBeDefined();
+    expect(await ui.find({ type: "Link", text: "OSCP" })).toBeDefined();
+    expect(await ui.find({ type: "Text", text: "Incomplete" })).toBeDefined();
+    expect(await ui.findAll({ type: "Link", text: "STRK" })).toHaveLength(3);
+    await ui.unmount();
+});
+
+test("a phase-1 report has no watchlist box", async ($, on) => {
+    world(on, { files: { [REPORT_PATH]: JSON.stringify(REPORT) }, stdout: named(REPORT_PATH) });
+    await $.tool.call({ tool: "Bash", command: step("phase1") });
+    const ui = await $.ui.mount(MOUNT);
+    expect(await ui.find({ key: "watchlist" })).toBeUndefined();
+    await ui.unmount();
+});
+
+test("a final step that names no report leaves the pane as it is", async ($, on) => {
+    const w = world(on, {
+        files: { [REPORT_PATH]: JSON.stringify(REPORT) },
+        stdout: named(REPORT_PATH),
+    });
+    await $.tool.call({ tool: "Bash", command: step("phase1") });
+    const ui = await $.ui.mount(MOUNT);
+
+    w.stdout =
+        'Stopped: no fresh watchlist read\n\ndirective: {"kind":"stop","reason":"no read"}\n';
+    await $.tool.call({ tool: "Bash", command: step("watchlist-final") });
+    expect(await ui.find({ type: "Text", text: /Alerts \(1\)/ })).toBeDefined();
+    expect(await ui.find({ type: "Text", text: /could not be loaded/ })).toBeUndefined();
+    await ui.unmount();
+});
+
+test("an --only watchlist run says it has no phase-1 report, through its final step", async ($, on) => {
+    const w = world(on);
+    await $.command.run({ ...SYNC, args: "--only watchlist" });
+    const ui = await $.ui.mount(MOUNT);
+    expect(await ui.find({ type: "Text", text: /Phase 2 alone/ })).toBeDefined();
+
+    w.stdout = '## Watchlist\n\n- Removed: none\n\ndirective: {"kind":"done"}\n';
+    await $.tool.call({ tool: "Bash", command: step("watchlist-final") });
+    expect(await ui.find({ type: "Text", text: /Phase 2 alone/ })).toBeDefined();
+    expect(await ui.find({ type: "Text", text: /could not be loaded/ })).toBeUndefined();
     await ui.unmount();
 });

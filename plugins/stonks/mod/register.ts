@@ -15,6 +15,7 @@ import type {
     PaneReport,
     PaneSection,
     PaneStatus,
+    PaneWatchlist,
 } from "./types/stonks-state";
 
 const PANE = "stonks";
@@ -27,13 +28,23 @@ const TICKS = { plugin: "stonks", key: "ticks" } as const;
 // The plugin root is `…/plugins/stonks` under `--plugin-dir`, and
 // `…/cache/<marketplace>/stonks/<version>` once installed from a marketplace.
 const STEP = /stonks\/(?:[^/\s"]+\/)?src\/cli\.ts"?\s+(?:phase1|sigue|watchlist-final)\b/;
+const FINAL_STEP = /src\/cli\.ts"?\s+watchlist-final\b/;
 const PATH_LINE = /^stonks-report-path: (.+)$/m;
+const PHASE2_ONLY = /--only\s+watchlist\b/;
 const REPORT_SCHEMA = "stonks.report.v1";
 
 const MIRROR_TITLE: Record<PaneSection["mirror"], string> = {
     "sws-portfolio": "SWS portfolio",
     "tracking-sheet": "Tracking sheet",
     "cartera-viva": "Cartera Viva",
+};
+
+// The A and B checks compare a mirror with IBKR; the C checks compare the
+// tracking sheet with the Cartera Viva.
+const AGREES: Record<PaneSection["mirror"], string> = {
+    "sws-portfolio": "Agrees with IBKR.",
+    "tracking-sheet": "Agrees with IBKR.",
+    "cartera-viva": "The tracking sheet agrees with the Cartera Viva.",
 };
 
 const MIRROR_HOTKEY: Record<PaneSection["mirror"], string> = {
@@ -122,9 +133,9 @@ const TICKER_CELL = { width: 7, flexShrink: 0 } as const;
 const SEVERITY_CELL = { width: 16, flexShrink: 0 } as const;
 const SIDES_CELL = { flexGrow: 1, flexShrink: 1 } as const;
 
-function tickerCell(ui: Ui, f: PaneFinding, links: Record<string, string>) {
-    const href = links[f.ticker];
-    return href === undefined ? h(ui.Text, null, f.ticker) : h(ui.Link, { href, label: f.ticker });
+function tickerLink(ui: Ui, ticker: string, links: Record<string, string>) {
+    const href = links[ticker];
+    return href === undefined ? h(ui.Text, null, ticker) : h(ui.Link, { href, label: ticker });
 }
 
 function findingRow(ui: Ui, f: PaneFinding, links: Record<string, string>) {
@@ -135,7 +146,7 @@ function findingRow(ui: Ui, f: PaneFinding, links: Record<string, string>) {
         ui.Box,
         ROW,
         h(ui.Box, CHECK_CELL, h(ui.Text, null, `${f.check}${gate}`)),
-        h(ui.Box, TICKER_CELL, tickerCell(ui, f, links)),
+        h(ui.Box, TICKER_CELL, tickerLink(ui, f.ticker, links)),
         h(ui.Box, SEVERITY_CELL, h(ui.Text, null, `${SEVERITY_LABEL[f.severity]}${repeat}`)),
         h(ui.Box, SIDES_CELL, h(ui.Text, { wrap: "wrap" }, `${sidesText(f)}${reason}`)),
     );
@@ -153,10 +164,16 @@ function headerRow(ui: Ui) {
     );
 }
 
-function findingsGrid(ui: Ui, key: string, findings: PaneFinding[], links: Record<string, string>) {
+function findingsGrid(
+    ui: Ui,
+    key: string,
+    findings: PaneFinding[],
+    links: Record<string, string>,
+    agrees: string,
+) {
     const rows =
         findings.length === 0
-            ? [h(ui.Text, { dimColor: true }, "Agrees with IBKR.")]
+            ? [h(ui.Text, { dimColor: true }, agrees)]
             : [headerRow(ui), ...findings.map((f) => findingRow(ui, f, links))];
     return h(ui.Box, { key, flexDirection: "column" }, ...rows);
 }
@@ -195,6 +212,18 @@ async function storeReport($: EngineInterface, loaded: PaneReport): Promise<void
     await $.store.set("snapshot", loaded.snapshot);
 }
 
+/**
+ * A step's report into the pane. `watchlist-final` names none in
+ * `--only watchlist`, or when it stops; the pane then keeps what it shows.
+ */
+async function follow($: EngineInterface, command: string, stdout: string): Promise<void> {
+    if (FINAL_STEP.test(command) && !PATH_LINE.test(stdout)) {
+        return;
+    }
+    const loaded = await loadReport($, stdout);
+    await (loaded === null ? showUnloaded($) : storeReport($, loaded));
+}
+
 /** A missing or invalid `report.json`: the pane points at the markdown instead. */
 async function showUnloaded($: EngineInterface): Promise<void> {
     await $.state.set(REPORT, null);
@@ -209,21 +238,25 @@ async function handOver($: EngineInterface): Promise<void> {
     }
 }
 
-function emptyHint(status: PaneStatus): string {
-    if (status === "syncing") {
-        return "Syncing… the report appears here after phase 1. The markdown report is printed in the transcript as well.";
-    }
-    return status === "error"
-        ? "The report could not be loaded; read the markdown report in the transcript."
-        : "No report yet. Run /stonks:sync; the markdown report is always printed in the transcript.";
-}
+const NO_REPORT =
+    "No report yet. Run /stonks:sync; the markdown report is always printed in the transcript.";
+
+const HINTS: Record<PaneStatus, string> = {
+    idle: NO_REPORT,
+    syncing:
+        "Syncing… the report appears here after phase 1. The markdown report is printed in the transcript as well.",
+    watchlist:
+        "Phase 2 alone (--only watchlist) has no phase-1 report to draw here; its watchlist result is printed in the transcript.",
+    ready: NO_REPORT,
+    error: "The report could not be loaded; read the markdown report in the transcript.",
+};
 
 async function emptyPane($: EngineInterface, ui: Ui) {
     const { value: status = "idle" } = await $.state.get(STATUS);
     return h(
         ui.Box,
         { flexDirection: "column", paddingX: 1 },
-        h(ui.Text, { dimColor: true }, emptyHint(status)),
+        h(ui.Text, { dimColor: true }, HINTS[status]),
     );
 }
 
@@ -243,7 +276,7 @@ function alertsBox(ui: Ui, r: PaneReport) {
               Box,
               { flexDirection: "column", borderStyle: "round", borderColor: "red", paddingX: 1 },
               h(Text, { bold: true, color: "red" }, `Alerts (${r.alerts.length})`),
-              findingsGrid(ui, "findings:alerts", r.alerts, r.links),
+              findingsGrid(ui, "findings:alerts", r.alerts, r.links, "No alerts."),
           );
 }
 
@@ -270,7 +303,9 @@ function sectionBox(
     collapsed: Record<string, boolean>,
 ) {
     const isCollapsed = collapsed[s.mirror] === true;
-    const body = isCollapsed ? [] : [findingsGrid(ui, `findings:${s.mirror}`, s.findings, links)];
+    const body = isCollapsed
+        ? []
+        : [findingsGrid(ui, `findings:${s.mirror}`, s.findings, links, AGREES[s.mirror])];
     return h(ui.Box, SECTION_BOX, mirrorToggle($, ui, s, isCollapsed), ...body);
 }
 
@@ -284,8 +319,15 @@ function linksRow(ui: Ui, r: PaneReport) {
     );
 }
 
-function movementText(m: PaneMovement): string {
-    return `${m.kind} ${m.quantity} ${m.ticker}${m.side === null ? "" : ` (${m.side})`}`;
+function movementRow(ui: Ui, m: PaneMovement, links: Record<string, string>) {
+    const side = m.side === null ? [] : [h(ui.Text, null, `(${m.side})`)];
+    return h(
+        ui.Box,
+        ROW,
+        h(ui.Text, null, `${m.kind} ${m.quantity}`),
+        tickerLink(ui, m.ticker, links),
+        ...side,
+    );
 }
 
 function noMovements(ui: Ui, r: PaneReport) {
@@ -303,12 +345,52 @@ function listedMovements(ui: Ui, r: PaneReport) {
         ui.Box,
         { flexDirection: "column" },
         h(ui.Text, { bold: true }, `Movimientos since ${r.movements.previousRunDate ?? "?"}`),
-        ...r.movements.items.map((m) => h(ui.Text, null, movementText(m))),
+        ...r.movements.items.map((m) => movementRow(ui, m, r.links)),
     );
 }
 
 function movementsBox(ui: Ui, r: PaneReport) {
     return r.movements.items.length === 0 ? noMovements(ui, r) : listedMovements(ui, r);
+}
+
+const WRAP_ROW = { flexDirection: "row", flexWrap: "wrap", columnGap: 1 } as const;
+
+function tickerLine(ui: Ui, label: string, tickers: string[], links: Record<string, string>) {
+    const items =
+        tickers.length === 0
+            ? [h(ui.Text, { dimColor: true }, "none")]
+            : tickers.map((ticker) => tickerLink(ui, ticker, links));
+    return h(ui.Box, WRAP_ROW, h(ui.Text, null, `${label}:`), ...items);
+}
+
+function incompleteLines(ui: Ui, w: PaneWatchlist, links: Record<string, string>) {
+    return w.incomplete === null
+        ? []
+        : [
+              h(ui.Text, { bold: true, color: "red" }, "Incomplete"),
+              tickerLine(ui, "Missing", w.incomplete.missing, links),
+              tickerLine(ui, "Unexpected", w.incomplete.extra, links),
+          ];
+}
+
+/** Phase 2's result, once `watchlist-final` has added it to the report. */
+function watchlistBox(ui: Ui, r: PaneReport) {
+    const w = r.watchlist ?? null;
+    if (w === null) {
+        return [];
+    }
+    return [
+        h(
+            ui.Box,
+            { key: "watchlist", ...SECTION_BOX },
+            h(ui.Text, { bold: true }, `Watchlist ${w.count}/${w.capacity}`),
+            tickerLine(ui, "Removed", w.removed, r.links),
+            tickerLine(ui, "Added", w.added, r.links),
+            tickerLine(ui, "Unresolved", w.unresolved, r.links),
+            tickerLine(ui, "Final list", w.final, r.links),
+            ...incompleteLines(ui, w, r.links),
+        ),
+    ];
 }
 
 async function toggleTick($: EngineInterface, key: string): Promise<void> {
@@ -362,12 +444,13 @@ async function reportPane($: EngineInterface, ui: Ui, r: PaneReport, bodyColumns
         linksRow(ui, r),
         movementsBox(ui, r),
         ...checklistBox($, ui, r, ticks),
+        ...watchlistBox(ui, r),
     );
 }
 
 export const register: Register = (on) => {
     on("command.run", { command: "stonks:sync" }, async ($, e, next) => {
-        await $.state.set(STATUS, "syncing");
+        await $.state.set(STATUS, PHASE2_ONLY.test(e.args) ? "watchlist" : "syncing");
         await $.state.set(REPORT, null);
         await $.state.set(TICKS, {});
         await $.state.set(COLLAPSED, {});
@@ -381,8 +464,7 @@ export const register: Register = (on) => {
         if (!STEP.test(e.command) || ran.deny !== undefined) {
             return ran;
         }
-        const loaded = await loadReport($, stdoutOf(ran));
-        await (loaded === null ? showUnloaded($) : storeReport($, loaded));
+        await follow($, e.command, stdoutOf(ran));
         return ran;
     });
 
