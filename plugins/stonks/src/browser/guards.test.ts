@@ -3,43 +3,57 @@ import { describe, expect, it } from "vitest";
 
 import { formatListing } from "../domain.ts";
 import { parseListing } from "../ticker.ts";
+import { carteraVivaCollector } from "./cartera-viva.ts";
 import { clickRowAction } from "./dropdown.ts";
+import { swsPortfolioCollector } from "./sws-portfolio.ts";
 import { removeFromMenuAction, watchlistRowMenuAction } from "./watchlist.ts";
 
 // The row actions act on an index from an earlier read, so each checks that
-// the row still shows what the engine chose before it dispatches anything.
-// These run the printed sources on a page just rich enough for them.
+// the row still shows what the engine chose before it dispatches anything,
+// and the collectors read only their page's own section. These run the
+// printed sources on a page just rich enough for them.
 
 const RUN = "run-fixture-1";
 const ORIGIN = "https://simplywall.st";
 const HOOL = "/stocks/us/tech/nasdaq-hool/hoolihan-systems";
 const ACME = "/stocks/us/software/nyse-acme/acme-corp";
+const WNYE = "/stocks/us/media/nyse-wnye/wynne-media";
+const STOCK_LINKS = 'a[href*="/stocks/"]';
 
 class FakeElement {
     readonly events: string[] = [];
-    parent: FakeElement | null = null;
+    parentElement: FakeElement | null = null;
+    /** Queries answer from `found`, not from a tree, so no fake has children of its own. */
+    readonly children: FakeElement[] = [];
 
     constructor(
         readonly attributes: Record<string, string> = {},
         readonly textContent = "",
-        readonly children: Record<string, FakeElement[]> = {},
+        readonly found: Record<string, FakeElement[]> = {},
+        readonly tag = "",
     ) {}
+
+    /** Nothing is laid out, so the rendered text is the text, lines and all. */
+    get innerText(): string {
+        return this.textContent;
+    }
 
     getAttribute(name: string): string | null {
         return this.attributes[name] ?? null;
     }
 
     querySelector(selector: string): FakeElement | null {
-        return this.children[selector]?.[0] ?? null;
+        return this.found[selector]?.[0] ?? null;
     }
 
     querySelectorAll(selector: string): FakeElement[] {
-        return this.children[selector] ?? [];
+        return this.found[selector] ?? [];
     }
 
-    /** Only a row matches: the watchlist's rows are `tr`. */
+    /** Matches on tags alone: the nearest of this element and its ancestors with one of them. */
     closest(selector: string): FakeElement | null {
-        return selector.startsWith("tr") ? this.parent : null;
+        const tags = selector.split(",").map((part) => part.trim());
+        return tags.includes(this.tag) ? this : (this.parentElement?.closest(selector) ?? null);
     }
 
     getBoundingClientRect(): { width: number; height: number } {
@@ -57,13 +71,23 @@ class FakeElement {
 }
 
 interface Answer {
-    data: { done: boolean; reason?: string };
+    data: Record<string, unknown>;
 }
 
-/** Runs a source on a page whose `document.querySelectorAll` answers from `page`. */
-function run(source: string, page: Record<string, FakeElement[]>): Answer {
-    const document = { querySelectorAll: (selector: string) => page[selector] ?? [] };
-    const location = { href: `${ORIGIN}/watchlist`, origin: ORIGIN, pathname: "/watchlist" };
+/** Runs a source on a page at `href` whose `document`, `body` included, answers from `page`. */
+function run(
+    source: string,
+    page: Record<string, FakeElement[]>,
+    href = `${ORIGIN}/watchlist`,
+): Answer {
+    const root = new FakeElement({}, "", page);
+    const document = {
+        body: root.querySelector("body"),
+        querySelector: (selector: string) => root.querySelector(selector),
+        querySelectorAll: (selector: string) => root.querySelectorAll(selector),
+    };
+    const { origin, pathname } = new URL(href);
+    const location = { href, origin, pathname };
     const getComputedStyle = () => ({ visibility: "visible", display: "block" });
     class MouseEvent {
         constructor(readonly type: string) {}
@@ -84,13 +108,15 @@ function watchlistPage(hrefs: string[]) {
     const anchors = hrefs.map((href) => new FakeElement({ href }));
     const buttons = anchors.map((anchor) => {
         const button = new FakeElement();
-        anchor.parent = new FakeElement({}, "", {
-            'a[href*="/stocks/"]': [anchor],
-            'button[aria-label="More Options"]': [button],
-        });
+        anchor.parentElement = new FakeElement(
+            {},
+            "",
+            { [STOCK_LINKS]: [anchor], 'button[aria-label="More Options"]': [button] },
+            "tr",
+        );
         return button;
     });
-    return { buttons, page: { 'a[href*="/stocks/"]': anchors } };
+    return { buttons, page: { [STOCK_LINKS]: anchors } };
 }
 
 /** Search results, one per symbol, each with the label a selection clicks. */
@@ -103,6 +129,77 @@ function dropdownPage(symbols: string[]) {
             }),
     );
     return { labels, page: { '[data-cy-id$="-search-result"]': results } };
+}
+
+const TRADER = "https://example-trader.test/cartera";
+const PORTFOLIO = "/portfolio/11111111-2222-4333-8444-555555555555";
+
+/** A Cartera Viva card's lines, as the real page renders them (design D10). */
+const HOOL_CARD = [
+    "HOOL",
+    "Tecnología",
+    "Hoolihan Systems Inc.",
+    "120 días",
+    "PM",
+    "98,40",
+    "ACTUAL",
+    "121,30",
+    "OBJETIVO",
+    "139,00",
+    "+23,27%",
+    "PESO 2,50%",
+    "CARRERA AL OBJETIVO",
+    "56%",
+    "Ver análisis en Telegram",
+    "En carrera",
+    "Trailing 15%",
+];
+
+/**
+ * The Cartera Viva as design D10 saw it: one open position's `article` card
+ * in the section headed "Posiciones abiertas", whose header shows the
+ * counter, and the recently closed positions as plain lines in a section of
+ * their own. Their heading comes first, so only its text tells the two apart.
+ */
+function carteraVivaPage(card: string[], closed: string[]): Record<string, FakeElement[]> {
+    const heading = new FakeElement({}, "Posiciones abiertas", {}, "h2");
+    const header = new FakeElement({}, "", { "*": [heading, new FakeElement({}, "1 posición")] });
+    const article = new FakeElement({}, card.join("\n"), {}, "article");
+    heading.parentElement = header;
+    header.parentElement = new FakeElement({}, "", { article: [article] }, "section");
+    const closedHeading = new FakeElement({}, "Cerradas recientemente", {}, "h2");
+    const lines = closed.map((line) => new FakeElement({}, line, {}, "p"));
+    closedHeading.parentElement = new FakeElement(
+        {},
+        [closedHeading.textContent, ...closed].join("\n"),
+        { "*": [closedHeading, ...lines] },
+        "section",
+    );
+    return {
+        h1: [new FakeElement({}, "Cartera Viva", {}, "h1")],
+        h2: [closedHeading, heading],
+        article: [article],
+    };
+}
+
+/**
+ * An SWS portfolio as design D10 saw it: a holding's stock link, whose text
+ * is its ticker, inside `container`, which only a `table` makes the holdings
+ * table; the page's counter; and a footer that links a trending stock.
+ */
+function swsPortfolioPage(container: "table" | "ul"): Record<string, FakeElement[]> {
+    const holding = new FakeElement({ href: HOOL }, "HOOL", {}, "a");
+    const holdings = new FakeElement({}, "HOOL", { [STOCK_LINKS]: [holding] }, container);
+    const trending = new FakeElement({ href: WNYE }, "WNYE", {}, "a");
+    holding.parentElement = holdings;
+    trending.parentElement = new FakeElement({}, "Trending today: WNYE", {}, "footer");
+    const links = [holding, trending];
+    const text = "My Portfolio\n1 holding\nHOOL\nTrending today: WNYE";
+    return {
+        body: [new FakeElement({}, text, { [STOCK_LINKS]: links }, "body")],
+        "table, [role=table], [role=grid]": container === "table" ? [holdings] : [],
+        [STOCK_LINKS]: links,
+    };
 }
 
 describe("watchlist-row-menu", () => {
@@ -164,5 +261,39 @@ describe("click-row", () => {
             expect(answer.data.done).toBe(true);
             expect(labels[0]?.events).toEqual(["click"]);
         }
+    });
+});
+
+describe("cartera-viva", () => {
+    it("reads the open positions' cards, not the recently closed positions", () => {
+        const page = carteraVivaPage(HOOL_CARD, ["UMBR", "Umbrella Biotech", "+12,40%"]);
+        const answer = run(carteraVivaCollector(RUN), page, TRADER);
+        expect(answer.data).toEqual({
+            title: "Cartera Viva",
+            heading: "Posiciones abiertas",
+            counter: "1 posición",
+            loading: false,
+            cards: [{ texts: HOOL_CARD }],
+        });
+        expect(JSON.stringify(answer.data)).not.toContain("UMBR");
+    });
+});
+
+describe("sws-portfolio", () => {
+    it.each([
+        ["in the holdings table", "table"],
+        ["on a page without one", "ul"],
+    ] as const)("reads the holding links %s, not the footer's", (_, container) => {
+        const answer = run(
+            swsPortfolioCollector(RUN),
+            swsPortfolioPage(container),
+            `${ORIGIN}${PORTFOLIO}`,
+        );
+        expect(answer.data).toEqual({
+            path: PORTFOLIO,
+            count: 1,
+            links: [{ href: HOOL, text: "HOOL" }],
+        });
+        expect(JSON.stringify(answer.data)).not.toContain("WNYE");
     });
 });
