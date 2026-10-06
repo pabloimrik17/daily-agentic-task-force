@@ -18,11 +18,6 @@ const KNOWN_EXCHANGES: Record<string, string> = {
 };
 
 /**
- * The listing in a stock link's path; null when the path is not a stock
- * page. `nasdaq-hool` is exchange `Nasdaq` (no tier), which design D9 lets
- * match any Nasdaq tier; other exchanges keep the slug's spelling.
- */
-/**
  * The link as a full address. Pages carry relative `/stocks/…` paths, and the
  * report and `listings.json` need a URL that opens (spec stonks-report).
  */
@@ -40,6 +35,11 @@ export function absoluteHref(href: string, pageUrl: string): string {
     }
 }
 
+/**
+ * The listing in a stock link's path; null when the path is not a stock
+ * page. `nasdaq-hool` is exchange `Nasdaq` (no tier), which design D9 lets
+ * match any Nasdaq tier; other exchanges keep the slug's spelling.
+ */
 export function listingFromHref(href: string): Listing | null {
     let path: string;
     try {

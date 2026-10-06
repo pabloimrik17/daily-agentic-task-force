@@ -173,18 +173,18 @@ after the report (see the glossary in `CONTEXT.md` for the terms).
 
 Phase 2 makes the private Simply Wall St watchlist equal the candidate set. A ticker is a candidate when every one of its entries in the tracking sheet is in Comprar, Roger or Operativa. One entry in any other Estado disqualifies it.
 
-- **Plan.** The engine reads the tracking sheet and the watchlist live, and plans from those two reads, never from a list remembered from an earlier run. The removals are the watchlist tickers that are not candidates. The additions are the candidates the watchlist lacks. The plan is applied in the same run without asking: invoking the command is the authorisation.
+- **Plan.** In a full run, planning starts only after phase 1, and after "sigue" when the gate paused the run: the engine refuses to plan otherwise, so the pause does not rest on the command alone. The engine reads the tracking sheet and the watchlist live, and plans from those two reads, never from a list remembered from an earlier run. The removals are the watchlist tickers that are not candidates. The additions are the candidates the watchlist lacks. The plan is applied in the same run without asking: invoking the command is the authorisation.
 - **Order and capacity.** Every removal is applied before any addition. The capacity is the one the watchlist page shows. If the candidate set is larger, nothing is changed and the report states both numbers.
 - **Exact listing.** Each addition is resolved to one `EXCHANGE:TICKER` listing, preferring the US primary one (NYSE, NasdaqGS, NasdaqGM or NasdaqCM). The engine supplies the search term when it knows the company name; otherwise the term is a hint chosen by the LLM. Only the search result whose symbol equals the listing is clicked. The first result, a similar ticker or a position on screen never decides.
 - **Per-change verification.** After each removal and each addition the engine checks that a fresh watchlist read differs from the previous one by exactly that change. Simply Wall St's confirmations name no ticker, so they are not read.
-- **Final comparison.** The watchlist is read once more and compared with the candidate set exactly. The report lists the tickers removed, the tickers added, any left unresolved, the final list, and the count against the capacity.
+- **Final comparison.** The watchlist is read once more and compared with the candidate set exactly. The report lists the tickers removed, the tickers added, any left unresolved, the final list, and the count against the capacity, each ticker linked to its Simply Wall St page.
 - **Resumption.** An interrupted phase 2 is resumed with `/stonks:sync --only watchlist`. It plans again from the live sheet and the live watchlist, so changes already made are not repeated.
 
 Guardrails:
 
 - A keeper, a candidate already on the watchlist, is never removed, not even to diagnose the page.
 - Any outcome other than the expected change stops phase 2 and reports the difference. The command does not try to repair it by experimenting on the watchlist.
-- When no search result matches the listing exactly, or only a non-US listing exists, the ticker is not added. It is reported as unresolved and the command asks you for its exact listing.
+- When no search result matches the listing exactly, or only a non-US listing exists, the ticker is not added. It is reported as unresolved and the command asks you for its exact listing. The run does not act on your answer: add the listing by hand once the run has ended, and the next run learns it from the watchlist.
 
 ## Report pane
 
@@ -192,14 +192,18 @@ When `/stonks:sync` runs in a terminal or in the Desktop app's Code tab, the
 plugin's hooks module (`mod/register.ts`) opens a pane above the prompt, or
 beside the transcript where the layout docks panes, and draws the same report
 as the markdown: alerts first, one collapsible section per mirror, ticker
-links, Movimientos and, when the gate pauses the run, the checklist. The
+links, Movimientos, the checklist when the gate pauses the run, and phase 2's
+result once `watchlist-final` has run. The
 markdown stays the run's output. The pane adds interaction only, so a run is
 complete without it: when mods are disabled, the surface places no panes or
 the pane fails, the markdown report is all there is.
 
 The pane opens in a "syncing" state when the command starts and shows the
-report after `phase1`; `sigue` and `watchlist-final` replace it. A new run
-replaces the previous run's report and clears every tick.
+report after `phase1`; `sigue` and `watchlist-final` replace it. A
+`watchlist-final` that names no report, because it stopped, leaves the pane as
+it is. With `--only watchlist` there is no phase-1 report: the pane says so,
+and phase 2's result is in the transcript only. A new run replaces the previous
+run's report and clears every tick.
 
 Keys, while the pane holds the keyboard (`ctrl+x tab` moves the focus into
 it):
