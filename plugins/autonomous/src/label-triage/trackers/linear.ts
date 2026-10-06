@@ -14,7 +14,7 @@ function isUnauthenticated(text: string): boolean {
     return text.includes("linear auth login") || text.includes("No API key configured");
 }
 
-function mapExecError(command: string, error: string): string {
+export function mapExecError(command: string, error: string): string {
     if (isUnauthenticated(error)) {
         return `${command}: Linear CLI is not authenticated, run \`linear auth login\``;
     }
@@ -31,7 +31,7 @@ function labelNames(entry: Json, path: string): string[] {
     });
 }
 
-function listedTask(entry: Json, path: string): { task: TrackerTask; type: string } {
+export function listedTask(entry: Json, path: string): { task: TrackerTask; type: string } {
     const statePath = `${path}.state`;
     const state = object(entry.state, statePath);
     return {
@@ -48,7 +48,7 @@ function listedTask(entry: Json, path: string): { task: TrackerTask; type: strin
     };
 }
 
-function isExcluded(type: string, status: string): boolean {
+export function isExcluded(type: string, status: string): boolean {
     return type === "completed" || type === "canceled" || status.toLowerCase() === "duplicate";
 }
 
@@ -63,7 +63,7 @@ function parseTasks(value: unknown): TrackerTask[] {
         .map(({ task }) => task);
 }
 
-function nullableDescription(entry: Json, path: string): string | null {
+export function nullableDescription(entry: Json, path: string): string | null {
     const value = entry.description;
     if (value === null || value === undefined) {
         return null;

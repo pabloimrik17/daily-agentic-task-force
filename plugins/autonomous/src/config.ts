@@ -31,7 +31,7 @@ export const EXAMPLE_PATH = join(
 );
 
 export type Scope = "work" | "personal";
-export type ContractLabel = "work" | "personal" | "AFK" | "HITL" | "grill-me";
+export type ContractLabel = "work" | "personal" | "AFK" | "HITL" | "grill-me" | "taken";
 export type Source = "linear" | "beads" | "github";
 
 export interface SourceRules {
@@ -58,10 +58,16 @@ export interface JudgementConfig {
     batch: number;
 }
 
+export interface SelectionConfig {
+    model: string;
+    effort: string;
+}
+
 export interface AutonomousConfig {
     schema: "autonomous.config.v1";
     sources: { linear: LinearConfig; beads: BeadsConfig; github: GithubConfig };
     judgement: JudgementConfig;
+    selection: SelectionConfig;
 }
 
 export type ConfigLoad =
@@ -126,7 +132,7 @@ export function loadConfig(
 
 function config(input: unknown): AutonomousConfig {
     const root = object(input, "$");
-    rejectUnknownKeys(root, ["schema", "sources", "judgement"], "$");
+    rejectUnknownKeys(root, ["schema", "sources", "judgement", "selection"], "$");
     const schema = string(root, "schema", "$");
     if (schema !== CONFIG_SCHEMA) {
         throw new ParseError(`$.schema is "${schema}", expected "${CONFIG_SCHEMA}"`);
@@ -141,6 +147,7 @@ function config(input: unknown): AutonomousConfig {
             github: githubConfig(object(sources.github, "$.sources.github"), "$.sources.github"),
         },
         judgement: judgementConfig(object(root.judgement, "$.judgement"), "$.judgement"),
+        selection: selectionConfig(object(root.selection, "$.selection"), "$.selection"),
     };
 }
 
@@ -172,7 +179,8 @@ function aliasesValue(
     const aliasPath = `${path}.${key}`;
     const result: Partial<Record<ContractLabel, string[]>> = {};
     for (const label of Object.keys(entry)) {
-        if (!isContractLabel(label)) {
+        // taken is set by hand or by an agent, never inferred, so it has no aliases.
+        if (!isContractLabel(label) || label === "taken") {
             throw new ParseError(`${aliasPath}.${label} is not a recognised field`);
         }
         const values = stringArray(entry, label, aliasPath);
@@ -218,8 +226,7 @@ function githubConfig(entry: Json, path: string): GithubConfig {
 
 const EFFORTS = ["low", "medium", "high", "xhigh", "max"];
 
-function judgementConfig(entry: Json, path: string): JudgementConfig {
-    rejectUnknownKeys(entry, ["model", "effort", "threshold", "cap", "batch"], path);
+function modelSettings(entry: Json, path: string): SelectionConfig {
     const model = string(entry, "model", path);
     if (model === "") {
         throw new ParseError(`${path}.model must not be empty`);
@@ -228,6 +235,12 @@ function judgementConfig(entry: Json, path: string): JudgementConfig {
     if (!EFFORTS.includes(effort)) {
         throw new ParseError(`${path}.effort must be one of ${EFFORTS.join(", ")}`);
     }
+    return { model, effort };
+}
+
+function judgementConfig(entry: Json, path: string): JudgementConfig {
+    rejectUnknownKeys(entry, ["model", "effort", "threshold", "cap", "batch"], path);
+    const { model, effort } = modelSettings(entry, path);
     const threshold = number(entry, "threshold", path);
     if (threshold < 0 || threshold > 1) {
         throw new ParseError(`${path}.threshold must be between 0 and 1`);
@@ -241,4 +254,9 @@ function judgementConfig(entry: Json, path: string): JudgementConfig {
         throw new ParseError(`${path}.batch must be an integer >= 1`);
     }
     return { model, effort, threshold, cap, batch };
+}
+
+function selectionConfig(entry: Json, path: string): SelectionConfig {
+    rejectUnknownKeys(entry, ["model", "effort"], path);
+    return modelSettings(entry, path);
 }

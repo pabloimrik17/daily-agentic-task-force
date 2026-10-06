@@ -19,7 +19,7 @@ import type { Tracker, TrackerLabel, TrackerResult, TrackerTask } from "./tracke
 
 const OPEN_STATUSES = new Set(["open", "in_progress"]);
 
-function task(entry: Json, path: string): TrackerTask {
+export function task(entry: Json, path: string): TrackerTask {
     return {
         source: "beads",
         id: string(entry, "id", path),

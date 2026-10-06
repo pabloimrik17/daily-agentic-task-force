@@ -1,5 +1,5 @@
 ---
-description: Run the autonomous loop's gate and triage steps, or bootstrap the label contract, report the outcome, and ask the user the questions the run hands off
+description: Run the autonomous loop's gate, triage and select steps, or bootstrap the label contract, report the outcome, and ask the user the questions the run hands off
 argument-hint: "[--account <provider-key>] [--force] [--json] [--apply] [--no-handoff] | --bootstrap-labels [--json]"
 allowed-tools: Bash(bun:*)
 ---
@@ -8,10 +8,11 @@ allowed-tools: Bash(bun:*)
 
 Entry point of the autonomous loop. Every decision is made by the script; this
 command only runs it, relays what it prints, and asks the user the questions
-the report hands off. `--apply` lets the `label-triage` step write labels and
-hand off questions, which `--no-handoff` suppresses; `--bootstrap-labels`
-creates missing labels on every enabled tracker and exits instead of running
-the steps.
+the report hands off. The steps are `quota-gate`, `label-triage` and `select`;
+`select` chooses the next work unit and writes nothing. `--apply` lets the
+`label-triage` step write labels and hand off questions, which `--no-handoff`
+suppresses; `--bootstrap-labels` creates missing labels on every enabled
+tracker and exits instead of running the steps.
 
 ## Steps
 

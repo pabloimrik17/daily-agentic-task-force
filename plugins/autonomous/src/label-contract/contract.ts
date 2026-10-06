@@ -5,7 +5,14 @@ import type { ContractLabel } from "../config.ts";
 
 export type Group = "scope" | "entry";
 
-export const LABELS: readonly ContractLabel[] = ["work", "personal", "AFK", "HITL", "grill-me"];
+export const LABELS: readonly ContractLabel[] = [
+    "work",
+    "personal",
+    "AFK",
+    "HITL",
+    "grill-me",
+    "taken",
+];
 
 export const GROUPS: Record<Group, readonly ContractLabel[]> = {
     scope: ["work", "personal"],
@@ -18,15 +25,17 @@ export const COLOURS: Record<ContractLabel, string> = {
     "grill-me": "#f2994a",
     work: "#2f80ed",
     personal: "#27ae60",
+    taken: "#95a2b3",
 };
 
 export const MEANINGS: Record<ContractLabel, string> = {
-    work: "Nazaries work, and has priority over personal work.",
+    work: "Nazaries work.",
     personal: "The user's own work.",
     AFK: "An agent may advance the task without a human.",
     HITL: "An agent may advance the task, but a human intervenes during or at the end of each stage.",
     "grill-me":
         "The task must be refined with a human before anyone works on it, and it takes precedence over AFK and HITL when combined.",
+    taken: "An agent or a person is advancing the task now; it is not selected until the label is removed.",
 };
 
 export function isContractLabel(name: string): name is ContractLabel {

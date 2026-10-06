@@ -1,0 +1,18 @@
+[
+    {
+        "id": "demo-b",
+        "title": "Synthetic demo-b",
+        "description": "Example work item",
+        "status": "in_progress",
+        "priority": 2,
+        "issue_type": "task",
+        "updated_at": "2026-01-01T00:00:00Z",
+        "labels": ["personal", "grill-me"],
+        "dependencies": [],
+        "dependency_count": 0,
+        "dependent_count": 0,
+        "comment_count": 0,
+        "blocked_by_count": 1,
+        "blocked_by": ["demo-a"]
+    }
+]
