@@ -1,8 +1,3 @@
-// Check B (spec stonks-reconciliation, the three "Check B" requirements):
-// the tracking sheet against IBKR, per ticker. Positions (B1–B3), buy
-// matching (B4–B6, design D16) and sell coverage (B7, B8). Excluded tickers
-// are skipped entirely.
-
 import type { ActiveOrder, Entry, Finding, IbkrRead, TrackingSheet } from "../domain.ts";
 import { samePrice, sameQuantity } from "../ticker.ts";
 import {
@@ -39,9 +34,6 @@ export function checkB(
     return findings;
 }
 
-// ---------------------------------------------------------------------------
-// B1–B3, positions
-
 function checkPositions(ticker: string, entries: Entry[], held: number): Finding[] {
     const positionEntries = entries.filter(
         (entry) => entry.estado === "Invertido" || entry.estado === "Vender",
@@ -76,9 +68,6 @@ function checkPositions(ticker: string, entries: Entry[], held: number): Finding
     }
     return [];
 }
-
-// ---------------------------------------------------------------------------
-// B4–B6, buy matching (design D16)
 
 const exactMatch = (entry: Entry, order: ActiveOrder): boolean =>
     sameQuantity(entry.cantidad, order.quantity) &&
@@ -146,9 +135,6 @@ function matchBuys(ticker: string, entries: Entry[], buys: ActiveOrder[]): Findi
     }
     return findings;
 }
-
-// ---------------------------------------------------------------------------
-// B7 and B8, sell coverage: totals only, never prices
 
 const sum = (values: number[]): number => values.reduce((total, value) => total + value, 0);
 

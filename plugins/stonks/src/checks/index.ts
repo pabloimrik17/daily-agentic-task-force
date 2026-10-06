@@ -1,8 +1,7 @@
-// Phase 1's deterministic checks in one call: A, B and C over the validated
-// inputs, with the findings in the order the report shows them (spec
+// Findings come out in the order the report shows them (spec
 // stonks-reconciliation): alerts first, then by check identifier, then by
-// ticker. Excluded tickers are normalised here so that the checks compare
-// them as they compare everything else.
+// ticker. Excluded tickers are normalised here so that the checks compare them
+// as they compare everything else.
 
 import type {
     CarteraVivaRead,

@@ -1,7 +1,6 @@
-// The known set of IBKR tools (design D4a): the 33 identifiers recorded at the
-// first connect plus `get_order_instructions`, which the UI lists as
-// read-only. A tool of the `ibkr` server outside this set is reported as a
-// warning and never called; the client's own login tools are not the server's.
+// The known set of IBKR tools (design D4a): 33 identifiers plus
+// `get_order_instructions`, which the UI lists as read-only. A tool of the
+// `ibkr` server outside this set is reported as a warning and never called.
 
 export const KNOWN_IBKR_TOOLS: readonly string[] = [
     "mcp__ibkr__get_account_summary",

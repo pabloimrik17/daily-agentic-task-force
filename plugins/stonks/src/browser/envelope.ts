@@ -12,14 +12,14 @@
  */
 const LOGIN_TEXT = String.raw`/log\s?in|sign\s?in|iniciar\s+sesi[oó]n|acceder|c[oó]digo\s+de\s+acceso/i`;
 
-/** Simply Wall St sends a logged-out visitor to `/welcome?r=<path>` (task 3.4). */
+/** Simply Wall St sends a logged-out visitor to `/welcome?r=<path>`. */
 const LOGIN_PATH = String.raw`/\/(login|signin|sign-in|welcome)(\/|$)/i`;
 
 /**
- * Login-wall heuristics, confirmed on both sites' logged-out pages in task
- * 3.4: Simply Wall St's sits at `/welcome` and shows a password field; the
- * Cartera Viva's sits at `/login` and asks for an access code, with no
- * password field.
+ * Login-wall heuristics, as seen on both sites' logged-out pages: Simply
+ * Wall St's sits at `/welcome` and shows a password field; the Cartera
+ * Viva's sits at `/login` and asks for an access code, with no password
+ * field.
  */
 const LOGIN_WALL = String.raw`(function () {
     if (${LOGIN_PATH}.test(location.pathname)) {

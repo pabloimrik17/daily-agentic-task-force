@@ -1,7 +1,6 @@
-// The gate (spec stonks-reconciliation, "Findings and their classification";
-// design D3): a pure decision over the findings. It trips when any finding
-// affects the watchlist, and names the tickers concerned. Pausing and
-// resuming belong to the step machine, not here.
+// Pure decision over the findings (spec stonks-reconciliation, design D3): it
+// trips when any finding affects the watchlist. Pausing and resuming belong to
+// the step machine, not here.
 
 import type { Finding, GateDecision } from "../domain.ts";
 

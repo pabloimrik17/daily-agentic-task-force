@@ -223,7 +223,6 @@ test("phase1 loads report.json into the pane and keeps its snapshot in the store
     expect((await ui.find({ key: "toggle:tracking-sheet" }))?.text).toContain("Tracking sheet (2)");
     expect(await ui.find({ key: "findings:tracking-sheet" })).toBeDefined();
     expect(await ui.find({ type: "Text", text: /B1 ⚑/ })).toBeDefined();
-    // Each linked ticker is a link in its finding's row and again in the links row.
     expect(await ui.findAll({ type: "Link" })).toHaveLength(2 * Object.keys(LINKS).length);
     expect(await ui.find({ type: "Text", text: /triggered-sell 3 WNYE/ })).toBeDefined();
     expect((await ui.find({ key: "tick:B1:WNYE" }))?.text).toContain("[ ] B1 WNYE");
@@ -274,7 +273,6 @@ test("ticks live in the session only and a new run clears them", async ($, on) =
     expect((await ui.find({ key: "tick:B1:WNYE" }))?.text).toContain("[x] B1 WNYE");
     expect(w.store.ticks).toBeUndefined();
 
-    // The next run replaces the report and shows no earlier tick.
     await $.command.run(SYNC);
     expect(await ui.find({ type: "Text", text: /Syncing/ })).toBeDefined();
     await $.tool.call({ tool: "Bash", command: step("sigue") });

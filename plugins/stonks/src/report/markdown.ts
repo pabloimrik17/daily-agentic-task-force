@@ -1,6 +1,5 @@
-// The report as markdown (spec stonks-report): always printed by the command,
-// and drawn block by block by the pane. The two stdout feed markers the pane
-// reads are added by the engine step, not here.
+// The `stonks-report-path:` line the pane follows is added by the engine
+// step, not here.
 
 import type { Finding, Mirror, Movement, Report, WatchlistResult } from "../domain.ts";
 

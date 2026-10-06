@@ -1,7 +1,6 @@
-// The golden run (task 6.8): one fictional dataset that exercises every
-// check at least once, with its findings reviewed by hand against the spec
-// once and then frozen. A change in `expected.json` is a change in what the
-// checks say; review it as such.
+// One fictional dataset exercises every check at least once; its findings
+// were reviewed by hand against the spec and frozen. A change in
+// `expected.json` is a change in what the checks say; review it as such.
 
 import { readFileSync } from "node:fs";
 

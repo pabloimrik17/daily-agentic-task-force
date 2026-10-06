@@ -1,7 +1,6 @@
-// Repeat counters (spec stonks-report, design D16): consecutive runs, the
-// current one included, in which the same check produced a finding for the
-// same ticker. The previous snapshot holds the previous count; a run without
-// the finding drops it from the snapshot, which resets the count to 1.
+// The count is consecutive runs (design D16), this one included, with the same
+// check finding the same ticker. A run without the finding drops it from the
+// snapshot, which resets the count to 1.
 
 import type { Finding, Snapshot } from "../domain.ts";
 

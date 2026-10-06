@@ -45,7 +45,7 @@ function parseCandidate(text: string): unknown {
 /**
  * The content blocks of a tool result. Claude in Chrome's `javascript_tool`
  * hands the hook a bare array of `{ type: "text", text }` blocks, the result
- * first and a "Tab Context" block after it (task 1.5); a `{ content }` object
+ * first and a "Tab Context" block after it; a `{ content }` object
  * is the MCP result shape.
  */
 function blocksOf(response: unknown): unknown[] {

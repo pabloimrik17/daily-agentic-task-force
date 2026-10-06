@@ -1,6 +1,3 @@
-// Phase 2 plan (spec stonks-watchlist): compare the desired set with the real
-// watchlist by symbol; with a desired set above capacity change nothing.
-
 import type { Directive, WatchlistRead } from "../domain.ts";
 import { normaliseTicker } from "../ticker.ts";
 

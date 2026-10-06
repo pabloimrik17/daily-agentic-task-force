@@ -1,4 +1,3 @@
-// Checks after each change and at the end of phase 2 (spec stonks-watchlist).
 // A failure stops phase 2; nothing here repairs anything.
 
 import type { Directive, WatchlistResult } from "../domain.ts";

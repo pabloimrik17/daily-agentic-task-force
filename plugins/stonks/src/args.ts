@@ -1,6 +1,3 @@
-// The arguments of `/stonks:sync` (spec stonks-sync, "Phases and modes"): one
-// optional `--only sources|watchlist`. Anything else is a usage error.
-
 export interface SyncArgs {
     only: "sources" | "watchlist" | null;
 }

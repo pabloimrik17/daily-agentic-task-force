@@ -1,5 +1,3 @@
-// Resolving an addition to an exact listing (design D11, D9).
-
 import type { CarteraVivaCard, DropdownRow, Listing } from "../domain.ts";
 import { formatListing } from "../domain.ts";
 import { normaliseTicker, parseListing } from "../ticker.ts";

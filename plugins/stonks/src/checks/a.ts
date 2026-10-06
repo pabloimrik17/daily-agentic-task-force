@@ -1,6 +1,4 @@
-// Check A (spec stonks-reconciliation, "Check A, SWS portfolio against
-// IBKR"): the SWS portfolio's tickers against the held tickers, both ways,
-// quantities not compared. Excluded tickers take part, because the SWS
+// Quantities are not compared. Excluded tickers take part, because the SWS
 // portfolio mirrors IBKR fully.
 
 import type { Finding, IbkrRead, SwsPortfolioRead } from "../domain.ts";

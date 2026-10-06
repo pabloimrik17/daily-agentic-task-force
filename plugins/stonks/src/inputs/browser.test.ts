@@ -14,10 +14,10 @@ const CONFIG = {
 const fixture = (name: string): unknown =>
     JSON.parse(readFileSync(new URL(`./fixtures/browser/${name}.json`, import.meta.url), "utf8"));
 
-// The page fixtures mirror the envelopes the collectors returned on the real
-// pages in task 3.4, with every value fictional: a holding link's text is its
-// ticker, a Nasdaq slug carries no tier, watchlist rows embed no
-// `uniqueSymbol`, and the watchlist counter reads `N/M stocks`.
+// The page fixtures mirror the envelopes the collectors return on the real
+// pages, with every value fictional: a holding link's text is its ticker, a
+// Nasdaq slug carries no tier, watchlist rows embed no `uniqueSymbol`, and the
+// watchlist counter reads `N/M stocks`.
 
 describe("SWS portfolio read", () => {
     it("derives tickers from the holding links only", () => {

@@ -1,5 +1,5 @@
-// The step machine's shared types (design D12). They live apart from `cli.ts`
-// so that the step modules import nothing that imports them back.
+// Shared step types (design D12), apart from `cli.ts` so step modules never
+// import a module that imports them back.
 
 import type { Directive } from "../domain.ts";
 import type { Runner } from "../inputs/sheet-gws.ts";

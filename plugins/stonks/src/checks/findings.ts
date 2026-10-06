@@ -1,9 +1,8 @@
-// The finding model (spec stonks-reconciliation, design D3 and D16): how a
-// check result is classified, and the views of the inputs that the checks
-// share. Severity and the watchlist mark depend on the check identifier
-// alone, so every check builds its findings through `finding` and none can
-// disagree with the tables below. Tickers meet here through `normaliseTicker`,
-// so a check never compares two spellings of one symbol.
+// Severity and the watchlist mark depend on the check identifier alone, so
+// every check builds its findings through `finding` and none can disagree with
+// the tables below. Tickers meet here through `normaliseTicker`, so a check
+// never compares two spellings of one symbol (spec stonks-reconciliation,
+// design D3 and D16).
 
 import type {
     ActiveOrder,
@@ -83,9 +82,6 @@ export function finding(
     };
 }
 
-// ---------------------------------------------------------------------------
-// Views of the inputs
-
 const POSITION_ESTADOS = new Set<Entry["estado"]>(["Invertido", "Vender"]);
 
 const sum = (values: number[]): number => values.reduce((total, value) => total + value, 0);
@@ -153,9 +149,6 @@ export function liveOrders(ibkr: IbkrRead, ticker: string, side: OrderSide): Act
         (order) => order.side === side && normaliseTicker(order.ticker) === wanted,
     );
 }
-
-// ---------------------------------------------------------------------------
-// Phrases for `sides`
 
 /** A quantity as the sheet would show it: `2`, `0.5`; sums are rounded to the 1e-6 of D16. */
 export function formatQuantity(quantity: number): string {

@@ -1,7 +1,6 @@
-// The step machine's entry (design D12): `bun src/cli.ts <step> [args…]`.
-// Each step prints markdown for the user, a blank line, and one last line
-// `directive: <JSON>` that the command follows. The exit code is 0 when a
-// directive was printed and 1 on a usage or runner error.
+// Step machine entry (design D12). Each step prints markdown, a blank line and
+// a last `directive: <JSON>` line the command follows; exit 1 on usage or
+// runner error.
 
 import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";

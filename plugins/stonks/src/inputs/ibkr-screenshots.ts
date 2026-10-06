@@ -1,9 +1,6 @@
-// The screenshot fallback (design D4, Fallback): when the IBKR reads fail and
-// the user declines or fails to re-authenticate, Claude transcribes
-// screenshots into one strict JSON document. This module validates it, checks
-// that the position pages are contiguous (a missing page would otherwise read
-// as sold lines) and renders the table the user must confirm before any check
-// runs on it.
+// The screenshot fallback (design D4): Claude's transcription is validated,
+// position pages must be contiguous (a missing page would read as sold lines),
+// and the rendered table needs the user's confirmation before any check runs.
 
 import type { ActiveOrder, IbkrRead, OrderType, Position } from "../domain.ts";
 import { normaliseTicker, sameQuantity } from "../ticker.ts";

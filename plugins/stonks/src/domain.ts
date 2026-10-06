@@ -1,11 +1,3 @@
-// The vocabulary every engine module shares: inputs as the engine sees them
-// after validation, findings, the report and the snapshot. Names follow
-// CONTEXT.md. Modules import from here so that inputs, checks, report and
-// watchlist agree on one shape; nothing here reads a file or decides anything.
-
-// ---------------------------------------------------------------------------
-// Configuration (design D15)
-
 export const CONFIG_SCHEMA = "stonks.config.v1";
 
 export interface StonksConfig {
@@ -16,9 +8,6 @@ export interface StonksConfig {
     carteraViva: { url: string };
     excludedTickers: string[];
 }
-
-// ---------------------------------------------------------------------------
-// Tracking sheet
 
 export const ESTADOS = [
     "Invertido",
@@ -49,9 +38,6 @@ export interface TrackingSheet {
     entries: Entry[];
 }
 
-// ---------------------------------------------------------------------------
-// IBKR
-
 export interface Position {
     ticker: string;
     quantity: number;
@@ -79,9 +65,6 @@ export interface IbkrRead {
     positions: Position[];
     orders: ActiveOrder[];
 }
-
-// ---------------------------------------------------------------------------
-// Simply Wall St and the Cartera Viva
 
 /** An exchange-qualified listing, `NasdaqGS:HOOL`. */
 export interface Listing {
@@ -156,9 +139,6 @@ export interface CollectorEnvelope {
     data: unknown;
 }
 
-// ---------------------------------------------------------------------------
-// Findings (spec stonks-reconciliation, design D3 and D16)
-
 export type CheckId =
     | "A1"
     | "A2"
@@ -203,9 +183,6 @@ export interface GateDecision {
     tripped: boolean;
     affectedTickers: string[];
 }
-
-// ---------------------------------------------------------------------------
-// Report and snapshot (spec stonks-report, design D13 and D14)
 
 export const REPORT_SCHEMA = "stonks.report.v1";
 export const SNAPSHOT_SCHEMA = "stonks.snapshot.v1";
@@ -262,9 +239,6 @@ export interface Report {
     snapshot: Snapshot;
 }
 
-// ---------------------------------------------------------------------------
-// Directives the engine prints for the command (design D12)
-
 export type BrowserSource = "sws-portfolio" | "watchlist" | "cartera-viva";
 
 export type Directive =
@@ -276,9 +250,6 @@ export type Directive =
     | { kind: "add"; ticker: string }
     | { kind: "stop"; reason: string }
     | { kind: "done" };
-
-// ---------------------------------------------------------------------------
-// Run state (design D6)
 
 /** What a run covers: `full` is phase 1 then phase 2; the others are `--only`. */
 export type RunMode = "full" | "sources" | "watchlist";

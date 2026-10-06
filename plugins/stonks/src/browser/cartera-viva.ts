@@ -1,13 +1,12 @@
-// Cartera Viva collector (spec stonks-inputs "Cartera Viva read"), as observed
-// on the real page in task 3.4. The page's title is "Cartera Viva"; its open
-// positions are the `article` cards of the section headed "Posiciones
-// abiertas", whose header also shows the "N posiciones" counter. The recently
-// closed positions sit in a section of their own and are never read. The
-// cards arrive a while after the page: until then the section holds
-// placeholders and no counter, which the collector reports as `loading`, as
-// it does a page that has rendered no title yet.
-// It returns each card's visible text lines untouched; reading ticker, name,
-// average price and trailing out of them happens in the engine parser.
+// Cartera Viva collector (spec stonks-inputs "Cartera Viva read"). The page's
+// title is "Cartera Viva"; its open positions are the `article` cards of the
+// section headed "Posiciones abiertas", whose header also shows the
+// "N posiciones" counter. The recently closed positions sit in a section of
+// their own and are never read. The cards arrive after the page: until then
+// the section holds placeholders and no counter, which the collector reports
+// as `loading`, as it does a page that has rendered no title yet.
+// It returns each card's visible text lines untouched; the engine parser reads
+// ticker, name, average price and trailing out of them.
 
 import { envelope } from "./envelope.ts";
 

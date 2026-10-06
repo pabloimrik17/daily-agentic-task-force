@@ -1,10 +1,5 @@
-// The report pane (design D13, D14). `command.run` on `stonks:sync` opens the
-// pane in its "syncing" state and hands the stored snapshot to the engine as
-// `<state>/previous.json`; `tool.call` on Bash recognises the engine's
-// report-producing steps, reads the `report.json` they name on their
-// `stonks-report-path:` line with `$.fs.read` into `$.state`, and keeps the
-// snapshot in `$.store`; `ui.render` draws it. The engine always prints the
-// markdown as well, so nothing here is required for a run to complete.
+// The report pane (design D13, D14). The engine always prints the markdown as
+// well, so nothing here is required for a run to complete.
 //
 // `$.state` is read and written directly, each call naming one of the file's
 // reference constants: the validators of both the CI-pinned and the running
@@ -29,9 +24,7 @@ const REPORT = { plugin: "stonks", key: "report" } as const;
 const COLLAPSED = { plugin: "stonks", key: "collapsed" } as const;
 const TICKS = { plugin: "stonks", key: "ticks" } as const;
 
-// A Bash command running one of the engine's report-producing steps.
 const STEP = /stonks\/src\/cli\.ts"?\s+(?:phase1|sigue|watchlist-final)\b/;
-// The engine names the file it wrote.
 const PATH_LINE = /^stonks-report-path: (.+)$/m;
 const REPORT_SCHEMA = "stonks.report.v1";
 
@@ -58,7 +51,6 @@ const SEVERITY_LABEL: Record<PaneFinding["severity"], string> = {
 const isRecord = (value: unknown): value is Record<string, unknown> =>
     typeof value === "object" && value !== null;
 
-// What the pane reads of `report.json`; anything else is an invalid report.
 const REPORT_SHAPE: Record<string, (value: unknown) => boolean> = {
     schema: (value) => value === REPORT_SCHEMA,
     ibkr: isRecord,
@@ -170,7 +162,6 @@ const SECTION_BOX = {
     paddingX: 1,
 } as const;
 
-// The tool result of a Bash call: `stdout` when it has one, else the text.
 function stdoutOf(ran: { result?: unknown; text?: string }): string {
     const result = ran.result as { stdout?: string } | undefined;
     return result?.stdout ?? ran.text ?? "";
@@ -193,9 +184,8 @@ async function loadReport($: EngineInterface, stdout: string): Promise<PaneRepor
 async function storeReport($: EngineInterface, loaded: PaneReport): Promise<void> {
     await $.state.set(REPORT, loaded);
     await $.state.set(STATUS, "ready");
-    // D14: the pane's store keeps the snapshot between sessions. Every
-    // recognised step rewrites `report.json` with the run's current
-    // snapshot, so the store follows the last report of the run.
+    // D14: the store keeps the snapshot between sessions; every step rewrites
+    // `report.json`, so it follows the run's last report.
     await $.store.set("snapshot", loaded.snapshot);
 }
 
@@ -371,7 +361,6 @@ async function reportPane($: EngineInterface, ui: Ui, r: PaneReport, bodyColumns
 
 export const register: Register = (on) => {
     on("command.run", { command: "stonks:sync" }, async ($, e, next) => {
-        // A new run: its report replaces the previous one, and no earlier tick shows.
         await $.state.set(STATUS, "syncing");
         await $.state.set(REPORT, null);
         await $.state.set(TICKS, {});

@@ -157,7 +157,6 @@ describe("phase1, gate", () => {
             "C9 VNDL",
         ]);
         expect(written.gate).toEqual({ tripped: true, affectedTickers: ["ACME", "TYRL"] });
-        // The whole report, not only the affected findings, then the pane's feed line.
         expect(out.markdown).toContain(renderMarkdown(written));
         expect(out.markdown).toContain("- [ ] B2 ACME");
         expect(out.markdown).toContain("- [ ] C1 TYRL");

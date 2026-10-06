@@ -1,8 +1,5 @@
-// The user configuration file (spec stonks-sync, "User configuration file"):
-// the personal values live in one JSON file outside the plugin, validated
-// strictly before any input is read. A missing file, a missing field, a
-// mistyped field or an unknown field is an error naming the path, never a
-// default.
+// User configuration (spec stonks-sync): validated strictly before any input
+// is read. Every violation is an error naming the path, never a default.
 
 import { readFileSync } from "node:fs";
 import { homedir } from "node:os";

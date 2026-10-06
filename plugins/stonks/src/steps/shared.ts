@@ -1,6 +1,5 @@
-// Plumbing every engine step shares (design D6, D12): the open run with its
-// configuration, this run's captures, the live sheet read and the `stop`
-// output. Nothing here decides anything about the data.
+// Plumbing every engine step shares (design D6, D12); nothing here decides
+// anything about the data.
 
 import { readdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";

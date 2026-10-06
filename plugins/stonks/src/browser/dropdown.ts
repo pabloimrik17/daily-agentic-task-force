@@ -1,6 +1,5 @@
-// The "Add stock" search box and its dropdown (design D10, D11 steps 3-6),
-// as observed on the real page in tasks 3.4 and 12.2. Typing the search term
-// is not here: it needs real keystrokes (`computer` `type`), into the box
+// The "Add stock" search box and its dropdown (design D10, D11 steps 3-6).
+// Typing the search term is not here: it needs real keystrokes (`computer` `type`), into the box
 // `reposition-add-panel` leaves focused. An addition shows no confirmation, so
 // `click-row` reports only that it clicked; a fresh read verifies the change.
 //

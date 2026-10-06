@@ -1,11 +1,9 @@
-// Reads of the two IBKR tools (design D4): the captured `tool_response` text
-// is parsed for the fields the checks use and nothing else, because IBKR owns
-// the schema. Inactive orders are dropped by a deny list, so an unknown status
+// Only the fields the checks use are parsed, because IBKR owns the schema
+// (design D4). Inactive orders are dropped by a deny list, so an unknown status
 // counts as active (a false finding beats a missed one, design D16). REPLACED
-// is not on it: IBKR marks an order the user modified that way, and the order
-// keeps working (observed on the first real run, design Context). A trail
-// is a percentage only when the description says `%`; otherwise it stays
-// unknown rather than derived.
+// is not on it: IBKR marks a user-modified order that way and it keeps working.
+// A trail is a percentage only when the description says `%`; otherwise it
+// stays unknown rather than derived.
 
 import { readdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";

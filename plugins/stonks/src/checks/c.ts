@@ -1,8 +1,3 @@
-// Check C (spec stonks-reconciliation, "Check C, tracking sheet against the
-// Cartera Viva"): the sheet and the IBKR holdings against the Trader's
-// Cartera Viva, at ticker level. Excluded tickers are skipped entirely. C6
-// adjusts nothing; when it cannot compare the trails it says so.
-
 import type {
     ActiveOrder,
     CarteraVivaCard,
@@ -55,9 +50,6 @@ export function checkC(
 
 const has = (entries: Entry[], estado: Estado): boolean =>
     entries.some((entry) => entry.estado === estado);
-
-// ---------------------------------------------------------------------------
-// The ticker is in the Cartera Viva: C2–C6
 
 function traderIn(
     ticker: string,
@@ -209,9 +201,6 @@ function notEvaluableTrail(
 ): Finding {
     return finding("C6", ticker, sides, { notEvaluable });
 }
-
-// ---------------------------------------------------------------------------
-// The ticker is not in the Cartera Viva: C1, C7, C8, C9
 
 function traderOut(ticker: string, entries: Entry[], held: number, buys: ActiveOrder[]): Finding[] {
     const isHeld = held > 0;

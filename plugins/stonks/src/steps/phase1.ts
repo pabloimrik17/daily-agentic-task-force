@@ -1,11 +1,6 @@
-// Phase 1 and its resumption (design D3, D4, D5, D12, D13, D14; spec
-// stonks-sync "Gate between phases", stonks-inputs "IBKR re-authentication
-// before the screenshot fallback"): every input read in this run, then the
-// checks, the gate and the report. IBKR comes from the confirmed screenshot
-// table when there is one, else from this run's captures; a failed read offers
-// `/mcp` once before the fallback. The previous run's snapshot feeds only
-// Movimientos and the repeat counters, never a check. `sigue` re-reads the
-// sheet alone, reuses everything else, and never pauses again.
+// Phase 1 and its resumption (design D3, D4, D5, D12, D13, D14). The previous
+// run's snapshot feeds only Movimientos and the repeat counters, never a check.
+// `sigue` re-reads the sheet alone, reuses everything else, and never pauses again.
 
 import { existsSync, readFileSync } from "node:fs";
 
@@ -120,9 +115,6 @@ function jsonFile(path: string): { ok: true; value: unknown } | { ok: false } {
     }
 }
 
-// ---------------------------------------------------------------------------
-// Strict readers for the engine's own files: the confirmed table and the snapshot
-
 const ORDER_TYPES: readonly string[] = [
     "limit",
     "trailing-stop",
@@ -226,9 +218,6 @@ function readPrevious(scope: RunScope): { snapshot: Snapshot | null; warning: st
     const read = strictly(() => readSnapshot(raw.value));
     return read.ok ? { snapshot: read.value, warning: null } : ignored(read.message);
 }
-
-// ---------------------------------------------------------------------------
-// Inputs
 
 function readConfirmed(path: string): IbkrResult<IbkrRead> {
     const unreadable = (why: string): IbkrResult<IbkrRead> => ({
@@ -358,9 +347,6 @@ async function gather(
     };
 }
 
-// ---------------------------------------------------------------------------
-// The report
-
 const isStrings = (value: unknown): value is string[] =>
     Array.isArray(value) && value.every((item) => typeof item === "string");
 
@@ -432,9 +418,6 @@ function reportOutput(
         directive,
     };
 }
-
-// ---------------------------------------------------------------------------
-// Steps
 
 const phase1: Step = async (ctx, args) => {
     noArgs("phase1", args);

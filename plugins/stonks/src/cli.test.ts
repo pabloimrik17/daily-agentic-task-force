@@ -66,7 +66,6 @@ describe("begin", () => {
         expect(result.code).toBe(1);
         expect(result.stdout).toBe("");
         expect(result.stderr).toContain(USAGE);
-        // No config was read (it does not exist) and no state was written.
         expect(existsSync(stateDir)).toBe(false);
         expect(readdirSync(dir)).toEqual(before);
     });

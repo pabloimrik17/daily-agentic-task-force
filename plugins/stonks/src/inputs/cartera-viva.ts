@@ -1,8 +1,7 @@
-// Cartera Viva parser, on the card layout observed in task 3.4. Each card's
-// lines read: ticker, sector, company name, "N días", "PM" and the average
-// price, the current price, the target, the return, the weight, the race to
-// the target, a link, a status, and the trailing line. The parser anchors on
-// the labels rather than on positions:
+// Cartera Viva parser. Each card's lines read: ticker, sector, company name,
+// "N días", "PM" and the average price, the current price, the target, the
+// return, the weight, the race to the target, a link, a status, and the
+// trailing line. The parser anchors on the labels rather than on positions:
 //   - ticker: the first line that is a ticker;
 //   - name: the line just before "N días", when it is not the ticker;
 //   - average price: the line after "PM", in the page's es-ES format

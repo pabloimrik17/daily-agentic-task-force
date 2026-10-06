@@ -1,7 +1,3 @@
-// The report as data (spec stonks-report): alerts first, then one section per
-// mirror in a fixed order, movements, the gate, links and the snapshot the
-// next run will compare against.
-
 import {
     type Finding,
     type GateDecision,

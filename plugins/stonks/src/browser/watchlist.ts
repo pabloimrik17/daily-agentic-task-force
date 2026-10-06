@@ -1,7 +1,6 @@
-// Watchlist collector and row actions (design D9, D10), confirmed on the real
-// page in task 3.4; the Remove click was observed on a real removal in task
-// 12.2. Its confirmation, "Removed from watchlist", names no ticker and stays
-// in the page for minutes, so no action reads it: a fresh read verifies each
+// Watchlist collector and row actions (design D9, D10). The Remove
+// confirmation, "Removed from watchlist", names no ticker and stays in the
+// page for minutes, so no action reads it: a fresh read verifies each
 // change. Nothing here scrolls: the page renders black when scrolled (D10),
 // and every row is already in the DOM.
 
@@ -70,7 +69,7 @@ const POINTER_EVENTS = '["pointerdown", "mousedown", "pointerup", "mouseup", "cl
 
 /**
  * Opens a row's menu: mouse-typed pointer events on the row's "More Options"
- * button (design D10). On the real page (task 3.4) events without a
+ * button (design D10). On the real page events without a
  * `pointerType` leave the menu closed, and the menu renders after this
  * returns, so the result cannot report it open.
  */

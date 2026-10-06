@@ -1,7 +1,5 @@
-// IBKR steps (design D4, D4a, D12): the unknown-tool check, and the
-// screenshot fallback's stage and confirm. Staging validates and renders the
-// transcribed table; only the user's confirmation turns it into this run's
-// IBKR read, which `phase1` then prefers over the MCP captures.
+// Only the user's confirmation turns a staged screenshot table into this run's
+// IBKR read, which `phase1` prefers over the MCP captures (design D4, D12).
 
 import { existsSync, renameSync, rmSync } from "node:fs";
 

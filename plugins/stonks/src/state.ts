@@ -1,7 +1,5 @@
-// The state directory and the run directory (design D6). All local state lives
-// under one directory; directories are 0700 and files 0600. A run owns one
-// directory, and `beginRun` deletes the previous one so that data from before
-// is gone by construction, not by instruction.
+// State and run directories (design D6): directories 0700, files 0600. A run
+// owns one directory and `beginRun` deletes the previous one.
 
 import { randomBytes } from "node:crypto";
 import {
