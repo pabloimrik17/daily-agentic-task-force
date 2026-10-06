@@ -27,6 +27,22 @@ describe("detect", () => {
         expect(detection.groups.entry).toEqual({ status: "present", labels: ["AFK"] });
     });
 
+    it("reports a task with work + AFK and no taken complete, with no group for taken", () => {
+        const detection = detect(task(["work", "AFK"]), rules());
+        expect(detection.groups).toEqual({
+            scope: { status: "present", labels: ["work"] },
+            entry: { status: "present", labels: ["AFK"] },
+        });
+    });
+
+    it("leaves taken out of both groups when a task carries it", () => {
+        const detection = detect(task(["work", "AFK", "taken"]), rules());
+        expect(detection.groups).toEqual({
+            scope: { status: "present", labels: ["work"] },
+            entry: { status: "present", labels: ["AFK"] },
+        });
+    });
+
     it("reports the entry group untagged when only scope is present", () => {
         const detection = detect(task(["work"]), rules());
         expect(detection.groups.scope).toEqual({ status: "present", labels: ["work"] });

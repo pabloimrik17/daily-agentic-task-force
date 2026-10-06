@@ -20,6 +20,7 @@ export function config(): AutonomousConfig {
             cap: 25,
             batch: 20,
         },
+        selection: { model: "sonnet", effort: "high" },
     };
 }
 
@@ -150,10 +151,16 @@ export function triageContext(options: {
         },
         now: NOW,
         config: load,
+        results: [],
         io: {
             openUsage: () => Promise.reject(new Error("the triage never reads OpenUsage")),
             trackers: () => options.trackers,
             judgement: options.judgement ?? noJudgement(),
+            chezmoi: () => Promise.reject(new Error("the triage never reads chezmoi")),
+            work: () => {
+                throw new Error("the triage never reads work");
+            },
+            selection: () => Promise.reject(new Error("the triage never selects")),
         },
     };
 }

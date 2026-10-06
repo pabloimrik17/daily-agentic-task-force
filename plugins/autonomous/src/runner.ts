@@ -3,6 +3,7 @@ import type { AutonomousConfig, ConfigLoad } from "./config.ts";
 import type { Exec } from "./exec.ts";
 import type { JudgementExec } from "./label-triage/judgement.ts";
 import type { TrackerFactory, Trackers } from "./label-triage/trackers/tracker.ts";
+import type { SelectionExec, WorkReaderFactory } from "./select/types.ts";
 
 // Provisional contract (design D2): expected to change as further steps land.
 
@@ -41,10 +42,14 @@ export interface RunContext {
     args: RunArgs;
     now: Date;
     config: ConfigLoad;
+    results: readonly StepResult[]; // the steps that already ran, in order (design D1)
     io: {
         openUsage: Exec;
         trackers: TrackerFactory;
         judgement: JudgementExec;
+        chezmoi: Exec;
+        work: WorkReaderFactory;
+        selection: SelectionExec;
     };
 }
 
@@ -81,7 +86,10 @@ export async function runSteps(steps: readonly Step[], ctx: RunContext): Promise
     const results: StepResult[] = [];
     const questions: HandoffQuestion[] = [];
     for (const step of steps) {
-        const { questions: contributed = [], ...result } = await step.run(ctx);
+        const { questions: contributed = [], ...result } = await step.run({
+            ...ctx,
+            results: [...results],
+        });
         results.push(result);
         questions.push(...contributed);
         if (result.outcome !== "advance") {

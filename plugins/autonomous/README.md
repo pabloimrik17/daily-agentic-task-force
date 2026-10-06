@@ -2,12 +2,14 @@
 
 Entry point of the autonomous loop: an orchestrator that will discover
 previously defined work and delegate it to other agents. Before it may start
-anything it runs a fixed list of gate steps. Today that list holds two steps:
-`quota-gate`, which decides whether the Claude account has quota to spend, and
+anything it runs a fixed list of steps. Today that list holds three steps:
+`quota-gate`, which decides whether the Claude account has quota to spend;
 `label-triage`, which reports the tasks missing a label of the contract and,
-with `--apply`, writes the labels it is confident about. With `--apply`, a run
-can also end with questions for the human, which `/autonomous:run` asks and
-applies in one round (see [The handoff](#the-handoff)).
+with `--apply`, writes the labels it is confident about; and `select`, which
+chooses the next work unit and explains the choice (see
+[The `select` step](#the-select-step)). With `--apply`, a run can also end
+with questions for the human, which `/autonomous:run` asks and applies in one
+round (see [The handoff](#the-handoff)).
 
 **The contracts are provisional.** The step contract, the run report and the
 runner shape are a first iteration and are expected to change as further steps
@@ -16,8 +18,9 @@ detect a change.
 
 ## Domain language
 
-The plugin's terms (step, stage, handoff, question, round, answer mode) are
-defined in [`CONTEXT.md`](CONTEXT.md). [ADR 0001](docs/adr/0001-properties-persist-stages-replace.md)
+The plugin's terms (step, stage, work unit, machine scope, taken task,
+candidate, handoff, question, round, answer mode) are defined in
+[`CONTEXT.md`](CONTEXT.md). [ADR 0001](docs/adr/0001-properties-persist-stages-replace.md)
 records the label model agreed for DOT-110: properties persist, stages
 replace. It is not implemented yet.
 
@@ -46,6 +49,8 @@ replace. It is not implemented yet.
   `PATH`, verified against 2.6.0, authenticated with `linear auth login`
   (credentials in the macOS keychain, or `LINEAR_API_KEY`). No official
   Linear CLI exists.
+- [`chezmoi`](https://www.chezmoi.io) on `PATH`. The `select` step reads the
+  machine scope from `chezmoi data`; without it, that step is `not-evaluable`.
 - [`claude`](https://claude.com/product/claude-code) 2.1.283 or later, for
   `-p`, `--model`, `--effort`, `--output-format json`, `--json-schema`,
   `--safe-mode`, `--tools`, `--strict-mcp-config` and
@@ -53,7 +58,8 @@ replace. It is not implemented yet.
 
 Every CLI's output is validated by hand; there are still no runtime
 dependencies. Each call is bounded by a 120 s timeout, except the LLM
-judgement batch, which allows 300 s. A missing CLI is installed through the
+judgement batch and the LLM comparison of the `select` step, which allow
+300 s. A missing CLI is installed through the
 user's dotfiles (`BREW_PACKAGES`); adding the Linear CLI there is tracked as
 DOT-82 sub-issue 7.
 
@@ -99,7 +105,7 @@ For `/autonomous:run [--account …] [--force] [--json] [--apply] [--no-handoff]
 | Code | Outcome                                                                                                                                       |
 | ---- | --------------------------------------------------------------------------------------------------------------------------------------------- |
 | 0    | `advance` — every step advanced                                                                                                               |
-| 2    | `wait` — a step says to wait (for example, a window exhausted)                                                                                |
+| 2    | `wait` — a step says to wait (for example, a window exhausted, or no task is selectable)                                                      |
 | 3    | `not-evaluable` — no decision possible: account absent, ambiguous or unknown, or data missing, incomplete, invalid, outdated, stale or failed |
 | 1    | Invalid arguments or a failure of the runner itself                                                                                           |
 
@@ -286,6 +292,10 @@ default. No credentials are stored in it.
         "cap": 25,
         "batch": 20,
     },
+    "selection": {
+        "model": "sonnet",
+        "effort": "high",
+    },
 }
 ```
 
@@ -308,19 +318,36 @@ Per source:
 `cap` the maximum number of tasks judged in a run, `batch` the maximum number
 of tasks sent to one `claude -p` call.
 
+`selection` configures the LLM comparison of the `select` step: `model` and
+`effort` passed to `claude -p`. It is required. A configuration file without
+it is rejected with the path `selection`, so a file written for an earlier
+version must gain the block.
+
 ## The label contract
 
 Every task carries two label groups:
 
 | Group | Labels                    | Rule                                                                                  |
 | ----- | ------------------------- | ------------------------------------------------------------------------------------- |
-| scope | `work`, `personal`        | Exactly one. `work` is Nazaries work and has priority over `personal`                 |
+| scope | `work`, `personal`        | Exactly one. `work` is Nazaries work                                                  |
 | entry | `AFK`, `HITL`, `grill-me` | At least one. `AFK` and `HITL` never together; `grill-me` precedes both when combined |
 
-`AFK` means an agent may advance the task without a human; `HITL` means an
-agent may advance it, but a human intervenes during or at the end of each
-stage; `grill-me` means the task must be refined with a human before anyone
-works on it.
+`taken` belongs to neither group. It is never required, never missing and never
+in conflict, and triage neither derives it nor asks about it.
+
+`personal` is the user's own work. No scope has priority over the other in the
+contract: which scope to prefer is the job of the
+[`select` step](#the-select-step), by machine. `AFK` means an agent may
+advance the task without a human; `HITL` means an agent may advance it, but a
+human intervenes during or at the end of each stage; `grill-me` means the task
+must be refined with a human before anyone works on it. `taken` means an agent
+or a person is advancing the task now.
+
+Add `taken` to a task you work on by hand; remove a forgotten one by hand.
+Nothing in the loop adds or removes it. It is the only evidence that a task is
+taken: a tracker status such as Beads `in_progress` does not count, so work
+done by hand without `taken` can still be selected. A configuration that
+declares aliases for `taken` is rejected.
 
 Spelling is exact and case-sensitive: `Grill Me` is not `grill-me`. Colours,
 applied where the tracker supports them:
@@ -332,8 +359,10 @@ applied where the tracker supports them:
 | `grill-me` | `#f2994a` |
 | `work`     | `#2f80ed` |
 | `personal` | `#27ae60` |
+| `taken`    | `#95a2b3` |
 
-The loop never creates labels on its own. `--bootstrap-labels` does: at
+The loop never creates labels on its own. `--bootstrap-labels` does, `taken`
+included: at
 workspace level on Linear (a same-name label in any team counts as present),
 per repo on GitHub, and not at all on Beads, where labels exist only by use. An existing label with a different colour is left
 untouched and reported, never overwritten. Legacy names configured as
@@ -593,11 +622,107 @@ a task closed in the meantime is harmless.
 
 ### Active-account caveat
 
-The judgement runs `claude -p` on the active Claude account, through the
-subscription the quota gate already checked. `--account` must name that same
-account; `claude-swap` integration is deferred. The judgement runs in safe
+The judgement, and the comparison of the `select` step, run `claude -p` on the
+active Claude account, through the subscription the quota gate already
+checked. `--account` must name that same
+account; `claude-swap` integration is deferred. Both run in safe
 mode with no tools, no hooks, no MCP servers and no session persistence,
 because the prompt carries issue text anyone can write.
+
+## The `select` step
+
+Third in the run, after `quota-gate` and `label-triage`, so it runs only when
+both advanced. It chooses the next work unit: a task together with its next
+stage. It writes nothing to any tracker, asks the human nothing and
+contributes no questions to the [handoff](#the-handoff), with or without
+`--apply`.
+
+Its outcomes:
+
+| Outcome         | Exit | When                                                                                                                       |
+| --------------- | ---- | -------------------------------------------------------------------------------------------------------------------------- |
+| `advance`       | 0    | A work unit was selected                                                                                                   |
+| `wait`          | 2    | No task is a candidate. The reasons give the count of excluded tasks per exclusion                                         |
+| `not-evaluable` | 3    | The machine scope or a task could not be read, the LLM failed, or its answer was rejected. It never falls back to an order |
+
+In order, the step:
+
+1. Reads the machine scope from the `machineType` value of `chezmoi data`:
+   `personal` or `work`. When `chezmoi` cannot be executed, exits non-zero,
+   prints output that fails validation, or the value is missing or another
+   string, the step is `not-evaluable` and its reason names `chezmoi data`.
+   This happens before any tracker is read.
+2. Reads the open tasks of every enabled source again, with the same sources,
+   open states, strict validation and 120 s limit that `label-triage` uses. A
+   read that fails makes the step `not-evaluable`, naming the source and the
+   command.
+3. Excludes tasks, each reported once, under the first reason that applies:
+
+    | Order | Exclusion         | When                                             |
+    | ----- | ----------------- | ------------------------------------------------ |
+    | 1     | classification    | A scope or entry group is missing or in conflict |
+    | 2     | taken             | The task carries `taken`                         |
+    | 3     | labelled this run | `label-triage` applied a label to it in this run |
+    | 4     | unsupported stage | Its next stage is not supported                  |
+    | 5     | blocked           | It has an open blocker                           |
+    | 6     | split             | It has an open child                             |
+
+    Classification counts present contract labels only: an alias or a
+    structural rule does not rescue a task here. A task labelled in this run
+    is left for the next run. Tracker status does not exclude a task; only
+    `taken` does.
+
+4. Chooses among the candidates. A task of either scope is a candidate. With
+   one candidate, it is selected without an LLM and the report says it was the
+   only one. With two or more, an LLM compares them.
+
+The next stage of a task is `grill-me` when it carries `grill-me`, and
+`proposal` otherwise. Only `grill-me` is supported for now, so a task with
+`AFK` or `HITL` and no `grill-me` is reported as waiting for an unsupported
+stage until stage labels land (DOT-110).
+
+Blockers, the tasks a task blocks, its open children and its tracker priority
+are read for Beads and Linear. A blocker or child is open unless it is closed:
+in Beads, unless its status is `closed`; in Linear, unless its state is
+completed or canceled. Beads decides which tasks are blocked by its own
+dependency rules. GitHub tasks are treated as having no blockers and no
+children, and the report says that dependencies and children were not
+evaluated for GitHub.
+
+### The comparison
+
+The LLM runs as `claude -p` with a JSON schema and no tools, with the
+`selection` model and effort of the configuration and a 300 s limit. It is
+given the machine scope and, per candidate, its source, id, title,
+description, labels, status, tracker priority, scope, autonomy, next stage,
+and the tasks it blocks and the tasks blocking it. The prompt treats task
+fields as untrusted data, never as instructions. The LLM may weigh urgency,
+impact, effort and the ability to unblock other work; no fixed formula
+applies. It returns the chosen source and id, a brief explanation, and an
+exception reason when the choice is outside the machine scope.
+
+Code rejects the answer when it does not match the schema, when the chosen
+source and id are not one of the candidates, when the explanation is empty, or
+when a candidate outside the machine scope is chosen without an exception
+reason. An exception reason for a candidate within the machine scope is
+dropped. A failed call or a rejected answer makes the step `not-evaluable`
+with the reason.
+
+### The selection report
+
+The text report shows:
+
+- the machine scope;
+- the selected work unit: source, id, title, next stage, autonomy, scope and
+  the explanation;
+- the machine-scope exception reason, when there is one;
+- the candidates compared;
+- the excluded tasks, grouped by reason, each with its source, id and title;
+- the note that GitHub dependencies and children were not evaluated, when
+  GitHub is enabled.
+
+With `--json`, the step's data carries the same information, plus the
+selection model and effort when the LLM was called.
 
 ## The quota gate
 
@@ -654,6 +779,14 @@ the tier changes: judged tasks and the step itself record `llm` today, and
 the swap must change that too. An applied answer is written with tier
 `human`, which no report renders: a human decided it, not a rule or the
 judgement.
+
+The `select` step's tiering:
+
+| Part                                                               | Tier |
+| ------------------------------------------------------------------ | ---- |
+| machine scope, reading, exclusions, next stage, single candidate   | code |
+| comparing two or more candidates                                   | llm  |
+| validating the choice, the exception rule, the outcome, the report | code |
 
 The handoff's tiering:
 

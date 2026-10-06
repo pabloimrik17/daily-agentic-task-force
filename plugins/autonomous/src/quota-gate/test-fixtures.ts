@@ -71,12 +71,18 @@ export function context(exec: OpenUsageExec, args: Partial<RunArgs> = {}): RunCo
         },
         now: NOW,
         config: { ok: false, path: "", error: "unused" },
+        results: [],
         io: {
             openUsage: exec,
             trackers: () => {
                 throw new Error("unused");
             },
             judgement: () => Promise.resolve({ ok: false, error: "unused" }),
+            chezmoi: () => Promise.resolve({ ok: false, error: "unused" }),
+            work: () => {
+                throw new Error("unused");
+            },
+            selection: () => Promise.resolve({ ok: false, error: "unused" }),
         },
     };
 }

@@ -1,0 +1,161 @@
+{
+    "nodes": [
+        {
+            "id": "synthetic-DEMO-108",
+            "identifier": "DEMO-108",
+            "title": "Synthetic DEMO-108",
+            "priority": 2,
+            "priorityLabel": "High",
+            "updatedAt": "2026-01-01T00:00:00Z",
+            "state": {
+                "name": "Backlog",
+                "type": "backlog",
+                "color": "#000000"
+            },
+            "labels": {
+                "nodes": [
+                    {
+                        "name": "personal"
+                    },
+                    {
+                        "name": "grill-me"
+                    }
+                ]
+            },
+            "inverseRelations": {
+                "nodes": []
+            }
+        },
+        {
+            "id": "synthetic-DEMO-111",
+            "identifier": "DEMO-111",
+            "title": "Synthetic DEMO-111",
+            "priority": 2,
+            "priorityLabel": "High",
+            "updatedAt": "2026-01-01T00:00:00Z",
+            "state": {
+                "name": "Backlog",
+                "type": "backlog",
+                "color": "#000000"
+            },
+            "labels": {
+                "nodes": [
+                    {
+                        "name": "personal"
+                    },
+                    {
+                        "name": "grill-me"
+                    }
+                ]
+            },
+            "inverseRelations": {
+                "nodes": [
+                    {
+                        "id": "relation-DEMO-108",
+                        "type": "blocks",
+                        "issue": {
+                            "id": "synthetic-DEMO-108",
+                            "identifier": "DEMO-108",
+                            "state": {
+                                "type": "backlog"
+                            }
+                        }
+                    },
+                    {
+                        "id": "relation-DEMO-200",
+                        "type": "blocks",
+                        "issue": {
+                            "id": "synthetic-DEMO-200",
+                            "identifier": "DEMO-200",
+                            "state": {
+                                "type": "completed"
+                            }
+                        }
+                    }
+                ]
+            }
+        },
+        {
+            "id": "synthetic-DEMO-82",
+            "identifier": "DEMO-82",
+            "title": "Synthetic DEMO-82",
+            "priority": 0,
+            "priorityLabel": "No priority",
+            "updatedAt": "2026-01-01T00:00:00Z",
+            "state": {
+                "name": "Backlog",
+                "type": "backlog",
+                "color": "#000000"
+            },
+            "labels": {
+                "nodes": [
+                    {
+                        "name": "personal"
+                    },
+                    {
+                        "name": "grill-me"
+                    }
+                ]
+            },
+            "inverseRelations": {
+                "nodes": []
+            }
+        },
+        {
+            "id": "synthetic-DEMO-200",
+            "identifier": "DEMO-200",
+            "title": "Synthetic DEMO-200",
+            "priority": 2,
+            "priorityLabel": "High",
+            "updatedAt": "2026-01-01T00:00:00Z",
+            "state": {
+                "name": "Done",
+                "type": "completed",
+                "color": "#000000"
+            },
+            "labels": {
+                "nodes": [
+                    {
+                        "name": "personal"
+                    },
+                    {
+                        "name": "grill-me"
+                    }
+                ]
+            },
+            "inverseRelations": {
+                "nodes": []
+            }
+        },
+        {
+            "id": "synthetic-DEMO-201",
+            "identifier": "DEMO-201",
+            "title": "Synthetic DEMO-201",
+            "priority": 2,
+            "priorityLabel": "High",
+            "updatedAt": "2026-01-01T00:00:00Z",
+            "state": {
+                "name": "Backlog",
+                "type": "canceled",
+                "color": "#000000"
+            },
+            "labels": {
+                "nodes": [
+                    {
+                        "name": "personal"
+                    },
+                    {
+                        "name": "grill-me"
+                    }
+                ]
+            },
+            "inverseRelations": {
+                "nodes": []
+            }
+        }
+    ],
+    "pageInfo": {
+        "hasNextPage": false,
+        "endCursor": null
+    }
+}
