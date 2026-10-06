@@ -15,11 +15,13 @@ import {
     type Report,
     type WatchlistItem,
     type WatchlistRead,
+    type WatchlistResult,
 } from "../domain.ts";
 import { parseCarteraViva } from "../inputs/cartera-viva.ts";
 import { parseDropdown } from "../inputs/dropdown.ts";
 import type { ReadResult } from "../inputs/envelope.ts";
 import { parseWatchlist } from "../inputs/watchlist.ts";
+import { tickerLinks } from "../report/links.ts";
 import { watchlistBlock } from "../report/markdown.ts";
 import { planPath, listingsPath, reportPath, writePrivate } from "../state.ts";
 import { normaliseTicker, parseListing } from "../ticker.ts";
@@ -565,6 +567,27 @@ const verifyStep = (ctx: StepContext): StepOutput => {
     ]);
 };
 
+/** Links for every ticker the result names: this read's pages, else the learnt ones, else a search. */
+function resultLinks(
+    scope: RunScope,
+    read: WatchlistRead,
+    result: WatchlistResult,
+): Record<string, string> {
+    const named = [
+        ...result.removed,
+        ...result.added,
+        ...result.unresolved,
+        ...result.final,
+        ...(result.incomplete === null
+            ? []
+            : [...result.incomplete.missing, ...result.incomplete.extra]),
+    ];
+    return tickerLinks([...new Set(named)], {
+        runLinks: read.items.flatMap((item) => (item.link === null ? [] : [item.link])),
+        listings: listingsOf(scope),
+    });
+}
+
 const finalStep = (ctx: StepContext): StepOutput => {
     const opened = openPlan(ctx, "watchlist-final");
     if (!opened.ok) {
@@ -581,7 +604,8 @@ const finalStep = (ctx: StepContext): StepOutput => {
         state.plan,
         state.unresolved,
     );
-    const block = watchlistBlock(result);
+    const links = resultLinks(scope, fresh.value.read, result);
+    const block = watchlistBlock(result, links);
     const path = reportPath(scope.stateDir, scope.run.runId);
     if (!existsSync(path)) {
         return { markdown: block, directive: { kind: "done" } };
@@ -596,6 +620,7 @@ const finalStep = (ctx: StepContext): StepOutput => {
         return stop("report.json has an unknown schema; run `phase1` again");
     }
     report.watchlist = result;
+    report.links = { ...report.links, ...links };
     writePrivate(path, JSON.stringify(report, null, 2));
     return {
         markdown: `${block}\n\nstonks-report-path: ${path}`,

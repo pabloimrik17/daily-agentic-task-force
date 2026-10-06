@@ -66,19 +66,19 @@ No previous run to compare with.
 
 Affected tickers: ACME, CRUX, ENCMX, HLYSN, HOOL, PIEDP, TYRL, UMBR, VNDL, WNYE, WONKA
 
-- [ ] B1 ENCMX
-- [ ] B1 WNYE
-- [ ] B2 HOOL
-- [ ] B4 HLYSN
-- [ ] B4 WONKA
-- [ ] B5 VNDL
-- [ ] B7 ACME
-- [ ] C1 UMBR
-- [ ] C2 CRUX
-- [ ] C2 PIEDP
-- [ ] C3 ENCMX
-- [ ] C7 TYRL
-- [ ] C8 WNYE
+- [ ] B1 [ENCMX](https://simplywall.st/search?q=ENCMX)
+- [ ] B1 [WNYE](https://simplywall.st/search?q=WNYE)
+- [ ] B2 [HOOL](https://simplywall.st/search?q=HOOL)
+- [ ] B4 [HLYSN](https://simplywall.st/search?q=HLYSN)
+- [ ] B4 [WONKA](https://simplywall.st/search?q=WONKA)
+- [ ] B5 [VNDL](https://simplywall.st/search?q=VNDL)
+- [ ] B7 [ACME](https://simplywall.st/search?q=ACME)
+- [ ] C1 [UMBR](https://simplywall.st/search?q=UMBR)
+- [ ] C2 [CRUX](https://simplywall.st/search?q=CRUX)
+- [ ] C2 [PIEDP](https://simplywall.st/search?q=PIEDP)
+- [ ] C3 [ENCMX](https://simplywall.st/search?q=ENCMX)
+- [ ] C7 [TYRL](https://simplywall.st/search?q=TYRL)
+- [ ] C8 [WNYE](https://simplywall.st/search?q=WNYE)
 "
 `;
 
@@ -120,7 +120,7 @@ WARNING: mcp__ibkr__submit_order is not in the known set of IBKR tools (fictiona
 
 ## Movimientos since 2026-10-03T20:11:00Z
 
-- triggered sell 3 WNYE
+- triggered sell 3 [WNYE](https://simplywall.st/search?q=WNYE)
 - fill 2 HOOL
 - new sell order 1 ACME
 - cancelled buy order 1 VNDL
@@ -129,12 +129,12 @@ WARNING: mcp__ibkr__submit_order is not in the known set of IBKR tools (fictiona
 
 Affected tickers: WNYE, CRUX
 
-- [ ] B1 WNYE
+- [ ] B1 [WNYE](https://simplywall.st/search?q=WNYE)
 - [ ] C2 CRUX
 
 ## Watchlist
 
-- Removed: WNYE
+- Removed: [WNYE](https://simplywall.st/search?q=WNYE)
 - Added: CRUX
 - Unresolved: UMBR
 - Final list: CRUX, HOOL

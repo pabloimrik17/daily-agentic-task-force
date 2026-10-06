@@ -539,7 +539,15 @@ describe("watchlist-final", () => {
             capacity: 50,
             incomplete: null,
         });
-        expect(out.markdown).toContain("- Removed: ACME, CRUX");
+        // Removed tickers link to the pages learnt when the plan read them; the
+        // added one to the page this read shows.
+        expect(out.markdown).toContain(
+            "- Removed: [ACME](https://simplywall.st/stocks/us/software/nyse-acme/acme-corp), " +
+                "[CRUX](https://simplywall.st/stocks/us/tech/nasdaq-crux/cruxwell)",
+        );
+        expect(out.markdown).toContain(
+            "- Added: [STRK](https://simplywall.st/stocks/us/materials/nyse-strk/strike-metals)",
+        );
         expect(out.markdown).toContain("- Count: 3/50");
         expect(out.markdown.trimEnd().split("\n").at(-1)).toBe(
             `stonks-report-path: ${reportPath(stateDir, runId)}`,
@@ -564,7 +572,9 @@ describe("watchlist-final", () => {
         await planAdditions(ctx, ["ACME", "HOOL", "CRUX", "GLBX"]);
         capture("watchlist", watchlist(["GLBX", "HOOL", "ACME"]));
         const out = await call(ctx, "watchlist-final");
-        expect(out.markdown).toContain("- Incomplete: missing STRK; unexpected ACME");
+        expect(out.markdown).toMatch(
+            /- Incomplete: missing \[STRK\]\([^)]+\); unexpected \[ACME\]\([^)]+\)/,
+        );
         expect(out.directive).toEqual({ kind: "done" });
     });
 
@@ -579,7 +589,8 @@ describe("watchlist-final", () => {
         capture("watchlist", watchlist(["GLBX", "HOOL"]));
         const out = await call(ctx, "watchlist-final");
         expect(out.markdown).toContain("- Added: none");
-        expect(out.markdown).toContain("- Unresolved: STRK");
+        // STRK has no page read or learnt: it links to a search.
+        expect(out.markdown).toContain("- Unresolved: [STRK](https://simplywall.st/search?q=STRK)");
     });
 
     it("stops without a fresh read", async () => {

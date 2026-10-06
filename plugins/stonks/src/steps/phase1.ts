@@ -30,6 +30,7 @@ import { withRepeatCounts } from "../report/counters.ts";
 import { tickerLinks } from "../report/links.ts";
 import { renderMarkdown } from "../report/markdown.ts";
 import { buildReport } from "../report/model.ts";
+import { movements } from "../report/movements.ts";
 import {
     ibkrConfirmedPath,
     listingsPath,
@@ -386,6 +387,10 @@ function writeReport(
     );
     const learnt = learnListings(scope, inputs.sws);
     const notes = [learnt.warning, previous.warning].filter((note) => note !== null);
+    const mentioned = [
+        ...findings.map((item) => item.ticker),
+        ...movements(previous.snapshot, inputs.ibkr).map((item) => item.ticker),
+    ];
     const report = buildReport({
         runId: scope.run.runId,
         generatedAt: ctx.now().toISOString(),
@@ -396,7 +401,7 @@ function writeReport(
         findings,
         gate: decideGate(findings),
         previous: previous.snapshot,
-        links: tickerLinks([...new Set(findings.map((item) => item.ticker))], {
+        links: tickerLinks([...new Set(mentioned)], {
             runLinks: inputs.sws.links,
             listings: learnt.listings,
         }),

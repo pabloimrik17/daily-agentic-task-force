@@ -125,7 +125,10 @@ describe("renderMarkdown", () => {
             warnings: [],
             ibkr: { provenance: "screenshots", positions: 1, orders: 0 },
         });
-        expect(md.match(/Agrees with IBKR\./g)).toHaveLength(3);
+        // The SWS portfolio and the tracking sheet are compared with IBKR, the C
+        // checks compare the tracking sheet with the Cartera Viva.
+        expect(md.match(/Agrees with IBKR\./g)).toHaveLength(2);
+        expect(md).toContain("## Cartera Viva\n\nThe tracking sheet agrees with the Cartera Viva.");
         expect(md).toContain("No previous run to compare with.");
         expect(md).toContain("IBKR from user-confirmed screenshots");
         expect(md).not.toContain("## Gate");
@@ -135,7 +138,7 @@ describe("renderMarkdown", () => {
     it("lists alerts before the sections and checklists only findings affecting the watchlist", () => {
         const md = renderMarkdown(fictional);
         expect(md.indexOf("## Alerts")).toBeLessThan(md.indexOf("## SWS portfolio"));
-        expect(md).toContain("- [ ] B1 WNYE");
+        expect(md).toContain("- [ ] B1 [WNYE](");
         expect(md).toContain("- [ ] C2 CRUX");
         expect(md).not.toContain("- [ ] B3");
         expect(md).toContain("B1 ⚑");
@@ -166,7 +169,7 @@ describe("renderSections", () => {
         });
         expect(parts.checklist).toBe("");
         expect(parts.alerts).toContain("STRK");
-        expect(parts.movements).toContain("triggered sell 3 WNYE");
+        expect(parts.movements).toContain("triggered sell 3 [WNYE](");
     });
 });
 
@@ -228,7 +231,7 @@ describe("golden dataset", () => {
         expect(gate.tripped).toBe(true);
         const expected = findings
             .filter((f) => f.affectsWatchlist)
-            .map((f) => `- [ ] ${f.check} ${f.ticker}`)
+            .map((f) => `- [ ] ${f.check} [${f.ticker}](${links[f.ticker] ?? ""})`)
             .sort();
         const listed = md
             .split("\n")

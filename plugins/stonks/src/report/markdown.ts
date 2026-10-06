@@ -12,6 +12,13 @@ const MIRROR_TITLES: Record<Mirror, string> = {
     "cartera-viva": "Cartera Viva",
 };
 
+/** What a section with no finding says: the A and B checks compare with IBKR, the C checks with the Cartera Viva. */
+const AGREES: Record<Mirror, string> = {
+    "sws-portfolio": "Agrees with IBKR.",
+    "tracking-sheet": "Agrees with IBKR.",
+    "cartera-viva": "The tracking sheet agrees with the Cartera Viva.",
+};
+
 const TABLE_HEAD = [
     "| Check | Ticker | Severity | Sides | Runs |",
     "| --- | --- | --- | --- | --- |",
@@ -21,8 +28,8 @@ function cell(text: string): string {
     return text.replace(/\|/g, "\\|").replace(/\s*\n\s*/g, " ");
 }
 
-function tickerLink(report: Report, ticker: string): string {
-    const url = report.links[ticker];
+function tickerLink(links: Record<string, string>, ticker: string): string {
+    const url = links[ticker];
     return url === undefined ? ticker : `[${ticker}](${url})`;
 }
 
@@ -34,22 +41,23 @@ function findingRow(report: Report, finding: Finding): string {
                   .map(([source, text]) => `${source}: ${text}`)
                   .join("; ");
     const check = finding.affectsWatchlist ? `${finding.check} ⚑` : finding.check;
-    return `| ${check} | ${tickerLink(report, finding.ticker)} | ${finding.severity} | ${cell(sides)} | ${finding.repeat ?? 1} |`;
+    return `| ${check} | ${tickerLink(report.links, finding.ticker)} | ${finding.severity} | ${cell(sides)} | ${finding.repeat ?? 1} |`;
 }
 
-function movementLine(movement: Movement): string {
+function movementLine(movement: Movement, links: Record<string, string>): string {
+    const ticker = tickerLink(links, movement.ticker);
     switch (movement.kind) {
         case "fill":
-            return `- fill ${movement.quantity} ${movement.ticker}`;
+            return `- fill ${movement.quantity} ${ticker}`;
         case "triggered-sell":
-            return `- triggered sell ${movement.quantity} ${movement.ticker}`;
+            return `- triggered sell ${movement.quantity} ${ticker}`;
         case "new-order":
-            return `- new ${movement.side ?? ""} order ${movement.quantity} ${movement.ticker}`.replace(
+            return `- new ${movement.side ?? ""} order ${movement.quantity} ${ticker}`.replace(
                 "  ",
                 " ",
             );
         case "cancelled-order":
-            return `- cancelled ${movement.side ?? ""} order ${movement.quantity} ${movement.ticker}`.replace(
+            return `- cancelled ${movement.side ?? ""} order ${movement.quantity} ${ticker}`.replace(
                 "  ",
                 " ",
             );
@@ -111,7 +119,7 @@ function movementsBlock(report: Report, cap: boolean): string {
         ? `${head.join("\n")}No movements.`
         : block(
               head,
-              items.map((m) => movementLine(m)),
+              items.map((m) => movementLine(m, report.links)),
               cap,
           );
 }
@@ -127,20 +135,18 @@ function checklistBlock(report: Report, cap: boolean): string {
         report.gate.affectedTickers.length === 0 ? "none" : report.gate.affectedTickers.join(", ");
     return block(
         ["## Gate", "", `Affected tickers: ${tickers}`, ""],
-        items.map((f) => `- [ ] ${f.check} ${f.ticker}`),
+        items.map((f) => `- [ ] ${f.check} ${tickerLink(report.links, f.ticker)}`),
         cap,
     );
 }
 
-function list(items: string[]): string {
-    return items.length === 0 ? "none" : items.join(", ");
-}
-
-/** The `## Watchlist` block; empty while phase 2 has not run. The final step prints it alone. */
-export function watchlistBlock(w: WatchlistResult | null): string {
+/** The `## Watchlist` block, its tickers linked; empty while phase 2 has not run. The final step prints it alone. */
+export function watchlistBlock(w: WatchlistResult | null, links: Record<string, string>): string {
     if (w === null) {
         return "";
     }
+    const list = (items: string[]): string =>
+        items.length === 0 ? "none" : items.map((ticker) => tickerLink(links, ticker)).join(", ");
     const lines = [
         "## Watchlist",
         "",
@@ -178,7 +184,7 @@ function header(report: Report): string {
 
 function sectionBlock(report: Report, mirror: Mirror, cap: boolean): string {
     const findings = report.sections.find((s) => s.mirror === mirror)?.findings ?? [];
-    return findingsBlock(report, MIRROR_TITLES[mirror], findings, "Agrees with IBKR.", cap);
+    return findingsBlock(report, MIRROR_TITLES[mirror], findings, AGREES[mirror], cap);
 }
 
 const MIRRORS: Mirror[] = ["sws-portfolio", "tracking-sheet", "cartera-viva"];
@@ -191,7 +197,7 @@ export function renderMarkdown(report: Report): string {
         ...MIRRORS.map((m) => sectionBlock(report, m, false)),
         movementsBlock(report, false),
         checklistBlock(report, false),
-        watchlistBlock(report.watchlist),
+        watchlistBlock(report.watchlist, report.links),
     ].filter((part) => part !== "");
     return `${parts.join("\n\n")}\n`;
 }

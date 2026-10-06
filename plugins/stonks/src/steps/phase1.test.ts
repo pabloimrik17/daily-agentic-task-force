@@ -158,8 +158,8 @@ describe("phase1, gate", () => {
         ]);
         expect(written.gate).toEqual({ tripped: true, affectedTickers: ["ACME", "TYRL"] });
         expect(out.markdown).toContain(renderMarkdown(written));
-        expect(out.markdown).toContain("- [ ] B2 ACME");
-        expect(out.markdown).toContain("- [ ] C1 TYRL");
+        expect(out.markdown).toContain("- [ ] B2 [ACME](");
+        expect(out.markdown).toContain("- [ ] C1 [TYRL](");
         expect(out.markdown).toMatch(
             new RegExp(`^stonks-report-path: ${reportPath(stateDir, runId)}$`, "m"),
         );
@@ -456,6 +456,38 @@ describe("phase1, links and listings", () => {
         expect(report(runId).links.CYBD).toBe("/stocks/us/tech/nasdaqgs-cybd/cyberdyne-systems");
     });
 
+    it("links a ticker that only Movimientos names", async () => {
+        writePrivate(
+            handoffPath(stateDir),
+            JSON.stringify({
+                schema: "stonks.snapshot.v1",
+                date: T0.toISOString(),
+                positions: [],
+                orders: [
+                    {
+                        ticker: "OSCP",
+                        side: "buy",
+                        quantity: 1,
+                        orderType: "limit",
+                        limitPrice: 12.5,
+                        trailPercent: null,
+                    },
+                ],
+                findings: [],
+            }),
+        );
+        const runId = open("full", T1);
+        captureAll(runId);
+        const out = await step("phase1", ctx(undefined, T1));
+        const written = report(runId);
+        expect(written.movements.items).toContainEqual(
+            expect.objectContaining({ kind: "cancelled-order", ticker: "OSCP" }),
+        );
+        expect(keys(written).some((key) => key.endsWith(" OSCP"))).toBe(false);
+        expect(written.links.OSCP).toBe(SEARCH_URL("OSCP"));
+        expect(out.markdown).toContain(`[OSCP](${SEARCH_URL("OSCP")})`);
+    });
+
     it("reports an unreadable listings file as a warning", async () => {
         writePrivate(listingsPath(stateDir), "not json");
         const runId = open();
@@ -556,7 +588,7 @@ describe("sigue", () => {
         const out = await step("sigue", ctx(gate));
         expect(out.directive).toEqual({ kind: "done" });
         expect(out.markdown).toContain("C1 ⚑");
-        expect(out.markdown).toContain("- [ ] C1 TYRL");
+        expect(out.markdown).toContain("- [ ] C1 [TYRL](");
         expect(out.markdown).toContain("does not pause again");
         expect(out.markdown).toContain("`watchlist-plan`");
         expect(report(runId).gate.tripped).toBe(true);
