@@ -64,7 +64,7 @@ The decisions were settled with the user in a grill on 2026-10-06 and are record
 - **Code** (`plugins/autonomous/src/`):
     - `label-contract/contract.ts`: `taken`, its colour and meaning, and the new `work` meaning.
     - `config.ts`: the `selection` block.
-    - The tracker readers: blockers, children and priority on `TrackerTask`.
+    - New readers for selection (`src/select/readers/`): blockers, children and priority on `WorkTask`, beside the unchanged triage trackers.
     - A new `select/` module: candidates, next stage, machine scope, comparison and render.
     - `run.ts`: the step list and the chezmoi exec.
     - `label-triage/criteria.md`: the meaning of `work`.
