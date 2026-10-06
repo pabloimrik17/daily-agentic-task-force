@@ -54,10 +54,10 @@ tracking sheet does not carry and its checks ignore.
 Roger, the swing trader whose trades the user follows.
 
 **Cartera Viva**:
-The trader's live portfolio as the trader publishes it on swingpro.club, the
-only source of truth for what the trader holds and for the trader's activated
-trailing stops.
-_Avoid_: swingpro, cartera del trader
+The trader's live portfolio as the trader publishes it on the trader's own
+site, the only source of truth for what the trader holds and for the trader's
+activated trailing stops.
+_Avoid_: the site's name, cartera del trader
 
 **Entry**:
 One row of the tracking sheet: one lot of a ticker at one price level. A ticker
