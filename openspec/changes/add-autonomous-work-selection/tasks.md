@@ -111,7 +111,7 @@
 ## 7. Integration checks
 
 - [x] 7.1 Run the full toolchain: `bun run test`, `typecheck`, `lint:eslint`, `lint:knip`, `lint:fallow`, `lint:oxfmt`, `lint:markdown` and `lint:marketplace`. Also run `openspec validate add-autonomous-work-selection --strict`. Verify that everything passes, within the fallow complexity budget.
-- [ ] 7.2 Run selection by hand against the real trackers on this machine, with `AUTONOMOUS_CONFIG` pointing at a scratchpad copy of the user config plus `selection`. Do one run without `--apply` and one with `--json`. Record in `openspec/changes/add-autonomous-work-selection/evidence/manual-selection.md`:
+- [x] 7.2 Run selection by hand against the real trackers on this machine, with `AUTONOMOUS_CONFIG` pointing at a scratchpad copy of the user config plus `selection`. Do one run without `--apply` and one with `--json`. Record in `openspec/changes/add-autonomous-work-selection/evidence/manual-selection.md`:
     - the machine scope;
     - the selected work unit and its explanation, or the `wait` reasons;
     - the exclusion counts per reason;
