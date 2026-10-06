@@ -83,7 +83,7 @@ When the response does not expose a trailing stop's trail percentage, the percen
 
 ### Requirement: IBKR re-authentication before the screenshot fallback
 
-When an IBKR read fails or the MCP server asks for login, the command SHALL first say that IBKR could not be read and why, and offer to re-authenticate the `ibkr` server through `/mcp`. It SHALL repeat the reads once the user says they have re-authenticated. The screenshot fallback SHALL be used only if re-authentication fails or the user declines it.
+When an IBKR read fails or the MCP server asks for login, the command SHALL first say that IBKR could not be read and why, and offer to re-authenticate the `ibkr` server through `/mcp`. It SHALL pass the session's `mcp__ibkr__*` tool names to the engine again and repeat the reads once the user says they have re-authenticated. The screenshot fallback SHALL be used only if re-authentication fails or the user declines it.
 
 #### Scenario: Login expired, user re-authenticates
 
@@ -137,6 +137,8 @@ The report SHALL state that IBKR came from user-confirmed screenshots.
 
 The engine SHALL hold the set of IBKR MCP tools known to exist: the catalog the `ibkr` server exposed at first connect, 34 tools, among them the two reads, the three order-instruction tools and the alert, watchlist and feedback mutations. At the start of every run, the command SHALL pass the names of the `mcp__ibkr__*` tools available in the session to the engine. If any is outside the known set, the engine SHALL print a WARNING naming it, and the report SHALL carry it. The warning SHALL NOT stop the run, trip the gate or change any check. The tool is never called.
 
+`mcp__ibkr__authenticate` and `mcp__ibkr__complete_authentication` are Claude Code's own tools for a server that awaits login, not IBKR's, and SHALL NOT be reported. When they are the only `mcp__ibkr__*` names, the server's catalog is not visible yet: the engine SHALL say so, and after a re-authentication the command SHALL pass the names again, so that the check covers the catalog.
+
 The check exists because the managed settings deny exactly two IBKR tools by name, while IBKR's authorisation already advertises an order-submission scope that no public tool uses yet. A new order-capable tool would otherwise go unnoticed.
 
 #### Scenario: Known tools only
@@ -148,6 +150,11 @@ The check exists because the managed settings deny exactly two IBKR tools by nam
 
 - **WHEN** the session exposes `mcp__ibkr__submit_order`, which the engine does not know
 - **THEN** the run prints a WARNING naming `mcp__ibkr__submit_order`, the report carries it, the run continues, and the tool is not called
+
+#### Scenario: Server awaiting login
+
+- **WHEN** the session exposes only `mcp__ibkr__authenticate` and `mcp__ibkr__complete_authentication`, and the user then re-authenticates through `/mcp`
+- **THEN** no WARNING is printed for those two names, the engine says the catalog is not visible yet, and the command passes the tool names again before repeating the reads
 
 #### Scenario: Names are not input data
 

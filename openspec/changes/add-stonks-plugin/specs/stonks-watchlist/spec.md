@@ -82,16 +82,13 @@ Each addition SHALL be resolved to one exact `EXCHANGE:TICKER` listing, preferri
 
 ### Requirement: Every change is verified
 
-After each removal and each addition, the command SHALL check two things:
-
-- the confirmation Simply Wall St shows names the expected ticker;
-- a fresh read of the watchlist differs from the previous read by exactly that change.
+After each removal and each addition, the command SHALL check that a fresh read of the watchlist differs from the previous read by exactly that change. Simply Wall St's confirmations name no ticker, so they SHALL NOT be taken as proof of a change.
 
 Any other outcome SHALL stop phase 2 at once and report the difference. Other outcomes include a different ticker added, an extra ticker removed, or a ticker missing that should stay. The command SHALL NOT try to repair the difference by experimenting on the watchlist.
 
 #### Scenario: Wrong ticker added
 
-- **WHEN** after selecting `NasdaqGS:HOOL` the confirmation names `HOO`
+- **WHEN** after selecting `NasdaqGS:HOOL` the fresh read shows `HOO` added and `HOOL` absent
 - **THEN** phase 2 stops and the report states that `HOO` was added instead of `HOOL`
 
 #### Scenario: Keeper disappeared
