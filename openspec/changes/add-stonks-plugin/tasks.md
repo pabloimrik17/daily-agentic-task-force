@@ -358,7 +358,7 @@ Both behaviours stay specified (`stonks-watchlist`, `stonks-inputs`) and covered
     - Two false unknown-tool WARNINGs named Claude Code's login tools, passed while the server awaited login; fixed (design D4a).
 
   Second attempt 2026-10-05, passed: the user checked the report against IBKR and the sheet, with no B8 on a covered position and no WARNING.
-- [ ] 12.2 (User) Run `/stonks:sync` in full. Verify that:
+- [x] 12.2 (User) Run `/stonks:sync` in full. Verify that:
     - if any finding affects the watchlist, the gate pauses once and shows every finding, "sigue" re-reads the sheet and prints what remains, and phase 2 starts without a second pause;
     - phase 2 removes before it adds, each change verified by a fresh read;
     - the final verification is exact;
@@ -369,7 +369,11 @@ Both behaviours stay specified (`stonks-watchlist`, `stonks-inputs`) and covered
   Then two planned changes were made by hand with the engine's actions under a page observer (design D10). A removal shows "Removed from watchlist", which names no ticker and lingers; an addition shows no confirmation. By the user's decision the confirmation is no longer read, and a fresh read alone verifies each change (spec `stonks-watchlist`). `reposition-add-panel` now focuses the search box, which a click through `find` had failed to do. The run is repeated with `--only watchlist`.
 
   Second attempt 2026-10-05, `--only watchlist`: four removals, then four additions, each verified by a fresh read, and an exact final match with nothing unresolved. Earlier runs already showed Movimientos and repeat counters. The gate check remains: one pause with the whole report, then "sigue" into phase 2 without a second pause.
-- [ ] 12.3 (User) Run while logged out of the Cartera Viva site. Verify that the command asks you to log in, waits, re-reads after you confirm, and never types credentials.
+
+  Closed 2026-10-06 without the gate check, by the user's decision: the user fixes it if it fails in daily use. Vitest covers it: `phase1` prints every finding in one pause and directs `gate-wait`, and after "sigue" a remaining finding directs `done`, never `gate-wait` (`src/steps/phase1.test.ts`).
+- [x] 12.3 (User) Run while logged out of the Cartera Viva site. Verify that the command asks you to log in, waits, re-reads after you confirm, and never types credentials.
+
+  Skipped 2026-10-06 by the user's decision: the user fixes it if it fails in daily use. Vitest covers the login wall in `phase1` and phase 2 (`src/steps/phase1.test.ts`, `src/steps/watchlist.test.ts`), and the logged-out page is recorded in design D10.
 
 ## 13. Integration
 
