@@ -131,7 +131,7 @@ export function removeFromMenuAction(runId: string): string {
         }
     }
     if (item === null) {
-        return { done: false };
+        return { done: false, reason: "no Remove item in an open menu" };
     }
     item.click();
     return { done: true };

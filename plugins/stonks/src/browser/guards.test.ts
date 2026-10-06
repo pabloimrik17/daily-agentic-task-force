@@ -4,7 +4,7 @@ import { describe, expect, it } from "vitest";
 import { formatListing } from "../domain.ts";
 import { parseListing } from "../ticker.ts";
 import { clickRowAction } from "./dropdown.ts";
-import { watchlistRowMenuAction } from "./watchlist.ts";
+import { removeFromMenuAction, watchlistRowMenuAction } from "./watchlist.ts";
 
 // The row actions act on an index from an earlier read, so each checks that
 // the row still shows what the engine chose before it dispatches anything.
@@ -127,6 +127,13 @@ describe("watchlist-row-menu", () => {
             reason: `the row links to ${ACME}, not ${HOOL}`,
         });
         expect(buttons.flatMap((button) => button.events)).toEqual([]);
+    });
+});
+
+describe("remove-from-menu", () => {
+    it("says why it clicked nothing when no menu is open", () => {
+        const answer = run(removeFromMenuAction(RUN), {});
+        expect(answer.data).toEqual({ done: false, reason: "no Remove item in an open menu" });
     });
 });
 
