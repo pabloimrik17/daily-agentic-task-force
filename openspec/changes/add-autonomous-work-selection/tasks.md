@@ -119,5 +119,5 @@
 
     Verify that the selected id is among the reported candidates, and that the run with `taken` no longer selects that task.
 
-- [ ] 7.3 Prepare the dotfiles PR that adds `"selection": { "model": "sonnet", "effort": "high" }` to the encrypted autonomous config. Leave it unmerged and link it from this change's PR, following the migration plan in design.md. Verify with `chezmoi diff` that the PR changes only that block once decrypted.
-- [ ] 7.4 Update DOT-108 in Linear with the PR, the evidence file and the release note (`feat(autonomous)!:`, a major release). Verify with `linear issue view DOT-108 --json`.
+- [x] 7.3 Prepare the dotfiles PR that adds `"selection": { "model": "sonnet", "effort": "high" }` to the encrypted autonomous config. Leave it unmerged and link it from this change's PR, following the migration plan in design.md. Verify with `chezmoi diff` that the PR changes only that block once decrypted.
+- [x] 7.4 Update DOT-108 in Linear with the PR, the evidence file and the release note (`feat(autonomous)!:`, a major release). Verify with `linear issue view DOT-108 --json`.
