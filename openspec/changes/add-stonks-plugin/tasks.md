@@ -377,4 +377,6 @@ Both behaviours stay specified (`stonks-watchlist`, `stonks-inputs`) and covered
 
 ## 13. Integration
 
-- [ ] 13.1 Confirm that dotfiles `add-plugin-configs` and `add-stonks-tooling` have merged, then merge this PR with commits scoped `feat(stonks): …` and no version bump. Verify that release-please opens a release PR for `stonks` 0.1.0.
+- [x] 13.1 Confirm that dotfiles `add-plugin-configs` and `add-stonks-tooling` have merged, then merge this PR with commits scoped `feat(stonks): …` and no version bump. Verify that release-please opens a release PR for `stonks` 0.1.0.
+
+  Marked done 2026-10-06 by the user's decision, ahead of the merge; the merge and the release PR follow it.

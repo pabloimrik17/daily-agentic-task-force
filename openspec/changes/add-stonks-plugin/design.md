@@ -11,7 +11,7 @@ See proposal.md for motivation. The decisions in this document were settled with
     - positions: `{ "positions": [ { contract_id: number, contract_description: string (the ticker symbol), position: number (fractional values occur), market_price, market_value, average_price, unrealized_pnl: number, currency: string, asset_class?: string ("STK"; absent on some rows) } ] }`;
     - orders: `{ "orders": [ { order_id: number, order_status: "NEW" | "REPLACED" | …, order_type: "LIMIT" | "TRAILING_STOP" | …, side: "BUY" | "SELL", total_shares_qty, cum_shares_qty, remaining_shares_qty: numeric strings, primary_description: string of the form "<SIDE> <qty> <TICKER>", secondary_description: string, order_time: ISO string, limit_price?: number (limit orders only) } ] }`. `secondary_description` reads "<Type> <price>, <tif>" for a limit and "Trailing <amount> Stop <price>, <tif>" or similar for a trailing stop, with no percent sign and no unit;
     - order status: `REPLACED` marks an order the user modified, and it is still working. The apply phase first read it as superseded and dropped it, so the first real run raised a false Unprotected position alert on two covered positions; the user checked them against IBKR on 2026-10-05. Only `FILLED`, `CANCELLED`/`CANCELED`, `INACTIVE`, `REJECTED` and `EXPIRED` drop an order, and an unknown status counts as active (D16);
-    - trailing stops: `order_type` is `TRAILING_STOP`. The trail appears only as an unlabelled amount in `secondary_description`, so the trail percentage is unknown unless the text carries a `%` (none did);
+    - trailing stops: `order_type` is `TRAILING_STOP`. The trail appears only as an unlabelled amount in `secondary_description`, so the trail percentage is unknown unless the text carries a `%` (none did). The parser reads a percentage after `Trailing` or `TRAIL` (`Trailing 15% Stop …`), and the fixtures use the observed `Trailing <amount> Stop <price>, <tif>` form;
     - pagination: none observed. Both responses returned every row, with no page or cursor field.
 - **`gws` 0.22.5** (`googleworkspace-cli`, Homebrew) reads Sheets values as JSON, keeps credentials in the macOS Keychain and accepts an exact `spreadsheets.readonly` scope. It is pre-1.0, has been idle since 2026-03, and Google has announced an official CLI "coming soon".
 - **Simply Wall St** has no retail API, CLI or MCP server. Reading and changing the portfolio and the watchlist means driving the web UI with the Claude in Chrome tools. The Cowork history recorded which browser recipes worked and which failed: scrolling blacks the watchlist page, fuzzy search picks wrong listings, and synthetic `input` events do not reach the React search box.
@@ -98,6 +98,8 @@ A re-stopping gate would deadlock on findings the user keeps on purpose, and the
 
 There is no separate command to resume after the gate: the reply continues the run, and `--only watchlist` resumes a run that ended.
 
+*Engine-side pause (2026-10-06).* The pause no longer rests on the command alone. `sigue` records `gate-resumed.json` in the run directory, and in a full run `watchlist-plan` stops unless phase 1 wrote `report.json` and, when its gate tripped, that marker exists. `--only watchlist` has no gate and is not checked.
+
 **Rejected alternatives:**
 
 - **Always continue.** The watchlist would follow a sheet known to be behind, for example a C2 ticker not yet marked Roger.
@@ -176,8 +178,12 @@ stonks/
   active.json            # { runId, startedAt, mode } while a run is open; captures expire after 6 h
   runs/<runId>/          # one run only; `begin` deletes runs/* first
     raw/                 # hook captures, verbatim
+    warnings.json        # unknown-IBKR-tool warnings (D4a)
+    ibkr-reauth-offered.json  # the /mcp offer was made (D4)
+    ibkr-staged.json     # fallback table awaiting confirmation (D4)
     ibkr-confirmed.json  # fallback table, after confirmation
     report.json          # stonks.report.v1, read by the pane
+    gate-resumed.json    # `sigue` ran (D3)
     plan.json            # watchlist plan
     previous.json        # snapshot handed over by the mod (D14), consumed once
   listings.json          # learnt TICKER → { symbol, name, url } (D11)
@@ -316,7 +322,7 @@ The command calls `bun "${CLAUDE_PLUGIN_ROOT}/src/cli.ts" <step>`. Each step pri
 | `collector <name>`, `action <name> <args…>`                                                               | Print browser JavaScript (D10)                                                                                                                                                                                                                                                            |
 | `ibkr-screenshots-stage`, `ibkr-screenshots-confirm`                                                      | The D4 fallback: `stage` reads the transcription on stdin, validates it and renders it; `confirm` accepts the staged table                                                                                                                                                                |
 | `phase1`                                                                                                  | Reads the sheet, validates the captures, runs the checks and the gate, writes `report.json`, prints the whole report and the `stonks-report-path:` line                                                                                                                                   |
-| `sigue`                                                                                                   | Re-reads the sheet, recomputes with the same run's captures, prints what remains and directs to phase 2, never to `gate-wait` again                                                                                                                                                       |
+| `sigue`                                                                                                   | Re-reads the sheet, recomputes with the same run's captures, records that the gate was resumed, prints what remains and directs to phase 2, never to `gate-wait` again                                                                                                                    |
 | `watchlist-plan`, `watchlist-search <T>`, `watchlist-resolve <T>`, `watchlist-verify`, `watchlist-final` | Phase 2: the plan from the live sheet and the live watchlist, the search term and target listing for an addition, the exact dropdown row to click, the verification after each change, the final comparison                                                                              |
 | `end`                                                                                                     | Closes the active run                                                                                                                                                                                                                                                                     |
 
@@ -326,10 +332,10 @@ Every branch therefore lives in tested code, and the command's markdown is a loo
 
 ### D13: Report in a mod pane, markdown always, spike first
 
-`hooks/hooks.json` also holds `modules: ["./mod/register.ts"]`. Its hooks do the following:
+`hooks/hooks.json` also holds `modules: ["../mod/register.ts"]`, a path relative to `hooks.json` itself. Its hooks do the following:
 
 - **`command.run`** for `stonks:sync` opens the pane in a "syncing" state. A pane opened because the user ran a command counts as asked for, so it places at any width.
-- **`tool.call`** on Bash recognises the engine's `phase1`, `sigue` and `watchlist-final` steps and reads `report.json` from the run directory (`$.fs.read`) into `$.state`. The step names the file on a `stonks-report-path: <path>` line of its stdout.
+- **`tool.call`** on Bash recognises the engine's `phase1`, `sigue` and `watchlist-final` steps and reads `report.json` from the run directory (`$.fs.read`) into `$.state`. The step names the file on a `stonks-report-path: <path>` line of its stdout. A `watchlist-final` that names no file, because it stopped or because `--only watchlist` has no phase-1 report, leaves the pane as it is.
 
   *Spike outcome (task 1.3).* Both feeds were tried in a headless `--plugin-dir` run: the path line followed by `$.fs.read`, and the whole report inlined in stdout between markers. Both delivered the report (the pane's store received the snapshot either way). The path feed is kept: the inline block would put the report into the transcript a second time, which the model then reads, for nothing the pane needs. The mod's inline-block branch was removed during apply (the repository's complexity gate asked for the hooks module to be split into small functions, and the dead branch went with it); the spike stub was deleted in task 10.1, and the mod now also checks the loaded file's shape (`stonks.report.v1` with its arrays and objects) and points at the markdown when the step named no file, the file is unreadable or its shape is not a report.
 
@@ -338,7 +344,10 @@ The pane draws:
 - bordered `Box` sections, each holding its findings as a grid of `Box` rows sized to the pane's body (`bodyColumns`), the sides wrapping in the last cell. A `Markdown` table is laid out for the terminal's width, not the pane's, and a wide one broke in the docked pane on the first real run;
 - `Button`s with hotkeys that toggle each mirror's section;
 - links reachable with Tab and Enter, since tmux reports no clicks;
-- checklist ticks, kept in `$.state` only.
+- checklist ticks, kept in `$.state` only;
+- phase 2's result, once `watchlist-final` has added it to `report.json`, with every ticker linked. In `--only watchlist` there is no phase-1 report: the pane says so from `command.run`, whose `args` name the mode, and the result is in the transcript only.
+
+Every ticker the report names links to its Simply Wall St page or a search: the findings, Movimientos, the checklist and the watchlist result.
 
 The engine always prints the markdown, and the command relays it.
 
@@ -451,17 +460,21 @@ plugins/stonks/
   commands/sync.md          # thin: directives loop, browser rules
   hooks/hooks.json          # PostToolUse capture hook + mod module
   src/cli.ts                # step machine entry
-  src/args.ts  src/config.ts  src/validate.ts  src/state.ts
+  src/steps/                # the steps by group: ibkr.ts, browser.ts, phase1.ts, watchlist.ts, shared.ts, types.ts
+  src/args.ts  src/config.ts  src/validate.ts  src/state.ts  src/domain.ts  src/ticker.ts
   src/capture.ts            # hook entry (D5)
-  src/inputs/               # ibkr.ts, ibkr-tools.ts, ibkr-screenshots.ts, sheet-gws.ts, sheet.ts, sws-portfolio.ts, watchlist.ts, cartera-viva.ts
+  src/inputs/               # ibkr.ts, ibkr-tools.ts, ibkr-screenshots.ts, sheet-gws.ts, sheet.ts, envelope.ts, sws-portfolio.ts, watchlist.ts, cartera-viva.ts, dropdown.ts
   src/browser/              # collector and action sources (D10)
-  src/checks/               # a.ts, b.ts, c.ts, findings.ts, gate.ts
+  src/checks/               # a.ts, b.ts, c.ts, findings.ts, gate.ts, index.ts
   src/watchlist/            # candidates.ts, plan.ts, resolve.ts, verify.ts, listings.ts
-  src/report/               # model.ts, movements.ts, counters.ts, markdown.ts, links.ts, snapshot.ts
+  src/report/               # model.ts (the snapshot too), movements.ts, counters.ts, markdown.ts, links.ts
   src/**/*.test.ts          # Vitest, fictional fixtures under src/**/fixtures/
-  mod/register.ts           # pane (if the spike succeeds)
+  mod/register.ts           # pane
   mod/*.test.ts             # claude plugin test
-  mod/types/claude-code.d.ts
+  mod/tsconfig.json         # the module's own program (D17)
+  mod/types/claude-code.d.ts  # vendored, pinned
+  mod/types/stonks-state.d.ts # the pane's `$.state` contract
+  scripts/mod-test.ts       # runs the mod tests on a scratch root (D17)
   vitest.config.ts          # excludes mod/**
 ```
 
