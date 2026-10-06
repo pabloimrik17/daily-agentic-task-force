@@ -6,7 +6,15 @@ import { afterEach, beforeEach, describe, expect, it } from "vitest";
 
 import { CONFIG_SCHEMA, type Directive, REPORT_SCHEMA, type Report } from "../domain.ts";
 import { renderMarkdown } from "../report/markdown.ts";
-import { beginRun, listingsPath, planPath, rawDir, reportPath, writePrivate } from "../state.ts";
+import {
+    beginRun,
+    listingsPath,
+    planPath,
+    rawDir,
+    reportPath,
+    resumedPath,
+    writePrivate,
+} from "../state.ts";
 import type { RunnerResult } from "../inputs/sheet-gws.ts";
 import type { RunMode } from "../domain.ts";
 import { type StepContext, UsageError } from "./types.ts";
@@ -47,6 +55,10 @@ function open(mode: RunMode = "full", values: unknown = fixture("values.json")) 
         }),
     );
     ({ runId } = beginRun({ stateDir, mode, now: NOW }));
+    if (mode === "full") {
+        // A full run reaches phase 2 through phase 1, whose gate stayed open here.
+        writePrivate(reportPath(stateDir, runId), JSON.stringify(reportWith(null)));
+    }
     const result: RunnerResult = { code: 0, stdout: JSON.stringify({ values }), stderr: "" };
     const ctx: StepContext = {
         env: { STONKS_CONFIG: configPath, STONKS_STATE_DIR: stateDir },
@@ -195,6 +207,34 @@ describe("watchlist-plan", () => {
         expect(out.directive).toEqual({ kind: "done" });
         expect(out.markdown).toContain("3 tickers are desired and the capacity is 2");
         expect(stateOf().pending).toEqual([]);
+    });
+
+    it("stops in a full run whose phase 1 has not run", async () => {
+        const ctx = open();
+        rmSync(reportPath(stateDir, runId));
+        capture("watchlist", watchlist(["HOOL"]));
+        const out = await call(ctx, "watchlist-plan");
+        expect(isStop(out.directive)).toContain("phase 1 has not run");
+        expect(existsSync(planPath(stateDir, runId))).toBe(false);
+    });
+
+    it("stops while the gate pauses a full run, and plans once sigue has run", async () => {
+        const ctx = open();
+        writePrivate(
+            reportPath(stateDir, runId),
+            JSON.stringify({
+                ...reportWith(null),
+                gate: { tripped: true, affectedTickers: ["ACME"] },
+            }),
+        );
+        capture("watchlist", watchlist(["HOOL"]));
+        const paused = await call(ctx, "watchlist-plan");
+        expect(isStop(paused.directive)).toContain("sigue");
+        expect(existsSync(planPath(stateDir, runId))).toBe(false);
+
+        writePrivate(resumedPath(stateDir, runId), "{}\n");
+        const resumed = await call(ctx, "watchlist-plan");
+        expect(resumed.directive).toEqual({ kind: "add", ticker: "GLBX" });
     });
 
     it("plans only the missing additions when resuming --only watchlist", async () => {
@@ -558,7 +598,7 @@ describe("watchlist-final", () => {
     });
 
     it("prints the block alone when there is no report", async () => {
-        const ctx = open();
+        const ctx = open("watchlist");
         await planAdditions(ctx, ["GLBX", "HOOL", "STRK"]);
         capture("watchlist", watchlist(["GLBX", "HOOL", "STRK"]));
         const out = await call(ctx, "watchlist-final");

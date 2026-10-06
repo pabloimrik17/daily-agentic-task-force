@@ -23,7 +23,7 @@ import type { ReadResult } from "../inputs/envelope.ts";
 import { parseWatchlist } from "../inputs/watchlist.ts";
 import { tickerLinks } from "../report/links.ts";
 import { watchlistBlock } from "../report/markdown.ts";
-import { planPath, listingsPath, reportPath, writePrivate } from "../state.ts";
+import { planPath, listingsPath, reportPath, resumedPath, writePrivate } from "../state.ts";
 import { normaliseTicker, parseListing } from "../ticker.ts";
 import { candidates } from "../watchlist/candidates.ts";
 import {
@@ -263,12 +263,50 @@ function next(state: PlanState, lead: string[]): StepOutput {
 
 const list = (items: string[]): string => (items.length === 0 ? "none" : items.join(", "));
 
+/** Whether phase 1's gate tripped, from its `report.json`; null when the file is unreadable. */
+function phase1Gate(path: string): boolean | null {
+    try {
+        const report = JSON.parse(readFileSync(path, "utf8")) as Partial<Report>;
+        return typeof report.gate?.tripped === "boolean" ? report.gate.tripped : null;
+    } catch {
+        return null;
+    }
+}
+
+/**
+ * In a full run, phase 2 follows phase 1, and a gate that tripped lets it start
+ * only after `sigue` (design D3): the pause is the engine's, not only the
+ * command's. `--only watchlist` has neither.
+ */
+function gateBlocks(scope: RunScope): StepOutput | null {
+    if (scope.run.mode !== "full") {
+        return null;
+    }
+    const path = reportPath(scope.stateDir, scope.run.runId);
+    if (!existsSync(path)) {
+        return stop("phase 1 has not run in this run; run `phase1` before `watchlist-plan`");
+    }
+    const tripped = phase1Gate(path);
+    if (tripped === null) {
+        return stop("report.json is unreadable; run `phase1` again");
+    }
+    return tripped && !existsSync(resumedPath(scope.stateDir, scope.run.runId))
+        ? stop(
+              'the gate paused this run; phase 2 starts only after the user says "sigue" and `sigue` has run',
+          )
+        : null;
+}
+
 const planStep: StepTable[string]["step"] = async (ctx) => {
     const opened = phase2Scope(ctx);
     if (!opened.ok) {
         return opened.output;
     }
     const { scope } = opened;
+    const blocked = gateBlocks(scope);
+    if (blocked !== null) {
+        return blocked;
+    }
     const sheet = await readSheet(ctx, scope);
     if (!sheet.ok) {
         return stop(sheet.reason);

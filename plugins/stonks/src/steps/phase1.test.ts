@@ -17,6 +17,7 @@ import {
     rawDir,
     reauthOfferedPath,
     reportPath,
+    resumedPath,
     runDir,
     writePrivate,
 } from "../state.ts";
@@ -592,6 +593,8 @@ describe("sigue", () => {
         expect(out.markdown).toContain("does not pause again");
         expect(out.markdown).toContain("`watchlist-plan`");
         expect(report(runId).gate.tripped).toBe(true);
+        // `watchlist-plan` reads this to let phase 2 start past the gate (design D3).
+        expect(existsSync(resumedPath(stateDir, runId))).toBe(true);
     });
 
     it("re-reads the sheet and recomputes with this run's captures", async () => {

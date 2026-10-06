@@ -51,6 +51,9 @@ export const warningsPath = (stateDir: string, runId: string): string =>
 /** Present once `phase1` has offered `/mcp` re-authentication in this run (design D4). */
 export const reauthOfferedPath = (stateDir: string, runId: string): string =>
     join(runDir(stateDir, runId), "ibkr-reauth-offered.json");
+/** Present once `sigue` has continued past the gate in this run (design D3). */
+export const resumedPath = (stateDir: string, runId: string): string =>
+    join(runDir(stateDir, runId), "gate-resumed.json");
 /** The screenshot table awaiting the user's confirmation (design D4). */
 export const stagedPath = (stateDir: string, runId: string): string =>
     join(runDir(stateDir, runId), "ibkr-staged.json");

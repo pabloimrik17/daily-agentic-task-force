@@ -38,6 +38,7 @@ import {
     rawDir,
     reauthOfferedPath,
     reportPath,
+    resumedPath,
     warningsPath,
     writePrivate,
 } from "../state.ts";
@@ -467,8 +468,13 @@ const sigue: Step = async (ctx, args) => {
     if (!gathered.ok) {
         return gathered.output;
     }
+    const written = writeReport(ctx, scope, gathered.value);
+    writePrivate(
+        resumedPath(scope.stateDir, scope.run.runId),
+        `${JSON.stringify({ resumedAt: ctx.now().toISOString() })}\n`,
+    );
     return reportOutput(
-        writeReport(ctx, scope, gathered.value),
+        written,
         { kind: "done" },
         `The gate does not pause again.\n\n${NEXT_PHASE2}`,
     );
