@@ -105,5 +105,5 @@ JSON
 - The engine removes first, then adds. Follow its order.
 - Never remove a keeper, not even to diagnose the page.
 - Never improvise after a failure: no repair, no retry of a different recipe. Relay the reason, run `end`, and finish.
-- When the engine marks a ticker unresolved, relay the question for its exact listing. Do not pick a listing yourself.
+- When the engine marks a ticker unresolved, relay the question for its exact listing and continue with the next directive. Do not pick a listing yourself, and do not act on the user's answer in this run: no step takes it. Tell the user to add the listing by hand once the run has ended; the next run learns it from the watchlist.
 - The search term is only a hint. The engine selects the listing.
