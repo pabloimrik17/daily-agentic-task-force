@@ -1,22 +1,23 @@
 // The label contract (spec label-contract): the fixed set of labels, their
 // grouping, colours and meanings, shared by detection, triage and bootstrap.
 
-import type { ContractLabel } from "../config.ts";
+// The label values are declared once here; every other type and list of
+// labels is derived from these.
+const SCOPE_LABELS = ["work", "personal"] as const;
+const ENTRY_LABELS = ["AFK", "HITL", "grill-me"] as const;
+const TAKEN_LABEL = "taken";
+
+export type Scope = (typeof SCOPE_LABELS)[number];
+export type EntryLabel = (typeof ENTRY_LABELS)[number];
+export type ContractLabel = Scope | EntryLabel | typeof TAKEN_LABEL;
 
 export type Group = "scope" | "entry";
 
-export const LABELS: readonly ContractLabel[] = [
-    "work",
-    "personal",
-    "AFK",
-    "HITL",
-    "grill-me",
-    "taken",
-];
+export const LABELS: readonly ContractLabel[] = [...SCOPE_LABELS, ...ENTRY_LABELS, TAKEN_LABEL];
 
 export const GROUPS: Record<Group, readonly ContractLabel[]> = {
-    scope: ["work", "personal"],
-    entry: ["AFK", "HITL", "grill-me"],
+    scope: SCOPE_LABELS,
+    entry: ENTRY_LABELS,
 };
 
 export const COLOURS: Record<ContractLabel, string> = {
@@ -40,6 +41,10 @@ export const MEANINGS: Record<ContractLabel, string> = {
 
 export function isContractLabel(name: string): name is ContractLabel {
     return (LABELS as readonly string[]).includes(name);
+}
+
+export function isScope(value: string): value is Scope {
+    return (SCOPE_LABELS as readonly string[]).includes(value);
 }
 
 export function isValidGroup(group: Group, labels: readonly string[]): boolean {

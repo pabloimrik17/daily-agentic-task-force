@@ -3,6 +3,7 @@
 // the comparison (D6) and the step's data (D9).
 
 import type { AutonomousConfig, Scope, Source } from "../config.ts";
+import type { EntryLabel } from "../label-contract/contract.ts";
 import type { TrackerResult, TrackerTask } from "../label-triage/trackers/tracker.ts";
 
 export interface WorkTask extends TrackerTask {
@@ -30,7 +31,7 @@ export type Exclusion =
     | "blocked"
     | "split";
 
-export type Autonomy = "AFK" | "HITL" | "grill-me";
+export type Autonomy = EntryLabel; // the entry label that sets how far an agent may go alone
 
 // A task every check permitted, with what the comparison needs about it.
 export interface Candidate {

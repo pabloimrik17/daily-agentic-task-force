@@ -4,6 +4,7 @@
 
 import type { Scope } from "../config.ts";
 import type { Exec } from "../exec.ts";
+import { isScope } from "../label-contract/contract.ts";
 import { object, ParseError, string } from "../validate.ts";
 
 type MachineScopeResult = { ok: true; scope: Scope } | { ok: false; error: string };
@@ -39,7 +40,7 @@ function parseScope(stdout: string): Scope {
         throw new ParseError("output.machineType is missing");
     }
     const value = string(root, "machineType", "output");
-    if (value !== "personal" && value !== "work") {
+    if (!isScope(value)) {
         throw new ParseError(`output.machineType "${value}" is not personal or work`);
     }
     return value;

@@ -9,7 +9,12 @@ import { homedir } from "node:os";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 
-import { isContractLabel } from "./label-contract/contract.ts";
+import {
+    type ContractLabel,
+    isContractLabel,
+    isScope,
+    type Scope,
+} from "./label-contract/contract.ts";
 import {
     boolean,
     type Json,
@@ -30,8 +35,7 @@ export const EXAMPLE_PATH = join(
     "config.example.json",
 );
 
-export type Scope = "work" | "personal";
-export type ContractLabel = "work" | "personal" | "AFK" | "HITL" | "grill-me" | "taken";
+export type { ContractLabel, Scope };
 export type Source = "linear" | "beads" | "github";
 
 export interface SourceRules {
@@ -164,7 +168,7 @@ function sourceRules(entry: Json, path: string): SourceRules {
 
 function scopeValue(parent: Json, key: string, path: string): Scope {
     const value = string(parent, key, path);
-    if (value !== "work" && value !== "personal") {
+    if (!isScope(value)) {
         throw new ParseError(`${path}.${key} must be "work" or "personal"`);
     }
     return value;
