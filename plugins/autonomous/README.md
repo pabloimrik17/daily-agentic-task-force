@@ -655,7 +655,10 @@ In order, the step:
 2. Reads the open tasks of every enabled source again, with the same sources,
    open states, strict validation and 120 s limit that `label-triage` uses. A
    read that fails makes the step `not-evaluable`, naming the source and the
-   command.
+   command. A Linear read is incomplete when its blocker relations (from
+   `linear issue query --all-teams`) reach 100 or its children (from
+   `linear issue view <id>`) reach 250, the most `linear-cli` v2.6.0 returns;
+   it counts as a failed read and the reason names that command.
 3. Excludes tasks, each reported once, under the first reason that applies:
 
     | Order | Exclusion         | When                                                                                  |

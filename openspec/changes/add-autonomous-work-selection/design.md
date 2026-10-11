@@ -200,6 +200,7 @@ interface SelectData {
 - **[Work done by hand without `taken` can be selected again.]** → This trade-off was accepted in the grill, because statuses change without the loop. The README states the rule.
 - **[Breaking configuration.]** → A config without `selection` is rejected and names the path. The migration order is below. Until the user updates, only manual runs are affected.
 - **[LLM cost on every run with two or more candidates.]** → There are few candidates while only `grill-me` is supported. The model and effort can be changed in the config without a release. The cap is revisited when the proposal stage is supported.
+- **[A Linear read can be truncated.]** → `linear-cli` v2.6.0 returns at most 100 blocker relations per issue in `linear issue query --all-teams` and 250 children in `linear issue view <id>`. A read that reaches either limit is treated as incomplete and counts as a failed read: the step is `not-evaluable`, naming Linear and that command, rather than selecting on partial blockers or children.
 - **[Linear `issue view` per surviving task.]** → D3's order limits these calls to candidates that are still `grill-me`.
 - **[`bd blocked` may report blockers differently from the dependency list.]** → Beads' own rule is accepted as the source of truth, and a test pins the parsing to recorded `bd` output.
 - **[`chezmoi` missing on the `PATH` where `/autonomous:run` is started.]** → The run is not evaluable, with a reason that names `chezmoi data`.

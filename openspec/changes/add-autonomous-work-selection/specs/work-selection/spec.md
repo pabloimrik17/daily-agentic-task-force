@@ -41,6 +41,20 @@ The step SHALL read the open tasks of every enabled source itself, after `label-
 - **WHEN** `linear issue view` for a task fails during the `select` step
 - **THEN** the step is `not-evaluable` and the reason names Linear and the command
 
+### Requirement: Linear reads that reach the limit
+
+A Linear read whose blocker relations (from `linear issue query --all-teams`) reach 100 or whose children (from `linear issue view <id>`) reach 250, the most `linear-cli` v2.6.0 returns, SHALL be incomplete and SHALL count as a failed read, so the step is `not-evaluable`.
+
+#### Scenario: Linear read reaches the limit
+
+- **WHEN** `linear issue query --all-teams` returns 100 blocker relations for a task
+- **THEN** the read is incomplete, the step is `not-evaluable` and the reason names Linear and `linear issue query --all-teams`
+
+#### Scenario: Linear children reach the limit
+
+- **WHEN** `linear issue view <id>` returns 250 children for a task
+- **THEN** the read is incomplete, the step is `not-evaluable` and the reason names Linear and `linear issue view`
+
 ### Requirement: Blockers, children and priority
 
 For Beads and Linear, the step SHALL read each task's open blockers, the tasks it blocks, its open children and its tracker priority. A blocker or child counts as open unless it is closed: in Beads, unless its status is `closed`; in Linear, unless its state is completed or canceled. Beads decides which tasks are blocked by its own dependency rules. GitHub tasks SHALL be treated as having no blockers and no children, and the report SHALL say that these were not evaluated for GitHub.

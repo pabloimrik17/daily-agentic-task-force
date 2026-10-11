@@ -7,11 +7,22 @@ import {
     mapExecError,
     nullableDescription,
 } from "../../label-triage/trackers/linear.ts";
-import { array, type Json, number, object, string } from "../../validate.ts";
+import { array, type Json, number, object, ParseError, string } from "../../validate.ts";
 import type { WorkReader, WorkTask } from "../types.ts";
 
-function nodes(entry: Json, key: string, path: string): unknown[] {
-    return array(object(entry[key], `${path}.${key}`).nodes, `${path}.${key}.nodes`);
+// linear-cli v2.6.0 requests these connections without pageInfo, so a full page may hide more.
+const INVERSE_RELATIONS_CAP = 100;
+const CHILDREN_CAP = 250;
+
+function nodes(entry: Json, key: string, path: string, cap: number): unknown[] {
+    const list = array(object(entry[key], `${path}.${key}`).nodes, `${path}.${key}.nodes`);
+    if (list.length >= cap) {
+        throw new ParseError(
+            `${path}.${key} has ${list.length} nodes, the most linear-cli returns; ` +
+                `${key === "children" ? "children" : "blockers"} may be missing`,
+        );
+    }
+    return list;
 }
 
 function openState(type: string | undefined): boolean {
@@ -19,7 +30,7 @@ function openState(type: string | undefined): boolean {
 }
 
 function blockers(entry: Json, path: string): string[] {
-    return nodes(entry, "inverseRelations", path).flatMap((item, index) => {
+    return nodes(entry, "inverseRelations", path, INVERSE_RELATIONS_CAP).flatMap((item, index) => {
         const relationPath = `${path}.inverseRelations.nodes[${index}]`;
         const relation = object(item, relationPath);
         if (string(relation, "type", relationPath) !== "blocks") return [];
@@ -52,7 +63,7 @@ function parseDetail(
     states: ReadonlyMap<string, string>,
 ): WorkTask {
     const entry = object(value, "$");
-    const children = nodes(entry, "children", "$")
+    const children = nodes(entry, "children", "$", CHILDREN_CAP)
         .map((item, index) => {
             const path = `$.children.nodes[${index}]`;
             const child = object(item, path);

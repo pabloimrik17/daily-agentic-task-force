@@ -12,6 +12,36 @@ function reader() {
     return { exec, work: linearWorkReader(exec, { enabled: true }) };
 }
 
+function readerWith(queryOutput: unknown, viewOutput: unknown = detail) {
+    const exec = vi
+        .fn<Exec>()
+        .mockResolvedValueOnce({ ok: true, stdout: JSON.stringify(queryOutput) })
+        .mockResolvedValueOnce({ ok: true, stdout: JSON.stringify(viewOutput) });
+    return linearWorkReader(exec, { enabled: true });
+}
+
+function withRelations(count: number) {
+    const [first, ...rest] = listing.nodes;
+    const related = { type: "related", issue: { identifier: "DEMO-500" } };
+    const inverseRelations = { nodes: Array.from({ length: count }, () => related) };
+    return { ...listing, nodes: [{ ...first, inverseRelations }, ...rest] };
+}
+
+function withChildren(count: number) {
+    const filler = Array.from({ length: count - detail.children.nodes.length }, (_, index) => ({
+        ...detail.children.nodes[1],
+        identifier: `DEMO-${1000 + index}`,
+    }));
+    return { ...detail, children: { nodes: [...detail.children.nodes, ...filler] } };
+}
+
+async function detailOf(view: unknown) {
+    const work = readerWith(listing, view);
+    const listed = await work.list();
+    if (!listed.ok) throw new Error(listed.error);
+    return work.detail(listed.value[2]!);
+}
+
 describe("linearWorkReader", () => {
     it("reads the open blocker and its inverse with tracker priority", async () => {
         const { exec, work } = reader();
@@ -60,6 +90,30 @@ describe("linearWorkReader", () => {
         expect(await work.list()).toEqual({
             ok: false,
             error: "linear issue query --all-teams: Linear CLI is not authenticated, run `linear auth login`",
+        });
+    });
+    it("parses 99 inverse relations", async () => {
+        const result = await readerWith(withRelations(99)).list();
+        expect(result.ok && result.value[0]?.blockedBy).toEqual([]);
+    });
+    it("fails closed at 100 inverse relations, the most linear-cli returns", async () => {
+        expect(await readerWith(withRelations(100)).list()).toEqual({
+            ok: false,
+            error:
+                "linear issue query --all-teams: output does not match the expected shape: $.nodes[0].inverseRelations has 100 nodes, " +
+                "the most linear-cli returns; blockers may be missing",
+        });
+    });
+    it("parses 249 children", async () => {
+        const result = await detailOf(withChildren(249));
+        expect(result.ok && result.value.children).toHaveLength(249 - 2);
+    });
+    it("fails closed at 250 children, the most linear-cli returns", async () => {
+        expect(await detailOf(withChildren(250))).toEqual({
+            ok: false,
+            error:
+                "linear issue view DEMO-82: output does not match the expected shape: $.children has 250 nodes, " +
+                "the most linear-cli returns; children may be missing",
         });
     });
 });
