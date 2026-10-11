@@ -75,7 +75,7 @@ A task SHALL be a candidate, whatever its scope, unless an exclusion applies. Ea
 
 1. **classification**: a scope or entry group missing or in conflict, by present contract labels only;
 2. **taken**: it carries `taken`;
-3. **labelled this run**: `label-triage` applied a label to it in this run;
+3. **labelled this run**: `label-triage` labelled it, or tried to, this run;
 4. **unsupported stage**: its next stage is not supported;
 5. **blocked**: an open blocker;
 6. **split**: an open child.
@@ -113,6 +113,16 @@ A task SHALL be a candidate, whatever its scope, unless an exclusion applies. Ea
 ### Requirement: Tracker status does not make a task taken
 
 A tracker status such as Beads `in_progress` or a Linear started state SHALL NOT exclude a task by itself; only the `taken` label does.
+
+#### Scenario: Write failed during triage
+
+- **WHEN** a `label-triage` write to a task fails in this run after adding `grill-me`
+- **THEN** the task is excluded as labelled this run, because a write was attempted and some labels may have landed
+
+#### Scenario: Only proposed by triage
+
+- **WHEN** `label-triage` only proposed or asked about a label for a task in this run
+- **THEN** the task is not excluded as labelled this run
 
 #### Scenario: In progress without taken
 

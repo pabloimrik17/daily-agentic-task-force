@@ -658,18 +658,20 @@ In order, the step:
    command.
 3. Excludes tasks, each reported once, under the first reason that applies:
 
-    | Order | Exclusion         | When                                             |
-    | ----- | ----------------- | ------------------------------------------------ |
-    | 1     | classification    | A scope or entry group is missing or in conflict |
-    | 2     | taken             | The task carries `taken`                         |
-    | 3     | labelled this run | `label-triage` applied a label to it in this run |
-    | 4     | unsupported stage | Its next stage is not supported                  |
-    | 5     | blocked           | It has an open blocker                           |
-    | 6     | split             | It has an open child                             |
+    | Order | Exclusion         | When                                                                                  |
+    | ----- | ----------------- | ------------------------------------------------------------------------------------- |
+    | 1     | classification    | A scope or entry group is missing or in conflict                                      |
+    | 2     | taken             | The task carries `taken`                                                              |
+    | 3     | labelled this run | `label-triage` applied a label to it in this run, or a write to it failed in this run |
+    | 4     | unsupported stage | Its next stage is not supported                                                       |
+    | 5     | blocked           | It has an open blocker                                                                |
+    | 6     | split             | It has an open child                                                                  |
 
     Classification counts present contract labels only: an alias or a
     structural rule does not rescue a task here. A task labelled in this run
-    is left for the next run. Tracker status does not exclude a task; only
+    is left for the next run, and so is a task whose `label-triage` write failed,
+    because some labels may have landed. A task `label-triage` only proposed or
+    asked about is not excluded. Tracker status does not exclude a task; only
     `taken` does.
 
 4. Chooses among the candidates. A task of either scope is a candidate. With

@@ -268,7 +268,7 @@ describe("selectCandidates", () => {
 });
 
 describe("labelledThisRun", () => {
-    it("takes only applied records from label-triage and deduplicates task keys", () => {
+    it("takes applied and failed records from label-triage and deduplicates task keys", () => {
         const results: StepResult[] = [
             { step: "quota-gate", tier: "code", outcome: "advance", reasons: [], data: null },
             triageResult([
@@ -281,7 +281,24 @@ describe("labelledThisRun", () => {
             ]),
         ];
 
-        expect(labelledThisRun(results)).toEqual(new Set(["linear:TEST-1", "beads:TEST-1"]));
+        expect(labelledThisRun(results)).toEqual(
+            new Set(["linear:TEST-1", "beads:TEST-1", "linear:TEST-4"]),
+        );
+    });
+
+    it("counts a failed record as labelled, since a write was attempted", () => {
+        const failed = record({ status: "failed", detail: "linear: add label failed" });
+
+        expect(labelledThisRun([triageResult([failed])])).toEqual(new Set(["linear:TEST-1"]));
+    });
+
+    it("does not count a proposed record skipped after a write failure", () => {
+        const skipped = record({
+            status: "proposed",
+            detail: "skipped after a write failure",
+        });
+
+        expect(labelledThisRun([triageResult([skipped])])).toEqual(new Set());
     });
 
     it("returns no labelled tasks without an applied record", () => {

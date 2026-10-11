@@ -25,7 +25,9 @@ export function labelledThisRun(results: readonly StepResult[]): Set<string> {
         }
         const data = result.data as LabelTriageData;
         for (const record of data.records) {
-            if (record.status === "applied") {
+            // A failed write may still have added some labels; only
+            // proposed and asked records are known to have written nothing.
+            if (record.status === "applied" || record.status === "failed") {
                 keys.add(taskKey(record.source, record.taskId));
             }
         }

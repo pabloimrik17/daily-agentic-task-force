@@ -38,7 +38,7 @@ These facts shape the approach:
 
 ### D1 — Steps see earlier results
 
-`RunContext` gains `results: readonly StepResult[]`, the results of the steps that already ran, in order. `runSteps` passes a fresh copy to each step. `select` reads the `label-triage` result from it and takes the tasks whose records have status `applied` as _labelled this run_. Without `--apply`, there are none.
+`RunContext` gains `results: readonly StepResult[]`, the results of the steps that already ran, in order. `runSteps` passes a fresh copy to each step. `select` reads the `label-triage` result from it and takes the tasks whose records have status `applied` or `failed` as _labelled this run_. A `failed` record means a write was attempted, and some labels may have landed before it failed. Records with status `proposed` or `asked` do not count. Without `--apply`, there are none.
 
 **Alternatives rejected:**
 
