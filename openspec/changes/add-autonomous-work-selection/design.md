@@ -75,6 +75,8 @@ How each source fills it in:
     - `list` runs the same `issue query` as triage and adds `priority`.
     - `blockedBy` comes from the `blocks` inverse relations whose state type is neither `completed` nor `canceled`, and `blocks` is the inverse across the listing.
     - `children` stays `null` until `detail`, which runs `issue view` and fills the description and the non-closed children.
+    - `issue view` gives each child's state name but not its type, so a child's state type comes from the listing that `list` read moments earlier. A child absent from that listing counts as open, so its parent is excluded as split rather than selected. A child that changes state between the two reads is judged by its earlier state; this window of seconds is accepted rather than adding a GraphQL read.
+    - Only the issues that stay in the open listing have their blocker relations read and checked against the cap; a completed or canceled issue never reaches selection.
 - **GitHub**:
     - `list` runs the same `gh issue list` as triage.
     - It sets `priority`, `blockedBy` and `children` to `null` and `blocks` to `[]`.
@@ -200,7 +202,7 @@ interface SelectData {
 - **[Work done by hand without `taken` can be selected again.]** → This trade-off was accepted in the grill, because statuses change without the loop. The README states the rule.
 - **[Breaking configuration.]** → A config without `selection` is rejected and names the path. The migration order is below. Until the dotfiles config gains `selection`, two paths are affected, not only manual runs. `/autonomous:run` is not evaluable. The `labelling-new-tasks` skill helper (`src/label-at-creation/cli.ts`) also calls `loadConfig`, so it is rejected too: `check.ts` then uses `{ enabled: false }` rules and reports "configuration unavailable" for every judged group, so tasks created through the skill get no alias or structural evidence and no judged labels.
 - **[LLM cost on every run with two or more candidates.]** → There are few candidates while only `grill-me` is supported. The model and effort can be changed in the config without a release. The cap is revisited when the proposal stage is supported.
-- **[A Linear read can be truncated.]** → `linear-cli` v2.6.0 returns at most 100 blocker relations per issue in `linear issue query --all-teams` and 250 children in `linear issue view <id>`. A read that reaches either limit is treated as incomplete and counts as a failed read: the step is `not-evaluable`, naming Linear and that command, rather than selecting on partial blockers or children.
+- **[A Linear read can be truncated.]** → `linear-cli` v2.6.0 returns at most 100 blocker relations per issue in `linear issue query --all-teams` and 250 children in `linear issue view <id>`. Only open issues are checked, since a closed one never reaches selection. A read that reaches either limit is treated as incomplete and counts as a failed read: the step is `not-evaluable`, naming Linear and that command, rather than selecting on partial blockers or children.
 - **[Linear `issue view` per surviving task.]** → D3's order limits these calls to candidates that are still `grill-me`.
 - **[`bd blocked` may report blockers differently from the dependency list.]** → Beads' own rule is accepted as the source of truth, and a test pins the parsing to recorded `bd` output.
 - **[`chezmoi` missing on the `PATH` where `/autonomous:run` is started.]** → The run is not evaluable, with a reason that names `chezmoi data`.

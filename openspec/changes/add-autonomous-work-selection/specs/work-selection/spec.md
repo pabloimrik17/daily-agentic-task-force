@@ -43,7 +43,7 @@ The step SHALL read the open tasks of every enabled source itself, after `label-
 
 ### Requirement: Linear reads that reach the limit
 
-A Linear read whose blocker relations (from `linear issue query --all-teams`) reach 100 or whose children (from `linear issue view <id>`) reach 250, the most `linear-cli` v2.6.0 returns, SHALL be incomplete and SHALL count as a failed read, so the step is `not-evaluable`.
+A Linear read whose blocker relations for an open task (from `linear issue query --all-teams`) reach 100 or whose children (from `linear issue view <id>`) reach 250, the most `linear-cli` v2.6.0 returns, SHALL be incomplete and SHALL count as a failed read, so the step is `not-evaluable`. The relations of a completed or canceled issue SHALL NOT be checked, because such an issue never reaches selection.
 
 #### Scenario: Linear read reaches the limit
 
@@ -54,6 +54,11 @@ A Linear read whose blocker relations (from `linear issue query --all-teams`) re
 
 - **WHEN** `linear issue view <id>` returns 250 children for a task
 - **THEN** the read is incomplete, the step is `not-evaluable` and the reason names Linear and `linear issue view`
+
+#### Scenario: Closed issue with many relations
+
+- **WHEN** `linear issue query --all-teams` returns 100 inverse relations for a completed issue
+- **THEN** the read is complete and the completed issue is not among the tasks
 
 ### Requirement: Blockers, children and priority
 
@@ -145,12 +150,17 @@ A tracker status such as Beads `in_progress` or a Linear started state SHALL NOT
 
 ### Requirement: A single candidate needs no comparison
 
-With exactly one candidate, the step SHALL select it without an LLM and explain that it was the only one.
+With exactly one candidate, the step SHALL select it without an LLM and explain that it was the only one. When that candidate is outside the machine scope, the step SHALL mark the selection as a machine-scope exception whose reason is that it was the only candidate.
 
 #### Scenario: Single candidate
 
 - **WHEN** exactly one candidate remains
 - **THEN** it is selected, no LLM is called and the step's tier is `code`
+
+#### Scenario: Single candidate outside the machine scope
+
+- **WHEN** the machine scope is `personal` and the only candidate is a `work` task
+- **THEN** it is selected without an LLM, and the report marks it as a machine-scope exception because it was the only candidate
 
 ### Requirement: Compare the candidates
 
