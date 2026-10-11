@@ -321,7 +321,10 @@ of tasks sent to one `claude -p` call.
 `selection` configures the LLM comparison of the `select` step: `model` and
 `effort` passed to `claude -p`. It is required. A configuration file without
 it is rejected with the path `selection`, so a file written for an earlier
-version must gain the block.
+version must gain the block. The rejection also reaches the
+[labelling at creation](#labelling-at-creation) helper: until the block is
+there, tasks created through it get no alias or structural evidence and no
+judged labels, and `/autonomous:run` is not evaluable.
 
 ## The label contract
 

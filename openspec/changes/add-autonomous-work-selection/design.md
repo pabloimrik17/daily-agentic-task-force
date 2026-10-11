@@ -198,7 +198,7 @@ interface SelectData {
 
 - **[A forgotten `taken` blocks a task forever.]** → The report lists every task excluded as taken. The README says to remove the label by hand. DOT-109 owns adding and removing it.
 - **[Work done by hand without `taken` can be selected again.]** → This trade-off was accepted in the grill, because statuses change without the loop. The README states the rule.
-- **[Breaking configuration.]** → A config without `selection` is rejected and names the path. The migration order is below. Until the user updates, only manual runs are affected.
+- **[Breaking configuration.]** → A config without `selection` is rejected and names the path. The migration order is below. Until the dotfiles config gains `selection`, two paths are affected, not only manual runs. `/autonomous:run` is not evaluable. The `labelling-new-tasks` skill helper (`src/label-at-creation/cli.ts`) also calls `loadConfig`, so it is rejected too: `check.ts` then uses `{ enabled: false }` rules and reports "configuration unavailable" for every judged group, so tasks created through the skill get no alias or structural evidence and no judged labels.
 - **[LLM cost on every run with two or more candidates.]** → There are few candidates while only `grill-me` is supported. The model and effort can be changed in the config without a release. The cap is revisited when the proposal stage is supported.
 - **[A Linear read can be truncated.]** → `linear-cli` v2.6.0 returns at most 100 blocker relations per issue in `linear issue query --all-teams` and 250 children in `linear issue view <id>`. A read that reaches either limit is treated as incomplete and counts as a failed read: the step is `not-evaluable`, naming Linear and that command, rather than selecting on partial blockers or children.
 - **[Linear `issue view` per surviving task.]** → D3's order limits these calls to candidates that are still `grill-me`.
@@ -209,7 +209,7 @@ interface SelectData {
 
 1. Merge this change. Release-please opens a major release of `autonomous` (`feat(autonomous)!:`).
 2. Prepare the dotfiles PR that adds `"selection": { "model": "sonnet", "effort": "high" }` to the encrypted config. Keep it unmerged.
-3. Merge the release PR, then the dotfiles PR.
+3. Merge the release PR, then the dotfiles PR right after it. Between the release and the dotfiles merge, both `/autonomous:run` and task creation through the `labelling-new-tasks` skill are affected, so keep that window short.
 4. On each machine, run `chezmoi apply` and update the plugin, then do one manual `/autonomous:run` to check the report.
 
 Rollback: reinstall the previous plugin version and revert the dotfiles PR. A config with `selection` is rejected by the old plugin, so both must be rolled back together.
