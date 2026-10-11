@@ -81,3 +81,38 @@ task's labels were back to `grill-me, monolab, personal`.
 
 - The selected id was among the reported candidates in every run.
 - With `taken`, the run no longer selected that task.
+
+## Run 4: `--json` on the reviewed code
+
+Run on 2026-10-11, after the review fixes: failed triage writes count as
+labelled this run, truncated Linear reads fail closed, and only the relations
+of open Linear issues are checked against the cap. The setup was the same as
+before: a scratchpad copy of the user's configuration plus `selection`,
+`--account claude`, no `--apply`.
+
+`bun plugins/autonomous/src/run.ts --account claude --json` exited 0. All
+three steps advanced; `select` ran at tier `llm`.
+
+- `machineScope`: `personal`
+- `selected`: Beads `agentic-task-2x0`, stage `grill-me`, autonomy
+  `grill-me`, scope `personal`, no exception, the same task as runs 1 and 2.
+  The explanation named the same evidence: it is the only P1 candidate, its
+  uncommitted changes are at risk, and later work depends on it.
+- Candidates compared: 20 (9 Beads, 10 Linear, 1 GitHub; 15 `personal`,
+  5 `work`, all at stage `grill-me`). The selected id is among them.
+- `comparison`: `{ "model": "sonnet", "effort": "high" }`
+- `notEvaluated`: `["github: dependencies and children"]`
+
+Exclusion counts per reason (689 excluded):
+
+| Reason            | Count |
+| ----------------- | ----- |
+| classification    | 540   |
+| taken             | 0     |
+| labelled this run | 0     |
+| unsupported stage | 148   |
+| blocked           | 0     |
+| split             | 1     |
+
+The Linear listing read completed, so no open Linear task reached the
+relation or children cap.
