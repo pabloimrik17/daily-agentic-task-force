@@ -20,11 +20,13 @@ function readerWith(queryOutput: unknown, viewOutput: unknown = detail) {
     return linearWorkReader(exec, { enabled: true });
 }
 
-function withRelations(count: number) {
-    const [first, ...rest] = listing.nodes;
+function withRelations(count: number, index = 0) {
     const related = { type: "related", issue: { identifier: "DEMO-500" } };
     const inverseRelations = { nodes: Array.from({ length: count }, () => related) };
-    return { ...listing, nodes: [{ ...first, inverseRelations }, ...rest] };
+    const nodes = listing.nodes.map((node, at) =>
+        at === index ? { ...node, inverseRelations } : node,
+    );
+    return { ...listing, nodes };
 }
 
 function withChildren(count: number) {
@@ -103,6 +105,15 @@ describe("linearWorkReader", () => {
                 "linear issue query --all-teams: output does not match the expected shape: $.nodes[0].inverseRelations has 100 nodes, " +
                 "the most linear-cli returns; blockers may be missing",
         });
+    });
+    it("does not cap the relations of a completed issue, which selection never reads", async () => {
+        const completed = listing.nodes.findIndex((node) => node.state.type === "completed");
+        const result = await readerWith(withRelations(100, completed)).list();
+        expect(result.ok && result.value.map(({ id }) => id)).toEqual([
+            "DEMO-108",
+            "DEMO-111",
+            "DEMO-82",
+        ]);
     });
     it("parses 249 children", async () => {
         const result = await detailOf(withChildren(249));

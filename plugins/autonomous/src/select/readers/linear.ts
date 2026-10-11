@@ -48,11 +48,13 @@ function parseListing(value: unknown) {
     return array(root.nodes, "$.nodes").map((item, index) => {
         const path = `$.nodes[${index}]`;
         const entry = object(item, path);
+        const listed = listedTask(entry, path);
         return {
-            ...listedTask(entry, path),
+            ...listed,
             priority:
                 number(entry, "priority", path) === 0 ? null : string(entry, "priorityLabel", path),
-            blockedBy: blockers(entry, path),
+            // A closed issue never reaches selection, so its relations are neither read nor capped.
+            blockedBy: isExcluded(listed.type, listed.task.status) ? [] : blockers(entry, path),
         };
     });
 }
