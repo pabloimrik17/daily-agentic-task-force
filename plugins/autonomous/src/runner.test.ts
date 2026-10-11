@@ -64,4 +64,25 @@ describe("runSteps", () => {
         expect(run.questions.map((q) => q.id)).toEqual(["a:x", "a:y", "b:z"]);
         expect(run.results.map((r) => "questions" in r)).toEqual([false, false]);
     });
+
+    it("gives each step the results of the steps before it", async () => {
+        const seen: Record<string, string[]> = {};
+        const spy = (id: string): Step => ({
+            id,
+            run: (context) => {
+                seen[id] = context.results.map((r) => r.step);
+                return Promise.resolve({
+                    step: id,
+                    tier: "code",
+                    outcome: "advance",
+                    reasons: [],
+                    data: null,
+                });
+            },
+            render: () => id,
+        });
+        await runSteps([spy("a"), spy("b"), spy("c")], ctx);
+
+        expect(seen).toEqual({ a: [], b: ["a"], c: ["a", "b"] });
+    });
 });

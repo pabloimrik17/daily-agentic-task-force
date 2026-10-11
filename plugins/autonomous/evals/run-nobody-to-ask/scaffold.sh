@@ -18,6 +18,10 @@ cat > "$HOME/.config/autonomous/config.json" <<EOF
     "threshold": 0.95,
     "cap": 25,
     "batch": 20
+  },
+  "selection": {
+    "model": "sonnet",
+    "effort": "high"
   }
 }
 EOF
@@ -61,8 +65,16 @@ console.log(
 EOF
 chmod +x "$HOME/bin/openusage"
 
+# A stand-in for `chezmoi data`: a personal machine, so the select step reads
+# the trackers instead of stopping as not-evaluable.
+cat > "$HOME/bin/chezmoi" <<'EOF'
+#!/bin/sh
+echo '{"machineType":"personal"}'
+EOF
+chmod +x "$HOME/bin/chezmoi"
+
 # The eval agent's Bash tool starts from the shell profile of $HOME; put the
-# stand-in ahead of the real `openusage` on PATH.
+# stand-ins ahead of the real `openusage` and `chezmoi` on PATH.
 for file in .zshenv .zshrc .zprofile .bashrc .bash_profile .profile; do
     printf 'export PATH="$HOME/bin:$PATH"\n' > "$HOME/$file"
 done

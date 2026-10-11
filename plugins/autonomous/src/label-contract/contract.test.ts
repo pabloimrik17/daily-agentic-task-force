@@ -11,8 +11,8 @@ function normalise(text: string): string {
 }
 
 describe("LABELS, GROUPS and COLOURS", () => {
-    it("lists exactly the five contract labels", () => {
-        expect(LABELS).toEqual(["work", "personal", "AFK", "HITL", "grill-me"]);
+    it("lists exactly the six contract labels", () => {
+        expect(LABELS).toEqual(["work", "personal", "AFK", "HITL", "grill-me", "taken"]);
     });
 
     it("groups scope and entry labels", () => {
@@ -27,6 +27,7 @@ describe("LABELS, GROUPS and COLOURS", () => {
             "grill-me": "#f2994a",
             work: "#2f80ed",
             personal: "#27ae60",
+            taken: "#95a2b3",
         });
     });
 
@@ -36,20 +37,35 @@ describe("LABELS, GROUPS and COLOURS", () => {
         }
     });
 
-    it.each(LABELS)("states the meaning of %s as criteria.md does", (label) => {
-        const criteria = normalise(
-            readFileSync(new URL("../label-triage/criteria.md", import.meta.url), "utf8"),
-        );
-        const statements = [
-            `${label} is ${MEANINGS[label]}`,
-            `${label} means ${MEANINGS[label]}`,
-        ].map(normalise);
-
-        expect(
-            statements.some((statement) => criteria.includes(statement)),
-            `criteria.md does not state the meaning of ${label} given in MEANINGS`,
-        ).toBe(true);
+    it("states that work is Nazaries work, without priority over personal work", () => {
+        expect(MEANINGS.work).toBe("Nazaries work.");
+        expect(MEANINGS.work).not.toMatch(/priority/i);
     });
+
+    it("states that taken means someone is advancing the task now", () => {
+        expect(MEANINGS.taken).toBe(
+            "An agent or a person is advancing the task now; it is not selected until the label is removed.",
+        );
+    });
+
+    // Triage neither derives nor asks about taken, so criteria.md covers the grouped labels only.
+    it.each([...GROUPS.scope, ...GROUPS.entry])(
+        "states the meaning of %s as criteria.md does",
+        (label) => {
+            const criteria = normalise(
+                readFileSync(new URL("../label-triage/criteria.md", import.meta.url), "utf8"),
+            );
+            const statements = [
+                `${label} is ${MEANINGS[label]}`,
+                `${label} means ${MEANINGS[label]}`,
+            ].map(normalise);
+
+            expect(
+                statements.some((statement) => criteria.includes(statement)),
+                `criteria.md does not state the meaning of ${label} given in MEANINGS`,
+            ).toBe(true);
+        },
+    );
 });
 
 describe("isContractLabel", () => {
@@ -63,6 +79,11 @@ describe("isContractLabel", () => {
 
     it("is case-sensitive", () => {
         expect(isContractLabel("afk")).toBe(false);
+    });
+
+    it("accepts taken and rejects Taken", () => {
+        expect(isContractLabel("taken")).toBe(true);
+        expect(isContractLabel("Taken")).toBe(false);
     });
 });
 

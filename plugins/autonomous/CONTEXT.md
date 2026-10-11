@@ -25,6 +25,25 @@ One part of an `/autonomous:run` invocation, such as the quota gate or label
 triage.
 _Avoid_: stage, run step
 
+### Selection
+
+**Machine scope**:
+The scope, `work` or `personal`, that a machine prefers when work is selected
+on it. Work from the other scope is selected only as a visible, justified
+exception.
+_Avoid_: machine type, work-first
+
+**Taken task**:
+A task that carries the taken label: an agent or a person has declared that
+they are advancing it. It is never a candidate, whether or not its session
+occupies a runner slot. A tracker status such as "in progress" does not make a
+task taken.
+_Avoid_: claimed, locked
+
+**Candidate**:
+A work unit that every verifiable constraint permits now. Selection compares
+candidates; it never chooses anything else.
+
 ### Labels
 
 **Autonomy label**:
@@ -37,6 +56,11 @@ Where a task is in the process: `grill-me` or `proposal`. Every task has
 exactly one, and each transition replaces it. A task whose autonomy is decided
 starts at `proposal`, and a task in `grill-me` moves to `proposal` when the
 grill ends.
+
+**Taken label**:
+`taken`: marks a taken task for as long as an agent or a person advances it,
+and is removed when they stop. It is neither a property nor a stage.
+_Avoid_: lock
 
 **Stage prompt**:
 The instructions the runner gives the agent session it opens for a task's

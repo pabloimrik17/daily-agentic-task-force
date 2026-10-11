@@ -1,15 +1,23 @@
 // The label contract (spec label-contract): the fixed set of labels, their
 // grouping, colours and meanings, shared by detection, triage and bootstrap.
 
-import type { ContractLabel } from "../config.ts";
+// The label values are declared once here; every other type and list of
+// labels is derived from these.
+const SCOPE_LABELS = ["work", "personal"] as const;
+const ENTRY_LABELS = ["AFK", "HITL", "grill-me"] as const;
+const TAKEN_LABEL = "taken";
+
+export type Scope = (typeof SCOPE_LABELS)[number];
+export type EntryLabel = (typeof ENTRY_LABELS)[number];
+export type ContractLabel = Scope | EntryLabel | typeof TAKEN_LABEL;
 
 export type Group = "scope" | "entry";
 
-export const LABELS: readonly ContractLabel[] = ["work", "personal", "AFK", "HITL", "grill-me"];
+export const LABELS: readonly ContractLabel[] = [...SCOPE_LABELS, ...ENTRY_LABELS, TAKEN_LABEL];
 
 export const GROUPS: Record<Group, readonly ContractLabel[]> = {
-    scope: ["work", "personal"],
-    entry: ["AFK", "HITL", "grill-me"],
+    scope: SCOPE_LABELS,
+    entry: ENTRY_LABELS,
 };
 
 export const COLOURS: Record<ContractLabel, string> = {
@@ -18,19 +26,25 @@ export const COLOURS: Record<ContractLabel, string> = {
     "grill-me": "#f2994a",
     work: "#2f80ed",
     personal: "#27ae60",
+    taken: "#95a2b3",
 };
 
 export const MEANINGS: Record<ContractLabel, string> = {
-    work: "Nazaries work, and has priority over personal work.",
+    work: "Nazaries work.",
     personal: "The user's own work.",
     AFK: "An agent may advance the task without a human.",
     HITL: "An agent may advance the task, but a human intervenes during or at the end of each stage.",
     "grill-me":
         "The task must be refined with a human before anyone works on it, and it takes precedence over AFK and HITL when combined.",
+    taken: "An agent or a person is advancing the task now; it is not selected until the label is removed.",
 };
 
 export function isContractLabel(name: string): name is ContractLabel {
     return (LABELS as readonly string[]).includes(name);
+}
+
+export function isScope(value: string): value is Scope {
+    return (SCOPE_LABELS as readonly string[]).includes(value);
 }
 
 export function isValidGroup(group: Group, labels: readonly string[]): boolean {

@@ -8,7 +8,7 @@ The entry group holds `AFK`, `HITL` and `grill-me`. At least one applies to a
 task; `AFK` and `HITL` never apply together, but `grill-me` may accompany
 either one.
 
-`work` is Nazaries work, and has priority over personal work.
+`work` is Nazaries work.
 
 `personal` is the user's own work.
 

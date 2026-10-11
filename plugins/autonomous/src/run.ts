@@ -5,19 +5,16 @@ import {
     unconfiguredAnswers,
 } from "./answer-mode.ts";
 import { parseArgs, type RunArgs, USAGE } from "./args.ts";
+import { PRINT_TIMEOUT_MS } from "./claude-print.ts";
 import { loadConfig } from "./config.ts";
-import { execCommand } from "./exec.ts";
+import { type Exec, execCommand } from "./exec.ts";
 import {
     bootstrapLabels,
     renderBootstrapJson,
     renderBootstrapText,
     unconfiguredBootstrap,
 } from "./label-contract/bootstrap.ts";
-import {
-    claudeJudgement,
-    JUDGEMENT_TIMEOUT_MS,
-    type JudgementExec,
-} from "./label-triage/judgement.ts";
+import { claudeJudgement, type JudgementExec } from "./label-triage/judgement.ts";
 import { labelTriageStep } from "./label-triage/step.ts";
 import { cliTrackers } from "./label-triage/trackers/cli.ts";
 import type { TrackerFactory } from "./label-triage/trackers/tracker.ts";
@@ -25,8 +22,12 @@ import { execOpenUsage, type OpenUsageExec } from "./quota-gate/openusage.ts";
 import { quotaGateStep } from "./quota-gate/step.ts";
 import { buildReport, exitCodeFor, renderJson, renderText, USAGE_EXIT_CODE } from "./report.ts";
 import { runSteps, type Step } from "./runner.ts";
+import { claudeSelection } from "./select/compare.ts";
+import { cliWork } from "./select/readers/cli.ts";
+import { selectStep } from "./select/step.ts";
+import type { SelectionExec, WorkReaderFactory } from "./select/types.ts";
 
-const STEPS: readonly Step[] = [quotaGateStep, labelTriageStep];
+const STEPS: readonly Step[] = [quotaGateStep, labelTriageStep, selectStep];
 
 export interface MainDeps {
     now: () => Date;
@@ -34,6 +35,9 @@ export interface MainDeps {
     openUsage: OpenUsageExec;
     trackers: TrackerFactory;
     judgement: JudgementExec;
+    chezmoi: Exec;
+    work: WorkReaderFactory;
+    selection: SelectionExec;
     stdout: (text: string) => void;
     stderr: (text: string) => void;
     steps?: readonly Step[];
@@ -59,7 +63,15 @@ export async function main(argv: readonly string[], deps: MainDeps): Promise<num
             args: parsed.args,
             now: startedAt,
             config: loadConfig(deps.env),
-            io: { openUsage: deps.openUsage, trackers: deps.trackers, judgement: deps.judgement },
+            results: [],
+            io: {
+                openUsage: deps.openUsage,
+                trackers: deps.trackers,
+                judgement: deps.judgement,
+                chezmoi: deps.chezmoi,
+                work: deps.work,
+                selection: deps.selection,
+            },
         });
         const report = buildReport(startedAt, run, parsed.args);
         deps.stdout(parsed.args.json ? renderJson(report) : renderText(report, steps));
@@ -114,7 +126,10 @@ if (import.meta.main) {
         env: process.env,
         openUsage: execOpenUsage,
         trackers: cliTrackers,
-        judgement: claudeJudgement(execCommand("claude", JUDGEMENT_TIMEOUT_MS)),
+        judgement: claudeJudgement(execCommand("claude", PRINT_TIMEOUT_MS)),
+        chezmoi: execCommand("chezmoi"),
+        work: cliWork,
+        selection: claudeSelection(execCommand("claude", PRINT_TIMEOUT_MS)),
         stdout: (text) => process.stdout.write(`${text}\n`),
         stderr: (text) => process.stderr.write(`${text}\n`),
     });

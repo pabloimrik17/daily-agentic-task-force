@@ -1,0 +1,52 @@
+{
+    "identifier": "DEMO-82",
+    "title": "Synthetic parent",
+    "description": "A synthetic parent description.",
+    "state": {
+        "name": "Backlog",
+        "color": "#000000"
+    },
+    "labels": {
+        "nodes": [
+            {
+                "name": "personal"
+            }
+        ]
+    },
+    "children": {
+        "nodes": [
+            {
+                "identifier": "DEMO-108",
+                "title": "Synthetic child",
+                "state": {
+                    "name": "Backlog",
+                    "color": "#000000"
+                }
+            },
+            {
+                "identifier": "DEMO-200",
+                "title": "Synthetic child",
+                "state": {
+                    "name": "Done",
+                    "color": "#000000"
+                }
+            },
+            {
+                "identifier": "DEMO-201",
+                "title": "Synthetic child",
+                "state": {
+                    "name": "Canceled",
+                    "color": "#000000"
+                }
+            },
+            {
+                "identifier": "DEMO-999",
+                "title": "Synthetic child",
+                "state": {
+                    "name": "Unknown",
+                    "color": "#000000"
+                }
+            }
+        ]
+    }
+}

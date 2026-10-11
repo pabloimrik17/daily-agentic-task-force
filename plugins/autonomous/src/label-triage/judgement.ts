@@ -6,17 +6,16 @@
 
 import { readFileSync } from "node:fs";
 
+import { claudePrint, parseMessage, PRINT_TIMEOUT_MS } from "../claude-print.ts";
 import type { Source } from "../config.ts";
 import type { Exec } from "../exec.ts";
 import { type Group, GROUPS } from "../label-contract/contract.ts";
 import {
     array,
-    boolean,
     type Json,
     number,
     object,
     optional,
-    ParseError,
     rejectUnknownKeys,
     string,
     stringArray,
@@ -62,7 +61,7 @@ interface NotJudged {
     reason: string;
 }
 
-export const JUDGEMENT_TIMEOUT_MS = 300_000;
+export const JUDGEMENT_TIMEOUT_MS = PRINT_TIMEOUT_MS;
 
 const CRITERIA = readFileSync(new URL("./criteria.md", import.meta.url), "utf8");
 
@@ -115,48 +114,17 @@ export const JUDGEMENT_SCHEMA = {
 
 export function claudeJudgement(exec: Exec): JudgementExec {
     return async (request) => {
-        // The prompt carries issue bodies anyone can write, so the session runs with every
-        // customisation off, no tools, no MCP servers and no transcript. `--bare` would also
-        // drop the keychain OAuth the subscription needs.
-        const result = await exec(
-            [
-                "-p",
-                "--safe-mode",
-                "--tools",
-                "",
-                "--strict-mcp-config",
-                "--no-session-persistence",
-                "--model",
-                request.model,
-                "--effort",
-                request.effort,
-                "--output-format",
-                "json",
-                "--json-schema",
-                JSON.stringify(JUDGEMENT_SCHEMA),
-            ],
-            buildPrompt(request.tasks),
-        );
-        if (!result.ok) {
-            return result;
-        }
-        let json: unknown;
-        try {
-            json = JSON.parse(result.stdout);
-        } catch (error) {
-            return {
-                ok: false,
-                error: `claude output is not valid JSON: ${(error as Error).message}`,
-            };
-        }
-        let output: Json;
-        try {
-            output = envelope(json);
-        } catch (error) {
-            return { ok: false, error: `claude envelope: ${parseMessage(error)}` };
+        const printed = await claudePrint(exec, {
+            model: request.model,
+            effort: request.effort,
+            schema: JUDGEMENT_SCHEMA,
+            prompt: buildPrompt(request.tasks),
+        });
+        if (!printed.ok) {
+            return printed;
         }
         try {
-            return { ok: true, answers: payload(output) };
+            return { ok: true, answers: payload(printed.output) };
         } catch (error) {
             return {
                 ok: false,
@@ -164,29 +132,6 @@ export function claudeJudgement(exec: Exec): JudgementExec {
             };
         }
     };
-}
-
-function parseMessage(error: unknown): string {
-    if (error instanceof ParseError) {
-        return error.message;
-    }
-    throw error;
-}
-
-function envelope(input: unknown): Json {
-    const root = object(input, "$");
-    const type = string(root, "type", "$");
-    if (type !== "result") {
-        throw new ParseError(`$.type is "${type}", expected "result"`);
-    }
-    const subtype = string(root, "subtype", "$");
-    if (subtype !== "success") {
-        throw new ParseError(`$.subtype is "${subtype}", expected "success"`);
-    }
-    if (boolean(root, "is_error", "$")) {
-        throw new ParseError("$.is_error is true, expected false");
-    }
-    return object(root.structured_output, "$.structured_output");
 }
 
 function payload(root: Json): JudgementAnswer[] {

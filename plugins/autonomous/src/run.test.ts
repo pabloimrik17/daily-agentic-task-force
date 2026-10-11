@@ -18,6 +18,8 @@ import type {
     Step,
     StepOutcome,
 } from "./runner.ts";
+import { fakeChezmoi, fakeReader, fakeSelection, workTask } from "./select/test-fixtures.ts";
+import type { SelectData } from "./select/types.ts";
 
 function fakeStep(outcome: StepOutcome): Step<{ value: number }> {
     return {
@@ -46,6 +48,11 @@ function deps(steps: readonly Step[] | undefined, overrides: Partial<MainDeps> =
             throw new Error("unused");
         },
         judgement: () => Promise.resolve({ ok: false, error: "unused" }),
+        chezmoi: () => Promise.resolve({ ok: false, error: "unused" }),
+        work: () => {
+            throw new Error("unused");
+        },
+        selection: () => Promise.resolve({ ok: false, error: "unused" }),
         stdout: (t) => out.push(t),
         stderr: (t) => err.push(t),
         ...(steps === undefined ? {} : { steps }),
@@ -202,6 +209,7 @@ describe("main --bootstrap-labels", () => {
                 cap: 25,
                 batch: 20,
             },
+            selection: { model: "sonnet", effort: "high" },
         }),
     );
     afterAll(() => rmSync(dir, { recursive: true, force: true }));
@@ -256,7 +264,7 @@ describe("main --bootstrap-labels", () => {
             [
                 `label bootstrap — started ${NOW.toISOString()}`,
                 "outcome: advance",
-                "  linear    workspace: created work, personal, AFK, HITL, grill-me",
+                "  linear    workspace: created work, personal, AFK, HITL, grill-me, taken",
             ].join("\n"),
         ]);
     });
@@ -359,20 +367,49 @@ describe("main with the real steps", () => {
         ]);
     });
 
-    it("advances through both steps with the example configuration and empty sources", async () => {
+    // Two in-scope grill-me candidates for the select step; the LLM picks DOT-120.
+    function selecting(calls: string[]) {
+        const selection = fakeSelection(() => ({
+            ok: true,
+            answer: {
+                source: "linear",
+                id: "DOT-120",
+                explanation: "It unblocks two tasks.",
+                exception: null,
+            },
+        }));
+        return {
+            chezmoi: fakeChezmoi({ machineType: "personal" }, calls),
+            work: () => [
+                fakeReader("beads", [workTask("beads", "B-7", ["personal", "grill-me"])], calls),
+                fakeReader(
+                    "linear",
+                    [workTask("linear", "DOT-120", ["personal", "HITL", "grill-me"])],
+                    calls,
+                ),
+            ],
+            selection,
+        };
+    }
+
+    const emptyTrackers = (): Trackers => ({
+        beads: empty("beads"),
+        github: empty("github"),
+        linear: empty("linear"),
+    });
+
+    it("advances through the three steps with the example configuration", async () => {
         let judged = 0;
+        const calls: string[] = [];
         const { d, out, err } = deps(undefined, {
             env: { AUTONOMOUS_CONFIG: configPath },
             openUsage: capacity(),
-            trackers: (): Trackers => ({
-                beads: empty("beads"),
-                github: empty("github"),
-                linear: empty("linear"),
-            }),
+            trackers: emptyTrackers,
             judgement: () => {
                 judged++;
                 return Promise.resolve({ ok: false, error: "unused" });
             },
+            ...selecting(calls),
         });
         expect(await main([], d)).toBe(0);
         expect(err).toEqual([]);
@@ -381,6 +418,92 @@ describe("main with the real steps", () => {
         expect(text).toContain("outcome: advance");
         expect(text).toContain("[quota-gate] advance (code)");
         expect(text).toContain("[label-triage] advance (code)");
+        expect(text).toContain("[select] advance (llm)");
+    });
+
+    it("does not run the select step when label-triage is not evaluable because bd cannot be executed", async () => {
+        const calls: string[] = [];
+        const { d, out } = deps(undefined, {
+            env: { AUTONOMOUS_CONFIG: configPath },
+            openUsage: capacity(),
+            trackers: () => trackers(calls, { beads: "bd list --json: bd CLI not found on PATH" }),
+            ...selecting(calls),
+        });
+        expect(await main(["--json"], d)).toBe(3);
+        const report = JSON.parse(out[0] as string) as {
+            steps: { step: string; outcome: string }[];
+        };
+        expect(report.steps.map((s) => [s.step, s.outcome])).toEqual([
+            ["quota-gate", "advance"],
+            ["label-triage", "not-evaluable"],
+        ]);
+        expect(calls).toEqual(["beads:listTasks"]);
+    });
+
+    it("writes nothing and carries no question from the select step with --apply", async () => {
+        const calls: string[] = [];
+        const { d, out } = deps(undefined, {
+            env: { AUTONOMOUS_CONFIG: configPath },
+            openUsage: capacity(),
+            // Every listed task is complete, so label-triage has nothing to write or ask either.
+            trackers: () =>
+                trackers(calls, { beads: [task("beads", "B-7", ["personal", "grill-me"])] }),
+            ...selecting(calls),
+        });
+        expect(await main(["--apply", "--json"], d)).toBe(0);
+        const report = JSON.parse(out[0] as string) as Record<string, unknown>;
+        expect(report.outcome).toBe("advance");
+        expect(report).not.toHaveProperty("handoff");
+        expect(calls.filter((call) => call.includes(":addLabel:"))).toEqual([]);
+    });
+
+    it("carries the select step's data in the --json report", async () => {
+        const calls: string[] = [];
+        const { d, out } = deps(undefined, {
+            env: { AUTONOMOUS_CONFIG: configPath },
+            openUsage: capacity(),
+            trackers: emptyTrackers,
+            ...selecting(calls),
+        });
+        expect(await main(["--json"], d)).toBe(0);
+        const report = JSON.parse(out[0] as string) as {
+            steps: { step: string; tier: string; outcome: string; data: unknown }[];
+        };
+        const select = report.steps[2];
+        expect(select?.step).toBe("select");
+        expect(select?.tier).toBe("llm");
+        expect(select?.data).toEqual({
+            machineScope: "personal",
+            selected: {
+                source: "linear",
+                id: "DOT-120",
+                title: "Task DOT-120",
+                stage: "grill-me",
+                autonomy: "HITL",
+                scope: "personal",
+                explanation: "It unblocks two tasks.",
+                exception: null,
+            },
+            candidates: [
+                {
+                    source: "beads",
+                    id: "B-7",
+                    title: "Task B-7",
+                    scope: "personal",
+                    stage: "grill-me",
+                },
+                {
+                    source: "linear",
+                    id: "DOT-120",
+                    title: "Task DOT-120",
+                    scope: "personal",
+                    stage: "grill-me",
+                },
+            ],
+            excluded: [],
+            notEvaluated: ["github: dependencies and children"],
+            comparison: { model: "sonnet", effort: "high" },
+        } satisfies SelectData);
     });
 });
 
@@ -685,6 +808,9 @@ describe("main --answer", () => {
             openUsage,
             trackers: () => fake,
             judgement,
+            // B-1 still lacks its entry group, so select advances on another, complete task.
+            chezmoi: fakeChezmoi({ machineType: "personal" }, []),
+            work: () => [fakeReader("beads", [workTask("beads", "B-2", ["work", "grill-me"])], [])],
         };
 
         const run = deps(undefined, shared);

@@ -24,6 +24,7 @@ const valid = () => ({
         github: { enabled: true, repos: ["owner/repo"], scope: "personal" },
     },
     judgement: { model: "claude-sonnet-5", effort: "medium", threshold: 0.95, cap: 25, batch: 20 },
+    selection: { model: "sonnet", effort: "high" },
 });
 
 describe("resolveConfigPath", () => {
@@ -116,6 +117,49 @@ describe("parseConfig", () => {
         });
     });
 
+    it("rejects an alias for taken with the alias's path", () => {
+        const input = valid();
+        (input.sources.beads.aliases as Record<string, string[]>).taken = ["in-progress"];
+        const result = parseConfig(input);
+        expect(result).toEqual({
+            ok: false,
+            error: "configuration does not match autonomous.config.v1: $.sources.beads.aliases.taken is not a recognised field",
+        });
+    });
+
+    it("returns the selection settings", () => {
+        const result = parseConfig(valid());
+        expect(result.ok && result.value.selection).toEqual({ model: "sonnet", effort: "high" });
+    });
+
+    it("rejects a config without selection with the path selection", () => {
+        const input: Record<string, unknown> = valid();
+        delete input.selection;
+        const result = parseConfig(input);
+        expect(result).toEqual({
+            ok: false,
+            error: "configuration does not match autonomous.config.v1: $.selection must be an object",
+        });
+    });
+
+    it("rejects an unknown field inside selection", () => {
+        const input = { ...valid(), selection: { ...valid().selection, threshold: 0.9 } };
+        const result = parseConfig(input);
+        expect(result).toEqual({
+            ok: false,
+            error: "configuration does not match autonomous.config.v1: $.selection.threshold is not a recognised field",
+        });
+    });
+
+    it("rejects a selection effort outside the known levels", () => {
+        const input = { ...valid(), selection: { ...valid().selection, effort: "extreme" } };
+        const result = parseConfig(input);
+        expect(result).toEqual({
+            ok: false,
+            error: "configuration does not match autonomous.config.v1: $.selection.effort must be one of low, medium, high, xhigh, max",
+        });
+    });
+
     it("rejects an unknown field inside judgement", () => {
         const input = { ...valid(), judgement: { ...valid().judgement, extra: true } };
         const result = parseConfig(input);
@@ -160,5 +204,6 @@ describe("config.example.json", () => {
         const raw = readFileSync(EXAMPLE_PATH, "utf8");
         const result = parseConfig(JSON.parse(raw));
         expect(result.ok).toBe(true);
+        expect(result.ok && result.value.selection).toEqual({ model: "sonnet", effort: "high" });
     });
 });

@@ -85,6 +85,7 @@ function config(enabled: Partial<Record<Source, boolean>> = {}): AutonomousConfi
             cap: 25,
             batch: 20,
         },
+        selection: { model: "sonnet", effort: "high" },
     };
 }
 
@@ -102,6 +103,7 @@ const everyWorkspaceLabelExcept = (missing: string): TrackerLabel[] =>
             ["AFK", "#5e6ad2"],
             ["HITL", "#eb5757"],
             ["grill-me", "#f2994a"],
+            ["taken", "#95a2b3"],
         ] as const
     )
         .filter(([name]) => name !== missing)
@@ -146,6 +148,7 @@ describe("bootstrapLabels", () => {
             "personal",
             "HITL",
             "grill-me",
+            "taken",
         ]);
         expect(report.sources[0]?.labels.find((label) => label.label === "AFK")).toEqual({
             scope: "owner/repo",
@@ -154,6 +157,34 @@ describe("bootstrapLabels", () => {
             colour: "#000000",
             expected: "#5e6ad2",
             note: "colour differs",
+        });
+        expect(report.outcome).toBe("advance");
+    });
+
+    it("creates taken on a GitHub repository that lacks it, with its colour", async () => {
+        const github = fake("github", {
+            labelScopes: ["owner/repo"],
+            labels: {
+                ok: true,
+                value: everyWorkspaceLabelExcept("taken").map((label) => ({
+                    ...label,
+                    scope: "owner/repo",
+                })),
+            },
+        });
+        const report = await bootstrapLabels(
+            trackers({ beads: beads(), github, linear: fake("linear") }),
+            config({ beads: false, linear: false }),
+            STARTED,
+        );
+        expect(github.created).toEqual([["owner/repo", "taken", "#95a2b3"]]);
+        expect(report.sources[0]?.labels.find((label) => label.label === "taken")).toEqual({
+            scope: "owner/repo",
+            label: "taken",
+            status: "created",
+            colour: "#95a2b3",
+            expected: null,
+            note: null,
         });
         expect(report.outcome).toBe("advance");
     });
@@ -171,7 +202,7 @@ describe("bootstrapLabels", () => {
         expect(linear.created).toEqual([]);
         expect(report.sources[0]?.labels.every((label) => label.note === null)).toBe(true);
         expect(report.sources[0]?.labels.map((label) => label.status)).toEqual(
-            Array(5).fill("present"),
+            Array(6).fill("present"),
         );
     });
 
@@ -224,10 +255,12 @@ describe("bootstrapLabels", () => {
             "owner/a AFK",
             "owner/a HITL",
             "owner/a grill-me",
+            "owner/a taken",
             "owner/b work",
             "owner/b AFK",
             "owner/b HITL",
             "owner/b grill-me",
+            "owner/b taken",
         ]);
     });
 
@@ -264,7 +297,7 @@ describe("bootstrapLabels", () => {
             STARTED,
         );
         expect(report.sources.map((entry) => entry.source)).toEqual(["beads", "github", "linear"]);
-        expect(github.created).toHaveLength(5);
+        expect(github.created).toHaveLength(6);
         expect(linear.created).toEqual([]);
         expect(report.sources[2]).toEqual({
             source: "linear",
@@ -291,7 +324,7 @@ describe("bootstrapLabels", () => {
             config(),
             STARTED,
         );
-        expect(linear.created).toHaveLength(5);
+        expect(linear.created).toHaveLength(6);
         expect(report.sources[1]).toMatchObject({ source: "github", evaluable: false });
         expect(report.sources[2]).toMatchObject({ source: "linear", evaluable: true });
         expect(report.outcome).toBe("not-evaluable");
@@ -387,8 +420,8 @@ describe("renderBootstrapText", () => {
                 "label bootstrap — started 2026-09-26T10:00:00.000Z",
                 "outcome: not-evaluable",
                 "  beads     not applicable — Beads needs no label creation: labels exist by use",
-                "  github    owner/repo: created work, personal, HITL; present AFK (colour #000000, expected #5e6ad2); failed grill-me (gh label create grill-me --repo owner/repo: gh failed: HTTP 403)",
-                "  github    owner/other: present work, personal, AFK, HITL, grill-me",
+                "  github    owner/repo: created work, personal, HITL, taken; present AFK (colour #000000, expected #5e6ad2); failed grill-me (gh label create grill-me --repo owner/repo: gh failed: HTTP 403)",
+                "  github    owner/other: present work, personal, AFK, HITL, grill-me, taken",
                 `  linear    not evaluable — ${UNAUTHENTICATED}`,
             ].join("\n"),
         );
