@@ -24,7 +24,7 @@
         {
             "name": "stonks",
             "source": "./plugins/stonks",
-            "version": "0.0.0",
+            "version": "1.0.0",
             "description": "Swing-trading bookkeeping: reconciles the user's mirrors against IBKR and keeps the Simply Wall St watchlist in step with the tracking sheet, with code making every decision"
         }
     ]
