@@ -1,5 +1,16 @@
 # Changelog
 
+## [2.0.0](https://github.com/pabloimrik17/daily-agentic-task-force/compare/autonomous--v1.2.0...autonomous--v2.0.0) (2026-10-15)
+
+
+### ⚠ BREAKING CHANGES
+
+* **autonomous:** autonomous.config.v1 now requires a selection block ({ model, effort }). A configuration file without it is rejected.
+
+### Features
+
+* **autonomous:** select the next work unit after triage ([#29](https://github.com/pabloimrik17/daily-agentic-task-force/issues/29)) ([7dfc8cb](https://github.com/pabloimrik17/daily-agentic-task-force/commit/7dfc8cb2a1e3e10d88af2604a16a7b03719e3e1e))
+
 ## [1.2.0](https://github.com/pabloimrik17/daily-agentic-task-force/compare/autonomous--v1.1.0...autonomous--v1.2.0) (2026-10-04)
 
 
