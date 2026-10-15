@@ -1,5 +1,2 @@
 [install]
-# Resolve only versions published at least 1 day ago (seconds), so a hijacked
-# release is pulled before it reaches us. Renovate waits longer (renovate.json).
-# Versions already in bun.lock are not re-checked.
 minimumReleaseAge = 86400
