@@ -17,6 +17,7 @@
     "prHourlyLimit": 2,
     "minimumReleaseAge": "14 days",
     "rangeStrategy": "pin",
+    "osvVulnerabilityAlerts": true,
     "vulnerabilityAlerts": {
         "prHourlyLimit": 0,
         "prConcurrentLimit": 0
@@ -35,9 +36,15 @@
             "schedule": ["on the first day of the month every 3 months"]
         },
         {
-            "description": "Re-assert the 14-day npm minimum release age; config:best-practices brings security:minimumReleaseAgeNpm with a shorter 3-day window that would otherwise override the top-level value for npm packages",
+            "description": "security:minimumReleaseAgeNpm (via config:best-practices) sets npm to 3 days; restore 14 for majors and minors",
             "matchDatasources": ["npm"],
+            "matchUpdateTypes": ["major", "minor"],
             "minimumReleaseAge": "14 days"
+        },
+        {
+            "description": "Patches wait 3 days, never below Bun's minimumReleaseAge (bunfig.toml)",
+            "matchUpdateTypes": ["patch"],
+            "minimumReleaseAge": "3 days"
         },
         {
             "description": "One PR for every Bun pin",
