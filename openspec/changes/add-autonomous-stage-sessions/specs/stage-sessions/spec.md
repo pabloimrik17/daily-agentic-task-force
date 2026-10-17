@@ -210,27 +210,27 @@ A `created` attempt SHALL be started by `reconcile` with `--apply`.
 
 ### Requirement: Abort of a pending attempt
 
-When no session is a candidate for a `pending` attempt, the attempt SHALL become `aborted`. `taken` SHALL be removed from the task only when the record shows that the runner added it. When the record does not show it, `taken` SHALL be left alone, since another run may hold it, and the report SHALL say that the task still carries `taken` if the task is read and does. A task that cannot be read SHALL be reported and SHALL NOT stop the abort.
+When no session is a candidate for a `pending` attempt, the attempt SHALL become `aborted`. `taken` SHALL be removed from the task whenever the task carries it, whatever the record shows: an add may have reached the tracker without being recorded, and the label carries no owner. A task that does not carry `taken` SHALL be only read. A removal that fails SHALL leave the attempt `pending` and be reported.
 
 #### Scenario: No session was created
 
 - **WHEN** no session has the pending attempt's workspace path and recorded title, and the record shows `taken` was added
 - **THEN** `taken` is removed from the task and the attempt reads `aborted`
 
-#### Scenario: Aborted before taken was added
+#### Scenario: Aborted before taken was recorded
 
 - **WHEN** no session matches, the record shows `taken` was never added, and the task carries `taken`
-- **THEN** `taken` is not removed, the attempt reads `aborted`, and the report says the task still carries `taken` and that it is to be removed by hand if no other run holds it
+- **THEN** `taken` is removed from the task and the attempt reads `aborted`
 
-#### Scenario: Aborted before taken was added and not carried
+#### Scenario: Aborted before taken was recorded and not carried
 
 - **WHEN** no session matches, the record shows `taken` was never added, and the task does not carry `taken`
 - **THEN** nothing is removed and the attempt reads `aborted`
 
 #### Scenario: Task cannot be read on abort
 
-- **WHEN** no session matches, the record shows `taken` was never added, and reading the task fails
-- **THEN** the failure is reported and the attempt reads `aborted`
+- **WHEN** no session matches and reading the task, or removing `taken` from it, fails
+- **THEN** the failure is reported and the attempt stays `pending`
 
 ### Requirement: Open attempts
 

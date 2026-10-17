@@ -743,43 +743,39 @@ describe("reconcile: recovery of a pending attempt", () => {
         expect(after.session?.id).toBeNull();
     });
 
-    it("aborts without findByPath and reports a taken it never added, leaving it on the task", async () => {
+    it("removes a taken the record never showed added, without findByPath", async () => {
         await given(pending({ taken: { added: null, removed: null } }));
         const calls: string[] = [];
         const sessions = fakeSessions({ calls, findByPath: () => ok([listed(SESSION)]) });
         const fakes = linear(calls);
         const result = await reconcileStep.run(context({ sessions, trackers: fakes }));
         expect(result.outcome).toBe("advance");
-        expect(result.data.attempts[0]).toMatchObject({
-            state: "aborted",
-            action: "aborted",
-            detail: "task still carries taken; remove it by hand if no other run holds it",
-        });
-        expect(calls).toEqual(["linear:readTask:DOT-109"]);
+        expect(result.data.attempts[0]).toMatchObject({ state: "aborted", action: "aborted" });
+        expect(calls).toEqual([
+            "linear:readTask:DOT-109",
+            "linear:removeLabel:DOT-109:taken",
+            "linear:readTask:DOT-109",
+        ]);
         const after = await stored();
         expect(after.state).toBe("aborted");
-        expect(after.taken).toEqual({ added: null, removed: null });
+        expect(after.taken).toEqual({ added: null, removed: AT });
         const read = await fakes.linear.readTask("DOT-109");
-        expect(read.ok && read.value.labels).toEqual(["taken", "grill-me"]);
+        expect(read.ok && read.value.labels).toEqual(["grill-me"]);
     });
 
-    it("aborts with nothing to report when taken was never added and the task lacks it", async () => {
+    it("only reads a task without taken that the record never showed added, and aborts", async () => {
         await given(pending({ taken: { added: null, removed: null } }));
         const calls: string[] = [];
         const sessions = fakeSessions({ calls });
         const result = await reconcileStep.run(
             context({ sessions, trackers: linear(calls, ["grill-me"]) }),
         );
-        expect(result.data.attempts[0]).toMatchObject({
-            state: "aborted",
-            action: "aborted",
-            detail: null,
-        });
+        expect(result.data.attempts[0]).toMatchObject({ state: "aborted", action: "aborted" });
         expect(calls).toEqual(["linear:readTask:DOT-109"]);
-        expect((await stored()).taken).toEqual({ added: null, removed: null });
+        expect((await stored()).state).toBe("aborted");
     });
 
-    it("still aborts when the task cannot be read to check a taken it never added", async () => {
+    it("fails the attempt, leaving it pending, when the task cannot be read to abort", async () => {
         await given(pending({ taken: { added: null, removed: null } }));
         const calls: string[] = [];
         const fakes = trackers(
@@ -790,14 +786,12 @@ describe("reconcile: recovery of a pending attempt", () => {
         const result = await reconcileStep.run(
             context({ sessions: fakeSessions({ calls }), trackers: fakes }),
         );
-        expect(result.outcome).toBe("advance");
-        expect(result.data.attempts[0]).toMatchObject({
-            state: "aborted",
-            action: "aborted",
-            detail: "could not check taken: linear issue view DOT-109: network down",
-        });
+        expect(result.outcome).toBe("not-evaluable");
+        expect(result.reasons).toEqual([`${ID}: linear issue view DOT-109: network down`]);
         expect(calls).toEqual(["linear:readTask:DOT-109"]);
-        expect((await stored()).taken).toEqual({ added: null, removed: null });
+        const after = await stored();
+        expect(after.state).toBe("pending");
+        expect(after.taken).toEqual({ added: null, removed: null });
     });
 
     it("aborts without asking the manager when the record holds no session", async () => {

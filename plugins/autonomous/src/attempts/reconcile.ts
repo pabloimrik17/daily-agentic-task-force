@@ -18,7 +18,7 @@ import type { AttemptRecord, AttemptSession, AttemptState } from "./record.ts";
 import { renderReconcile } from "./reconcile-render.ts";
 import { readMarker } from "./result.ts";
 import { attemptDir, capturePath, listRecords, resultPath, writeRecord } from "./state.ts";
-import { removeTaken, TAKEN } from "./taken.ts";
+import { removeTaken } from "./taken.ts";
 
 const RECONCILE = "reconcile";
 
@@ -238,12 +238,11 @@ async function adopt(
     return reported(record, after, { action: "adopted", detail: id });
 }
 
+// `taken` is removed whatever `taken.added` holds: an add whose command timed out
+// or whose save was lost can reach the task unrecorded, and the label has no owner.
 async function abort(r: Reconciler, record: AttemptRecord): Promise<Reconciled> {
     if (!r.apply) {
         return reported(record, record, { action: "aborted" });
-    }
-    if (record.taken.added === null) {
-        return abortUntaken(r, record);
     }
     const removed = await removeTaken(r.trackers[record.task.source], record.task.id);
     if (!removed.ok) {
@@ -254,25 +253,6 @@ async function abort(r: Reconciler, record: AttemptRecord): Promise<Reconciled> 
         taken: { ...record.taken, removed: r.at },
     });
     return reported(record, after, { action: "aborted" });
-}
-
-// `taken` is written after the pending record: an attempt whose add was never
-// recorded did not put it there, and a `taken` the task carries may belong to
-// another machine's run. It is reported, never removed; `taken.removed` stays null.
-async function abortUntaken(r: Reconciler, record: AttemptRecord): Promise<Reconciled> {
-    const detail = await takenLeft(r, record);
-    const after = await save(r, record, { state: "aborted" });
-    return reported(record, after, { action: "aborted", detail });
-}
-
-async function takenLeft(r: Reconciler, record: AttemptRecord): Promise<string | null> {
-    const read = await r.trackers[record.task.source].readTask(record.task.id);
-    if (!read.ok) {
-        return `could not check taken: ${read.error}`;
-    }
-    return read.value.labels.includes(TAKEN)
-        ? "task still carries taken; remove it by hand if no other run holds it"
-        : null;
 }
 
 async function ambiguous(r: Reconciler, record: AttemptRecord, ids: string[]): Promise<Reconciled> {
