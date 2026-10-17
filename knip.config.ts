@@ -1,7 +1,7 @@
 import type { KnipConfig } from "knip";
 
 export default {
-    // Agent scaffolding, not source. Mirrored in 4 sibling configs; see CLAUDE.md.
+    // Agent scaffolding, not source. Mirrored in 4 sibling configs; see AGENTS.md.
     ignore: [
         "openspec/**",
         ".agents/**",

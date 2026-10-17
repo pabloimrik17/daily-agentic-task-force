@@ -16,7 +16,7 @@
         // Loaded by the GitHub Pages HTML documents, not a JavaScript import.
         "docs/styles.css",
     ],
-    // Agent scaffolding, not source. Mirrored in 4 sibling configs; see CLAUDE.md.
+    // Agent scaffolding, not source. Mirrored in 4 sibling configs; see AGENTS.md.
     "ignorePatterns": [
         "openspec/**",
         ".agents/**",
