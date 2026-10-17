@@ -20,6 +20,7 @@ function fakeTracker(
         labelScopes: [],
         createsLabels: false,
         listTasks: () => Promise.resolve({ ok: true, value: [] }),
+        removeLabel: () => Promise.reject(new Error("triage never removes a label")),
         addLabel: (id, label) => {
             calls.push(`${source}:addLabel:${id}:${label}`);
             const state = states.get(id);

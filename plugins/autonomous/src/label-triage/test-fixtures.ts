@@ -21,6 +21,9 @@ export function config(): AutonomousConfig {
             batch: 20,
         },
         selection: { model: "sonnet", effort: "high" },
+        sessions: { tool: "claude", profile: null, binary: null },
+        workspace: { root: "/home/me/WebstormProjects" },
+        naming: { model: "haiku", effort: "low" },
     };
 }
 
@@ -98,6 +101,14 @@ function fakeTracker(
             labels.set(id, [...kept, label]);
             return Promise.resolve({ ok: true, value: undefined });
         },
+        removeLabel: (id, label) => {
+            calls.push(`${source}:removeLabel:${id}:${label}`);
+            labels.set(
+                id,
+                (labels.get(id) ?? []).filter((name) => name !== label),
+            );
+            return Promise.resolve({ ok: true, value: undefined });
+        },
         listLabels: () => Promise.resolve({ ok: true, value: [] }),
         createLabel: (): Promise<TrackerResult<void>> =>
             Promise.reject(new Error("the triage never creates labels")),
@@ -136,7 +147,12 @@ export function triageContext(options: {
     const given = options.config ?? config();
     const load: ConfigLoad =
         "schema" in given
-            ? { ok: true, path: "/home/me/.config/autonomous/config.json", config: given }
+            ? {
+                  ok: true,
+                  path: "/home/me/.config/autonomous/config.json",
+                  config: given,
+                  defaulted: [],
+              }
             : given;
     return {
         args: {

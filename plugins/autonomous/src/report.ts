@@ -13,6 +13,7 @@ export interface RunReport {
     steps: StepResult[];
     outcome: StepOutcome;
     handoff?: Handoff;
+    config?: { defaulted: string[] }; // the configuration keys that took a shipped default; absent when none
 }
 
 // One AskUserQuestion round takes at most 4 questions: a limit of the tool, not a setting.
@@ -22,6 +23,7 @@ export function buildReport(
     startedAt: Date,
     run: RunResult,
     args: Pick<RunArgs, "apply" | "noHandoff">,
+    defaulted: string[] = [],
 ): RunReport {
     const report: RunReport = {
         schema: "autonomous.run.v1",
@@ -29,6 +31,9 @@ export function buildReport(
         steps: run.results,
         outcome: run.outcome,
     };
+    if (defaulted.length > 0) {
+        report.config = { defaulted };
+    }
     if (args.apply && !args.noHandoff && run.questions.length > 0) {
         report.handoff = {
             questions: run.questions.slice(0, MAX_QUESTIONS),
@@ -47,7 +52,13 @@ export function renderText(report: RunReport, steps: readonly Step[]): string {
         const step = steps.find((candidate) => candidate.id === result.step);
         return step ? step.render(result) : renderGeneric(result);
     });
-    const header = `autonomous run — started ${report.startedAt}\noutcome: ${report.outcome}`;
+    const defaults =
+        report.config === undefined ? [] : [`defaults: ${report.config.defaulted.join(", ")}`];
+    const header = [
+        `autonomous run — started ${report.startedAt}`,
+        `outcome: ${report.outcome}`,
+        ...defaults,
+    ].join("\n");
     // Design D2: the handoff travels as the last line, one JSON document the command reads back.
     const handoff =
         report.handoff === undefined ? [] : [`handoff: ${JSON.stringify(report.handoff)}`];

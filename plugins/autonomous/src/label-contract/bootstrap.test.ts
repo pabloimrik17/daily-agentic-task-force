@@ -40,6 +40,7 @@ function fake(
             listTasks: unused,
             readTask: unused,
             addLabel: unused,
+            removeLabel: unused,
             listLabels: () => {
                 result.listed++;
                 return Promise.resolve(options.labels ?? { ok: true, value: [] });
@@ -86,6 +87,9 @@ function config(enabled: Partial<Record<Source, boolean>> = {}): AutonomousConfi
             batch: 20,
         },
         selection: { model: "sonnet", effort: "high" },
+        sessions: { tool: "claude", profile: null, binary: null },
+        workspace: { root: "/home/me/WebstormProjects" },
+        naming: { model: "haiku", effort: "low" },
     };
 }
 

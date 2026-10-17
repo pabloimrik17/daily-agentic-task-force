@@ -230,6 +230,7 @@ describe("main --bootstrap-labels", () => {
             listTasks: unused,
             readTask: unused,
             addLabel: unused,
+            removeLabel: unused,
             listLabels: () =>
                 Promise.resolve(
                     typeof labels === "string"
@@ -348,6 +349,7 @@ describe("main with the real steps", () => {
             listTasks: () => Promise.resolve({ ok: true, value: [] }),
             readTask: unused,
             addLabel: unused,
+            removeLabel: unused,
             listLabels: unused,
             createLabel: unused,
         };

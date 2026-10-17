@@ -11,6 +11,8 @@ export interface WorkTask extends TrackerTask {
     blocks: string[]; // ids this task blocks while it is open
     blockedBy: string[] | null; // open blockers; null: not evaluated (GitHub)
     children: string[] | null; // open children; null: not evaluated (GitHub) or not read yet (Linear before detail)
+    project: string | null; // Linear project name, read by detail; null elsewhere, when absent and before detail
+    repository: string | null; // GitHub "owner/name", from the id; null elsewhere
 }
 
 export interface WorkReader {
@@ -21,7 +23,7 @@ export interface WorkReader {
 
 export type WorkReaderFactory = (config: AutonomousConfig) => WorkReader[]; // one per enabled source
 
-export type Stage = "grill-me" | "proposal";
+export type StageName = "grill-me" | "proposal";
 
 export type Exclusion =
     | "classification"
@@ -38,7 +40,7 @@ export interface Candidate {
     task: WorkTask; // after detail(): description and children filled
     scope: Scope;
     autonomy: Autonomy;
-    stage: Stage;
+    stage: StageName;
 }
 
 export interface Excluded {
@@ -70,7 +72,7 @@ export interface SelectedUnit {
     source: Source;
     id: string;
     title: string;
-    stage: Stage;
+    stage: StageName;
     autonomy: Autonomy;
     scope: Scope;
     explanation: string;
@@ -80,7 +82,7 @@ export interface SelectedUnit {
 export interface SelectData {
     machineScope: Scope | null;
     selected: SelectedUnit | null;
-    candidates: { source: Source; id: string; title: string; scope: Scope; stage: Stage }[];
+    candidates: { source: Source; id: string; title: string; scope: Scope; stage: StageName }[];
     excluded: Excluded[];
     notEvaluated: string[]; // e.g. "github: dependencies and children"
     comparison: { model: string; effort: string } | null; // set only when the LLM was called

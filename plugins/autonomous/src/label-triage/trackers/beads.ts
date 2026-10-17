@@ -84,6 +84,17 @@ export function beadsTracker(exec: Exec, config: BeadsConfig): Tracker {
             return run(exec, `bd label add ${id} ${label}`, ["-C", dir, "label", "add", id, label]);
         },
 
+        removeLabel(id: string, label: string): Promise<TrackerResult<void>> {
+            return run(exec, `bd label remove ${id} ${label}`, [
+                "-C",
+                dir,
+                "label",
+                "remove",
+                id,
+                label,
+            ]);
+        },
+
         listLabels(): Promise<TrackerResult<TrackerLabel[]>> {
             return runJson(
                 exec,
