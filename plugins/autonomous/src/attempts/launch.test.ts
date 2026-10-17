@@ -495,6 +495,20 @@ describe("launch: the sequence", () => {
         });
         expect((await readAttempt("linear:DOT-109:test:2")).attempt).toBe(2);
     });
+
+    it.each(["discarded", "aborted"] as const)(
+        "is not blocked by a %s attempt still carrying a legacy cleanup",
+        async (stale) => {
+            const cleanup = { pending: true as const, error: "aoe remove: busy" };
+            await writeRecord(state, record({ state: stale, cleanup }));
+            const { ctx } = setup();
+
+            expect(await launchStep.run(ctx)).toMatchObject({
+                outcome: "advance",
+                data: { attempt: { id: "linear:DOT-109:test:2", state: "started" } },
+            });
+        },
+    );
 });
 
 describe("launch: the branch of a task", () => {

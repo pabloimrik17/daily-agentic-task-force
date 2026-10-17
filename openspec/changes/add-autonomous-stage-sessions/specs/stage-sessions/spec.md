@@ -45,7 +45,7 @@ Attempt records and their files SHALL live under a state directory, `$XDG_STATE_
 
 ### Requirement: Run lock
 
-A run that reads or writes attempts SHALL hold a lock in the state directory for its duration. A run that finds the lock held by a live process SHALL be `not-evaluable`, naming the other run. A lock left by a process that no longer exists SHALL be reclaimed.
+A run that reads or writes attempts SHALL hold a lock in the state directory for its duration. A run that finds the lock held by a live process SHALL be `not-evaluable`, naming the other run. A lock left by a process that no longer exists SHALL be reclaimed. A lock with no readable owner, because it is empty or unparsable, SHALL be treated as held until it is older than a grace period of 10 s, and reclaimed after that.
 
 #### Scenario: Overlapping runs
 
@@ -55,6 +55,16 @@ A run that reads or writes attempts SHALL hold a lock in the state directory for
 #### Scenario: Stale lock
 
 - **WHEN** the lock names a process id that no longer exists
+- **THEN** the run reclaims the lock and proceeds
+
+#### Scenario: Lock being written
+
+- **WHEN** the lock exists but holds no readable owner and is younger than the grace period
+- **THEN** the run is `not-evaluable` as for a live holder and writes nothing
+
+#### Scenario: Abandoned empty lock
+
+- **WHEN** the lock holds no readable owner and is older than the grace period
 - **THEN** the run reclaims the lock and proceeds
 
 ### Requirement: The reconcile step
@@ -128,6 +138,20 @@ An eligible attempt SHALL be finalised only when its session is `open` without b
 - **WHEN** both proofs are present and the session reports `idle`
 - **THEN** the session is removed, the attempt reads `completed`, `taken` is removed from the task and the worktree still exists
 
+### Requirement: Captures are never fatal
+
+A capture of a session that cannot be read, or whose file cannot be written, SHALL NOT stop a finalisation, a retention or a discard. It SHALL be reported as a note and the operation SHALL go on.
+
+#### Scenario: Capture file cannot be written on finalisation
+
+- **WHEN** both proofs are present and the session reports `idle` and writing the capture file fails
+- **THEN** the failure is reported as a note, the session is removed and the attempt reads `completed`
+
+#### Scenario: Capture file cannot be written on retention
+
+- **WHEN** a started attempt's session reports `stopped` with no valid marker and writing the capture file fails
+- **THEN** the failure is reported as a note and the attempt reads `retained`
+
 ### Requirement: Pending cleanup
 
 When the session cannot be removed after both proofs are present, the attempt SHALL be marked `completed` with a pending cleanup naming the error, `taken` SHALL stay on the task, and every later `reconcile` SHALL retry the removal and then remove `taken`. The stage SHALL NOT run again for that task while the cleanup is pending.
@@ -158,26 +182,68 @@ When a `started` attempt's session is `exited` or `gone` and the stage is not co
 
 ### Requirement: Recovery of a pending attempt
 
-A `pending` attempt SHALL be resolved before anything else: when exactly one session of the session manager has the attempt's workspace path, the attempt adopts it and becomes `created`; when none has it, `taken` is removed from the task and the attempt becomes `aborted`; when several have it, the attempt is retained for the user with that reason. A `created` attempt SHALL be started by `reconcile` with `--apply`.
+A `pending` attempt SHALL be resolved before anything else, adopting only a session the runner created. The title of the session SHALL be recorded before it is created. A candidate is a session at the attempt's workspace path whose title equals that recorded title; the title narrows a path match and SHALL never identify a session on its own. One candidate is adopted and the attempt becomes `created`; none aborts the attempt; several retain it for the user with that reason.
 
 #### Scenario: Session was created before the crash
 
-- **WHEN** a pending attempt's workspace path matches one session
+- **WHEN** exactly one session has the pending attempt's workspace path and the attempt's recorded title
 - **THEN** the attempt reads `created` with that session's id, and nothing is created again
 
-#### Scenario: No session was created
+#### Scenario: Manual session with the same path
 
-- **WHEN** no session has the pending attempt's workspace path
-- **THEN** `taken` is removed from the task and the attempt reads `aborted`
+- **WHEN** a session the user created by hand has the pending attempt's workspace path and a different title
+- **THEN** it is not adopted, and the attempt is resolved as if no session matched
 
 #### Scenario: Ambiguous recovery
 
-- **WHEN** two sessions have the pending attempt's workspace path
+- **WHEN** two sessions have the pending attempt's workspace path and recorded title
 - **THEN** the attempt is retained with that reason and neither session is touched
+
+### Requirement: Created attempts are started
+
+A `created` attempt SHALL be started by `reconcile` with `--apply`.
+
+#### Scenario: Created attempt started
+
+- **WHEN** `reconcile` runs with `--apply` and an attempt reads `created`
+- **THEN** its session is started and the attempt reads `started`
+
+### Requirement: Abort of a pending attempt
+
+When no session is a candidate for a `pending` attempt, the attempt SHALL become `aborted`. `taken` SHALL be removed from the task only when the record shows that the runner added it. When the record does not show it, `taken` SHALL be left alone, since another run may hold it, and the report SHALL say that the task still carries `taken` if the task is read and does. A task that cannot be read SHALL be reported and SHALL NOT stop the abort.
+
+#### Scenario: No session was created
+
+- **WHEN** no session has the pending attempt's workspace path and recorded title, and the record shows `taken` was added
+- **THEN** `taken` is removed from the task and the attempt reads `aborted`
+
+#### Scenario: Aborted before taken was added
+
+- **WHEN** no session matches, the record shows `taken` was never added, and the task carries `taken`
+- **THEN** `taken` is not removed, the attempt reads `aborted`, and the report says the task still carries `taken` and that it is to be removed by hand if no other run holds it
+
+#### Scenario: Aborted before taken was added and not carried
+
+- **WHEN** no session matches, the record shows `taken` was never added, and the task does not carry `taken`
+- **THEN** nothing is removed and the attempt reads `aborted`
+
+#### Scenario: Task cannot be read on abort
+
+- **WHEN** no session matches, the record shows `taken` was never added, and reading the task fails
+- **THEN** the failure is reported and the attempt reads `aborted`
+
+### Requirement: Open attempts
+
+An attempt SHALL be open when it is `pending`, `created`, `started` or `retained`, or `completed` with a pending cleanup. An attempt that is `aborted` or `discarded` SHALL NOT be open, even when its record still names a cleanup.
+
+#### Scenario: Discarded attempt with a stale cleanup
+
+- **WHEN** an attempt is `discarded` and its record still names a cleanup
+- **THEN** it is not open and does not block a launch
 
 ### Requirement: The launch step
 
-`/autonomous:run` SHALL run a `launch` step last, after `select`. It SHALL take the selected work unit and, before anything else, check that the stage has an implementation, that the task read again from its tracker carries no `taken`, that no attempt of the task is `pending`, `created`, `started` or `retained`, and that a repository is inferred. A failed precondition SHALL make the step `wait` with that reason. Without `--apply` the step SHALL report what it would launch and `advance`.
+`/autonomous:run` SHALL run a `launch` step last, after `select`. It SHALL take the selected work unit and, before anything else, check that the stage has an implementation, that the task read again from its tracker carries no `taken`, that no attempt of the task is open, and that a repository is inferred. A failed precondition SHALL make the step `wait` with that reason. Without `--apply` the step SHALL report what it would launch and `advance`.
 
 #### Scenario: Stage without implementation
 
@@ -196,7 +262,7 @@ A `pending` attempt SHALL be resolved before anything else: when exactly one ses
 
 ### Requirement: Launch sequence
 
-With `--apply`, `launch` SHALL, in order: prepare the workspace; write the attempt record as `pending` with the workspace path; add `taken` to the task; write the prompt; create the session; record its id and mark `created`; start the session and mark `started`. A failure at any point SHALL leave the record in the last state reached and make the step `not-evaluable` with the reason; a failure to add `taken` SHALL create no session.
+With `--apply`, `launch` SHALL, in order: prepare the workspace; write the attempt record as `pending` with the workspace path and the title of the session; add `taken` to the task and record it; write the prompt; create the session; record its id and mark `created`; start the session and mark `started`. A failure at any point SHALL leave the record in the last state reached and make the step `not-evaluable` with the reason; a failure to add `taken` SHALL create no session.
 
 #### Scenario: Taken cannot be written
 
@@ -215,7 +281,7 @@ With `--apply`, `launch` SHALL, in order: prepare the workspace; write the attem
 
 ### Requirement: Session identity
 
-A managed session SHALL be identified by the id the session manager assigns at creation, read from the creation command's output and confirmed by reading the session back. The title SHALL never identify a session. The workspace path SHALL be used only to recover a pending attempt.
+A managed session SHALL be identified by the id the session manager assigns at creation, read from the creation command's output and confirmed by reading the session back. The title SHALL never identify a session on its own. The workspace path SHALL be used only to recover a pending attempt, and there the recorded title SHALL narrow it.
 
 #### Scenario: Id parsed and confirmed
 
@@ -321,12 +387,17 @@ With `--task <source>:<id>`, the run SHALL skip `label-triage` and `select` and 
 
 ### Requirement: Discard mode
 
-With `--apply --discard <attempt-id>`, the run SHALL run no step and SHALL, in order: remove the attempt's session when it still exists, remove `taken` from the task, and mark the attempt `discarded`, keeping its directory. With `--release-workspace` it SHALL also release the workspace, keeping the branch.
+With `--apply --discard <attempt-id>`, the run SHALL run no step and SHALL, in order: remove the attempt's session when it still exists, remove `taken` from the task, and mark the attempt `discarded`, keeping its directory. A pending cleanup of the attempt SHALL be cleared when it is discarded. With `--release-workspace` it SHALL also release the workspace, keeping the branch.
 
 #### Scenario: Discard a retained attempt
 
 - **WHEN** the run is invoked with `--apply --discard linear:DOT-109:test:1` for a retained attempt
 - **THEN** its session is removed, `taken` is removed from `DOT-109`, the attempt reads `discarded` and its worktree still exists
+
+#### Scenario: Discard an attempt with a pending cleanup
+
+- **WHEN** the run is invoked with `--apply --discard` for a `completed` attempt carrying a pending cleanup
+- **THEN** the attempt reads `discarded`, its cleanup is cleared, and a later launch for the task is not blocked by it
 
 #### Scenario: Session removal fails on discard
 
@@ -340,16 +411,21 @@ With `--apply --discard <attempt-id>`, the run SHALL run no step and SHALL, in o
 
 ### Requirement: Discard by task id
 
-`--discard` MAY name a task as `<source>:<task>` instead of an attempt. It SHALL resolve to the task's single attempt that is not `completed`, `aborted` or `discarded`; when there are none or several, nothing SHALL change and the run SHALL report the attempt ids found.
+`--discard` MAY name a task as `<source>:<task>` instead of an attempt. It SHALL resolve to the task's single attempt that still holds the task: one that is not `aborted`, not `discarded`, and not `completed` unless it carries a pending cleanup. This is the rule that applies to a discard by attempt id. When there are none or several, nothing SHALL change and the run SHALL report the attempt ids found.
 
 #### Scenario: Discard by task
 
-- **WHEN** `--discard linear:DOT-109` names a task with exactly one open attempt
+- **WHEN** `--discard linear:DOT-109` names a task with exactly one attempt that still holds it
+- **THEN** that attempt is discarded
+
+#### Scenario: Completed attempt with a pending cleanup
+
+- **WHEN** `--discard linear:DOT-109` names a task whose only attempt that still holds it is `completed` with a pending cleanup
 - **THEN** that attempt is discarded
 
 #### Scenario: Ambiguous task
 
-- **WHEN** `--discard linear:DOT-109` names a task with two open attempts
+- **WHEN** `--discard linear:DOT-109` names a task with two attempts that still hold it
 - **THEN** nothing changes and the run reports both attempt ids
 
 ### Requirement: Workspace preparation

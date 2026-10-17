@@ -29,11 +29,17 @@ export interface Observed {
     agentSessionId: string | null; // the agent's own conversation id, when known
 }
 
+// A session listed at a workspace path; the title narrows a recovery (design D8).
+export interface ListedSession {
+    id: string;
+    title: string;
+}
+
 export interface SessionManager {
     create(spec: SessionSpec): Promise<Result<{ id: string }>>; // created, not started
     start(id: string): Promise<Result<void>>;
     observe(id: string): Promise<Result<Observed>>; // a missing session is `gone`, not an error
-    findByPath(path: string): Promise<Result<string[]>>; // ids whose workspace is `path`; recovery only
+    findByPath(path: string): Promise<Result<ListedSession[]>>; // sessions whose workspace is `path`; recovery only
     listGroups(): Promise<Result<string[]>>; // group paths, for the group derivation (design D5)
     capture(id: string, lines: number): Promise<Result<string>>;
     remove(id: string): Promise<Result<void>>; // permanent, workspace kept

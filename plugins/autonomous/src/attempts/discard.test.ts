@@ -377,7 +377,7 @@ describe("discardAttempt by attempt id", () => {
 
         expect(report.outcome).toBe("advance");
         expect(report.removed).toMatchObject({ session: true, taken: true });
-        expect((await read(state)).state).toBe("discarded");
+        expect(await read(state)).toMatchObject({ state: "discarded", cleanup: null });
     });
 
     it("names a malformed record instead of calling it missing", async () => {
@@ -416,6 +416,35 @@ describe("discardAttempt by task id", () => {
         expect(report.attempt).toBe("linear:DOT-109:test:2");
         expect((await read(state, "linear:DOT-109:test:2")).state).toBe("discarded");
         expect((await read(state, "linear:DOT-109:test:1")).state).toBe("completed");
+    });
+
+    it("resolves a completed attempt with a pending cleanup", async () => {
+        const owing = record({
+            state: "completed",
+            cleanup: { pending: true, error: "aoe: busy" },
+        });
+        const { state, deps } = await setup({ records: [owing] });
+
+        const report = await discardAttempt(args("linear:DOT-109"), deps, STARTED);
+
+        expect(report.outcome).toBe("advance");
+        expect(report.attempt).toBe("linear:DOT-109:test:1");
+        expect(await read(state)).toMatchObject({ state: "discarded", cleanup: null });
+    });
+
+    it("still refuses a completed attempt without a pending cleanup", async () => {
+        const done = record({ state: "completed", cleanup: null });
+        const { state, calls, deps } = await setup({ records: [done] });
+
+        const report = await discardAttempt(args("linear:DOT-109"), deps, STARTED);
+
+        expect(report).toMatchObject({
+            outcome: "not-evaluable",
+            found: ["linear:DOT-109:test:1"],
+            reasons: ["no open attempt of linear:DOT-109"],
+        });
+        expect(calls).toEqual([]);
+        expect(await read(state)).toEqual(done);
     });
 
     it("lists both attempts of a task with two open ones and changes nothing", async () => {

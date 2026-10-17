@@ -1,10 +1,13 @@
 // The run lock (spec stage-sessions, "Run lock"; design D12): one run at a
 // time reads or writes attempts. `<state>/run.lock` is created exclusively;
 // a lock whose process is gone is reclaimed by renaming it aside, as ghd-aoe
-// does. There is no waiting loop: a live holder fails the run at once.
+// does. There is no waiting loop: a live holder fails the run at once. A lock
+// with no readable owner (the file exists but is empty or unparsable) is
+// held until its mtime is older than a grace period: its creator may be
+// between creating the file and writing its pid.
 
 import { randomUUID } from "node:crypto";
-import { mkdir, readFile, rename, rm, writeFile } from "node:fs/promises";
+import { mkdir, readFile, rename, rm, stat, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 
 import { number, object, string } from "../validate.ts";
@@ -19,7 +22,10 @@ interface LockOwner {
 interface Seen {
     text: string;
     owner: LockOwner | null; // null when the file does not parse
+    mtimeMs: number;
 }
+
+const OWNERLESS_GRACE_MS = 10_000;
 
 function lockFile(state: string): string {
     return join(state, "run.lock");
@@ -48,8 +54,9 @@ function parseOwner(text: string): LockOwner | null {
 // null when the file is gone.
 async function look(file: string): Promise<Seen | null> {
     try {
+        const { mtimeMs } = await stat(file);
         const text = await readFile(file, "utf8");
-        return { text, owner: parseOwner(text) };
+        return { text, owner: parseOwner(text), mtimeMs };
     } catch (error) {
         if ((error as NodeJS.ErrnoException).code === "ENOENT") {
             return null;
@@ -89,6 +96,14 @@ async function reclaim(file: string, observed: string): Promise<boolean> {
     return false;
 }
 
+// A parsed owner holds the lock while its process lives; no owner means a
+// creator that may still be writing, until the grace period has passed.
+function holds(seen: Seen, now: Date): boolean {
+    return seen.owner
+        ? isAlive(seen.owner.pid)
+        : now.getTime() - seen.mtimeMs <= OWNERLESS_GRACE_MS;
+}
+
 function heldBy(file: string, seen: Seen | null): LockResult {
     const owner = seen?.owner;
     const who = owner ? ` (pid ${owner.pid}, started ${owner.startedAt})` : "";
@@ -112,7 +127,7 @@ async function acquire(state: string, pid: number, now: Date): Promise<LockResul
         return { ok: true, release: releaser(file, pid) };
     }
     const seen = await look(file);
-    if (seen?.owner && isAlive(seen.owner.pid)) {
+    if (seen && holds(seen, now)) {
         return heldBy(file, seen);
     }
     if (seen !== null && !(await reclaim(file, seen.text))) {

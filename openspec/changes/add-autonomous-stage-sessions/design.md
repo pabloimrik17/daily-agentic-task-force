@@ -75,7 +75,7 @@ interface SessionManager {
     create(spec: SessionSpec): Promise<Result<{ id: string }>>; // not started
     start(id: string): Promise<Result<void>>;
     observe(id: string): Promise<Result<Observed>>; // { state: "open" | "exited" | "gone"; status: string; needsHuman: boolean; agentSessionId: string | null }
-    findByPath(path: string): Promise<Result<string[]>>; // ids, for recovery
+    findByPath(path: string): Promise<Result<{ id: string; title: string }[]>>; // for recovery, which narrows by title
     capture(id: string, lines: number): Promise<Result<string>>;
     remove(id: string): Promise<Result<void>>; // permanent, workspace kept
 }
@@ -86,7 +86,7 @@ interface SessionManager {
 - `create`: `aoe [--profile p] add <path> --title <t> --group <g> --tool <tool> [--cmd-override <binary>] --extra-args "<args> '<instruction>'"`, no `--launch`, no `--yolo`. The id is the `ID:` line of stdout; when absent, the result is an error and the attempt stays `pending` for recovery. The instruction is single-quoted with `'` escaped as `'\''`, and the stage's args are appended in front of it as the tool expects (`--model`, `--effort` for claude; `-m`, `-c model_reasoning_effort=` for codex). The instruction is one short sentence naming the prompt file's absolute path: no task text reaches the shell.
 - `start`: `aoe session start <id>`.
 - `observe`: `aoe session show <id> --json`, mapped with the table of the spec; a non-zero exit whose stderr says the session is not found is `gone`, any other failure is an error.
-- `findByPath`: `aoe list --json` filtered by `path` after `realpath` on both sides.
+- `findByPath`: `aoe list --json` filtered by `path` after `realpath` on both sides; it returns each match's id and listed title, so recovery can narrow by title.
 - `capture`: `aoe session capture <id> -n 200 --strip-ansi`.
 - `remove`: `aoe remove <id> --purge`, never `--delete-worktree`.
 
@@ -151,17 +151,19 @@ Parsed strictly; `attempt` must equal the directory's id; `outcome` must be `com
 
 `src/attempts/reconcile.ts`, step id `reconcile`, placed first in `STEPS`. Per record, in this order:
 
-1. `pending` → `findByPath(workspace.path)`: one id → `created`; none → remove `taken`, `aborted`; several → `retained` with reason. With `--apply` only; without it, report the resolution it would make.
+1. `pending` → `findByPath(workspace.path)`, keeping only the sessions whose title equals `record.session.title` (written before `create`): one → `created`; none → `aborted`; several → `retained` with reason. The title only narrows a path match and never identifies a session on its own, so a session the runner did not create is never adopted. On abort, `taken` is removed only when `taken.added` is set. When it is null the add was never recorded and `taken` may belong to another machine's run: nothing is removed, `taken.removed` stays null, the task is read, and the report says "task still carries taken; remove it by hand if no other run holds it" when it does. A failed read is reported and the abort proceeds. With `--apply` only; without it, report the resolution it would make.
 2. `created` → with `--apply`, `start`, then `started`.
 3. `started` → `observe`; write `observed`; when `exited` or `gone` and the proofs fail → `retained` with capture; when the proofs hold and `!busy` → finalise (capture, save `agentSessionId`, `remove`, `completed`, remove `taken`); when the proofs hold and `busy` → report "completing"; otherwise report the observation.
 4. `completed` with `cleanup` → `remove` again; on success clear `cleanup` and remove `taken`.
 5. `retained`, `aborted`, `discarded` → listed only.
 
+The capture saved in steps 3 and 4 is never fatal: a failed `capture` or a failed write of `capture.txt` becomes a note (`capture failed: …`, `saving the capture failed: …`) and the finalisation or retention goes on.
+
 A failure of a manager command for one attempt makes the step `not-evaluable` naming the command; attempts already written stay written. The step is `advance` otherwise, with reasons summarising counts (observed, finalised, retained, cleanups pending, needing a person).
 
 ### D9 — The launch step
 
-`src/attempts/launch.ts`, step id `launch`, placed last. Input: the selected unit from the `select` result, or the supplied task from `--task` (read through the `WorkReader` of its source and passed through the same exclusions as `select`, so a taken or unclassified task is reported as such). Preconditions in order: stage registered; task read again carries no `taken`; no attempt of the task in `pending`, `created`, `started` or `retained` or with pending cleanup; repository inferred. Each failure is `wait` with the reason. Then the sequence of the spec: `prepare` → write `pending` record → `addLabel(taken)` with read-back → write `prompt.md` → name (D10) → `create` → `created` → `start` → `started`. Any failure after the record exists is `not-evaluable`; the record keeps the last state.
+`src/attempts/launch.ts`, step id `launch`, placed last. Input: the selected unit from the `select` result, or the supplied task from `--task` (read through the `WorkReader` of its source and passed through the same exclusions as `select`, so a taken or unclassified task is reported as such). Preconditions in order: stage registered; task read again carries no `taken`; no attempt of the task open, that is in `pending`, `created`, `started` or `retained`, or `completed` with a pending cleanup (an `aborted` or `discarded` record never counts, whatever its `cleanup` holds); repository inferred. Each failure is `wait` with the reason. Then the sequence of the spec: `prepare` → name (D10) → write `pending` record, with the session block and its title → `addLabel(taken)` with read-back, recording `taken.added` → write `prompt.md` → `create` → `created` → `start` → `started`. The title is in the record before `create` so recovery can narrow by it. Any failure after the record exists is `not-evaluable`; the record keeps the last state.
 
 Without `--apply`, the step stops after the preconditions and the inference and reports the repository, branch and title it would use.
 
@@ -173,11 +175,11 @@ The attempt number is the highest existing number for that task and stage plus o
 
 ### D11 — Discard mode
 
-`src/attempts/discard.ts`, branched in `run.ts` like answer mode. Resolves the id (attempt id, or task id to its single open attempt; an attempt that no longer holds the task, `completed` without a pending cleanup, `aborted` or `discarded`, is refused so a closed attempt never removes a `taken` a later one holds), then: when `session.id` is set and `observe` is not `gone`, save the capture and the agent's conversation id into the attempt directory (the "Session removal" rule applies to every removal by the runner) and `remove`; `removeLabel(taken)` with read-back; record `discarded`; `release` only with `--release-workspace`. Report `autonomous.discard.v1` with `{ schema, startedAt, outcome, attempt, task, removed: { session, taken, workspace } }`. A failure stops at that point and exits 3; what was already removed is reported.
+`src/attempts/discard.ts`, branched in `run.ts` like answer mode. Resolves the id (attempt id, or task id to the task's single attempt that still holds it: not `aborted`, not `discarded`, and not `completed` unless it carries a pending cleanup, the same rule for both forms, so a closed attempt never removes a `taken` a later one holds), then: when `session.id` is set and `observe` is not `gone`, save the capture and the agent's conversation id into the attempt directory (the "Session removal" rule applies to every removal by the runner; a failed capture or write is a note, never fatal) and `remove`; `removeLabel(taken)` with read-back; record `discarded` with `cleanup` set to null, so a stale cleanup never blocks a launch; `release` only with `--release-workspace`. Report `autonomous.discard.v1` with `{ schema, startedAt, outcome, attempt, task, removed: { session, taken, workspace } }`. A failure stops at that point and exits 3; what was already removed is reported.
 
 ### D12 — Run lock
 
-`src/attempts/lock.ts`: `<state>/run.lock` written with `wx`, holding `{ pid, startedAt }`; a lock whose pid is dead is reclaimed by rename, as ghd-aoe does. Held by `main` around `runSteps` and around discard mode; bootstrap and answer mode do not take it. Held even without `--apply`, because `reconcile` reads records that `--apply` runs rewrite.
+`src/attempts/lock.ts`: `<state>/run.lock` written with `wx`, holding `{ pid, startedAt }`; a lock whose pid is dead is reclaimed by rename, as ghd-aoe does. A lock with no parsed owner, empty or unparsable, is most likely being written by another run between creating the file and filling it, so it is held, not reclaimed, until its mtime is older than a grace period (10 s, a constant); after that it is reclaimed as a dead one. Held by `main` around `runSteps` and around discard mode; bootstrap and answer mode do not take it. Held even without `--apply`, because `reconcile` reads records that `--apply` runs rewrite.
 
 ### D13 — Configuration overlay
 
@@ -226,7 +228,8 @@ The attempt number is the highest existing number for that task and stage plus o
 - **[Repository inference picks the wrong repo.]** → Only an exact single match is accepted; the report names the signal used; a wrong worktree is visible before any agent work matters, and the dry run shows it without `--apply`.
 - **[Branch collision: `feature/x` and `feature-x` map to one directory.]** → Task ids are unique per source and the slug is a suffix; worktrunk reports "path occupied" and the launch fails closed.
 - **[The agent never writes the marker.]** → The attempt stays open as "idle without a result" and the user discards it; nothing is retried or lost.
-- **[A crash between the `taken` write and the parse of `aoe add` can still adopt a manual session that shares the worktree.]** → Recovery by path only runs for a record with both the session block and `taken`; the dry run and the report name the adopted id before anything is started.
+- **[A crash between the `taken` write and the parse of `aoe add` could adopt a manual session that shares the worktree.]** → Closed: recovery narrows the path match by the title the runner recorded before `create`, so a session it did not create is not a candidate; the title never identifies a session on its own, and the report names the adopted id before anything is started.
+- **[An abort of a pending attempt whose `taken` write was never recorded could remove a `taken` another machine's run holds.]** → The abort removes `taken` only when the record shows the runner added it; otherwise it reports that the task still carries it, for removal by hand.
 - **[The user removes `taken` by hand while an attempt is open.]** → `launch` checks open attempts, not only `taken`, so the task is not launched twice; `reconcile` still finalises the open one.
 - **[A codex session's `waiting` is only a permission request.]** → Documented; the grill stage in DOT-110 targets claude.
 - **[fallow complexity budget.]** → `reconcile` is a dispatch on state with one function per state; the launch sequence is a list of steps each returning a result.

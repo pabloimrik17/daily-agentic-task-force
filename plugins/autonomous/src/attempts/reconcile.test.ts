@@ -29,6 +29,10 @@ const SESSION = "ef3fde3ca69c4b8b";
 const AGENT = "4daf1b40-6249-4a25-bdd7-0a69bc77e342";
 const ID = "linear:DOT-109:test:1";
 const PATH = "/w/dotfiles-worktrees/feature-DOT-109-stage-session-manager";
+const TITLE = "auto 🧪 Stage session manager (DOT-109)";
+
+// A session listed at the workspace path, titled as the record names it unless told otherwise.
+const listed = (id: string, title = TITLE) => ({ id, title });
 
 let state: string;
 
@@ -471,6 +475,27 @@ describe("reconcile: finalisation", () => {
         });
         expect(result.outcome).toBe("advance");
     });
+
+    it("keeps finalising when the capture cannot be written, naming it in the detail", async () => {
+        await given(record());
+        await marker();
+        await mkdir(captured());
+        const sessions = fakeSessions({
+            observe: () => ok(seen("idle")),
+            capture: () => ok("the last lines"),
+            remove: () => ok(undefined),
+        });
+        const result = await reconcileStep.run(context({ sessions, trackers: linear([]) }));
+        expect(result.outcome).toBe("advance");
+        expect(result.data.attempts[0]?.action).toBe("finalised");
+        expect(result.data.attempts[0]?.detail).toMatch(/^saving the capture failed: .*EISDIR/);
+        expect(sessions.calls).toEqual([
+            `observe ${SESSION}`,
+            `capture ${SESSION} 200`,
+            `remove ${SESSION}`,
+        ]);
+        expect((await stored()).state).toBe("completed");
+    });
 });
 
 describe("reconcile: pending cleanup", () => {
@@ -656,7 +681,7 @@ describe("reconcile: retained attempts", () => {
 describe("reconcile: recovery of a pending attempt", () => {
     it("adopts the one session at the workspace path, creating nothing", async () => {
         await given(pending());
-        const sessions = fakeSessions({ findByPath: () => ok([SESSION]) });
+        const sessions = fakeSessions({ findByPath: () => ok([listed(SESSION)]) });
         const result = await reconcileStep.run(context({ sessions, trackers: linear([]) }));
         expect(result.data.attempts[0]).toMatchObject({
             before: "pending",
@@ -688,15 +713,91 @@ describe("reconcile: recovery of a pending attempt", () => {
         expect(after.taken.removed).toBe(AT);
     });
 
-    it("aborts a pending attempt whose taken was never added without calling findByPath", async () => {
-        await given(pending({ taken: { added: null, removed: null } }));
+    it("adopts the session with the recorded title among those at the path", async () => {
+        await given(pending());
+        const sessions = fakeSessions({
+            findByPath: () => ok([listed("manual0000000000", "my own session"), listed(SESSION)]),
+        });
+        const result = await reconcileStep.run(context({ sessions, trackers: linear([]) }));
+        expect(result.data.attempts[0]).toMatchObject({ action: "adopted", detail: SESSION });
+        expect((await stored()).session?.id).toBe(SESSION);
+    });
+
+    it("never adopts a session at the path with another title, and aborts", async () => {
+        await given(pending());
         const calls: string[] = [];
-        const sessions = fakeSessions({ calls, findByPath: () => ok([SESSION]) });
+        const sessions = fakeSessions({
+            calls,
+            findByPath: () => ok([listed("manual0000000000", "my own session")]),
+        });
         const result = await reconcileStep.run(context({ sessions, trackers: linear(calls) }));
         expect(result.data.attempts[0]).toMatchObject({ state: "aborted", action: "aborted" });
-        expect(sessions.calls).toEqual([]);
-        expect(calls).toEqual([]);
-        expect((await stored()).state).toBe("aborted");
+        expect(calls).toEqual([
+            `findByPath ${PATH}`,
+            "linear:readTask:DOT-109",
+            "linear:removeLabel:DOT-109:taken",
+            "linear:readTask:DOT-109",
+        ]);
+        const after = await stored();
+        expect(after.state).toBe("aborted");
+        expect(after.session?.id).toBeNull();
+    });
+
+    it("aborts without findByPath and reports a taken it never added, leaving it on the task", async () => {
+        await given(pending({ taken: { added: null, removed: null } }));
+        const calls: string[] = [];
+        const sessions = fakeSessions({ calls, findByPath: () => ok([listed(SESSION)]) });
+        const fakes = linear(calls);
+        const result = await reconcileStep.run(context({ sessions, trackers: fakes }));
+        expect(result.outcome).toBe("advance");
+        expect(result.data.attempts[0]).toMatchObject({
+            state: "aborted",
+            action: "aborted",
+            detail: "task still carries taken; remove it by hand if no other run holds it",
+        });
+        expect(calls).toEqual(["linear:readTask:DOT-109"]);
+        const after = await stored();
+        expect(after.state).toBe("aborted");
+        expect(after.taken).toEqual({ added: null, removed: null });
+        const read = await fakes.linear.readTask("DOT-109");
+        expect(read.ok && read.value.labels).toEqual(["taken", "grill-me"]);
+    });
+
+    it("aborts with nothing to report when taken was never added and the task lacks it", async () => {
+        await given(pending({ taken: { added: null, removed: null } }));
+        const calls: string[] = [];
+        const sessions = fakeSessions({ calls });
+        const result = await reconcileStep.run(
+            context({ sessions, trackers: linear(calls, ["grill-me"]) }),
+        );
+        expect(result.data.attempts[0]).toMatchObject({
+            state: "aborted",
+            action: "aborted",
+            detail: null,
+        });
+        expect(calls).toEqual(["linear:readTask:DOT-109"]);
+        expect((await stored()).taken).toEqual({ added: null, removed: null });
+    });
+
+    it("still aborts when the task cannot be read to check a taken it never added", async () => {
+        await given(pending({ taken: { added: null, removed: null } }));
+        const calls: string[] = [];
+        const fakes = trackers(
+            calls,
+            { linear: [task("linear", "DOT-109", ["taken"])] },
+            { linear: { readErrors: { "DOT-109": "linear issue view DOT-109: network down" } } },
+        );
+        const result = await reconcileStep.run(
+            context({ sessions: fakeSessions({ calls }), trackers: fakes }),
+        );
+        expect(result.outcome).toBe("advance");
+        expect(result.data.attempts[0]).toMatchObject({
+            state: "aborted",
+            action: "aborted",
+            detail: "could not check taken: linear issue view DOT-109: network down",
+        });
+        expect(calls).toEqual(["linear:readTask:DOT-109"]);
+        expect((await stored()).taken).toEqual({ added: null, removed: null });
     });
 
     it("aborts without asking the manager when the record holds no session", async () => {
@@ -726,9 +827,12 @@ describe("reconcile: recovery of a pending attempt", () => {
         expect((await stored()).state).toBe("pending");
     });
 
-    it("retains an ambiguous recovery and touches neither session", async () => {
+    it("retains a recovery with two sessions of the recorded title, touching neither", async () => {
         await given(pending());
-        const sessions = fakeSessions({ findByPath: () => ok(["aaaa", "bbbb"]) });
+        const sessions = fakeSessions({
+            findByPath: () =>
+                ok([listed("aaaa"), listed("manual0000000000", "mine"), listed("bbbb")]),
+        });
         const result = await reconcileStep.run(context({ sessions, trackers: linear([]) }));
         const reason = `2 sessions share ${PATH}: aaaa, bbbb`;
         expect(result.data.attempts[0]).toMatchObject({
@@ -757,7 +861,9 @@ describe("reconcile: recovery of a pending attempt", () => {
 describe("reconcile: manual sessions are untouched", () => {
     it("runs no session command for a completed attempt sharing its path with a manual session", async () => {
         await given(record({ state: "completed", taken: { added: AT, removed: AT } }));
-        const sessions = fakeSessions({ findByPath: () => ok(["manual0000000000"]) });
+        const sessions = fakeSessions({
+            findByPath: () => ok([listed("manual0000000000", "my own session")]),
+        });
         const result = await reconcileStep.run(context({ sessions, trackers: linear([]) }));
         expect(result.data.attempts[0]?.action).toBe("none");
         expect(sessions.calls).toEqual([]);

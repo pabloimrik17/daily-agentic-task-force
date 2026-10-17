@@ -293,9 +293,7 @@ async function readRecords(state: string): Promise<Gate<AttemptRecord[]>> {
 function openAttempt(records: readonly AttemptRecord[], task: WorkTask): string | null {
     const open = records.find(
         (record) =>
-            record.task.source === task.source &&
-            record.task.id === task.id &&
-            (OPEN_STATES.includes(record.state) || record.cleanup !== null),
+            record.task.source === task.source && record.task.id === task.id && holdsTask(record),
     );
     if (open === undefined) {
         return null;
@@ -303,6 +301,11 @@ function openAttempt(records: readonly AttemptRecord[], task: WorkTask): string 
     const state = open.cleanup === null ? open.state : `${open.state} with a pending cleanup`;
     return `attempt ${open.id} is ${state}`;
 }
+
+// Open, or completed with a cleanup still owed; a stale cleanup on a discarded
+// or aborted record (legacy data) never blocks a launch.
+const holdsTask = (record: AttemptRecord): boolean =>
+    OPEN_STATES.includes(record.state) || (record.state === "completed" && record.cleanup !== null);
 
 async function inferFor(
     root: string,

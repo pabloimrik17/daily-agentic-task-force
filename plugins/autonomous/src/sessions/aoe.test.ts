@@ -330,7 +330,7 @@ describe("aoeManager", () => {
             );
         });
 
-        it("matches entries by realpath on both sides", async () => {
+        it("matches entries by realpath on both sides, with their listed titles", async () => {
             const root = await mkdtemp(join(tmpdir(), "aoe-test-"));
             dirs.push(root);
             const real = join(root, "repo");
@@ -341,13 +341,19 @@ describe("aoeManager", () => {
                 json([
                     { ...LIST_ENTRY, id: "1111111111111111", path: link },
                     { ...LIST_ENTRY, id: "2222222222222222", path: join(root, "other") },
-                    { ...LIST_ENTRY, id: "3333333333333333", path: real },
+                    { ...LIST_ENTRY, id: "3333333333333333", title: "by hand", path: real },
                 ]),
             );
 
             const result = await aoeManager(exec, null).findByPath(real);
 
-            expect(result).toEqual({ ok: true, value: ["1111111111111111", "3333333333333333"] });
+            expect(result).toEqual({
+                ok: true,
+                value: [
+                    { id: "1111111111111111", title: "auto 🧪 Fixture (X-1)" },
+                    { id: "3333333333333333", title: "by hand" },
+                ],
+            });
             expect(exec.calls).toEqual([["list", "--json"]]);
         });
 
@@ -356,11 +362,24 @@ describe("aoeManager", () => {
 
             expect(
                 await aoeManager(exec, null).findByPath("/private/tmp/scratchpad/wtfix/./repo/"),
-            ).toEqual({ ok: true, value: ["336c83018fca4d13"] });
+            ).toEqual({
+                ok: true,
+                value: [{ id: "336c83018fca4d13", title: "auto 🧪 Fixture (X-1)" }],
+            });
         });
 
         it("is an error naming aoe list --json on a malformed entry", async () => {
             const exec = fakeExec(() => json([{ id: "336c83018fca4d13" }]));
+
+            expect(await aoeManager(exec, null).findByPath("/x")).toEqual({
+                ok: false,
+                error: "aoe list --json: output does not match the expected shape: $[0].title must be a string",
+            });
+        });
+
+        it("is an error naming aoe list --json on an entry without a path", async () => {
+            const { path: _path, ...withoutPath } = LIST_ENTRY;
+            const exec = fakeExec(() => json([withoutPath]));
 
             expect(await aoeManager(exec, null).findByPath("/x")).toEqual({
                 ok: false,

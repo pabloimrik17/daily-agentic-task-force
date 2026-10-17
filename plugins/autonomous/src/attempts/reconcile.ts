@@ -18,7 +18,7 @@ import type { AttemptRecord, AttemptSession, AttemptState } from "./record.ts";
 import { renderReconcile } from "./reconcile-render.ts";
 import { readMarker } from "./result.ts";
 import { attemptDir, capturePath, listRecords, resultPath, writeRecord } from "./state.ts";
-import { removeTaken } from "./taken.ts";
+import { removeTaken, TAKEN } from "./taken.ts";
 
 const RECONCILE = "reconcile";
 
@@ -212,12 +212,16 @@ async function reconcilePending(r: Reconciler, record: AttemptRecord): Promise<R
     if (!found.ok) {
         return failed(record, found.error);
     }
-    const [first, ...others] = found.value;
+    // Only a session the runner created is a candidate: the title recorded
+    // before `create` narrows the path match, and never identifies one alone.
+    const { title } = record.session;
+    const ids = found.value.filter((listed) => listed.title === title).map(({ id }) => id);
+    const [first, ...others] = ids;
     if (first === undefined) {
         return abort(r, record);
     }
     if (others.length > 0) {
-        return ambiguous(r, record, found.value);
+        return ambiguous(r, record, ids);
     }
     return adopt(r, record, record.session, first);
 }
@@ -238,19 +242,37 @@ async function abort(r: Reconciler, record: AttemptRecord): Promise<Reconciled> 
     if (!r.apply) {
         return reported(record, record, { action: "aborted" });
     }
-    // `taken` is written after the pending record: an attempt whose add failed
-    // never had it, and there is nothing to remove from the tracker.
-    if (record.taken.added !== null) {
-        const removed = await removeTaken(r.trackers[record.task.source], record.task.id);
-        if (!removed.ok) {
-            return failed(record, removed.error);
-        }
+    if (record.taken.added === null) {
+        return abortUntaken(r, record);
+    }
+    const removed = await removeTaken(r.trackers[record.task.source], record.task.id);
+    if (!removed.ok) {
+        return failed(record, removed.error);
     }
     const after = await save(r, record, {
         state: "aborted",
         taken: { ...record.taken, removed: r.at },
     });
     return reported(record, after, { action: "aborted" });
+}
+
+// `taken` is written after the pending record: an attempt whose add was never
+// recorded did not put it there, and a `taken` the task carries may belong to
+// another machine's run. It is reported, never removed; `taken.removed` stays null.
+async function abortUntaken(r: Reconciler, record: AttemptRecord): Promise<Reconciled> {
+    const detail = await takenLeft(r, record);
+    const after = await save(r, record, { state: "aborted" });
+    return reported(record, after, { action: "aborted", detail });
+}
+
+async function takenLeft(r: Reconciler, record: AttemptRecord): Promise<string | null> {
+    const read = await r.trackers[record.task.source].readTask(record.task.id);
+    if (!read.ok) {
+        return `could not check taken: ${read.error}`;
+    }
+    return read.value.labels.includes(TAKEN)
+        ? "task still carries taken; remove it by hand if no other run holds it"
+        : null;
 }
 
 async function ambiguous(r: Reconciler, record: AttemptRecord, ids: string[]): Promise<Reconciled> {
@@ -408,7 +430,11 @@ async function saveCapture(
     if (!captured.ok) {
         return [`capture failed: ${captured.error}`];
     }
-    await writeFile(capturePath(attemptDir(r.state, record.id)), captured.value);
+    try {
+        await writeFile(capturePath(attemptDir(r.state, record.id)), captured.value);
+    } catch (error) {
+        return [`saving the capture failed: ${messageOf(error)}`];
+    }
     return [];
 }
 

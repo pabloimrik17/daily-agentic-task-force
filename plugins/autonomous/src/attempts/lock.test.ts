@@ -1,4 +1,4 @@
-import { readFile, readdir, rm, writeFile } from "node:fs/promises";
+import { readFile, readdir, rm, utimes, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
@@ -29,6 +29,12 @@ function writeLock(pid: number): Promise<void> {
     return writeFile(file, JSON.stringify({ pid, startedAt: "2026-10-17T11:00:00.000Z" }));
 }
 
+// Sets the lock's mtime to `ageMs` before NOW, the clock acquire compares against.
+function setAge(ageMs: number): Promise<void> {
+    const mtime = new Date(NOW.getTime() - ageMs);
+    return utimes(file, mtime, mtime);
+}
+
 describe("acquireLock", () => {
     it("writes the pid and start time", async () => {
         const lock = await acquireLock(state, 4242, NOW);
@@ -57,9 +63,42 @@ describe("acquireLock", () => {
         expect(await readdir(state)).toEqual(["run.lock"]);
     });
 
-    it("reclaims an unparsable lock", async () => {
+    it("reclaims an unparsable lock once it is older than the grace period", async () => {
         await writeFile(file, "not json");
+        await setAge(60_000);
         expect((await acquireLock(state, 4242, NOW)).ok).toBe(true);
+        expect(await heldPid()).toBe(4242);
+    });
+
+    it("reclaims an empty lock once it is older than the grace period", async () => {
+        await writeFile(file, "");
+        await setAge(60_000);
+        expect((await acquireLock(state, 4242, NOW)).ok).toBe(true);
+        expect(await heldPid()).toBe(4242);
+    });
+
+    it("reports a fresh empty lock as held", async () => {
+        await writeFile(file, "");
+        await setAge(1_000);
+        expect(await acquireLock(state, 4242, NOW)).toEqual({
+            ok: false,
+            error: `another run holds ${file}`,
+        });
+        expect(await readFile(file, "utf8")).toBe("");
+    });
+
+    it("reports a fresh unparsable lock as held", async () => {
+        await writeFile(file, "not json");
+        await setAge(1_000);
+        expect((await acquireLock(state, 4242, NOW)).ok).toBe(false);
+        expect(await readFile(file, "utf8")).toBe("not json");
+    });
+
+    it("reclaims a dead owner's lock at once, however fresh", async () => {
+        await writeLock(DEAD);
+        await setAge(0);
+        expect((await acquireLock(state, 4242, NOW)).ok).toBe(true);
+        expect(await heldPid()).toBe(4242);
     });
 
     it("creates the state directory", async () => {

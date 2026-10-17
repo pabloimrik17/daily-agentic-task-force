@@ -147,15 +147,19 @@ async function byAttempt(id: string, state: string): Promise<Resolved> {
     if (record.state === "discarded") {
         return unresolved(`attempt ${id} is already discarded`);
     }
-    // A closed attempt no longer holds `taken`: a later attempt of the task may.
-    // Only a completed attempt with a pending cleanup still owes its removal.
-    const closed = record.state === "aborted" || (record.state === "completed" && !record.cleanup);
-    return closed
-        ? unresolved(`attempt ${id} is ${record.state}; nothing to discard`)
-        : { ok: true, record };
+    return holdsTask(record)
+        ? { ok: true, record }
+        : unresolved(`attempt ${id} is ${record.state}; nothing to discard`);
 }
 
-const CLOSED = ["completed", "aborted", "discarded"];
+// A closed attempt no longer holds `taken`: a later attempt of the task may.
+// Only a completed attempt with a pending cleanup still owes its removal.
+function holdsTask(record: AttemptRecord): boolean {
+    if (record.state === "aborted" || record.state === "discarded") {
+        return false;
+    }
+    return record.state !== "completed" || record.cleanup !== null;
+}
 
 async function byTask(ref: TaskRef, value: string, state: string): Promise<Resolved> {
     let records: AttemptRecord[];
@@ -168,7 +172,7 @@ async function byTask(ref: TaskRef, value: string, state: string): Promise<Resol
         (record) => record.task.source === ref.source && record.task.id === ref.id,
     );
     const found = ofTask.map((record) => record.id);
-    const open = ofTask.filter((record) => !CLOSED.includes(record.state));
+    const open = ofTask.filter(holdsTask);
     const [only] = open;
     if (open.length === 1 && only !== undefined) {
         return { ok: true, record: only };
@@ -250,6 +254,7 @@ async function markDiscarded({
         state: "discarded",
         history: [...record.history, { state: "discarded", at }],
         taken: { ...record.taken, removed: at },
+        cleanup: null, // discarding the attempt settles the cleanup it still owed
     };
     try {
         await writeRecord(deps.state, discarded);

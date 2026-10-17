@@ -11,7 +11,13 @@ import { type Exec, execCommand } from "../exec.ts";
 import { run, runJson } from "../label-triage/trackers/cli-json.ts";
 import type { Result } from "../result.ts";
 import { array, type Json, object, string } from "../validate.ts";
-import type { Observed, SessionManager, SessionManagerFactory, SessionSpec } from "./manager.ts";
+import type {
+    ListedSession,
+    Observed,
+    SessionManager,
+    SessionManagerFactory,
+    SessionSpec,
+} from "./manager.ts";
 
 // `aoe add` prints the id indented and padded: "  ID:      336c83018fca4d13".
 const ID_LINE = /^\s*ID:\s*([0-9a-f]{16})\s*$/m;
@@ -75,11 +81,12 @@ function parseShow(value: unknown): Observed {
     };
 }
 
-function parseList(value: unknown): { id: string; path: string }[] {
+function parseList(value: unknown): (ListedSession & { path: string })[] {
     return array(value, "$").map((item, index) => {
         const entry = object(item, `$[${index}]`);
         return {
             id: string(entry, "id", `$[${index}]`),
+            title: string(entry, "title", `$[${index}]`),
             path: string(entry, "path", `$[${index}]`),
         };
     });
@@ -182,7 +189,7 @@ async function findByPath(
     exec: Exec,
     profile: string | null,
     path: string,
-): Promise<Result<string[]>> {
+): Promise<Result<ListedSession[]>> {
     const listed = await runJson(
         exec,
         "aoe list --json",
@@ -193,13 +200,13 @@ async function findByPath(
         return listed;
     }
     const target = await canonical(path);
-    const ids: string[] = [];
-    for (const entry of listed.value) {
-        if ((await canonical(entry.path)) === target) {
-            ids.push(entry.id);
+    const found: ListedSession[] = [];
+    for (const { id, title, path: entryPath } of listed.value) {
+        if ((await canonical(entryPath)) === target) {
+            found.push({ id, title });
         }
     }
-    return { ok: true, value: ids };
+    return { ok: true, value: found };
 }
 
 async function capture(
