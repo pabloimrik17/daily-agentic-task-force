@@ -40,3 +40,30 @@ describe("run report configuration defaults", () => {
         expect(renderText(report, [])).not.toContain("defaults:");
     });
 });
+
+describe("run report lock", () => {
+    const LOCKED: RunResult = { results: [], outcome: "not-evaluable", questions: [] };
+    const error = "another run holds /state/run.lock (pid 1234, started 2026-10-17T08:59:00.000Z)";
+
+    it("prints the lock line after the header and carries the error in the JSON", () => {
+        const report = { ...buildReport(STARTED, LOCKED, ARGS), lock: { error } };
+
+        expect(renderText(report, [])).toBe(
+            [
+                "autonomous run — started 2026-10-17T09:00:00.000Z\noutcome: not-evaluable",
+                `lock: ${error}`,
+            ].join("\n\n"),
+        );
+        expect(JSON.parse(renderJson(report))).toEqual({
+            schema: "autonomous.run.v1",
+            startedAt: "2026-10-17T09:00:00.000Z",
+            steps: [],
+            outcome: "not-evaluable",
+            lock: { error },
+        });
+    });
+
+    it("prints no lock line when the lock was taken", () => {
+        expect(renderText(buildReport(STARTED, RUN, ARGS), [])).not.toContain("lock:");
+    });
+});

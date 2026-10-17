@@ -14,6 +14,7 @@ export interface RunReport {
     outcome: StepOutcome;
     handoff?: Handoff;
     config?: { defaulted: string[] }; // the configuration keys that took a shipped default; absent when none
+    lock?: { error: string }; // another run held the lock (design D12), so no step ran; absent otherwise
 }
 
 // One AskUserQuestion round takes at most 4 questions: a limit of the tool, not a setting.
@@ -59,10 +60,11 @@ export function renderText(report: RunReport, steps: readonly Step[]): string {
         `outcome: ${report.outcome}`,
         ...defaults,
     ].join("\n");
+    const lock = report.lock === undefined ? [] : [`lock: ${report.lock.error}`];
     // Design D2: the handoff travels as the last line, one JSON document the command reads back.
     const handoff =
         report.handoff === undefined ? [] : [`handoff: ${JSON.stringify(report.handoff)}`];
-    return [header, ...sections, ...handoff].join("\n\n");
+    return [header, ...lock, ...sections, ...handoff].join("\n\n");
 }
 
 function renderGeneric(result: StepResult): string {
