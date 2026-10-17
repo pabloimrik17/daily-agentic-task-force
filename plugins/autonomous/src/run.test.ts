@@ -1,10 +1,19 @@
-import { copyFileSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import {
+    copyFileSync,
+    existsSync,
+    mkdtempSync,
+    readFileSync,
+    rmSync,
+    writeFileSync,
+} from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
 import { afterAll, describe, expect, it } from "vitest";
 
 import type { Answer } from "./args.ts";
+import { fakeSessions, fakeWorkspace, record, tempState } from "./attempts/test-fixtures.ts";
+import { attemptDir, recordPath, writeRecord } from "./attempts/state.ts";
 import { type AutonomousConfig, CONFIG_SCHEMA, EXAMPLE_PATH } from "./config.ts";
 import { config, fakeJudgement, task, trackers } from "./label-triage/test-fixtures.ts";
 import type { Tracker, TrackerLabel, Trackers } from "./label-triage/trackers/tracker.ts";
@@ -36,13 +45,43 @@ function fakeStep(outcome: StepOutcome): Step<{ value: number }> {
     };
 }
 
-// `steps` undefined runs the real STEPS.
+// Every state directory a test creates, removed once the file has run.
+const STATES: string[] = [];
+afterAll(() => {
+    for (const dir of STATES) {
+        rmSync(dir, { recursive: true, force: true });
+    }
+});
+
+function state(): string {
+    const dir = tempState();
+    STATES.push(dir);
+    return dir;
+}
+
+// The run lock (design D12) of every run whose env does not name its own state.
+const STATE = state();
+
+// A state directory whose lock this live process holds, as another run would.
+function heldLock(): { dir: string; error: string } {
+    const dir = state();
+    const startedAt = "2026-10-17T08:59:00.000Z";
+    writeFileSync(join(dir, "run.lock"), JSON.stringify({ pid: process.pid, startedAt }));
+    const error = `another run holds ${join(dir, "run.lock")} (pid ${process.pid}, started ${startedAt})`;
+    return { dir, error };
+}
+
+const ABSENT_CONFIG = join(tmpdir(), "autonomous-run-absent", "config.json");
+
+// `steps` undefined runs the real STEPS. Unless the override names them, the
+// env points AUTONOMOUS_CONFIG at a missing file and AUTONOMOUS_STATE at a
+// temporary directory, so no test reads the user's own configuration or state.
 function deps(steps: readonly Step[] | undefined, overrides: Partial<MainDeps> = {}) {
     const out: string[] = [];
     const err: string[] = [];
     const d: MainDeps = {
         now: () => NOW,
-        env: { AUTONOMOUS_CONFIG: join(tmpdir(), "autonomous-run-absent", "config.json") },
+        env: {},
         openUsage: () => Promise.resolve({ ok: false, error: "unused" }),
         trackers: () => {
             throw new Error("unused");
@@ -53,11 +92,19 @@ function deps(steps: readonly Step[] | undefined, overrides: Partial<MainDeps> =
             throw new Error("unused");
         },
         selection: () => Promise.resolve({ ok: false, error: "unused" }),
+        sessions: () => {
+            throw new Error("unused");
+        },
+        workspace: () => {
+            throw new Error("unused");
+        },
+        naming: () => Promise.resolve({ ok: false, error: "unused" }),
         stdout: (t) => out.push(t),
         stderr: (t) => err.push(t),
         ...(steps === undefined ? {} : { steps }),
         ...overrides,
     };
+    d.env = { AUTONOMOUS_CONFIG: ABSENT_CONFIG, AUTONOMOUS_STATE: STATE, ...d.env };
     return { d, out, err };
 }
 
@@ -223,6 +270,7 @@ describe("main --bootstrap-labels", () => {
             listTasks: unused,
             readTask: unused,
             addLabel: unused,
+            removeLabel: unused,
             listLabels: () =>
                 Promise.resolve(
                     typeof labels === "string"
@@ -233,7 +281,10 @@ describe("main --bootstrap-labels", () => {
         };
     }
 
-    function bootstrapDeps(tracker: Tracker, env = { AUTONOMOUS_CONFIG: configPath }) {
+    function bootstrapDeps(
+        tracker: Tracker,
+        env: Record<string, string> = { AUTONOMOUS_CONFIG: configPath },
+    ) {
         const calls = { steps: 0, openUsage: 0 };
         const step: Step = {
             id: "counted",
@@ -318,6 +369,16 @@ describe("main --bootstrap-labels", () => {
         });
     });
 
+    it("takes no run lock: a lock another run holds does not stop it", async () => {
+        const { dir } = heldLock();
+        const { d, calls } = bootstrapDeps(linear([]), {
+            AUTONOMOUS_CONFIG: configPath,
+            AUTONOMOUS_STATE: dir,
+        });
+        expect(await main(["--bootstrap-labels"], d)).toBe(0);
+        expect(calls).toEqual({ steps: 0, openUsage: 0 });
+    });
+
     it("exits 1 when the bootstrap itself fails", async () => {
         const broken = { ...linear([]), listLabels: () => Promise.reject(new Error("boom")) };
         const { d, err } = bootstrapDeps(broken);
@@ -341,12 +402,13 @@ describe("main with the real steps", () => {
             listTasks: () => Promise.resolve({ ok: true, value: [] }),
             readTask: unused,
             addLabel: unused,
+            removeLabel: unused,
             listLabels: unused,
             createLabel: unused,
         };
     }
 
-    it("still runs the quota gate without a configuration file, the triage reporting the missing file", async () => {
+    it("stops at reconcile without a configuration file, reporting the missing file", async () => {
         const missing = join(dir, "absent.json");
         const { d, out } = deps(undefined, {
             env: { AUTONOMOUS_CONFIG: missing },
@@ -359,10 +421,9 @@ describe("main with the real steps", () => {
         };
         expect(report.outcome).toBe("not-evaluable");
         expect(report.steps.map((s) => [s.step, s.outcome])).toEqual([
-            ["quota-gate", "advance"],
-            ["label-triage", "not-evaluable"],
+            ["reconcile", "not-evaluable"],
         ]);
-        expect(report.steps[1]?.reasons).toEqual([
+        expect(report.steps[0]?.reasons).toEqual([
             `configuration file not found at ${missing}; create it from the example at ${EXAMPLE_PATH}`,
         ]);
     });
@@ -398,7 +459,8 @@ describe("main with the real steps", () => {
         linear: empty("linear"),
     });
 
-    it("advances through the three steps with the example configuration", async () => {
+    // No stage but `test` has an implementation, so launch waits on the selected grill-me task.
+    it("runs the five steps with the example configuration, launch waiting on the stage", async () => {
         let judged = 0;
         const calls: string[] = [];
         const { d, out, err } = deps(undefined, {
@@ -411,14 +473,17 @@ describe("main with the real steps", () => {
             },
             ...selecting(calls),
         });
-        expect(await main([], d)).toBe(0);
+        expect(await main([], d)).toBe(2);
         expect(err).toEqual([]);
         expect(judged).toBe(0);
         const text = out[0] as string;
-        expect(text).toContain("outcome: advance");
+        expect(text).toContain("outcome: wait");
+        expect(text).toContain("[reconcile] advance (code)");
         expect(text).toContain("[quota-gate] advance (code)");
         expect(text).toContain("[label-triage] advance (code)");
         expect(text).toContain("[select] advance (llm)");
+        expect(text).toContain("[launch] wait (code)");
+        expect(text).toContain("stage grill-me has no implementation");
     });
 
     it("does not run the select step when label-triage is not evaluable because bd cannot be executed", async () => {
@@ -434,6 +499,7 @@ describe("main with the real steps", () => {
             steps: { step: string; outcome: string }[];
         };
         expect(report.steps.map((s) => [s.step, s.outcome])).toEqual([
+            ["reconcile", "advance"],
             ["quota-gate", "advance"],
             ["label-triage", "not-evaluable"],
         ]);
@@ -450,9 +516,9 @@ describe("main with the real steps", () => {
                 trackers(calls, { beads: [task("beads", "B-7", ["personal", "grill-me"])] }),
             ...selecting(calls),
         });
-        expect(await main(["--apply", "--json"], d)).toBe(0);
+        expect(await main(["--apply", "--json"], d)).toBe(2);
         const report = JSON.parse(out[0] as string) as Record<string, unknown>;
-        expect(report.outcome).toBe("advance");
+        expect(report.outcome).toBe("wait");
         expect(report).not.toHaveProperty("handoff");
         expect(calls.filter((call) => call.includes(":addLabel:"))).toEqual([]);
     });
@@ -465,11 +531,11 @@ describe("main with the real steps", () => {
             trackers: emptyTrackers,
             ...selecting(calls),
         });
-        expect(await main(["--json"], d)).toBe(0);
+        expect(await main(["--json"], d)).toBe(2);
         const report = JSON.parse(out[0] as string) as {
             steps: { step: string; tier: string; outcome: string; data: unknown }[];
         };
-        const select = report.steps[2];
+        const select = report.steps[3];
         expect(select?.step).toBe("select");
         expect(select?.tier).toBe("llm");
         expect(select?.data).toEqual({
@@ -568,7 +634,7 @@ describe("main --answer", () => {
     function answerDeps(
         log: string[],
         steps: readonly Step[],
-        env = { AUTONOMOUS_CONFIG: configPath },
+        env: Record<string, string> = { AUTONOMOUS_CONFIG: configPath },
     ) {
         const fake = trackers([], {});
         const result = deps(steps, {
@@ -609,6 +675,17 @@ describe("main --answer", () => {
         expect(seen[0]?.trackers).toBe(fake);
         expect(err).toEqual([]);
         expect(out).toHaveLength(1);
+    });
+
+    it("takes no run lock: a lock another run holds does not stop it", async () => {
+        const log: string[] = [];
+        const { dir } = heldLock();
+        const { d } = answerDeps(log, [answering("triage", log)], {
+            AUTONOMOUS_CONFIG: configPath,
+            AUTONOMOUS_STATE: dir,
+        });
+        expect(await main(["--apply", ...answerArgs("triage:B-1:entry=HITL")], d)).toBe(0);
+        expect(log).toEqual(["trackers", "triage:answer triage:B-1:entry=HITL"]);
     });
 
     it("prints usage and exits 1 for an answer without --apply", async () => {
@@ -813,8 +890,9 @@ describe("main --answer", () => {
             work: () => [fakeReader("beads", [workTask("beads", "B-2", ["work", "grill-me"])], [])],
         };
 
+        // launch waits: no stage but `test` has an implementation.
         const run = deps(undefined, shared);
-        expect(await main(["--apply", "--json"], run.d)).toBe(0);
+        expect(await main(["--apply", "--json"], run.d)).toBe(2);
         const { handoff } = JSON.parse(run.out[0] as string) as {
             handoff?: { questions: HandoffQuestion[]; remaining: number };
         };
@@ -840,5 +918,341 @@ describe("main --answer", () => {
             ok: true,
             value: { labels: ["work", "HITL"] },
         });
+    });
+});
+
+// A step with the given id that logs its runs and returns `data`.
+function named(id: string, outcome: StepOutcome, log: string[], data: unknown = null): Step {
+    return {
+        id,
+        run: () => {
+            log.push(id);
+            return Promise.resolve({ step: id, tier: "code", outcome, reasons: [id], data });
+        },
+        render: (result) => `[${id}] ${result.outcome}`,
+    };
+}
+
+const FIVE = ["reconcile", "quota-gate", "label-triage", "select", "launch"];
+
+describe("main stage-session wiring", () => {
+    it("runs reconcile before the quota gate and keeps its result when the gate waits", async () => {
+        const log: string[] = [];
+        const steps = [
+            named("reconcile", "advance", log, { attempts: [] }),
+            named("quota-gate", "wait", log),
+            named("label-triage", "advance", log),
+        ];
+        const { d, out } = deps(steps);
+        expect(await main(["--json"], d)).toBe(2);
+        expect(log).toEqual(["reconcile", "quota-gate"]);
+        const report = JSON.parse(out[0] as string) as {
+            outcome: string;
+            steps: { step: string; outcome: string; data: unknown }[];
+        };
+        expect(report.outcome).toBe("wait");
+        expect(report.steps.map((s) => [s.step, s.outcome, s.data])).toEqual([
+            ["reconcile", "advance", { attempts: [] }],
+            ["quota-gate", "wait", null],
+        ]);
+    });
+
+    it("runs exactly reconcile, quota-gate and launch with --task", async () => {
+        const log: string[] = [];
+        const { d, out } = deps(FIVE.map((id) => named(id, "advance", log)));
+        expect(await main(["--task", "linear:DOT-109", "--json"], d)).toBe(0);
+        expect(log).toEqual(["reconcile", "quota-gate", "launch"]);
+        const report = JSON.parse(out[0] as string) as { steps: { step: string }[] };
+        expect(report.steps.map((s) => s.step)).toEqual(["reconcile", "quota-gate", "launch"]);
+    });
+
+    it("runs every step without --task", async () => {
+        const log: string[] = [];
+        const { d } = deps(FIVE.map((id) => named(id, "advance", log)));
+        expect(await main([], d)).toBe(0);
+        expect(log).toEqual(FIVE);
+    });
+
+    it("carries both new steps' data in the --json report", async () => {
+        const log: string[] = [];
+        const reconciled = { attempts: [], retained: [], cleanups: [], needsHuman: [], errors: [] };
+        const launched = { task: { source: "linear", id: "DOT-109", title: "T" }, stage: "test" };
+        const steps = [
+            named("reconcile", "advance", log, reconciled),
+            named("launch", "advance", log, launched),
+        ];
+        const { d, out } = deps(steps);
+        expect(await main(["--json"], d)).toBe(0);
+        const report = JSON.parse(out[0] as string) as { steps: { step: string; data: unknown }[] };
+        expect(report.steps.map((s) => [s.step, s.data])).toEqual([
+            ["reconcile", reconciled],
+            ["launch", launched],
+        ]);
+    });
+
+    it("is not-evaluable without running a step when another run holds the lock", async () => {
+        const log: string[] = [];
+        const { dir, error } = heldLock();
+        const { d, out } = deps(
+            FIVE.map((id) => named(id, "advance", log)),
+            {
+                env: { AUTONOMOUS_STATE: dir },
+            },
+        );
+        expect(await main([], d)).toBe(3);
+        expect(log).toEqual([]);
+        expect(out).toEqual([
+            `autonomous run — started ${NOW.toISOString()}\noutcome: not-evaluable\n\nlock: ${error}`,
+        ]);
+        expect(existsSync(join(dir, "run.lock"))).toBe(true);
+    });
+
+    it("prints the held lock in one autonomous.run.v1 JSON document with --json", async () => {
+        const log: string[] = [];
+        const { dir, error } = heldLock();
+        const { d, out } = deps([named("reconcile", "advance", log)], {
+            env: { AUTONOMOUS_STATE: dir },
+        });
+        expect(await main(["--json"], d)).toBe(3);
+        expect(log).toEqual([]);
+        expect(out).toHaveLength(1);
+        expect(JSON.parse(out[0] as string)).toEqual({
+            schema: "autonomous.run.v1",
+            startedAt: NOW.toISOString(),
+            steps: [],
+            outcome: "not-evaluable",
+            lock: { error },
+        });
+    });
+
+    it.each<[string, Step]>([
+        ["after the steps ran", named("reconcile", "advance", [])],
+        [
+            "when a step throws",
+            { id: "broken", run: () => Promise.reject(new Error("boom")), render: () => "" },
+        ],
+    ])("releases the lock %s", async (_, step) => {
+        const dir = state();
+        const { d } = deps([step], { env: { AUTONOMOUS_STATE: dir } });
+        await main([], d);
+        expect(existsSync(join(dir, "run.lock"))).toBe(false);
+    });
+});
+
+describe("main --discard", () => {
+    const dir = mkdtempSync(join(tmpdir(), "autonomous-discard-"));
+    const configPath = join(dir, "config.json");
+    writeFileSync(configPath, JSON.stringify(config()));
+    afterAll(() => rmSync(dir, { recursive: true, force: true }));
+
+    const ATTEMPT = "linear:DOT-109:test:1";
+    const gone = {
+        state: "gone",
+        status: "not found",
+        busy: false,
+        needsHuman: false,
+        agentSessionId: null,
+    } as const;
+
+    // A state directory holding the started attempt, and fakes that discard it:
+    // its session is gone and DOT-109 carries `taken`.
+    async function discardDeps(env: Record<string, string> = {}) {
+        const log: string[] = [];
+        const calls: string[] = [];
+        const attempts = state();
+        await writeRecord(attempts, record());
+        const sessions = fakeSessions({
+            observe: () => Promise.resolve({ ok: true, value: gone }),
+        });
+        const result = deps(
+            FIVE.map((id) => named(id, "advance", log)),
+            {
+                env: { AUTONOMOUS_CONFIG: configPath, AUTONOMOUS_STATE: attempts, ...env },
+                sessions: () => sessions,
+                workspace: () => fakeWorkspace({}),
+                trackers: () =>
+                    trackers(calls, { linear: [task("linear", "DOT-109", ["work", "taken"])] }),
+            },
+        );
+        const stored = () => readFileSync(recordPath(attemptDir(attempts, ATTEMPT)), "utf8");
+        return { ...result, log, calls, sessions, stored };
+    }
+
+    const argv = (...extra: string[]) => ["--apply", "--discard", ATTEMPT, ...extra];
+
+    it("discards the attempt without running a step and exits 0", async () => {
+        const { d, out, err, log, calls, stored } = await discardDeps();
+        expect(await main(argv(), d)).toBe(0);
+        expect(log).toEqual([]);
+        expect(err).toEqual([]);
+        expect(calls).toContain("linear:removeLabel:DOT-109:taken");
+        expect(JSON.parse(stored())).toMatchObject({ state: "discarded" });
+        expect(out).toHaveLength(1);
+        expect(out[0]).toContain(`autonomous discard — started ${NOW.toISOString()}`);
+        expect(out[0]).toContain("outcome: advance");
+    });
+
+    it("prints one autonomous.discard.v1 JSON document with --json", async () => {
+        const { d, out } = await discardDeps();
+        expect(await main(argv("--json"), d)).toBe(0);
+        expect(out).toHaveLength(1);
+        expect(JSON.parse(out[0] as string)).toMatchObject({
+            schema: "autonomous.discard.v1",
+            startedAt: NOW.toISOString(),
+            outcome: "advance",
+            attempt: ATTEMPT,
+            task: { source: "linear", id: "DOT-109" },
+            removed: { session: false, taken: true, workspace: false },
+        });
+    });
+
+    it("exits 3 when the attempt cannot be discarded", async () => {
+        const { d, out, log } = await discardDeps();
+        expect(await main(["--apply", "--discard", "linear:DOT-109:test:2", "--json"], d)).toBe(3);
+        expect(log).toEqual([]);
+        expect(JSON.parse(out[0] as string)).toMatchObject({
+            schema: "autonomous.discard.v1",
+            outcome: "not-evaluable",
+            reasons: ["attempt linear:DOT-109:test:2 not found"],
+        });
+    });
+
+    it("exits 3 and changes nothing when another run holds the lock", async () => {
+        const { dir: held, error } = heldLock();
+        const { d, out, log, calls, sessions } = await discardDeps({ AUTONOMOUS_STATE: held });
+        expect(await main(argv("--json"), d)).toBe(3);
+        expect(log).toEqual([]);
+        expect(calls).toEqual([]);
+        expect(sessions.calls).toEqual([]);
+        expect(JSON.parse(out[0] as string)).toEqual({
+            schema: "autonomous.discard.v1",
+            startedAt: NOW.toISOString(),
+            outcome: "not-evaluable",
+            attempt: null,
+            task: null,
+            found: [],
+            removed: { session: false, taken: false, workspace: false },
+            reasons: [error],
+        });
+    });
+
+    it("leaves the record alone when the lock is held", async () => {
+        const { dir: held } = heldLock();
+        const { d, stored } = await discardDeps({ AUTONOMOUS_STATE: held });
+        const before = stored();
+        expect(await main(argv(), d)).toBe(3);
+        expect(stored()).toBe(before);
+    });
+
+    it("releases the lock once the discard is done", async () => {
+        const { d } = await discardDeps();
+        await main(argv(), d);
+        expect(existsSync(join(d.env.AUTONOMOUS_STATE ?? "", "run.lock"))).toBe(false);
+    });
+
+    it("prints the configuration error and one JSON document holding it", async () => {
+        const missing = join(dir, "absent.json");
+        const error = `configuration file not found at ${missing}; create it from the example at ${EXAMPLE_PATH}`;
+        const { d, out, err, log } = await discardDeps({ AUTONOMOUS_CONFIG: missing });
+        expect(await main(argv("--json"), d)).toBe(3);
+        expect(log).toEqual([]);
+        expect(err).toEqual([error]);
+        expect(out).toHaveLength(1);
+        expect(JSON.parse(out[0] as string)).toMatchObject({
+            schema: "autonomous.discard.v1",
+            outcome: "not-evaluable",
+            config: { path: missing, error },
+        });
+    });
+
+    it("shows the defaulted keys in the text and the JSON, and neither for a full config", async () => {
+        const bare = join(dir, "bare.json");
+        writeFileSync(
+            bare,
+            JSON.stringify({
+                ...config(),
+                sessions: undefined,
+                workspace: undefined,
+                naming: undefined,
+            }),
+        );
+        const defaulted = ["sessions.tool", "sessions.profile", "sessions.binary"];
+
+        const text = await discardDeps({ AUTONOMOUS_CONFIG: bare });
+        await main(argv(), text.d);
+        expect((text.out[0] as string).split("\n").slice(0, 3)).toEqual([
+            `autonomous discard — started ${NOW.toISOString()}`,
+            "outcome: advance",
+            expect.stringMatching(/^defaults: sessions\.tool, sessions\.profile, sessions\.binary/),
+        ]);
+
+        const json = await discardDeps({ AUTONOMOUS_CONFIG: bare });
+        await main(argv("--json"), json.d);
+        expect(
+            (JSON.parse(json.out[0] as string) as { config: { defaulted: string[] } }).config
+                .defaulted,
+        ).toEqual(expect.arrayContaining(defaulted));
+
+        const full = await discardDeps();
+        await main(argv("--json"), full.d);
+        expect(JSON.parse(full.out[0] as string)).not.toHaveProperty("config");
+        const fullText = await discardDeps();
+        await main(argv(), fullText.d);
+        expect(fullText.out[0]).not.toContain("defaults:");
+    });
+});
+
+describe("main configuration defaults", () => {
+    const dir = mkdtempSync(join(tmpdir(), "autonomous-defaults-"));
+    afterAll(() => rmSync(dir, { recursive: true, force: true }));
+
+    // config() without the optional blocks, written to a file of its own.
+    function configFile(name: string, full: boolean): string {
+        const { sessions, workspace, naming, ...required } = config();
+        const path = join(dir, name);
+        writeFileSync(
+            path,
+            JSON.stringify(full ? { ...required, sessions, workspace, naming } : required),
+        );
+        return path;
+    }
+
+    const DEFAULTED = [
+        "sessions.tool",
+        "sessions.profile",
+        "sessions.binary",
+        "workspace.root",
+        "naming.model",
+        "naming.effort",
+    ];
+
+    it("shows the defaulted keys in the text header and in the JSON", async () => {
+        const env = { AUTONOMOUS_CONFIG: configFile("bare.json", false) };
+        const text = deps([fakeStep("advance")], { env });
+        await main([], text.d);
+        expect((text.out[0] as string).split("\n\n")[0]).toBe(
+            [
+                `autonomous run — started ${NOW.toISOString()}`,
+                "outcome: advance",
+                `defaults: ${DEFAULTED.join(", ")}`,
+            ].join("\n"),
+        );
+
+        const json = deps([fakeStep("advance")], { env });
+        await main(["--json"], json.d);
+        expect(JSON.parse(json.out[0] as string)).toMatchObject({
+            config: { defaulted: DEFAULTED },
+        });
+    });
+
+    it("shows neither when the file sets every key", async () => {
+        const env = { AUTONOMOUS_CONFIG: configFile("full.json", true) };
+        const text = deps([fakeStep("advance")], { env });
+        await main([], text.d);
+        expect(text.out[0]).not.toContain("defaults:");
+
+        const json = deps([fakeStep("advance")], { env });
+        await main(["--json"], json.d);
+        expect(JSON.parse(json.out[0] as string)).not.toHaveProperty("config");
     });
 });

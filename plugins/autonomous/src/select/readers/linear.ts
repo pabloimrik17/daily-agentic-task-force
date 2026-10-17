@@ -59,6 +59,13 @@ function parseListing(value: unknown) {
     });
 }
 
+function projectName(entry: Json, path: string): string | null {
+    const value = entry.project;
+    if (value === undefined || value === null) return null;
+    const projectPath = `${path}.project`;
+    return string(object(value, projectPath), "name", projectPath);
+}
+
 function parseDetail(
     value: unknown,
     task: WorkTask,
@@ -73,7 +80,12 @@ function parseDetail(
             return string(child, "identifier", path);
         })
         .filter((id) => openState(states.get(id)));
-    return { ...task, description: nullableDescription(entry, "$"), children };
+    return {
+        ...task,
+        description: nullableDescription(entry, "$"),
+        children,
+        project: projectName(entry, "$"),
+    };
 }
 
 export function linearWorkReader(exec: Exec, _config: LinearConfig): WorkReader {
@@ -97,6 +109,8 @@ export function linearWorkReader(exec: Exec, _config: LinearConfig): WorkReader 
                     priority,
                     blockedBy,
                     children: null,
+                    project: null,
+                    repository: null,
                     blocks: [],
                 }));
             for (const task of tasks) {

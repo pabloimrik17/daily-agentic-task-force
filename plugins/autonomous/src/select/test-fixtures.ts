@@ -24,6 +24,8 @@ export function workTask(
         blocks: [],
         blockedBy: [],
         children: [],
+        project: null,
+        repository: null,
         ...overrides,
     };
 }

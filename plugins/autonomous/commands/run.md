@@ -1,6 +1,6 @@
 ---
-description: Run the autonomous loop's gate, triage and select steps, or bootstrap the label contract, report the outcome, and ask the user the questions the run hands off
-argument-hint: "[--account <provider-key>] [--force] [--json] [--apply] [--no-handoff] | --bootstrap-labels [--json]"
+description: Run the autonomous loop's reconcile, gate, triage, select and launch steps, or launch a supplied task, or discard an attempt, or bootstrap the label contract, report the outcome, and ask the user the questions the run hands off
+argument-hint: "[--task <source>:<id> [--stage <stage>]] [--account <provider-key>] [--force] [--json] [--apply] [--no-handoff] | --apply --discard <attempt> [--release-workspace] [--json] | --bootstrap-labels [--json]"
 allowed-tools: Bash(bun:*)
 ---
 
@@ -8,11 +8,15 @@ allowed-tools: Bash(bun:*)
 
 Entry point of the autonomous loop. Every decision is made by the script; this
 command only runs it, relays what it prints, and asks the user the questions
-the report hands off. The steps are `quota-gate`, `label-triage` and `select`;
-`select` chooses the next work unit and writes nothing. `--apply` lets the
+the report hands off. The steps are `reconcile`, `quota-gate`, `label-triage`,
+`select` and `launch`: `reconcile` brings earlier attempts up to date, `select`
+chooses the next work unit and writes nothing, and `launch` starts one session
+for it. `--task` supplies a task to `launch` in place of `label-triage` and
+`select`; `--discard` discards an attempt and runs no step. `--apply` lets the
 `label-triage` step write labels and hand off questions, which `--no-handoff`
 suppresses; `--bootstrap-labels` creates missing labels on every enabled
-tracker and exits instead of running the steps.
+tracker and exits instead of running the steps. `--apply` can now also create
+sessions and worktrees and write `taken`.
 
 ## Steps
 

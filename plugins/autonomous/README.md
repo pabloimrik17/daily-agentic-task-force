@@ -1,15 +1,24 @@
 # autonomous
 
-Entry point of the autonomous loop: an orchestrator that will discover
-previously defined work and delegate it to other agents. Before it may start
-anything it runs a fixed list of steps. Today that list holds three steps:
-`quota-gate`, which decides whether the Claude account has quota to spend;
-`label-triage`, which reports the tasks missing a label of the contract and,
-with `--apply`, writes the labels it is confident about; and `select`, which
-chooses the next work unit and explains the choice (see
-[The `select` step](#the-select-step)). With `--apply`, a run can also end
-with questions for the human, which `/autonomous:run` asks and applies in one
-round (see [The handoff](#the-handoff)).
+Entry point of the autonomous loop: an orchestrator that discovers previously
+defined work and delegates it to other agents. It runs a fixed list of five
+steps, in this order:
+
+1. `reconcile` brings the attempts of earlier runs up to date: it resolves,
+   observes, finalises or retains each one (see
+   [The `reconcile` step](#the-reconcile-step)).
+2. `quota-gate` decides whether the Claude account has quota to spend.
+3. `label-triage` reports the tasks missing a label of the contract and, with
+   `--apply`, writes the labels it is confident about.
+4. `select` chooses the next work unit and explains the choice (see
+   [The `select` step](#the-select-step)).
+5. `launch` starts one managed session for the selected unit (see
+   [The `launch` step](#the-launch-step)).
+
+With `--apply`, a run can also end with questions for the human, which
+`/autonomous:run` asks and applies in one round (see
+[The handoff](#the-handoff)). `--apply` can now also create sessions and
+worktrees and write the `taken` label.
 
 **The contracts are provisional.** The step contract, the run report and the
 runner shape are a first iteration and are expected to change as further steps
@@ -19,10 +28,16 @@ detect a change.
 ## Domain language
 
 The plugin's terms (step, stage, work unit, machine scope, taken task,
-candidate, handoff, question, round, answer mode) are defined in
-[`CONTEXT.md`](CONTEXT.md). [ADR 0001](docs/adr/0001-properties-persist-stages-replace.md)
-records the label model agreed for DOT-110: properties persist, stages
-replace. It is not implemented yet.
+candidate, attempt, managed session, stage contract, workspace, result marker,
+retained attempt, pending cleanup, run lock, handoff, question, round, answer
+mode) are defined in [`GLOSSARY.md`](GLOSSARY.md).
+[ADR 0001](docs/adr/0001-properties-persist-stages-replace.md) records the
+label model agreed for DOT-110: properties persist, stages replace. It is not
+implemented yet.
+[ADR 0002](docs/adr/0002-remove-taken-on-finalisation.md) records why the
+runner removes `taken` when an attempt is finalised or discarded.
+[ADR 0003](docs/adr/0003-optional-config-blocks-with-shipped-defaults.md)
+records why the new configuration blocks are optional and the old ones are not.
 
 ## Install
 
@@ -55,31 +70,46 @@ replace. It is not implemented yet.
   `-p`, `--model`, `--effort`, `--output-format json`, `--json-schema`,
   `--safe-mode`, `--tools`, `--strict-mcp-config` and
   `--no-session-persistence`.
+- `aoe` (Agent of Empires) on `PATH`, verified against 1.14.0. It creates,
+  observes and removes the managed sessions.
+- `wt` (worktrunk) on `PATH`, verified against 0.77.0. It prepares and
+  releases the workspaces.
+
+`aoe` and `wt` are needed only when a run reaches `reconcile` with attempts to
+observe, or `launch` with something to launch. With no attempt on disk and
+nothing selected, neither is called.
 
 Every CLI's output is validated by hand; there are still no runtime
 dependencies. Each call is bounded by a 120 s timeout, except the LLM
 judgement batch and the LLM comparison of the `select` step, which allow
-300 s. A missing CLI is installed through the
-user's dotfiles (`BREW_PACKAGES`); adding the Linear CLI there is tracked as
-DOT-82 sub-issue 7.
+300 s, and the session naming of `launch`, which allows 10 s. Preparing a
+workspace is bounded by 120 s. A call that exceeds its limit counts as failed.
+A missing CLI is installed through the user's dotfiles (`BREW_PACKAGES`);
+adding the Linear CLI there is tracked as DOT-82 sub-issue 7.
 
 ## Usage
 
 ```text
 /autonomous:run [--account <provider-key>] [--force] [--json] [--apply] [--no-handoff]
+/autonomous:run --task <source>:<id> [--stage <stage>] [--account <provider-key>] [--force] [--json] [--apply] [--no-handoff]
 /autonomous:run --bootstrap-labels [--json]
 /autonomous:run --apply --answer <id>=<value>[,<value>]... [--json]
+/autonomous:run --apply --discard <attempt-id|source:id> [--release-workspace] [--json]
 ```
 
-| Flag                              | Effect                                                                                                                                                                                           |
-| --------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| `--account <provider-key>`        | Claude account to evaluate (`claude` or `claude@<id>`). Required when several Claude accounts are present                                                                                        |
-| `--force`                         | Ask OpenUsage to bypass its shared cache                                                                                                                                                         |
-| `--json`                          | Print one `autonomous.run.v1` JSON document instead of the text report; with `--bootstrap-labels`, one `autonomous.bootstrap.v1` document; with `--answer`, one `autonomous.answers.v1` document |
-| `--apply`                         | Let steps write. Without it a run has no side effects beyond the CLIs' own caches. Required by `--answer`                                                                                        |
-| `--no-handoff`                    | Emit no handoff; the questions stay in the step's report. For runs with no human present, such as a `/loop`. Not combined with `--bootstrap-labels` or `--answer`                                |
-| `--answer <id>=<value>[,<value>]` | [Answer mode](#answer-mode): apply the answer to the question `<id>` and exit, running no step. Repeat it once per question. Only combines with `--apply` and `--json`                           |
-| `--bootstrap-labels`              | Run only the label bootstrap and exit. Only combines with `--json`                                                                                                                               |
+| Flag                                | Effect                                                                                                                                                                                                                                                                     |
+| ----------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `--account <provider-key>`          | Claude account to evaluate (`claude` or `claude@<id>`). Required when several Claude accounts are present                                                                                                                                                                  |
+| `--force`                           | Ask OpenUsage to bypass its shared cache                                                                                                                                                                                                                                   |
+| `--json`                            | Print one `autonomous.run.v1` JSON document instead of the text report; with `--bootstrap-labels`, one `autonomous.bootstrap.v1` document; with `--answer`, one `autonomous.answers.v1` document; with `--discard`, one `autonomous.discard.v1` document                   |
+| `--apply`                           | Let steps write. Without it a run has no side effects beyond the CLIs' own caches and the run lock. Required by `--answer` and `--discard`                                                                                                                                 |
+| `--no-handoff`                      | Emit no handoff; the questions stay in the step's report. For runs with no human present, such as a `/loop`. Not combined with `--bootstrap-labels` or `--answer`                                                                                                          |
+| `--answer <id>=<value>[,<value>]`   | [Answer mode](#answer-mode): apply the answer to the question `<id>` and exit, running no step. Repeat it once per question. Only combines with `--apply` and `--json`                                                                                                     |
+| `--bootstrap-labels`                | Run only the label bootstrap and exit. Only combines with `--json`                                                                                                                                                                                                         |
+| `--task <source>:<id>`              | Give that task to `launch` instead of running `label-triage` and `select`. `<source>` is `linear`, `beads` or `github`, split at the first `:`. Given once. Not combined with `--bootstrap-labels`, `--answer` or `--discard`. See [The supplied task](#the-supplied-task) |
+| `--stage <stage>`                   | The stage `launch` runs for the supplied task. Requires `--task`. Given once. Its name is not checked when the arguments are parsed: an unregistered stage makes `launch` wait                                                                                             |
+| `--discard <attempt-id\|source:id>` | [Discard mode](#discard-mode): discard that attempt, or the one open attempt of that task, and exit, running no step. Requires `--apply`. Only combines with `--apply`, `--json` and `--release-workspace`. Given once                                                     |
+| `--release-workspace`               | With `--discard`, also release the attempt's worktree. Requires `--discard`                                                                                                                                                                                                |
 
 The script can also be run directly, which is what a shell or `/loop` should
 branch on:
@@ -89,8 +119,10 @@ bun plugins/autonomous/src/run.ts --account claude --json --apply --no-handoff
 ```
 
 `--apply` and `--bootstrap-labels` are the only ways anything is written;
-answer mode requires `--apply`. They are separate write paths that cannot be
-combined, and each must be typed explicitly: nothing adds either on its own.
+answer mode and discard mode require `--apply`. They are separate write paths
+that cannot be combined, and each must be typed explicitly: nothing adds
+either on its own. With `--apply`, `reconcile` and `launch` write attempt
+records, sessions, worktrees and the `taken` label.
 The one exception is the answer invocation of `/autonomous:run`, which passes
 `--apply` again; it only follows a run the user started with `--apply`. A
 `/loop` that should write passes `--apply` explicitly, and `--no-handoff` with
@@ -102,12 +134,17 @@ it, as above; through the command that is
 
 For `/autonomous:run [--account …] [--force] [--json] [--apply] [--no-handoff]`:
 
-| Code | Outcome                                                                                                                                       |
-| ---- | --------------------------------------------------------------------------------------------------------------------------------------------- |
-| 0    | `advance` — every step advanced                                                                                                               |
-| 2    | `wait` — a step says to wait (for example, a window exhausted, or no task is selectable)                                                      |
-| 3    | `not-evaluable` — no decision possible: account absent, ambiguous or unknown, or data missing, incomplete, invalid, outdated, stale or failed |
-| 1    | Invalid arguments or a failure of the runner itself                                                                                           |
+| Code | Outcome                                                                                                                                                                                        |
+| ---- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 0    | `advance` — every step advanced                                                                                                                                                                |
+| 2    | `wait` — a step says to wait (for example, a window exhausted, or no task is selectable)                                                                                                       |
+| 3    | `not-evaluable` — no decision possible: account absent, ambiguous or unknown, data missing, incomplete, invalid, outdated, stale or failed, or another run holds the [run lock](#the-run-lock) |
+| 1    | Invalid arguments or a failure of the runner itself                                                                                                                                            |
+
+The same codes apply with `--task`. A run that finds the lock held runs no
+step: it prints a report with no steps, outcome `not-evaluable` and, after the
+header, the line `lock: <error>` (in JSON, the report's `lock` field,
+`{ "error": "<error>" }`), and exits 3.
 
 For `/autonomous:run --bootstrap-labels [--json]`:
 
@@ -124,6 +161,14 @@ For `/autonomous:run --apply --answer <id>=<value>[,<value>]... [--json]`:
 | 0    | `advance` — every answer was applied or skipped                                              |
 | 3    | `not-evaluable` — an answer was rejected or failed, or the configuration could not be loaded |
 | 1    | Invalid arguments or a failure of the runner itself                                          |
+
+For `/autonomous:run --apply --discard <attempt-id|source:id> [--release-workspace] [--json]`:
+
+| Code | Outcome                                                                                                                                                   |
+| ---- | --------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 0    | `advance` — the attempt was discarded                                                                                                                     |
+| 3    | `not-evaluable` — it could not be: the attempt was not found or is ambiguous, a removal failed, the configuration could not be loaded or the lock is held |
+| 1    | Invalid arguments or a failure of the runner itself                                                                                                       |
 
 ## The handoff
 
@@ -250,7 +295,9 @@ report never carries a handoff.
 Per-user settings live outside the plugin, in one JSON file validated as
 strictly as the OpenUsage document: a missing file, a missing required field,
 a mistyped field or an unknown field is an error naming the path, never a
-default. No credentials are stored in it.
+default. The one exception is the three [optional blocks](#optional-blocks)
+below, whose missing keys take a shipped default. No credentials are stored in
+it.
 
 - Path: `~/.config/autonomous/config.json`, overridable with
   `AUTONOMOUS_CONFIG` (mainly for tests and machines with several roles).
@@ -261,14 +308,14 @@ default. No credentials are stored in it.
   through then exits 3 (`not-evaluable`), because `label-triage` cannot be
   evaluated. This changes the outcome for users who ran only the quota gate.
 
-```jsonc
+```json
 {
     "schema": "autonomous.config.v1",
     "sources": {
         "linear": {
             "enabled": true,
             "scope": "personal",
-            "aliases": { "grill-me": ["Grill Me"] },
+            "aliases": { "grill-me": ["Grill Me"] }
         },
         "beads": {
             "enabled": true,
@@ -276,26 +323,38 @@ default. No credentials are stored in it.
             "aliases": {
                 "work": ["project:example"],
                 "personal": ["project:personal"],
-                "HITL": ["human"],
-            },
+                "HITL": ["human"]
+            }
         },
         "github": {
             "enabled": true,
             "repos": ["owner/repo"],
-            "scope": "personal",
-        },
+            "scope": "personal"
+        }
     },
     "judgement": {
         "model": "claude-sonnet-5",
         "effort": "medium",
         "threshold": 0.95,
         "cap": 25,
-        "batch": 20,
+        "batch": 20
     },
     "selection": {
         "model": "sonnet",
-        "effort": "high",
+        "effort": "high"
     },
+    "sessions": {
+        "tool": "claude",
+        "profile": null,
+        "binary": null
+    },
+    "workspace": {
+        "root": "~/WebstormProjects"
+    },
+    "naming": {
+        "model": "haiku",
+        "effort": "low"
+    }
 }
 ```
 
@@ -326,6 +385,29 @@ version must gain the block. The rejection also reaches the
 there, tasks created through it get no alias or structural evidence and no
 judged labels, and `/autonomous:run` is not evaluable.
 
+### Optional blocks
+
+`sessions`, `workspace` and `naming` are optional. The plugin ships
+`plugins/autonomous/config.defaults.json`, and a key missing from the user's
+file, or a whole missing block, takes the shipped value for that key. A
+mistyped or unknown key is still an error naming its path, so a file written
+for an earlier version keeps working unchanged. ADR 0003 records why these
+blocks have defaults while `selection` stayed required. The shipped defaults:
+
+| Key                | Default              | Meaning                                                                             |
+| ------------------ | -------------------- | ----------------------------------------------------------------------------------- |
+| `sessions.tool`    | `claude`             | The agent each session runs: `claude` or `codex`. Any other value is rejected       |
+| `sessions.profile` | `null`               | The `aoe` profile passed to every `aoe` command; `null` leaves `aoe`'s default      |
+| `sessions.binary`  | `null`               | The agent binary or wrapper, passed as `--cmd-override`; `null` uses the tool's own |
+| `workspace.root`   | `~/WebstormProjects` | The directory whose git repositories a task is inferred against; `~` uses `HOME`    |
+| `naming.model`     | `haiku`              | `--model` of the `claude -p` call that names a session                              |
+| `naming.effort`    | `low`                | `--effort` of that call                                                             |
+
+When a run used a default, the text report's header gains a third line,
+`defaults: sessions.tool, naming.model`, listing the dotted keys in the order
+of the table; with `--json` the report holds `config.defaulted`, the same list.
+A run whose configuration sets every key shows neither.
+
 ## The label contract
 
 Every task carries two label groups:
@@ -336,7 +418,8 @@ Every task carries two label groups:
 | entry | `AFK`, `HITL`, `grill-me` | At least one. `AFK` and `HITL` never together; `grill-me` precedes both when combined |
 
 `taken` belongs to neither group. It is never required, never missing and never
-in conflict, and triage neither derives it nor asks about it.
+in conflict, and triage neither derives it nor asks about it. The runner writes
+it, at launch (see [The `taken` label](#the-taken-label)).
 
 `personal` is the user's own work. No scope has priority over the other in the
 contract: which scope to prefer is the job of the
@@ -346,11 +429,13 @@ human intervenes during or at the end of each stage; `grill-me` means the task
 must be refined with a human before anyone works on it. `taken` means an agent
 or a person is advancing the task now.
 
-Add `taken` to a task you work on by hand; remove a forgotten one by hand.
-Nothing in the loop adds or removes it. It is the only evidence that a task is
-taken: a tracker status such as Beads `in_progress` does not count, so work
+Add `taken` to a task you work on by hand. It is the only evidence that a task
+is taken: a tracker status such as Beads `in_progress` does not count, so work
 done by hand without `taken` can still be selected. A configuration that
-declares aliases for `taken` is rejected.
+declares aliases for `taken` is rejected. The runner adds and removes `taken`
+only for the attempts it launches (see [The `taken` label](#the-taken-label));
+`label-triage` never does, and a `taken` you added by hand stays until you
+remove it.
 
 Spelling is exact and case-sensitive: `Grill Me` is not `grill-me`. Colours,
 applied where the tracker supports them:
@@ -464,7 +549,7 @@ database. The run that built it is recorded in
 
 ## The `label-triage` step
 
-Second in the run, after `quota-gate`. It reads the open tasks of every
+Third in the run, after `reconcile` and `quota-gate`. It reads the open tasks of every
 enabled source — Linear across all teams except completed, canceled and
 `Duplicate` issues, Beads issues that are `open` or `in_progress`, GitHub open
 issues per configured repo — and reports every task missing a label group or
@@ -634,11 +719,11 @@ because the prompt carries issue text anyone can write.
 
 ## The `select` step
 
-Third in the run, after `quota-gate` and `label-triage`, so it runs only when
-both advanced. It chooses the next work unit: a task together with its next
-stage. It writes nothing to any tracker, asks the human nothing and
-contributes no questions to the [handoff](#the-handoff), with or without
-`--apply`.
+Fourth in the run, after `reconcile`, `quota-gate` and `label-triage`, so it
+runs only when all three advanced. It chooses the next work unit: a task
+together with its next stage, which [`launch`](#the-launch-step) then takes. It
+writes nothing to any tracker, asks the human nothing and contributes no
+questions to the [handoff](#the-handoff), with or without `--apply`.
 
 Its outcomes:
 
@@ -690,7 +775,9 @@ In order, the step:
 The next stage of a task is `grill-me` when it carries `grill-me`, and
 `proposal` otherwise. Only `grill-me` is supported for now, so a task with
 `AFK` or `HITL` and no `grill-me` is reported as waiting for an unsupported
-stage until stage labels land (DOT-110).
+stage until stage labels land (DOT-110). `launch` keeps its own list: a stage
+runs only when an implementation is registered for it, and only the test stage
+is.
 
 Blockers, the tasks a task blocks, its open children and its tracker priority
 are read for Beads and Linear. A blocker or child is open unless it is closed:
@@ -735,9 +822,492 @@ The text report shows:
 With `--json`, the step's data carries the same information, plus the
 selection model and effort when the LLM was called.
 
+## The `reconcile` step
+
+First in the run, before `quota-gate`, so a stage that completed is recorded
+and its session removed even when no quota is left. It reads the attempts on
+disk, brings each one forward as described below and reports all of them. It
+never returns `wait`. It writes only with `--apply`; without it, it observes
+and reports what it would do.
+
+### Attempts
+
+An attempt is one launch of a managed session for one stage of one task,
+identified as `<source>:<task>:<stage>:<n>`, where `n` counts the attempts of
+that task and stage from 1: the second attempt of the `test` stage for Linear
+`DOT-109` is `linear:DOT-109:test:2`. Its record lives in the state directory,
+outside every tracker and outside the workspace the agent works in. An attempt
+is in exactly one state:
+
+| State       | Meaning                                                               |
+| ----------- | --------------------------------------------------------------------- |
+| `pending`   | The record is written; no session exists yet                          |
+| `created`   | The session exists and has not been started                           |
+| `started`   | The session was started                                               |
+| `completed` | Both proofs held and the session was removed (it may carry a cleanup) |
+| `retained`  | Its session exited without completing the stage                       |
+| `aborted`   | No session was ever created                                           |
+| `discarded` | It was discarded with `--discard`                                     |
+
+Every state change is written to the record, with its time, before the next
+action that depends on it, so an interruption anywhere leaves a state the next
+run resolves.
+
+The state directory is `$XDG_STATE_HOME/autonomous`, or
+`~/.local/state/autonomous` when `XDG_STATE_HOME` is unset, and
+`AUTONOMOUS_STATE` overrides both (mainly for tests). Each attempt has its own
+directory, nested by source, task, stage and attempt number:
+
+```text
+<state>/attempts/<source>/<task id>/<stage>/<n>/
+    record.json    the attempt record, schema autonomous.attempt.v1
+    prompt.md      what the agent is asked to do
+    result.json    the result marker, written by the agent
+    capture.txt    the last lines of the session, when one was taken
+```
+
+A GitHub id contains a `/`, so its directory nests one level deeper:
+`<state>/attempts/github/owner/name#12/test/1/`. Writes go through a temporary
+file and a rename, so a reader never sees a partial record. A record that
+cannot be parsed makes `reconcile` `not-evaluable`, naming the file. The run
+lock lives in the same directory (see [The run lock](#the-run-lock)).
+
+### What it does to each attempt
+
+In order of attempt id, by state:
+
+- `pending` is resolved first (recovery, below).
+- `created` is started, with `--apply`, and becomes `started`.
+- `started` is observed, its two proofs are checked, and it is then finalised,
+  retained or only reported.
+- `completed` with a pending cleanup has its cleanup retried.
+- `retained`, `aborted`, `discarded` and `completed` without a cleanup are
+  only listed. A retained attempt is listed on every run until it is
+  discarded.
+
+The runner acts only on sessions whose id is recorded in an attempt. A session
+made by hand is never removed, started, stopped or renamed, even when it shares
+a worktree path with an attempt.
+
+**Observed state.** The session integration reduces what it sees to `open`,
+`exited` or `gone`, and for `open` whether a person is needed. For Agent of
+Empires:
+
+| AoE status                        | State    | Needs a person | Busy |
+| --------------------------------- | -------- | -------------- | ---- |
+| `running`, `starting`, `creating` | `open`   | no             | yes  |
+| `idle`, `unknown`                 | `open`   | no             | no   |
+| `waiting`                         | `open`   | yes            | no   |
+| `stopped`, `error`, `deleting`    | `exited` | no             | no   |
+| not found                         | `gone`   | no             | no   |
+
+An observed state never completes an attempt by itself. An idle agent, an
+exited process or a closed window is not success: a session that is `idle` and
+has no valid result marker stays `started` and is reported as idle without a
+result, and a `waiting` one is reported as open and needing a person, with
+nothing changed.
+
+**The two proofs.** A stage counts as completed only when both hold:
+
+1. A valid result marker exists. The agent writes `result.json` in the
+   attempt's directory. It is valid when it parses, has the schema
+   `autonomous.result.v1`, names that attempt's id and reports the outcome
+   `completed`. A missing marker, a malformed one, or one that names another
+   attempt counts as absent, and the report gives the reason.
+2. The stage's own check against the task's tracker holds. The task is read
+   again for it.
+
+A tracker changed by hand without a marker is not completion, and neither is a
+marker without the tracker check.
+
+**Finalisation.** An attempt whose proofs hold is finalised only when its
+session is `open` without being busy, `exited` or `gone`. A session that is
+`running`, `starting` or `creating` is left alone and the attempt is reported
+as `completing`. Finalising, in this order:
+
+1. Save the agent's conversation id in the record and a capture of the session
+   (200 lines) in the attempt's directory.
+2. Remove the session.
+3. Mark the attempt `completed`.
+4. Remove `taken` from the task, read back to confirm.
+
+The attempt's directory and the workspace are kept. A session that is already
+`gone` needs neither the capture nor the removal.
+
+**Retention.** A `started` attempt whose session is `exited` or `gone` while
+the proofs do not hold becomes `retained`, with the reason and the time; the
+last lines of the session are captured first when it still exists. A retained
+attempt keeps its session and `taken`, and no run retries it, relaunches it or
+removes it. The user discards it with `--discard` (see
+[Discard mode](#discard-mode)).
+
+**Pending cleanup.** When the session cannot be removed after both proofs hold,
+or `taken` cannot be removed afterwards, the attempt is marked `completed` with
+a pending cleanup that names the error. `taken` stays on the task, the stage
+does not run again for that task while the cleanup is pending, and every later
+`reconcile` with `--apply` retries the removal and then removes `taken`.
+
+**Recovery of a pending attempt.** A `pending` attempt is resolved before
+anything else, by looking for sessions that have the attempt's worktree path:
+
+| Sessions found | Result                                                                                |
+| -------------- | ------------------------------------------------------------------------------------- |
+| One            | The attempt adopts it, records its id and becomes `created`; nothing is created again |
+| None           | `taken` is removed from the task and the attempt becomes `aborted`                    |
+| Several        | The attempt is retained with that reason, and neither session is touched              |
+
+### Outcome and report
+
+The step is `advance` when nothing failed, with reasons that summarise the
+counts: attempts observed, adopted, aborted, retained as ambiguous, started,
+finalised, newly retained, cleanups cleared, then the totals retained,
+cleanups pending and attempts needing a person, and `nothing changed` when no
+attempt changed. With no record on disk the reason is `nothing to reconcile`
+and no session manager command is run. Without `--apply` the counts read
+`would-finalise`, `would-retain` and so on, and the attempt's `action` in the
+data is what would be done.
+
+The step is `not-evaluable` when the configuration did not load, a record
+cannot be parsed, or a session manager or tracker command fails for an attempt.
+That attempt keeps its state, the error is listed prefixed with the attempt's
+id, and the attempts already written stay written. A failed session removal or
+`taken` removal during finalisation is not one of these: it is a pending
+cleanup and the step stays `advance`.
+
+The text report prints one line per attempt, then the lists that need a
+person, then the reasons:
+
+```text
+[reconcile] advance (code)
+  linear:DOT-109:test:1  started → started  session waiting/open, needs a person  marker no result marker  observed
+  needs a person:
+    linear:DOT-109:test:1
+  reasons:
+    - 1 attempt observed
+    - 1 attempt needs a person
+    - nothing changed
+```
+
+Each line holds the id, the state before and after, the session's status and
+state with the flags `needs a person` and `busy`, the marker (`marker ok`, or
+the reason it is absent) and the action, with its detail after a colon.
+
+With `--json`, the step's `data` carries the same information:
+
+| Field        | Content                                                                                   |
+| ------------ | ----------------------------------------------------------------------------------------- |
+| `attempts`   | Every record, sorted by id, each `{ id, before, state, session, marker, action, detail }` |
+| `retained`   | The ids in state `retained` after the step                                                |
+| `cleanups`   | The ids `completed` with a cleanup still pending after the step                           |
+| `needsHuman` | The ids whose session is open and needs a person                                          |
+| `errors`     | The failed manager or tracker commands, one per attempt that hit one                      |
+
+In an attempt, `before` is the state read from disk and `state` the state
+after the step (the same without `--apply`). `session` is
+`{ state, status, busy, needsHuman }`, or `null` when the session was not
+observed. `marker` is `{ ok: true }`, `{ ok: false, reason }`, or `null` when
+it was not checked. `action` is one of `none`, `adopted`, `aborted`,
+`ambiguous`, `started`, `observed`, `completing`, `finalised`, `retained`,
+`cleanup-pending` and `cleanup-cleared`. `detail` is free text: the retention
+reason, the cleanup error, the adopted session id, or `null`.
+
+## The `launch` step
+
+Last in the run, after `select`. It takes the selected work unit, or the task
+given with `--task` (see [The supplied task](#the-supplied-task)), reads the
+task again through its source and applies the exclusions of the `select` step,
+so a task that carries `taken`, lacks a scope or entry label, is blocked or is
+split is reported as excluded. With `--stage`, the unsupported-stage exclusion
+is skipped. It then checks, in this order, and a failed check makes the step
+`wait` with that reason:
+
+1. The stage has an implementation registered. Only `test` is, so a selected
+   `grill-me` unit waits until DOT-110 registers its stage.
+2. The task read again carries no `taken`.
+3. No attempt of the task, at any stage, is `pending`, `created`, `started` or
+   `retained`, or `completed` with a pending cleanup.
+4. A repository is inferred (see
+   [Sessions and workspaces](#sessions-and-workspaces)).
+
+A task that cannot be read, a workspace root that cannot be listed, a record
+that cannot be parsed, or a failed `aoe group list` makes the step
+`not-evaluable`.
+
+Without `--apply` the step stops there. It also reads the AoE groups and names
+the session, which calls `claude -p`, so the report shows the group and the
+title it would use, and it is `advance`. It writes nothing and creates
+nothing.
+
+With `--apply` it then does, in this order:
+
+1. Prepare the workspace.
+2. Write the attempt record as `pending`, with the workspace path.
+3. Add `taken` to the task, read back to confirm.
+4. Write `prompt.md` in the attempt's directory.
+5. Create the session and record its id: the attempt becomes `created`.
+6. Start the session: the attempt becomes `started`.
+
+A failure at any point makes the step `not-evaluable` and leaves the record in
+the last state reached. A workspace that cannot be prepared leaves no record
+and no `taken`. A failure to add `taken` creates no session and leaves the
+attempt `pending`. A failure to create the session after `taken` was added
+leaves the attempt `pending`, and the next `reconcile` resolves it by
+[recovery](#what-it-does-to-each-attempt). The attempt number is the highest
+existing number for that task and stage, plus one.
+
+**The prompt.** The session is created with an initial instruction that names
+the absolute path of `prompt.md` and tells the agent to read it and follow it:
+no task text reaches the shell. The file carries the attempt id, the task
+(source, id, title, description), the stage's instructions, and the absolute
+path and exact content of the result marker. It is written before the session
+exists, beside the record and never in the workspace.
+
+**The stage contract.** A stage declares its id, its emoji, its prompt for a
+task, its agent arguments and its completion check against the task's tracker.
+Registering one needs no change to `reconcile` or `launch`. This change ships
+one, the test stage 🧪, whose prompt asks the agent only to write the result
+marker and stop, and whose tracker check always holds. It is never a task's
+next stage and runs only with `--task <source>:<id> --stage test`. Its agent
+arguments are `--model haiku --effort low` for `claude` and
+`-c model_reasoning_effort=low` for `codex`.
+
+The text report prints a header like the `select` step's, then the lines that
+apply:
+
+```text
+[launch] advance (llm)
+  task        linear → DOT-109 → Stage session manager
+  stage       test
+  input       supplied
+  repository  /home/me/WebstormProjects/dotfiles (from Dotfiles)
+  branch      feature/DOT-109-stage-session-manager
+  group       Dotfiles
+  title       auto 🧪 Stage sessions (DOT-109) (llm)
+  workspace   /home/me/WebstormProjects/dotfiles-worktrees/feature-DOT-109-stage-session-manager (created)
+  attempt     linear:DOT-109:test:1 started, session 336c83018fca4d13
+  reasons:
+    - launched linear:DOT-109:test:1 as "auto 🧪 Stage sessions (DOT-109)" in /home/me/WebstormProjects/dotfiles-worktrees/feature-DOT-109-stage-session-manager
+```
+
+Lines with nothing to show are left out. The title line says whether the name
+came from the LLM or the fallback, and the fallback's error when there was one.
+With `--json`, the step's `data` carries:
+
+| Field        | Content                                                                                               |
+| ------------ | ----------------------------------------------------------------------------------------------------- |
+| `task`       | `{ source, id, title }`, or `null` when nothing was selected                                          |
+| `stage`      | The stage launched, or `null`                                                                         |
+| `input`      | `selected`, `supplied`, or `null`                                                                     |
+| `excluded`   | The `select` exclusion that stopped the unit, or `null`                                               |
+| `repository` | `{ path, inferredFrom }`, the repository and the signal that matched, or `null`                       |
+| `branch`     | The branch, or `null`                                                                                 |
+| `group`      | The AoE group, or `null`                                                                              |
+| `title`      | `{ value, source, error }`: the session title, `llm` or `fallback`, and the fallback's reason         |
+| `workspace`  | `{ path, created }` with `--apply`, otherwise `null`                                                  |
+| `attempt`    | `{ id, state, session }` with `--apply`: the record's last state and the session id, otherwise `null` |
+
+The step's tier is `llm` when the LLM named the session and `code` otherwise.
+
+### The supplied task
+
+```text
+/autonomous:run --task <source>:<id> [--stage <stage>] [--account <provider-key>] [--force] [--json] [--apply] [--no-handoff]
+```
+
+With `--task`, only `reconcile`, `quota-gate` and `launch` run; `label-triage`
+and `select` do not. The task is given to `launch`, with `input` `supplied`,
+and the stage is `--stage`, or the task's next stage when it is omitted.
+`launch` applies every precondition as usual: a supplied task without a scope
+label waits with the exclusion's reason, and a task that is not an open task of
+an enabled source waits too.
+
+To validate the cycle end to end, launch the test stage, then run the same
+command again once the session has finished writing the marker; the second run
+finalises it:
+
+```bash
+bun plugins/autonomous/src/run.ts --account <key> --apply --task <source>:<id> --stage test
+```
+
+### The run lock
+
+A run holds `<state>/run.lock` for its whole duration. The file holds the
+process id and the start time. It is held even without `--apply`, because
+`reconcile` reads records that `--apply` runs rewrite, and discard mode holds it
+too. `--bootstrap-labels` and answer mode do not take it.
+
+A run that finds the lock held by a live process runs no step: it is
+`not-evaluable`, exits 3, and names the other run, as in
+`another run holds <state>/run.lock (pid 1234, started 2026-10-17T10:00:00.000Z)`.
+Nothing is written. A lock left by a process that no longer exists is
+reclaimed, and the run goes on. A run does not wait and does not retry.
+
+### The `taken` label
+
+The runner writes `taken` for the attempts it launches:
+
+- It adds `taken` at launch, after the workspace is prepared and the `pending`
+  record is written, and before the session is created. The write is read back.
+- It removes `taken` when the attempt is finalised, after its session is gone;
+  when it is discarded; and when a `pending` attempt is aborted because no
+  session was ever created. The removal is read back too.
+- It keeps `taken` while the attempt is `retained`, and while a completed
+  attempt's cleanup is pending.
+
+A forgotten `taken` is removed by hand.
+[ADR 0002](docs/adr/0002-remove-taken-on-finalisation.md) records why the
+runner removes it.
+
+## Discard mode
+
+```text
+/autonomous:run --apply --discard <attempt-id|source:id> [--release-workspace] [--json]
+```
+
+Discard mode discards an attempt and exits. It runs no step. It needs
+`--apply` and only combines with `--json` and `--release-workspace`. Quote the
+value when a GitHub id contains a `#`.
+
+`--discard` names an attempt by its id, `<source>:<task>:<stage>:<n>`, or a
+task as `<source>:<task>`. A task resolves to its single attempt that is not
+`completed`, `aborted` or `discarded`; when there is none or there are several,
+nothing changes and the report lists the attempt ids found. An attempt that is
+already `discarded`, `aborted` or `completed` without a pending cleanup, or that
+does not exist, is reported and nothing changes: only an attempt that still
+holds the task can be discarded, so a closed one never removes a `taken` that a
+later attempt holds.
+
+It does these, in this order, and stops at the first failure:
+
+1. Removes the attempt's session, when it has one and it still exists.
+2. Removes `taken` from the task, read back to confirm.
+3. Marks the attempt `discarded`, keeping its directory.
+4. With `--release-workspace`, releases the worktree. The branch is kept.
+
+Without `--release-workspace` the worktree is kept, so the next attempt of that
+task reuses it. A failure stops the run with exit 3 and names the error. What
+was already removed stays removed and is reported: when the session cannot be
+removed, nothing changes and `taken` stays; when `taken` cannot be removed
+after the session was, the reason says so.
+
+With `--json` the report is one document identified by
+`schema: "autonomous.discard.v1"`:
+
+```json
+{
+    "schema": "autonomous.discard.v1",
+    "startedAt": "2026-10-17T10:00:00.000Z",
+    "outcome": "advance",
+    "attempt": "linear:DOT-109:test:1",
+    "task": { "source": "linear", "id": "DOT-109" },
+    "found": [],
+    "removed": { "session": true, "taken": true, "workspace": false },
+    "reasons": [
+        "session 336c83018fca4d13 removed",
+        "taken removed from linear:DOT-109",
+        "attempt linear:DOT-109:test:1 discarded"
+    ]
+}
+```
+
+`outcome` is `advance` when the attempt was discarded and `not-evaluable`
+otherwise. `attempt` and `task` are `null` when nothing was resolved; `found`
+holds the attempt ids a task reference matched when it resolved to none or to
+several; `removed` says which of the session, `taken` and worktree were
+removed; `reasons` says what was done or why it stopped. When the configuration
+cannot be loaded, the error is printed on stderr and, with `--json`, the
+document also holds `config: { path, error }` and removes nothing. Without
+`--json` the text report holds the same information:
+
+```text
+autonomous discard — started 2026-10-17T10:00:00.000Z
+outcome: advance
+attempt: linear:DOT-109:test:1
+task: linear:DOT-109
+removed: session yes, taken yes, workspace no
+reasons:
+  session 336c83018fca4d13 removed
+  taken removed from linear:DOT-109
+  attempt linear:DOT-109:test:1 discarded
+```
+
+When another run holds the [run lock](#the-run-lock), nothing changes: the
+report is `not-evaluable` with the lock's error as its only reason.
+
+The exit code is 0 for `advance` and 3 otherwise.
+
+## Sessions and workspaces
+
+Sessions and workspaces sit behind two contracts, each with one implementation:
+replacing one touches one module and its tests, not the steps or the stages.
+
+**`SessionManager`.** It creates a session without starting it, starts it,
+observes it (reduced to `open`, `exited` or `gone`, with whether it needs a
+person and whether it is busy), finds the sessions that have a worktree path
+(only to recover a `pending` attempt), lists the groups, captures the session's
+last lines, and removes it permanently with the worktree kept. Agent of Empires,
+through the `aoe` CLI, is the one implementation. A session is identified by
+the id `aoe add` prints, confirmed by reading the session back; the title never
+identifies one, and the worktree path is only the recovery key. The tool is
+`claude` or `codex`; any other `sessions.tool` is rejected by the configuration.
+
+**`WorkspaceManager`.** It prepares a worktree for a repository and a branch,
+and says whether it created it, and it releases one. worktrunk, through `wt`,
+is the one implementation. When the branch already has a worktree, it is
+reused; otherwise the branch is created from the repository's default branch.
+Releasing removes the worktree and keeps the branch. The runner does not wait
+for the background hooks of `wt`, such as a dependency install, so a stage that
+needs dependencies says so in its prompt.
+
+**The title.** A managed session is titled `auto <emoji> <name> (<task id>)`,
+where the emoji is the stage's and the name is at most four English words that
+an LLM infers from the task's title, description and labels, treated as
+untrusted data. It uses `naming.model` and `naming.effort`, through the same
+`claude -p` helper as the judgement and the comparison, with a 10 s limit. When
+the inference fails, times out or returns something invalid, the name is the
+first words of the task title instead, and the report says the fallback was
+used and why.
+
+**The group.** The session gets the project's AoE group, derived from the
+repository directory's name as `ghd-aoe` does: an existing group whose last
+path segment compares equal wins, otherwise the humanised directory name
+(`dotfiles` becomes `Dotfiles`). Names compare case-insensitively with
+`/`, `_` and `-` read as spaces. The groups come from `aoe group list --json`.
+
+**The branch.** `feature/<task id>-<slug>`, where the slug is the task title
+lower-cased, with runs of other characters collapsed to `-` and cut to 40
+characters. In a GitHub id the `/` and `#` become `-`. A task has one branch,
+and its worktree is reused across attempts and stages.
+
+**The repository.** It is inferred from the task against the git repositories
+directly under `workspace.root`. The signals are, by source:
+
+| Source | Signal                                                         |
+| ------ | -------------------------------------------------------------- |
+| GitHub | The repository name in the task id (`name` in `owner/name#12`) |
+| Linear | The project name, read by the Linear reader; none when unset   |
+| Beads  | Every label that is not a contract label                       |
+
+Names compare as for the group. Exactly one repository must match: with none or
+several, the task is not launched and the reason lists the signals and the
+matches. The report says which signal matched.
+
+**What the runner never does.**
+
+- It never trashes a session: it removes it with `aoe remove --purge`, because
+  AoE's trash keeps a removed session listed as `error`. The agent's
+  conversation id and a capture are saved first, and the conversation itself
+  stays where the agent keeps it.
+- It never removes a worktree except on `--discard --release-workspace`, never
+  asks AoE to delete one, and never deletes a branch.
+- It never creates a session with a permission bypass: there is no `--yolo`,
+  whatever the tool.
+- It never touches a session whose id is not recorded in an attempt.
+
 ## The quota gate
 
-For the selected account the gate reads OpenUsage and evaluates the `session`
+Second in the run, after `reconcile`, so a stage that completed is recorded even
+when the gate says to wait. For the selected account the gate reads OpenUsage and evaluates the `session`
 and `weekly` windows: used amount, limit, window length, reset time, and the
 usage projected to the end of the window as OpenUsage's `Pace.evaluate`
 computes it. Other resources, such as `fable`, are listed but not evaluated.
@@ -790,6 +1360,15 @@ the tier changes: judged tasks and the step itself record `llm` today, and
 the swap must change that too. An applied answer is written with tier
 `human`, which no report renders: a human decided it, not a rule or the
 judgement.
+
+The `reconcile` and `launch` steps' tiering:
+
+| Part                                                                           | Tier                      |
+| ------------------------------------------------------------------------------ | ------------------------- |
+| records, lock, recovery, observation, proofs, finalisation, retention, cleanup | code                      |
+| preconditions, inference, branch, workspace, `taken`, creation, start          | code                      |
+| session name                                                                   | llm, with a code fallback |
+| discard                                                                        | code                      |
 
 The `select` step's tiering:
 

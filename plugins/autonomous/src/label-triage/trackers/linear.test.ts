@@ -231,6 +231,31 @@ describe("linearTracker", () => {
         });
     });
 
+    describe("removeLabel", () => {
+        it("removes one label incrementally with the exact argv", async () => {
+            const exec = fakeExec(() => ({ ok: true, stdout: "" }));
+            const tracker = linearTracker(exec, CONFIG);
+            const result = await tracker.removeLabel("DOT-82", "taken");
+
+            expect(exec.calls).toEqual([["issue", "update", "DOT-82", "--remove-label", "taken"]]);
+            expect(result).toEqual({ ok: true, value: undefined });
+        });
+
+        it("maps the unauthenticated case naming linear auth login", async () => {
+            const exec = fakeExec(() => ({
+                ok: false,
+                error: "linear failed: Run `linear auth login` to authenticate.",
+            }));
+            const tracker = linearTracker(exec, CONFIG);
+            const result = await tracker.removeLabel("DOT-82", "taken");
+
+            expect(result).toEqual({
+                ok: false,
+                error: "linear issue update DOT-82 --remove-label taken: Linear CLI is not authenticated, run `linear auth login`",
+            });
+        });
+    });
+
     describe("listLabels", () => {
         it("lists labels with the exact argv, workspace and team scopes", async () => {
             const exec = fakeExec(() => ({

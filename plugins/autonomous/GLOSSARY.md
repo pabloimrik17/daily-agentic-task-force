@@ -1,8 +1,8 @@
 # autonomous
 
 The autonomous loop: it reads the work the user defined in Linear, Beads and
-GitHub, checks it against the label contract, and will eventually delegate it
-to agents.
+GitHub, checks it against the label contract, and launches one managed session per
+attempt to advance a stage.
 
 The split of today's `entry` group (`AFK`, `HITL`, `grill-me`) into autonomy
 and stage labels, stage prompts and transitions are agreed but not implemented
@@ -44,6 +44,57 @@ _Avoid_: claimed, locked
 A work unit that every verifiable constraint permits now. Selection compares
 candidates; it never chooses anything else.
 
+### Sessions
+
+**Attempt**:
+One launch of a managed session for one stage of one task, identified as
+`<source>:<task>:<stage>:<n>`, where `n` counts the attempts of that task and
+stage from 1. Its record lives in the local state directory, outside every
+tracker and every workspace.
+_Avoid_: session
+
+**Managed session**:
+A session of the session manager whose id is recorded in an attempt. The runner
+acts only on managed sessions; a session made by hand is never touched, even
+when it shares a workspace path with an attempt.
+
+**Stage contract**:
+What a stage declares: its id, its emoji, its prompt for a task, its agent
+arguments and its completion check against the task's tracker. A stage can be
+launched only when an implementation is registered for its id.
+
+**Workspace**:
+The git worktree of a task's repository, on the branch
+`feature/<task id>-<slug>`. It is reused across attempts and stages, and the
+runner removes it only when an attempt is discarded with `--release-workspace`.
+It never deletes the branch.
+
+**Result marker**:
+The file `result.json` that the agent writes in the attempt's directory, with
+the schema `autonomous.result.v1`, the attempt's id and the outcome
+`completed`. It is valid only when it parses, names that attempt and reports
+`completed`; any other marker counts as absent. It is one of the two proofs
+that a stage completed, the other being the stage's own check against the
+tracker.
+
+**Retained attempt**:
+A started attempt whose session exited, or is gone, without the stage having
+completed. It keeps its session and the taken label, and no run retries,
+relaunches or removes it. Every run lists it until a person discards it.
+_Avoid_: failed attempt
+
+**Pending cleanup**:
+A completed attempt whose session could not be removed. The taken label stays
+on the task, the stage does not run again for it, and every later reconcile
+retries the removal and then removes the label.
+
+**Run lock**:
+The lock in the state directory that a run holds while it reads or writes
+attempts, so that only one run at a time uses a state directory. A run that
+finds it held by a live process is not evaluable. It has nothing to do with the
+taken label.
+_Avoid_: taken label
+
 ### Labels
 
 **Autonomy label**:
@@ -58,14 +109,18 @@ starts at `proposal`, and a task in `grill-me` moves to `proposal` when the
 grill ends.
 
 **Taken label**:
-`taken`: marks a taken task for as long as an agent or a person advances it,
-and is removed when they stop. It is neither a property nor a stage.
+`taken`: marks a taken task for as long as an agent or a person advances it.
+The runner adds it when it launches a managed session and removes it when the
+attempt is finalised or discarded, or when no session was ever created; a
+retained attempt keeps it. It is neither a property nor a stage.
 _Avoid_: lock
 
 **Stage prompt**:
 The instructions the runner gives the agent session it opens for a task's
-stage. The `grill-me` prompt asks for a grill that ends with the ticket updated
-and shown to the human.
+stage. The runner writes them to a prompt file in the attempt's directory, and
+the session's initial instruction tells the agent to read that file. The
+`grill-me` prompt asks for a grill that ends with the ticket updated and shown
+to the human.
 
 **Transition**:
 A task leaving its stage: its stage label is replaced and, when the stage

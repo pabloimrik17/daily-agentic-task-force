@@ -197,6 +197,30 @@ describe("beadsTracker", () => {
         });
     });
 
+    describe("removeLabel", () => {
+        it("removes one label with the exact argv", async () => {
+            const exec = fakeExec(() => ({ ok: true, stdout: "" }));
+            const tracker = beadsTracker(exec, CONFIG);
+            const result = await tracker.removeLabel("agentic-task-kc2.29", "taken");
+
+            expect(exec.calls).toEqual([
+                ["-C", "/repo/.beads", "label", "remove", "agentic-task-kc2.29", "taken"],
+            ]);
+            expect(result).toEqual({ ok: true, value: undefined });
+        });
+
+        it("reports a CLI error naming the command", async () => {
+            const exec = fakeExec(() => ({ ok: false, error: "bd failed: boom" }));
+            const tracker = beadsTracker(exec, CONFIG);
+            const result = await tracker.removeLabel("x", "taken");
+
+            expect(result).toEqual({
+                ok: false,
+                error: "bd label remove x taken: bd failed: boom",
+            });
+        });
+    });
+
     describe("listLabels", () => {
         it("lists all labels with the exact argv", async () => {
             const exec = fakeExec(() => ({

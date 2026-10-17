@@ -15,6 +15,7 @@ interface CandidateDeps {
     config: AutonomousConfig;
     labelledThisRun: ReadonlySet<string>;
     detail: (task: WorkTask) => Promise<TrackerResult<WorkTask>>;
+    stage?: string; // supplied by `--stage`: the next stage's support is not checked
 }
 
 export function labelledThisRun(results: readonly StepResult[]): Set<string> {
@@ -46,7 +47,7 @@ function exclusionBeforeDetail(task: WorkTask, deps: CandidateDeps): Exclusion |
     if (deps.labelledThisRun.has(taskKey(task.source, task.id))) {
         return "labelled-this-run";
     }
-    if (!isSupported(nextStage(task.labels))) {
+    if (deps.stage === undefined && !isSupported(nextStage(task.labels))) {
         return "unsupported-stage";
     }
     if (task.blockedBy !== null && task.blockedBy.length > 0) {

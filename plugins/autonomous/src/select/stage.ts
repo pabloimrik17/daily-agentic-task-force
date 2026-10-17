@@ -3,14 +3,14 @@
 // `SUPPORTED_STAGES` once the proposal stage runs; nothing else depends on how
 // the stage is derived.
 
-import type { Stage } from "./types.ts";
+import type { StageName } from "./types.ts";
 
-const SUPPORTED_STAGES: readonly Stage[] = ["grill-me"];
+const SUPPORTED_STAGES: readonly StageName[] = ["grill-me"];
 
-export function nextStage(labels: readonly string[]): Stage {
+export function nextStage(labels: readonly string[]): StageName {
     return labels.includes("grill-me") ? "grill-me" : "proposal";
 }
 
-export function isSupported(stage: Stage): boolean {
+export function isSupported(stage: StageName): boolean {
     return SUPPORTED_STAGES.includes(stage);
 }

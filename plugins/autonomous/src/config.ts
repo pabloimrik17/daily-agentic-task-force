@@ -2,7 +2,9 @@
 // file"): per-user parts of the label contract live in one JSON file outside
 // the plugin, validated strictly. A missing file, a missing required field, a
 // mistyped field or an unknown field is an error naming the path, never a
-// default.
+// default. The one exception is the optional `sessions`, `workspace` and
+// `naming` blocks: a key absent from the file takes the shipped default, and
+// the load records which keys did (design D13).
 
 import { readFileSync } from "node:fs";
 import { homedir } from "node:os";
@@ -15,6 +17,7 @@ import {
     isScope,
     type Scope,
 } from "./label-contract/contract.ts";
+import type { SessionTool } from "./sessions/manager.ts";
 import {
     boolean,
     type Json,
@@ -33,6 +36,12 @@ export const EXAMPLE_PATH = join(
     dirname(fileURLToPath(import.meta.url)),
     "..",
     "config.example.json",
+);
+
+export const DEFAULTS_PATH = join(
+    dirname(fileURLToPath(import.meta.url)),
+    "..",
+    "config.defaults.json",
 );
 
 export type { ContractLabel, Scope };
@@ -67,15 +76,37 @@ export interface SelectionConfig {
     effort: string;
 }
 
+export interface SessionsConfig {
+    tool: SessionTool;
+    profile: string | null; // the session manager's profile; null for its default
+    binary: string | null; // the agent binary or wrapper; null for the tool's own
+}
+
+export interface WorkspaceConfig {
+    root: string; // `~` already expanded with HOME at load
+}
+
+export type NamingConfig = SelectionConfig;
+
 export interface AutonomousConfig {
     schema: "autonomous.config.v1";
     sources: { linear: LinearConfig; beads: BeadsConfig; github: GithubConfig };
     judgement: JudgementConfig;
     selection: SelectionConfig;
+    sessions: SessionsConfig;
+    workspace: WorkspaceConfig;
+    naming: NamingConfig;
+}
+
+// The shipped values of the optional blocks, as the JSON file holds them.
+export interface ConfigDefaults {
+    sessions: Json;
+    workspace: Json;
+    naming: Json;
 }
 
 export type ConfigLoad =
-    | { ok: true; path: string; config: AutonomousConfig }
+    | { ok: true; path: string; config: AutonomousConfig; defaulted: string[] }
     | { ok: false; path: string; error: string };
 
 export function resolveConfigPath(env: Record<string, string | undefined>): string {
@@ -87,11 +118,14 @@ export function resolveConfigPath(env: Record<string, string | undefined>): stri
     return join(home, ".config", "autonomous", "config.json");
 }
 
+// `defaulted` lists the keys that took a shipped value, as dotted paths.
 export function parseConfig(
     input: unknown,
-): { ok: true; value: AutonomousConfig } | { ok: false; error: string } {
+    defaults: ConfigDefaults = SHIPPED_DEFAULTS,
+    home: string = homedir(),
+): { ok: true; value: AutonomousConfig; defaulted: string[] } | { ok: false; error: string } {
     try {
-        return { ok: true, value: config(input) };
+        return { ok: true, ...config(input, defaults, home) };
     } catch (error) {
         if (error instanceof ParseError) {
             return {
@@ -127,32 +161,159 @@ export function loadConfig(
     } catch (error) {
         return { ok: false, path, error: `${path}: ${(error as Error).message}` };
     }
-    const parsed = parseConfig(json);
+    const parsed = parseConfig(json, SHIPPED_DEFAULTS, env.HOME ?? homedir());
     if (!parsed.ok) {
         return { ok: false, path, error: `${path}: ${parsed.error}` };
     }
-    return { ok: true, path, config: parsed.value };
+    return { ok: true, path, config: parsed.value, defaulted: parsed.defaulted };
 }
 
-function config(input: unknown): AutonomousConfig {
+function config(
+    input: unknown,
+    defaults: ConfigDefaults,
+    home: string,
+): { value: AutonomousConfig; defaulted: string[] } {
     const root = object(input, "$");
-    rejectUnknownKeys(root, ["schema", "sources", "judgement", "selection"], "$");
+    rejectUnknownKeys(
+        root,
+        ["schema", "sources", "judgement", "selection", "sessions", "workspace", "naming"],
+        "$",
+    );
     const schema = string(root, "schema", "$");
     if (schema !== CONFIG_SCHEMA) {
         throw new ParseError(`$.schema is "${schema}", expected "${CONFIG_SCHEMA}"`);
     }
     const sources = object(root.sources, "$.sources");
     rejectUnknownKeys(sources, ["linear", "beads", "github"], "$.sources");
+    const { defaulted, ...optionalBlocks } = optionalConfig(root, defaults, home);
     return {
-        schema: CONFIG_SCHEMA,
-        sources: {
-            linear: linearConfig(object(sources.linear, "$.sources.linear"), "$.sources.linear"),
-            beads: beadsConfig(object(sources.beads, "$.sources.beads"), "$.sources.beads"),
-            github: githubConfig(object(sources.github, "$.sources.github"), "$.sources.github"),
+        value: {
+            schema: CONFIG_SCHEMA,
+            sources: {
+                linear: linearConfig(
+                    object(sources.linear, "$.sources.linear"),
+                    "$.sources.linear",
+                ),
+                beads: beadsConfig(object(sources.beads, "$.sources.beads"), "$.sources.beads"),
+                github: githubConfig(
+                    object(sources.github, "$.sources.github"),
+                    "$.sources.github",
+                ),
+            },
+            judgement: judgementConfig(object(root.judgement, "$.judgement"), "$.judgement"),
+            selection: selectionConfig(object(root.selection, "$.selection"), "$.selection"),
+            ...optionalBlocks,
         },
-        judgement: judgementConfig(object(root.judgement, "$.judgement"), "$.judgement"),
-        selection: selectionConfig(object(root.selection, "$.selection"), "$.selection"),
+        defaulted,
     };
+}
+
+const SESSIONS_KEYS = ["tool", "profile", "binary"];
+const WORKSPACE_KEYS = ["root"];
+const NAMING_KEYS = ["model", "effort"];
+
+// Design D13: the user's block (or none), unknown keys rejected, each missing
+// key filled from the shipped defaults and recorded. Validation comes after.
+function overlay(
+    root: Json,
+    block: keyof ConfigDefaults,
+    keys: readonly string[],
+    defaults: ConfigDefaults,
+    defaulted: string[],
+): Json {
+    const path = `$.${block}`;
+    const given = block in root ? object(root[block], path) : {};
+    rejectUnknownKeys(given, keys, path);
+    const filled: Json = { ...given };
+    for (const key of keys) {
+        if (!(key in given)) {
+            filled[key] = defaults[block][key];
+            defaulted.push(`${block}.${key}`);
+        }
+    }
+    return filled;
+}
+
+function optionalConfig(
+    root: Json,
+    defaults: ConfigDefaults,
+    home: string,
+): Pick<AutonomousConfig, "sessions" | "workspace" | "naming"> & { defaulted: string[] } {
+    const defaulted: string[] = [];
+    const sessions = overlay(root, "sessions", SESSIONS_KEYS, defaults, defaulted);
+    const workspace = overlay(root, "workspace", WORKSPACE_KEYS, defaults, defaulted);
+    const naming = overlay(root, "naming", NAMING_KEYS, defaults, defaulted);
+    return {
+        sessions: sessionsConfig(sessions, "$.sessions"),
+        workspace: workspaceConfig(workspace, "$.workspace", home),
+        naming: modelSettings(naming, "$.naming"),
+        defaulted,
+    };
+}
+
+const SESSION_TOOLS: readonly string[] = ["claude", "codex"];
+
+function isSessionTool(value: string): value is SessionTool {
+    return SESSION_TOOLS.includes(value);
+}
+
+function nullableString(entry: Json, key: string, path: string): string | null {
+    const value = entry[key];
+    if (value === null) {
+        return null;
+    }
+    if (typeof value !== "string") {
+        throw new ParseError(`${path}.${key} must be a string or null`);
+    }
+    if (value === "") {
+        throw new ParseError(`${path}.${key} must not be empty`);
+    }
+    return value;
+}
+
+function sessionsConfig(entry: Json, path: string): SessionsConfig {
+    const tool = string(entry, "tool", path);
+    if (!isSessionTool(tool)) {
+        throw new ParseError(`${path}.tool must be "claude" or "codex"`);
+    }
+    return {
+        tool,
+        profile: nullableString(entry, "profile", path),
+        binary: nullableString(entry, "binary", path),
+    };
+}
+
+function workspaceConfig(entry: Json, path: string, home: string): WorkspaceConfig {
+    const root = string(entry, "root", path);
+    if (root === "") {
+        throw new ParseError(`${path}.root must not be empty`);
+    }
+    return { root: expandHome(root, home) };
+}
+
+function expandHome(value: string, home: string): string {
+    if (value === "~") {
+        return home;
+    }
+    return value.startsWith("~/") ? join(home, value.slice(2)) : value;
+}
+
+// The defaults file ships with the plugin, so one that does not parse is a
+// defect of the plugin, not user input: it throws.
+function readDefaults(): ConfigDefaults {
+    try {
+        const root = object(JSON.parse(readFileSync(DEFAULTS_PATH, "utf8")), "$");
+        rejectUnknownKeys(root, ["sessions", "workspace", "naming"], "$");
+        const defaults = {
+            sessions: object(root.sessions, "$.sessions"),
+            workspace: object(root.workspace, "$.workspace"),
+            naming: object(root.naming, "$.naming"),
+        };
+        optionalConfig({}, defaults, "/");
+        return defaults;
+    } catch (error) {
+        throw new Error(`${DEFAULTS_PATH}: ${(error as Error).message}`, { cause: error });
+    }
 }
 
 function sourceRules(entry: Json, path: string): SourceRules {
@@ -264,3 +425,6 @@ function selectionConfig(entry: Json, path: string): SelectionConfig {
     rejectUnknownKeys(entry, ["model", "effort"], path);
     return modelSettings(entry, path);
 }
+
+// Last, so every constant the validators read is initialised first.
+const SHIPPED_DEFAULTS = readDefaults();
