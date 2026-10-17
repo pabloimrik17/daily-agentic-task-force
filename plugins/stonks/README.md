@@ -12,7 +12,7 @@ exist for the inputs that were pasted or photographed: IBKR's MCP server for
 positions and orders, and `gws` for the tracking sheet. This plugin moves the
 procedure into code: the engine makes every decision, and the LLM only drives
 the browser and calls MCP tools. The domain terms (mirror, tracking sheet,
-Estado, Watchlist candidate, keeper) are defined in [`CONTEXT.md`](CONTEXT.md).
+Estado, Watchlist candidate, keeper) are defined in [`GLOSSARY.md`](GLOSSARY.md).
 
 ## Install
 
@@ -149,7 +149,7 @@ Every part is tiered: code first, the LLM last. No part needs a typed judgement,
 Phase 1 compares each mirror with IBKR and the tracking sheet with the
 Cartera Viva. Every result is a finding with a severity; the findings marked
 "yes" under Gate affect the watchlist's composition and pause the run once
-after the report (see the glossary in `CONTEXT.md` for the terms).
+after the report (see the glossary in `GLOSSARY.md` for the terms).
 
 | Check | Meaning                                                                                                                                                                                    | Severity                | Gate |
 | ----- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ----------------------- | ---- |

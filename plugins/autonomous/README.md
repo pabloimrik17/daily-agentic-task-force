@@ -20,7 +20,7 @@ detect a change.
 
 The plugin's terms (step, stage, work unit, machine scope, taken task,
 candidate, handoff, question, round, answer mode) are defined in
-[`CONTEXT.md`](CONTEXT.md). [ADR 0001](docs/adr/0001-properties-persist-stages-replace.md)
+[`GLOSSARY.md`](GLOSSARY.md). [ADR 0001](docs/adr/0001-properties-persist-stages-replace.md)
 records the label model agreed for DOT-110: properties persist, stages
 replace. It is not implemented yet.
 
