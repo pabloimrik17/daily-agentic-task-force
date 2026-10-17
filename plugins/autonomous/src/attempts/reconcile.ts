@@ -237,9 +237,13 @@ async function abort(r: Reconciler, record: AttemptRecord): Promise<Reconciled> 
     if (!r.apply) {
         return reported(record, record, { action: "aborted" });
     }
-    const removed = await removeTaken(r.trackers[record.task.source], record.task.id);
-    if (!removed.ok) {
-        return failed(record, removed.error);
+    // `taken` is written after the pending record: an attempt whose add failed
+    // never had it, and there is nothing to remove from the tracker.
+    if (record.taken.added !== null) {
+        const removed = await removeTaken(r.trackers[record.task.source], record.task.id);
+        if (!removed.ok) {
+            return failed(record, removed.error);
+        }
     }
     const after = await save(r, record, {
         state: "aborted",

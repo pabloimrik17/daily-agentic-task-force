@@ -413,6 +413,7 @@ describe("reconcile: finalisation", () => {
             "linear:readTask:DOT-109",
             `capture ${SESSION} 200`,
             `remove ${SESSION}`,
+            "linear:readTask:DOT-109",
             "linear:removeLabel:DOT-109:taken",
             "linear:readTask:DOT-109",
         ]);
@@ -522,6 +523,7 @@ describe("reconcile: pending cleanup", () => {
         expect(calls).toEqual([
             `observe ${SESSION}`,
             `remove ${SESSION}`,
+            "linear:readTask:DOT-109",
             "linear:removeLabel:DOT-109:taken",
             "linear:readTask:DOT-109",
         ]);
@@ -545,6 +547,7 @@ describe("reconcile: pending cleanup", () => {
         const result = await reconcileStep.run(context({ sessions, trackers: linear(calls) }));
         expect(calls).toEqual([
             `observe ${SESSION}`,
+            "linear:readTask:DOT-109",
             "linear:removeLabel:DOT-109:taken",
             "linear:readTask:DOT-109",
         ]);
@@ -661,6 +664,7 @@ describe("reconcile: recovery of a pending attempt", () => {
         expect(result.data.attempts[0]).toMatchObject({ state: "aborted", action: "aborted" });
         expect(calls).toEqual([
             `findByPath ${PATH}`,
+            "linear:readTask:DOT-109",
             "linear:removeLabel:DOT-109:taken",
             "linear:readTask:DOT-109",
         ]);
@@ -669,13 +673,27 @@ describe("reconcile: recovery of a pending attempt", () => {
         expect(after.taken.removed).toBe(AT);
     });
 
+    it("aborts without touching the tracker when taken was never added", async () => {
+        await given(pending({ taken: { added: null, removed: null } }));
+        const calls: string[] = [];
+        const sessions = fakeSessions({ calls, findByPath: () => ok([]) });
+        const result = await reconcileStep.run(context({ sessions, trackers: linear(calls) }));
+        expect(result.data.attempts[0]).toMatchObject({ state: "aborted", action: "aborted" });
+        expect(calls).toEqual([`findByPath ${PATH}`]);
+        expect((await stored()).state).toBe("aborted");
+    });
+
     it("aborts without asking the manager when the record holds no session", async () => {
         await given(pending({ session: null }));
         const calls: string[] = [];
         const sessions = fakeSessions({ calls });
         const result = await reconcileStep.run(context({ sessions, trackers: linear(calls) }));
         expect(result.data.attempts[0]?.action).toBe("aborted");
-        expect(calls).toEqual(["linear:removeLabel:DOT-109:taken", "linear:readTask:DOT-109"]);
+        expect(calls).toEqual([
+            "linear:readTask:DOT-109",
+            "linear:removeLabel:DOT-109:taken",
+            "linear:readTask:DOT-109",
+        ]);
     });
 
     it("stays pending and is not evaluable when taken cannot be removed", async () => {

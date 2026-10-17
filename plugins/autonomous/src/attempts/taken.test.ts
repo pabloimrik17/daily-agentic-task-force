@@ -104,11 +104,22 @@ describe("addTaken", () => {
 });
 
 describe("removeTaken", () => {
+    it("treats an absent taken as removed without issuing the command", async () => {
+        const linear = tracker({ labels: ["work", "AFK"] }, "linear");
+
+        expect(await removeTaken(linear, "DOT-109")).toEqual({ ok: true });
+        expect(linear.calls).toEqual(["readTask:DOT-109"]);
+    });
+
     it("removes taken, leaves every other label and confirms the read-back", async () => {
         const beads = tracker({ labels: ["work", "grill-me", TAKEN] });
 
         expect(await removeTaken(beads, "kc2.29")).toEqual({ ok: true });
-        expect(beads.calls).toEqual(["removeLabel:kc2.29:taken", "readTask:kc2.29"]);
+        expect(beads.calls).toEqual([
+            "readTask:kc2.29",
+            "removeLabel:kc2.29:taken",
+            "readTask:kc2.29",
+        ]);
         const read = await beads.readTask("kc2.29");
         expect(read.ok && read.value.labels).toEqual(["work", "grill-me"]);
     });
@@ -123,7 +134,7 @@ describe("removeTaken", () => {
         });
     });
 
-    it("reports a failing command without reading the task", async () => {
+    it("reports a failing command after the read that found taken", async () => {
         const linear = tracker(
             { labels: [TAKEN], removeError: "linear issue update: boom" },
             "linear",
@@ -134,7 +145,7 @@ describe("removeTaken", () => {
             error: "linear issue update: boom",
             labels: null,
         });
-        expect(linear.calls).toEqual(["removeLabel:DOT-109:taken"]);
+        expect(linear.calls).toEqual(["readTask:DOT-109", "removeLabel:DOT-109:taken"]);
     });
 
     it("reports a failing read-back with no labels found", async () => {

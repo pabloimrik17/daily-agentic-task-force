@@ -117,6 +117,7 @@ describe("discardAttempt by attempt id", () => {
         expect(calls).toEqual([
             "observe ef3fde3ca69c4b8b",
             "remove ef3fde3ca69c4b8b",
+            "linear:readTask:DOT-109",
             "linear:removeLabel:DOT-109:taken",
             "linear:readTask:DOT-109",
         ]);
@@ -160,6 +161,7 @@ describe("discardAttempt by attempt id", () => {
         expect(calls).toEqual([
             "observe ef3fde3ca69c4b8b",
             "remove ef3fde3ca69c4b8b",
+            "linear:readTask:DOT-109",
             "linear:removeLabel:DOT-109:taken",
             "linear:readTask:DOT-109",
             "released /w/dotfiles feature/DOT-109-stage-session-manager",
