@@ -26,8 +26,16 @@ import { claudeSelection } from "./select/compare.ts";
 import { cliWork } from "./select/readers/cli.ts";
 import { selectStep } from "./select/step.ts";
 import type { SelectionExec, WorkReaderFactory } from "./select/types.ts";
+import { aoeSessions } from "./sessions/aoe.ts";
+import type { SessionManagerFactory } from "./sessions/manager.ts";
+import { resolveStateDir } from "./attempts/state.ts";
+import type { WorkspaceManagerFactory } from "./workspace/manager.ts";
+import { worktrunkWorkspace } from "./workspace/worktrunk.ts";
 
 const STEPS: readonly Step[] = [quotaGateStep, labelTriageStep, selectStep];
+
+// Design D10: the session name inference never holds a launch for long.
+const NAMING_TIMEOUT_MS = 10_000;
 
 export interface MainDeps {
     now: () => Date;
@@ -38,6 +46,9 @@ export interface MainDeps {
     chezmoi: Exec;
     work: WorkReaderFactory;
     selection: SelectionExec;
+    sessions: SessionManagerFactory;
+    workspace: WorkspaceManagerFactory;
+    naming: Exec;
     stdout: (text: string) => void;
     stderr: (text: string) => void;
     steps?: readonly Step[];
@@ -71,6 +82,10 @@ export async function main(argv: readonly string[], deps: MainDeps): Promise<num
                 chezmoi: deps.chezmoi,
                 work: deps.work,
                 selection: deps.selection,
+                sessions: deps.sessions,
+                workspace: deps.workspace,
+                naming: deps.naming,
+                state: resolveStateDir(deps.env),
             },
         });
         const report = buildReport(startedAt, run, parsed.args);
@@ -130,6 +145,9 @@ if (import.meta.main) {
         chezmoi: execCommand("chezmoi"),
         work: cliWork,
         selection: claudeSelection(execCommand("claude", PRINT_TIMEOUT_MS)),
+        sessions: aoeSessions,
+        workspace: worktrunkWorkspace,
+        naming: execCommand("claude", NAMING_TIMEOUT_MS),
         stdout: (text) => process.stdout.write(`${text}\n`),
         stderr: (text) => process.stderr.write(`${text}\n`),
     });

@@ -1,3 +1,5 @@
+import type { Source } from "./config.ts";
+
 // One answer passed back to a question of a handoff: the question's id and the
 // option values chosen for it (design D3).
 export interface Answer {
@@ -7,6 +9,10 @@ export interface Answer {
 
 export interface RunArgs {
     account: string | undefined;
+    task: { source: Source; id: string } | undefined; // --task <source>:<id> (design D15)
+    stage: string | undefined; // --stage, only with --task
+    discard: string | undefined; // --discard <attempt or task id>
+    releaseWorkspace: boolean;
     force: boolean;
     json: boolean;
     apply: boolean;
@@ -43,6 +49,10 @@ const VALUED = new Map<string, (args: RunArgs, value: string | undefined) => str
 export function parseArgs(argv: readonly string[]): ParseArgsResult {
     const args: RunArgs = {
         account: undefined,
+        task: undefined,
+        stage: undefined,
+        discard: undefined,
+        releaseWorkspace: false,
         force: false,
         json: false,
         apply: false,

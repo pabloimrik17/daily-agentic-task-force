@@ -53,6 +53,13 @@ function deps(steps: readonly Step[] | undefined, overrides: Partial<MainDeps> =
             throw new Error("unused");
         },
         selection: () => Promise.resolve({ ok: false, error: "unused" }),
+        sessions: () => {
+            throw new Error("unused");
+        },
+        workspace: () => {
+            throw new Error("unused");
+        },
+        naming: () => Promise.resolve({ ok: false, error: "unused" }),
         stdout: (t) => out.push(t),
         stderr: (t) => err.push(t),
         ...(steps === undefined ? {} : { steps }),

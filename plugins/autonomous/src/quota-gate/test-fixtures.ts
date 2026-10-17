@@ -61,6 +61,10 @@ export function context(exec: OpenUsageExec, args: Partial<RunArgs> = {}): RunCo
     return {
         args: {
             account: undefined,
+            task: undefined,
+            stage: undefined,
+            discard: undefined,
+            releaseWorkspace: false,
             force: false,
             json: false,
             apply: false,
@@ -83,6 +87,14 @@ export function context(exec: OpenUsageExec, args: Partial<RunArgs> = {}): RunCo
                 throw new Error("unused");
             },
             selection: () => Promise.resolve({ ok: false, error: "unused" }),
+            sessions: () => {
+                throw new Error("unused");
+            },
+            workspace: () => {
+                throw new Error("unused");
+            },
+            naming: () => Promise.resolve({ ok: false, error: "unused" }),
+            state: "/unused/state",
         },
     };
 }

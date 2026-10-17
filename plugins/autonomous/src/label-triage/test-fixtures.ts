@@ -141,6 +141,10 @@ export function triageContext(options: {
     return {
         args: {
             account: undefined,
+            task: undefined,
+            stage: undefined,
+            discard: undefined,
+            releaseWorkspace: false,
             force: false,
             json: false,
             apply: false,
@@ -161,6 +165,14 @@ export function triageContext(options: {
                 throw new Error("the triage never reads work");
             },
             selection: () => Promise.reject(new Error("the triage never selects")),
+            sessions: () => {
+                throw new Error("the triage never opens sessions");
+            },
+            workspace: () => {
+                throw new Error("the triage never prepares workspaces");
+            },
+            naming: () => Promise.reject(new Error("the triage never names sessions")),
+            state: "/unused/state",
         },
     };
 }

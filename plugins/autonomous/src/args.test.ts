@@ -4,6 +4,10 @@ import { parseArgs, type RunArgs } from "./args.ts";
 
 const DEFAULTS: RunArgs = {
     account: undefined,
+    task: undefined,
+    stage: undefined,
+    discard: undefined,
+    releaseWorkspace: false,
     force: false,
     json: false,
     apply: false,

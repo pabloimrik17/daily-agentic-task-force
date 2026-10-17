@@ -2,8 +2,8 @@
 
 ## 1. Branch and glossary
 
-- [ ] 1.1 Verify the branch is on `origin/main` (`git log --oneline origin/main..HEAD` shows no commits yet) and that `bun run test`, `bun run typecheck` and `bun run lint:fallow` pass before any change. Leave the one-line `bun.lock` diff alone.
-- [ ] 1.2 Rename `plugins/autonomous/CONTEXT.md` and `plugins/stonks/CONTEXT.md` to `GLOSSARY.md` with `git mv`, add a root `GLOSSARY-MAP.md` listing both contexts (design D18), and update every link in both plugin READMEs, `plugins/autonomous/commands/run.md`, ADR 0001 and the archived changes' references are left as history. Verify with `bun run lint:markdown` and `grep -rn CONTEXT.md plugins README.md` returning nothing outside `openspec/`.
+- [x] 1.1 Verify the branch is on `origin/main` (`git log --oneline origin/main..HEAD` shows no commits yet) and that `bun run test`, `bun run typecheck` and `bun run lint:fallow` pass before any change. Leave the one-line `bun.lock` diff alone.
+- [x] 1.2 Rename `plugins/autonomous/CONTEXT.md` and `plugins/stonks/CONTEXT.md` to `GLOSSARY.md` with `git mv`, add a root `GLOSSARY-MAP.md` listing both contexts (design D18), and update every link in both plugin READMEs, `plugins/autonomous/commands/run.md`, ADR 0001 and the archived changes' references are left as history. Verify with `bun run lint:markdown` and `grep -rn CONTEXT.md plugins README.md` returning nothing outside `openspec/`.
 - [ ] 1.3 Add the stage-session terms to `plugins/autonomous/GLOSSARY.md` under a new "Sessions" heading: attempt, managed session, stage contract, workspace, result marker, retained attempt, pending cleanup, run lock, with `_Avoid_` lines (session for attempt; lock for taken). Verify with `bun run lint:markdown`.
 
 ## 2. Configuration and trackers
