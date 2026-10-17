@@ -48,7 +48,7 @@
 
 - [x] 8.1 Run the full toolchain: `bun run test`, `typecheck`, `lint:eslint`, `lint:knip`, `lint:fallow`, `bunx fallow audit`, `lint:oxfmt`, `lint:markdown` and `lint:marketplace`, plus `openspec validate add-autonomous-stage-sessions --strict`. Verify that everything passes within the fallow complexity budget.
 - [x] 8.2 Run the cycle by hand against this machine's AoE and worktrunk with `AUTONOMOUS_STATE` pointing at a scratchpad directory and `AUTONOMOUS_CONFIG` at a scratchpad copy of the user config: (1) `--task <source>:<id> --stage test` without `--apply` and read the dry run; (2) the same with `--apply`, then check `aoe list --json` shows the session with the expected title and group, the task carries `taken`, and the worktree exists; (3) once the agent wrote the marker, a plain run with `--apply` finalises it: session gone from `aoe list`, `taken` removed, worktree kept; (4) a second `--apply --task … --stage test` launch, then `aoe remove --purge` of its session by hand to simulate a crash, and a run that retains it with a capture; (5) `--apply --discard <attempt>` and the task free again. Record each step's output in `openspec/changes/add-autonomous-stage-sessions/evidence/manual-stage-session.md`, with work-tracker titles left out.
-- [ ] 8.3 Update DOT-109 in Linear with the PR, the evidence file and the release note (`feat(autonomous):`, a minor release), and the DOT-82 and DOT-110 links to the renamed glossary. Verify with `linear issue view DOT-109 --json`.
+- [x] 8.3 Update DOT-109 in Linear with the PR, the evidence file and the release note (`feat(autonomous):`, a minor release), and the DOT-82 and DOT-110 links to the renamed glossary. Verify with `linear issue view DOT-109 --json`.
 
 ## Workflow follow-up
 
