@@ -1,15 +1,25 @@
 // Discard mode (spec stage-sessions, "Discard mode", "Discard by task id";
 // design D11): the one way a person releases an attempt. In order it removes
-// the session, removes `taken` from the task and marks the attempt discarded;
-// with `--release-workspace` it then releases the worktree. The first failure
-// stops the discard, and the report says what was already done.
+// the session (saving its capture and the agent's conversation id first),
+// removes `taken` from the task and marks the attempt discarded; with
+// `--release-workspace` it then releases the worktree. The first failure stops
+// the discard, and the report says what was already done.
+
+import { writeFile } from "node:fs/promises";
 
 import type { RunArgs } from "../args.ts";
 import type { Trackers } from "../label-triage/trackers/tracker.ts";
 import type { SessionManager } from "../sessions/manager.ts";
 import type { WorkspaceManager } from "../workspace/manager.ts";
 import { type AttemptRecord, parseAttemptId, parseTaskRef, type TaskRef } from "./record.ts";
-import { attemptDir, listRecords, readRecord, recordPath, writeRecord } from "./state.ts";
+import {
+    attemptDir,
+    capturePath,
+    listRecords,
+    readRecord,
+    recordPath,
+    writeRecord,
+} from "./state.ts";
 import { removeTaken } from "./taken.ts";
 
 export const DISCARD_SCHEMA = "autonomous.discard.v1";
@@ -31,8 +41,9 @@ export interface DiscardReport {
     found: string[]; // attempt ids found when the task reference resolved to 0 or several
     removed: { session: boolean; taken: boolean; workspace: boolean };
     reasons: string[];
-    // Present only when the configuration failed to load, leaving nothing to discard.
-    config?: { path: string; error: string };
+    // `path` and `error` only when the configuration failed to load, leaving nothing
+    // to discard; `defaulted` only when keys took a shipped default, as in the run report.
+    config?: { path?: string; error?: string; defaulted?: string[] };
 }
 
 type Resolved =
@@ -44,10 +55,13 @@ interface Discarding {
     deps: DiscardDeps;
     report: DiscardReport;
     releaseWorkspace: boolean;
+    conversation: string | null; // the agent's conversation id, saved before the session goes
 }
 
 // A step returns the reason it failed, or null when it did its part.
 type DiscardStep = (discarding: Discarding) => Promise<string | null>;
+
+const CAPTURE_LINES = 200;
 
 const messageOf = (error: unknown) => (error instanceof Error ? error.message : String(error));
 
@@ -83,7 +97,13 @@ export async function discardAttempt(
     const { record } = target;
     report.attempt = record.id;
     report.task = { source: record.task.source, id: record.task.id };
-    const discarding = { record, deps, report, releaseWorkspace: args.releaseWorkspace };
+    const discarding = {
+        record,
+        deps,
+        report,
+        releaseWorkspace: args.releaseWorkspace,
+        conversation: null,
+    };
     const steps: DiscardStep[] = [removeSession, removeTakenLabel, markDiscarded, releaseWorktree];
     for (const step of steps) {
         const failure = await step(discarding);
@@ -99,6 +119,10 @@ export async function discardAttempt(
 // With --json a configuration that fails to load still yields one document.
 export function unconfiguredDiscard(path: string, error: string, startedAt: Date): DiscardReport {
     return { ...blank(startedAt), reasons: [error], config: { path, error } };
+}
+
+export function withDefaults(report: DiscardReport, defaulted: string[]): DiscardReport {
+    return defaulted.length === 0 ? report : { ...report, config: { defaulted } };
 }
 
 async function resolve(value: string, state: string): Promise<Resolved> {
@@ -120,8 +144,14 @@ async function byAttempt(id: string, state: string): Promise<Resolved> {
         const missing = (error as { cause?: { code?: string } }).cause?.code === "ENOENT";
         return unresolved(missing ? `attempt ${id} not found` : messageOf(error));
     }
-    return record.state === "discarded"
-        ? unresolved(`attempt ${id} is already discarded`)
+    if (record.state === "discarded") {
+        return unresolved(`attempt ${id} is already discarded`);
+    }
+    // A closed attempt no longer holds `taken`: a later attempt of the task may.
+    // Only a completed attempt with a pending cleanup still owes its removal.
+    const closed = record.state === "aborted" || (record.state === "completed" && !record.cleanup);
+    return closed
+        ? unresolved(`attempt ${id} is ${record.state}; nothing to discard`)
         : { ok: true, record };
 }
 
@@ -150,7 +180,23 @@ async function byTask(ref: TaskRef, value: string, state: string): Promise<Resol
     return unresolved(reason, found);
 }
 
-async function removeSession({ record, deps, report }: Discarding): Promise<string | null> {
+// The capture beside the record, while the session still exists; a failure is
+// reported, never fatal.
+async function saveCapture({ record, deps, report }: Discarding, id: string): Promise<void> {
+    const captured = await deps.sessions.capture(id, CAPTURE_LINES);
+    if (!captured.ok) {
+        report.reasons.push(`capture of session ${id} failed: ${captured.error}`);
+        return;
+    }
+    try {
+        await writeFile(capturePath(attemptDir(deps.state, record.id)), captured.value);
+    } catch (error) {
+        report.reasons.push(`saving the capture of session ${id} failed: ${messageOf(error)}`);
+    }
+}
+
+async function removeSession(discarding: Discarding): Promise<string | null> {
+    const { record, deps, report } = discarding;
     const id = record.session?.id ?? null;
     if (id === null) {
         report.reasons.push("no session recorded");
@@ -164,6 +210,8 @@ async function removeSession({ record, deps, report }: Discarding): Promise<stri
         report.reasons.push(`session ${id} was already gone`);
         return null;
     }
+    discarding.conversation = observed.value.agentSessionId;
+    await saveCapture(discarding, id);
     const removal = await deps.sessions.remove(id);
     if (!removal.ok) {
         return `removing session ${id} failed: ${removal.error}; nothing was changed`;
@@ -185,10 +233,20 @@ async function removeTakenLabel({ record, deps, report }: Discarding): Promise<s
     return null;
 }
 
-async function markDiscarded({ record, deps, report }: Discarding): Promise<string | null> {
+async function markDiscarded({
+    record,
+    deps,
+    report,
+    conversation,
+}: Discarding): Promise<string | null> {
     const at = deps.now().toISOString();
+    const { session } = record;
     const discarded: AttemptRecord = {
         ...record,
+        session:
+            session === null
+                ? null
+                : { ...session, agentSessionId: conversation ?? session.agentSessionId },
         state: "discarded",
         history: [...record.history, { state: "discarded", at }],
         taken: { ...record.taken, removed: at },
@@ -231,6 +289,9 @@ export function renderDiscardText(report: DiscardReport): string {
     return [
         `autonomous discard — started ${report.startedAt}`,
         `outcome: ${report.outcome}`,
+        ...(report.config?.defaulted === undefined
+            ? []
+            : [`defaults: ${report.config.defaulted.join(", ")}`]),
         ...(report.attempt === null ? [] : [`attempt: ${report.attempt}`]),
         ...(report.task === null ? [] : [`task: ${report.task.source}:${report.task.id}`]),
         `removed: session ${yesNo(session)}, taken ${yesNo(taken)}, workspace ${yesNo(workspace)}`,

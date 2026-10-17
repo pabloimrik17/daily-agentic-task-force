@@ -203,8 +203,9 @@ const noSession = (record: AttemptRecord) => `record in state ${record.state} na
 // --- pending: recovery (spec "Recovery of a pending attempt") -----------------
 
 async function reconcilePending(r: Reconciler, record: AttemptRecord): Promise<Reconciled> {
-    // No session block: the launch stopped before naming, so nothing could have been created.
-    if (record.session === null) {
+    // The launch writes the session block, then `taken`, then creates the session:
+    // without either, it stopped before creating anything.
+    if (record.session === null || record.taken.added === null) {
         return abort(r, record);
     }
     const found = await r.sessions.findByPath(record.workspace.path);
@@ -435,23 +436,20 @@ async function retain(r: Reconciler, target: Target, failure: string | null): Pr
 // either fails the attempt stays `completed` with the error and `taken` on the
 // task, and every later run retries what is left (reconcileCleanup).
 async function finalise(r: Reconciler, target: Target): Promise<Reconciled> {
-    const { record, current, id, observed, parts } = target;
-    const notes = await saveCapture(r, current, target);
-    const session = current.session && {
-        ...current.session,
-        agentSessionId: observed.agentSessionId,
-    };
+    const { record, id, observed, parts } = target;
+    const notes = await saveCapture(r, target.current, target);
+    const current = await saveConversation(r, target.current, observed);
     const removed = await removeUnlessGone(r, id, observed);
     if (!removed.ok) {
         const cleanup = { pending: true as const, error: removed.error };
-        const after = await save(r, current, { state: "completed", session, cleanup });
+        const after = await save(r, current, { state: "completed", cleanup });
         return reported(record, after, {
             ...parts,
             action: "cleanup-pending",
             detail: joined([...notes, removed.error]),
         });
     }
-    const completed = await save(r, current, { state: "completed", session });
+    const completed = await save(r, current, { state: "completed" });
     const after = await releaseTaken(r, completed);
     const action = after.cleanup === null ? "finalised" : "cleanup-pending";
     return reported(record, after, {
@@ -459,6 +457,22 @@ async function finalise(r: Reconciler, target: Target): Promise<Reconciled> {
         action,
         detail: joined([...notes, ...(after.cleanup === null ? [] : [after.cleanup.error])]),
     });
+}
+
+// The agent's conversation id, written before the session is removed so a crash
+// after the removal still leaves the pointer; a gone session reports none, and
+// the id saved by an earlier run stays.
+function saveConversation(
+    r: Reconciler,
+    record: AttemptRecord,
+    observed: Observed,
+): Promise<AttemptRecord> {
+    const { session } = record;
+    if (session === null) {
+        return Promise.resolve(record);
+    }
+    const agentSessionId = observed.agentSessionId ?? session.agentSessionId;
+    return save(r, record, { session: { ...session, agentSessionId } });
 }
 
 // `taken` removed with a read-back; a failure leaves (or keeps) the cleanup pending.

@@ -12,13 +12,14 @@ import {
     renderDiscardJson,
     renderDiscardText,
     unconfiguredDiscard,
+    withDefaults,
 } from "./attempts/discard.ts";
 import { launchStep } from "./attempts/launch.ts";
 import { acquireLock } from "./attempts/lock.ts";
 import { reconcileStep } from "./attempts/reconcile.ts";
 import { resolveStateDir } from "./attempts/state.ts";
 import { PRINT_TIMEOUT_MS } from "./claude-print.ts";
-import { type AutonomousConfig, type ConfigLoad, loadConfig } from "./config.ts";
+import { type ConfigLoad, loadConfig } from "./config.ts";
 import { type Exec, execCommand } from "./exec.ts";
 import {
     bootstrapLabels,
@@ -186,17 +187,17 @@ function context(
     };
 }
 
-// The configuration of a mode that runs no step, or null when it failed to
-// load: the error then goes to stderr and, with --json, the mode's own
+// The loaded configuration of a mode that runs no step, or null when it failed
+// to load: the error then goes to stderr and, with --json, the mode's own
 // document holding it (`unconfigured`) to stdout.
 function modeConfig(
     args: RunArgs,
     deps: MainDeps,
     unconfigured: (path: string, error: string) => string,
-): AutonomousConfig | null {
+): Extract<ConfigLoad, { ok: true }> | null {
     const load = loadConfig(deps.env);
     if (load.ok) {
-        return load.config;
+        return load;
     }
     deps.stderr(load.error);
     if (args.json) {
@@ -208,12 +209,13 @@ function modeConfig(
 // Design D9: the bootstrap needs the configuration and the trackers but none of
 // the step machinery, and it is not gated by quota.
 async function runBootstrap(args: RunArgs, deps: MainDeps): Promise<number> {
-    const config = modeConfig(args, deps, (path, error) =>
+    const load = modeConfig(args, deps, (path, error) =>
         renderBootstrapJson(unconfiguredBootstrap(path, error, deps.now())),
     );
-    if (config === null) {
+    if (load === null) {
         return exitCodeFor("not-evaluable");
     }
+    const { config } = load;
     const report = await bootstrapLabels(deps.trackers(config), config, deps.now());
     deps.stdout(args.json ? renderBootstrapJson(report) : renderBootstrapText(report));
     return exitCodeFor(report.outcome);
@@ -223,12 +225,13 @@ async function runBootstrap(args: RunArgs, deps: MainDeps): Promise<number> {
 // and the trackers but runs no step, no quota gate and no judgement.
 async function runAnswers(args: RunArgs, steps: readonly Step[], deps: MainDeps): Promise<number> {
     const startedAt = deps.now();
-    const config = modeConfig(args, deps, (path, error) =>
+    const load = modeConfig(args, deps, (path, error) =>
         renderAnswersJson(unconfiguredAnswers(path, error, startedAt)),
     );
-    if (config === null) {
+    if (load === null) {
         return exitCodeFor("not-evaluable");
     }
+    const { config } = load;
     const ctx = { config, trackers: deps.trackers(config) };
     const report = await applyAnswers(steps, args.answers, ctx, startedAt);
     deps.stdout(args.json ? renderAnswersJson(report) : renderAnswersText(report));
@@ -239,14 +242,16 @@ async function runAnswers(args: RunArgs, steps: readonly Step[], deps: MainDeps)
 // rewrites an attempt, so it holds the run lock.
 async function runDiscard(args: RunArgs, deps: MainDeps): Promise<number> {
     const startedAt = deps.now();
-    const config = modeConfig(args, deps, (path, error) =>
+    const load = modeConfig(args, deps, (path, error) =>
         renderDiscardJson(unconfiguredDiscard(path, error, startedAt)),
     );
-    if (config === null) {
+    if (load === null) {
         return exitCodeFor("not-evaluable");
     }
+    const { config, defaulted } = load;
     const state = resolveStateDir(deps.env);
-    const print = (report: DiscardReport) => {
+    const print = (done: DiscardReport) => {
+        const report = withDefaults(done, defaulted);
         deps.stdout(args.json ? renderDiscardJson(report) : renderDiscardText(report));
         return exitCodeFor(report.outcome);
     };

@@ -1,4 +1,4 @@
-import { rmSync } from "node:fs";
+import { existsSync, readFileSync, rmSync } from "node:fs";
 import { writeFile } from "node:fs/promises";
 
 import { afterEach, describe, expect, it } from "vitest";
@@ -13,9 +13,10 @@ import {
     renderDiscardJson,
     renderDiscardText,
     unconfiguredDiscard,
+    withDefaults,
 } from "./discard.ts";
 import type { AttemptRecord } from "./record.ts";
-import { attemptDir, readRecord, recordPath, writeRecord } from "./state.ts";
+import { attemptDir, capturePath, readRecord, recordPath, writeRecord } from "./state.ts";
 import { fakeSessions, fakeWorkspace, record, tempState } from "./test-fixtures.ts";
 
 const STARTED = new Date("2026-10-17T13:00:00.000Z");
@@ -70,6 +71,7 @@ async function setup(options: Setup = {}) {
     const sessions = fakeSessions({
         calls,
         observe: () => Promise.resolve({ ok: true, value: OPEN }),
+        capture: () => Promise.resolve({ ok: true, value: "the pane" }),
         remove: () => Promise.resolve({ ok: true, value: undefined }),
         ...options.sessions,
     });
@@ -116,12 +118,60 @@ describe("discardAttempt by attempt id", () => {
         ]);
         expect(calls).toEqual([
             "observe ef3fde3ca69c4b8b",
+            "capture ef3fde3ca69c4b8b 200",
             "remove ef3fde3ca69c4b8b",
             "linear:readTask:DOT-109",
             "linear:removeLabel:DOT-109:taken",
             "linear:readTask:DOT-109",
         ]);
         expect(deps.workspace.calls).toEqual([]);
+    });
+
+    it("saves the capture and the conversation id before it removes a live session", async () => {
+        const { state, calls, deps } = await setup({
+            sessions: {
+                observe: () =>
+                    Promise.resolve({ ok: true, value: { ...OPEN, agentSessionId: "conv-7" } }),
+            },
+        });
+
+        await discardAttempt(args("linear:DOT-109:test:1"), deps, STARTED);
+
+        expect(calls.slice(0, 3)).toEqual([
+            "observe ef3fde3ca69c4b8b",
+            "capture ef3fde3ca69c4b8b 200",
+            "remove ef3fde3ca69c4b8b",
+        ]);
+        const file = capturePath(attemptDir(state, "linear:DOT-109:test:1"));
+        expect(readFileSync(file, "utf8")).toBe("the pane");
+        expect((await read(state)).session?.agentSessionId).toBe("conv-7");
+    });
+
+    it("keeps an earlier conversation id when the session reports none", async () => {
+        const original = record();
+        const session = original.session && { ...original.session, agentSessionId: "conv-1" };
+        const { state, deps } = await setup({ records: [{ ...original, session }] });
+
+        await discardAttempt(args("linear:DOT-109:test:1"), deps, STARTED);
+
+        expect((await read(state)).session?.agentSessionId).toBe("conv-1");
+    });
+
+    it("discards anyway when the capture fails, and says so", async () => {
+        const { state, calls, deps } = await setup({
+            sessions: { capture: () => Promise.resolve({ ok: false, error: "aoe: no pane" }) },
+        });
+
+        const report = await discardAttempt(args("linear:DOT-109:test:1"), deps, STARTED);
+
+        expect(report.outcome).toBe("advance");
+        expect(report.removed.session).toBe(true);
+        expect(report.reasons).toContain(
+            "capture of session ef3fde3ca69c4b8b failed: aoe: no pane",
+        );
+        expect(calls).toContain("remove ef3fde3ca69c4b8b");
+        expect(existsSync(capturePath(attemptDir(state, "linear:DOT-109:test:1")))).toBe(false);
+        expect((await read(state)).state).toBe("discarded");
     });
 
     it("keeps the record's directory and everything but the state, history and taken", async () => {
@@ -160,6 +210,7 @@ describe("discardAttempt by attempt id", () => {
         );
         expect(calls).toEqual([
             "observe ef3fde3ca69c4b8b",
+            "capture ef3fde3ca69c4b8b 200",
             "remove ef3fde3ca69c4b8b",
             "linear:readTask:DOT-109",
             "linear:removeLabel:DOT-109:taken",
@@ -296,6 +347,37 @@ describe("discardAttempt by attempt id", () => {
         expect(report.outcome).toBe("not-evaluable");
         expect(report.reasons).toEqual(["attempt linear:DOT-109:test:1 is already discarded"]);
         expect(calls).toEqual([]);
+    });
+
+    it.each(["completed", "aborted"] as const)(
+        "refuses a %s attempt without a pending cleanup and changes nothing",
+        async (state) => {
+            const original = record({ state, session: null });
+            const { state: dir, calls, deps } = await setup({ records: [original] });
+
+            const report = await discardAttempt(args("linear:DOT-109:test:1"), deps, STARTED);
+
+            expect(report.outcome).toBe("not-evaluable");
+            expect(report.reasons).toEqual([
+                `attempt linear:DOT-109:test:1 is ${state}; nothing to discard`,
+            ]);
+            expect(calls).toEqual([]);
+            expect(await read(dir)).toEqual(original);
+        },
+    );
+
+    it("still discards a completed attempt with a pending cleanup", async () => {
+        const { state, deps } = await setup({
+            records: [
+                record({ state: "completed", cleanup: { pending: true, error: "aoe: busy" } }),
+            ],
+        });
+
+        const report = await discardAttempt(args("linear:DOT-109:test:1"), deps, STARTED);
+
+        expect(report.outcome).toBe("advance");
+        expect(report.removed).toMatchObject({ session: true, taken: true });
+        expect((await read(state)).state).toBe("discarded");
     });
 
     it("names a malformed record instead of calling it missing", async () => {
@@ -450,5 +532,24 @@ describe("reports", () => {
             config: { path: "/c.json", error: "bad config" },
         });
         expect(renderDiscardText(report)).toContain("  bad config");
+    });
+
+    it("shows the defaulted keys in the text and the JSON, and nothing when there are none", async () => {
+        const { deps } = await setup();
+        const report = await discardAttempt(args("linear:DOT-109:test:1"), deps, STARTED);
+
+        const defaulted = withDefaults(report, ["sessions.tool", "workspace.root"]);
+        expect(renderDiscardText(defaulted).split("\n").slice(0, 3)).toEqual([
+            "autonomous discard — started 2026-10-17T13:00:00.000Z",
+            "outcome: advance",
+            "defaults: sessions.tool, workspace.root",
+        ]);
+        expect(JSON.parse(renderDiscardJson(defaulted))).toMatchObject({
+            config: { defaulted: ["sessions.tool", "workspace.root"] },
+        });
+
+        expect(withDefaults(report, [])).toBe(report);
+        expect(renderDiscardText(report)).not.toContain("defaults:");
+        expect(JSON.parse(renderDiscardJson(report))).not.toHaveProperty("config");
     });
 });

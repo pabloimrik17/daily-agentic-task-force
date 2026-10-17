@@ -216,6 +216,10 @@ describe("parseArgs", () => {
             ["--task", "linear:A-1", "--stage", "test", "--stage", "other"],
             "--stage given more than once",
         ],
+        [
+            ["--task", "linear:A-1", "--stage", "grill-me"],
+            "--stage grill-me is not a registered stage (test)",
+        ],
         [["--stage", "test"], "--stage requires --task"],
         [
             ["--task", "linear:A-1", "--bootstrap-labels"],

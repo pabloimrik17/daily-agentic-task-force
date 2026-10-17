@@ -1164,6 +1164,42 @@ describe("main --discard", () => {
             config: { path: missing, error },
         });
     });
+
+    it("shows the defaulted keys in the text and the JSON, and neither for a full config", async () => {
+        const bare = join(dir, "bare.json");
+        writeFileSync(
+            bare,
+            JSON.stringify({
+                ...config(),
+                sessions: undefined,
+                workspace: undefined,
+                naming: undefined,
+            }),
+        );
+        const defaulted = ["sessions.tool", "sessions.profile", "sessions.binary"];
+
+        const text = await discardDeps({ AUTONOMOUS_CONFIG: bare });
+        await main(argv(), text.d);
+        expect((text.out[0] as string).split("\n").slice(0, 3)).toEqual([
+            `autonomous discard — started ${NOW.toISOString()}`,
+            "outcome: advance",
+            expect.stringMatching(/^defaults: sessions\.tool, sessions\.profile, sessions\.binary/),
+        ]);
+
+        const json = await discardDeps({ AUTONOMOUS_CONFIG: bare });
+        await main(argv("--json"), json.d);
+        expect(
+            (JSON.parse(json.out[0] as string) as { config: { defaulted: string[] } }).config
+                .defaulted,
+        ).toEqual(expect.arrayContaining(defaulted));
+
+        const full = await discardDeps();
+        await main(argv("--json"), full.d);
+        expect(JSON.parse(full.out[0] as string)).not.toHaveProperty("config");
+        const fullText = await discardDeps();
+        await main(argv(), fullText.d);
+        expect(fullText.out[0]).not.toContain("defaults:");
+    });
 });
 
 describe("main configuration defaults", () => {

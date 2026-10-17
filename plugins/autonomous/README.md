@@ -1172,7 +1172,10 @@ value when a GitHub id contains a `#`.
 task as `<source>:<task>`. A task resolves to its single attempt that is not
 `completed`, `aborted` or `discarded`; when there is none or there are several,
 nothing changes and the report lists the attempt ids found. An attempt that is
-already `discarded`, or that does not exist, is reported and nothing changes.
+already `discarded`, `aborted` or `completed` without a pending cleanup, or that
+does not exist, is reported and nothing changes: only an attempt that still
+holds the task can be discarded, so a closed one never removes a `taken` that a
+later attempt holds.
 
 It does these, in this order, and stops at the first failure:
 

@@ -35,7 +35,7 @@ import {
     resultPath,
     writeRecord,
 } from "./state.ts";
-import { addTaken } from "./taken.ts";
+import { addTaken, TAKEN } from "./taken.ts";
 
 const LAUNCH = "launch";
 
@@ -173,12 +173,24 @@ async function plan(
     if (!groups.ok) {
         return broken(groups.error);
     }
-    const { task, stage, repository } = checked.value;
+    const { task, stage, records, repository } = checked.value;
     const naming = await nameSession(ctx.io.naming, config.naming, task, stage);
-    const branch = branchFor(task);
+    const branch = branchOf(records, task);
     const group = groupFor(repository.path, groups.value);
     Object.assign(data, { branch, group, title: titleOf(naming) });
     return pass({ ...checked.value, branch, group, naming, sessions });
+}
+
+// One branch per task: the first attempt derives it from the title, every
+// later attempt, at any stage, reuses the latest record's.
+function branchOf(records: readonly AttemptRecord[], task: WorkTask): string {
+    const latest = records
+        .filter((record) => record.task.source === task.source && record.task.id === task.id)
+        .reduce<AttemptRecord | null>(
+            (best, record) => (best === null || record.attempt > best.attempt ? record : best),
+            null,
+        );
+    return latest?.workspace.branch ?? branchFor(task);
 }
 
 function titleOf(naming: Naming): LaunchData["title"] {
@@ -252,7 +264,7 @@ async function preconditions(
         return wait(`stage ${read.stage} has no implementation`);
     }
     // Already an exclusion of readUnit; kept so the order of D9 reads here.
-    if (task.labels.includes("taken")) {
+    if (task.labels.includes(TAKEN)) {
         return wait(`${task.source}:${task.id} carries taken`);
     }
     const records = await readRecords(state);

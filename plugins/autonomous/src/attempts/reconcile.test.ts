@@ -400,11 +400,15 @@ describe("reconcile: finalisation", () => {
         await given(record());
         await marker();
         const calls: string[] = [];
+        let onDisk: AttemptRecord | null = null;
         const sessions = fakeSessions({
             calls,
             observe: () => ok(seen("idle")),
             capture: () => ok("the last lines"),
-            remove: () => ok(undefined),
+            remove: () => {
+                onDisk = JSON.parse(rawRecord()) as AttemptRecord;
+                return ok(undefined);
+            },
         });
         const fakes = linear(calls);
         const result = await reconcileStep.run(context({ sessions, trackers: fakes }));
@@ -419,6 +423,9 @@ describe("reconcile: finalisation", () => {
         ]);
         expect(result.outcome).toBe("advance");
         expect(result.reasons).toEqual(["1 attempt observed", "1 finalised"]);
+        const beforeRemove = onDisk as AttemptRecord | null;
+        expect(beforeRemove?.state).toBe("started");
+        expect(beforeRemove?.session?.agentSessionId).toBe(AGENT);
         const after = await stored();
         expect(after.state).toBe("completed");
         expect(after.history.at(-1)).toEqual({ state: "completed", at: AT });
@@ -439,6 +446,14 @@ describe("reconcile: finalisation", () => {
         expect(result.data.attempts[0]?.action).toBe("finalised");
         expect(calls.filter((call) => !call.startsWith("linear:"))).toEqual([`observe ${SESSION}`]);
         expect((await stored()).state).toBe("completed");
+    });
+
+    it("keeps the conversation id saved earlier when the session is already gone", async () => {
+        await given(record({ session: { ...record().session!, agentSessionId: AGENT } }));
+        await marker();
+        const sessions = fakeSessions({ observe: () => ok(seen("gone")) });
+        await reconcileStep.run(context({ sessions, trackers: linear([]) }));
+        expect((await stored()).session?.agentSessionId).toBe(AGENT);
     });
 
     it("keeps finalising when the capture fails, naming it in the detail", async () => {
@@ -673,13 +688,14 @@ describe("reconcile: recovery of a pending attempt", () => {
         expect(after.taken.removed).toBe(AT);
     });
 
-    it("aborts without touching the tracker when taken was never added", async () => {
+    it("aborts a pending attempt whose taken was never added without calling findByPath", async () => {
         await given(pending({ taken: { added: null, removed: null } }));
         const calls: string[] = [];
-        const sessions = fakeSessions({ calls, findByPath: () => ok([]) });
+        const sessions = fakeSessions({ calls, findByPath: () => ok([SESSION]) });
         const result = await reconcileStep.run(context({ sessions, trackers: linear(calls) }));
         expect(result.data.attempts[0]).toMatchObject({ state: "aborted", action: "aborted" });
-        expect(calls).toEqual([`findByPath ${PATH}`]);
+        expect(sessions.calls).toEqual([]);
+        expect(calls).toEqual([]);
         expect((await stored()).state).toBe("aborted");
     });
 

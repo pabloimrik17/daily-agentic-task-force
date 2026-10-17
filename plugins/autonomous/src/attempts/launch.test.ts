@@ -497,6 +497,56 @@ describe("launch: the sequence", () => {
     });
 });
 
+describe("launch: the branch of a task", () => {
+    const EARLIER = "feature/DOT-109-an-earlier-title";
+    const earlier = () =>
+        record({
+            state: "discarded",
+            workspace: { ...record().workspace, branch: EARLIER },
+        });
+
+    it("reuses the branch of an earlier attempt in the dry run", async () => {
+        await writeRecord(state, earlier());
+        const { ctx } = setup({ args: { apply: false } });
+
+        const result = await launchStep.run(ctx);
+
+        expect(result.reasons[0]).toContain(`on ${EARLIER} as`);
+        expect(result.data.branch).toBe(EARLIER);
+    });
+
+    it("prepares the branch of an earlier attempt, not one derived from the new title", async () => {
+        await writeRecord(state, earlier());
+        const { ctx, workspace } = setup();
+
+        await launchStep.run(ctx);
+
+        expect(workspace.calls).toEqual([`prepare ${join(root, "dotfiles")} ${EARLIER}`]);
+        expect((await readAttempt("linear:DOT-109:test:2")).workspace.branch).toBe(EARLIER);
+    });
+
+    it("takes the branch from the highest attempt number of the task, at any stage", async () => {
+        await writeRecord(state, earlier());
+        await writeRecord(
+            state,
+            record({
+                id: "linear:DOT-109:proposal:2",
+                stage: "proposal",
+                attempt: 2,
+                state: "discarded",
+                workspace: { ...record().workspace, branch: "feature/DOT-109-latest" },
+            }),
+        );
+        const { ctx, workspace } = setup();
+
+        await launchStep.run(ctx);
+
+        expect(workspace.calls).toEqual([
+            `prepare ${join(root, "dotfiles")} feature/DOT-109-latest`,
+        ]);
+    });
+});
+
 describe("launch: session identity", () => {
     it("records the id the session manager reported and starts that session", async () => {
         const { ctx, sessions } = setup();

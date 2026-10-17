@@ -1,5 +1,6 @@
 import { parseTaskRef } from "./attempts/record.ts";
 import type { Source } from "./config.ts";
+import { STAGES } from "./stages/registry.ts";
 
 // One answer passed back to a question of a handoff: the question's id and the
 // option values chosen for it (design D3).
@@ -124,13 +125,16 @@ function readTask(args: RunArgs, value: string | undefined): string | null {
     return null;
 }
 
-// args does not check the registry: launch reports an unregistered stage as wait.
+// The stage must be registered, so a typo is a usage error before any tracker is touched.
 function readStage(args: RunArgs, value: string | undefined): string | null {
     if (value === undefined || value === "" || value.startsWith("--")) {
         return "--stage requires a stage name";
     }
     if (args.stage !== undefined) {
         return "--stage given more than once";
+    }
+    if (!STAGES.has(value)) {
+        return `--stage ${value} is not a registered stage (${[...STAGES.keys()].join(", ")})`;
     }
     args.stage = value;
     return null;

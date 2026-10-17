@@ -116,7 +116,7 @@ interface WorkspaceManager {
 
 `src/workspace/worktrunk.ts`: `prepare` runs `git -C <repo> rev-parse --verify --quiet refs/heads/<branch>` to decide `--create`, then `wt -C <repo> switch [--create] <branch> --no-cd --format=json` with a 120 s limit, and validates `path` as an existing directory. `--base` is omitted: worktrunk defaults to the repository's default branch and the user's config may override it. `release` runs `wt -C <repo> remove <branch>` without deleting the branch. Hooks run as configured; nothing waits for background ones.
 
-The branch is `feature/<task id>-<slug>`: the slug is the title lower-cased, non-alphanumerics collapsed to `-`, cut to 40 characters. For a GitHub id the `/` and `#` become `-`.
+The branch is `feature/<task id>-<slug>`: the slug is the title lower-cased, non-alphanumerics collapsed to `-`, cut to 40 characters. For a GitHub id the `/` and `#` become `-`. It is derived from the title at the task's first attempt and reused from the task's latest attempt record afterwards, so a title edited by a stage does not move the task to a new branch.
 
 ### D5 — Repository inference
 
@@ -173,7 +173,7 @@ The attempt number is the highest existing number for that task and stage plus o
 
 ### D11 — Discard mode
 
-`src/attempts/discard.ts`, branched in `run.ts` like answer mode. Resolves the id (attempt id, or task id to its single open attempt), then: `remove` when `session.id` is set and `observe` is not `gone`; `removeLabel(taken)` with read-back; record `discarded`; `release` only with `--release-workspace`. Report `autonomous.discard.v1` with `{ schema, startedAt, outcome, attempt, task, removed: { session, taken, workspace } }`. A failure stops at that point and exits 3; what was already removed is reported.
+`src/attempts/discard.ts`, branched in `run.ts` like answer mode. Resolves the id (attempt id, or task id to its single open attempt; an attempt that no longer holds the task, `completed` without a pending cleanup, `aborted` or `discarded`, is refused so a closed attempt never removes a `taken` a later one holds), then: when `session.id` is set and `observe` is not `gone`, save the capture and the agent's conversation id into the attempt directory (the "Session removal" rule applies to every removal by the runner) and `remove`; `removeLabel(taken)` with read-back; record `discarded`; `release` only with `--release-workspace`. Report `autonomous.discard.v1` with `{ schema, startedAt, outcome, attempt, task, removed: { session, taken, workspace } }`. A failure stops at that point and exits 3; what was already removed is reported.
 
 ### D12 — Run lock
 
@@ -226,6 +226,7 @@ The attempt number is the highest existing number for that task and stage plus o
 - **[Repository inference picks the wrong repo.]** → Only an exact single match is accepted; the report names the signal used; a wrong worktree is visible before any agent work matters, and the dry run shows it without `--apply`.
 - **[Branch collision: `feature/x` and `feature-x` map to one directory.]** → Task ids are unique per source and the slug is a suffix; worktrunk reports "path occupied" and the launch fails closed.
 - **[The agent never writes the marker.]** → The attempt stays open as "idle without a result" and the user discards it; nothing is retried or lost.
+- **[A crash between the `taken` write and the parse of `aoe add` can still adopt a manual session that shares the worktree.]** → Recovery by path only runs for a record with both the session block and `taken`; the dry run and the report name the adopted id before anything is started.
 - **[The user removes `taken` by hand while an attempt is open.]** → `launch` checks open attempts, not only `taken`, so the task is not launched twice; `reconcile` still finalises the open one.
 - **[A codex session's `waiting` is only a permission request.]** → Documented; the grill stage in DOT-110 targets claude.
 - **[fallow complexity budget.]** → `reconcile` is a dispatch on state with one function per state; the launch sequence is a list of steps each returning a result.
