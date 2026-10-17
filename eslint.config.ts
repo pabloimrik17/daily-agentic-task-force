@@ -8,7 +8,7 @@ export default tseslint.config(
         ignores: [
             "node_modules/**",
             "coverage/**",
-            // Agent scaffolding, not source. Mirrored in 4 sibling configs; see CLAUDE.md.
+            // Agent scaffolding, not source. Mirrored in 4 sibling configs; see AGENTS.md.
             "openspec/**",
             ".agents/**",
             ".claude/**",

@@ -1,7 +1,7 @@
 node_modules/
 coverage/
 
-# Agent scaffolding, not source. Mirrored in 4 sibling configs; see CLAUDE.md.
+# Agent scaffolding, not source. Mirrored in 4 sibling configs; see AGENTS.md.
 openspec/
 .agents/
 .claude/
@@ -11,7 +11,6 @@ openspec/
 
 # AI agent instruction files
 AGENTS.md
-CLAUDE.md
 
 # Auto-generated changelogs
 **/CHANGELOG.md
