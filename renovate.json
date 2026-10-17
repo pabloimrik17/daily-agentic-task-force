@@ -50,6 +50,11 @@
             "description": "One PR for every Bun pin",
             "matchPackageNames": ["bun", "oven/bun", "@types/bun"],
             "groupName": "bun"
+        },
+        {
+            "description": "Update the fallow CLI and its GitHub Action together",
+            "matchPackageNames": ["fallow", "fallow-rs/fallow"],
+            "groupName": "fallow"
         }
     ],
     "customManagers": [
