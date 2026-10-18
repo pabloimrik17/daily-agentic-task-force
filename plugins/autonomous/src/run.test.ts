@@ -45,7 +45,6 @@ function fakeStep(outcome: StepOutcome): Step<{ value: number }> {
     };
 }
 
-// Every state directory a test creates, removed once the file has run.
 const STATES: string[] = [];
 afterAll(() => {
     for (const dir of STATES) {
@@ -921,7 +920,6 @@ describe("main --answer", () => {
     });
 });
 
-// A step with the given id that logs its runs and returns `data`.
 function named(id: string, outcome: StepOutcome, log: string[], data: unknown = null): Step {
     return {
         id,
@@ -1206,7 +1204,6 @@ describe("main configuration defaults", () => {
     const dir = mkdtempSync(join(tmpdir(), "autonomous-defaults-"));
     afterAll(() => rmSync(dir, { recursive: true, force: true }));
 
-    // config() without the optional blocks, written to a file of its own.
     function configFile(name: string, full: boolean): string {
         const { sessions, workspace, naming, ...required } = config();
         const path = join(dir, name);

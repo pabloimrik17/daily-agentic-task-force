@@ -1,10 +1,6 @@
-// The run lock (spec stage-sessions, "Run lock"; design D12): one run at a
-// time reads or writes attempts. `<state>/run.lock` is created exclusively;
-// a lock whose process is gone is reclaimed by renaming it aside, as ghd-aoe
-// does. There is no waiting loop: a live holder fails the run at once. A lock
-// with no readable owner (the file exists but is empty or unparsable) is
-// held until its mtime is older than a grace period: its creator may be
-// between creating the file and writing its pid.
+// The run lock (spec stage-sessions, "Run lock"; design D12). A live holder
+// fails the run at once; a lock whose process is gone is reclaimed by renaming
+// it aside, as ghd-aoe does.
 
 import { randomUUID } from "node:crypto";
 import { mkdir, readFile, rename, rm, stat, writeFile } from "node:fs/promises";

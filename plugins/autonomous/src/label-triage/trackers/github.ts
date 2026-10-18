@@ -71,7 +71,6 @@ function parseTaskId(id: string): { ok: true; repo: string; number: string } | {
     return { ok: true, repo, number };
 }
 
-// One incremental label change: `--add-label` or `--remove-label` on one issue.
 function editLabel(
     exec: Exec,
     id: string,

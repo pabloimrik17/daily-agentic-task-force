@@ -31,7 +31,6 @@ const valid = () => ({
     naming: { model: "haiku", effort: "low" },
 });
 
-// The file as a user without the optional blocks writes it.
 const withoutOptional = (): Record<string, unknown> => {
     const input: Record<string, unknown> = valid();
     delete input.sessions;

@@ -112,9 +112,7 @@ function dispatch(args: RunArgs, steps: readonly Step[], deps: MainDeps): Promis
     return runPipeline(args, steps, deps);
 }
 
-// Design D12: one run at a time reads or writes attempts. `held` runs only once
-// the lock is taken, and the lock is released however it ends; a lock another
-// live run holds goes to `refused` and nothing else happens.
+// Design D12: one run at a time reads or writes attempts.
 async function withLock(
     state: string,
     held: () => Promise<number>,
@@ -187,9 +185,7 @@ function context(
     };
 }
 
-// The loaded configuration of a mode that runs no step, or null when it failed
-// to load: the error then goes to stderr and, with --json, the mode's own
-// document holding it (`unconfigured`) to stdout.
+// For a mode that runs no step; null once a load failure has been printed.
 function modeConfig(
     args: RunArgs,
     deps: MainDeps,

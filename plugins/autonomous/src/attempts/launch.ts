@@ -1,10 +1,6 @@
 // The launch step (spec stage-sessions, "The launch step", "Launch sequence";
-// design D9): takes the selected unit, or the task supplied by `--task`, reads
-// the task again through the select step's exclusions, checks the
-// preconditions in D9's order and, with `--apply`, prepares the workspace and
-// launches one attempt. The sequence is a list of small steps, each writing the
-// record before the next one depends on it, so a crash at any point leaves a
-// record that `reconcile` resolves.
+// design D9). Each action of the sequence writes the record before the next one
+// depends on it, so a crash at any point leaves a record `reconcile` resolves.
 
 import { mkdir, writeFile } from "node:fs/promises";
 
@@ -42,8 +38,8 @@ const LAUNCH = "launch";
 export interface LaunchData {
     task: { source: Source; id: string; title: string } | null;
     stage: string | null;
-    input: "selected" | "supplied" | null; // where the unit came from
-    excluded: Excluded | null; // the select exclusion that stopped it, when one did
+    input: "selected" | "supplied" | null;
+    excluded: Excluded | null;
     repository: { path: string; inferredFrom: string } | null;
     branch: string | null;
     group: string | null;
@@ -65,8 +61,8 @@ const EMPTY: LaunchData = {
     attempt: null,
 };
 
-// A check or an action that stopped the launch: a precondition is `wait`, a
-// failed read or write is `not-evaluable`.
+// A failed precondition stops with `wait`, a failed read or write with
+// `not-evaluable`.
 type Gate<T> =
     | { ok: true; value: T }
     | { ok: false; outcome: "wait" | "not-evaluable"; reason: string };
@@ -89,7 +85,6 @@ interface Unit {
     input: "selected" | "supplied";
 }
 
-// What the preconditions settled, and what a launch needs from them.
 interface Plan {
     task: WorkTask; // read again and detailed
     stage: Stage;
@@ -231,8 +226,7 @@ async function readUnit(
     return pass({ task: candidate.task, stage: data.stage });
 }
 
-// The open task of the unit's source with the unit's id; a source with no
-// reader (not enabled) has no open task.
+// A source with no reader is not enabled, so it has no open task.
 async function readTask(
     readers: readonly WorkReader[],
     unit: Unit,
@@ -289,7 +283,6 @@ async function readRecords(state: string): Promise<Gate<AttemptRecord[]>> {
     }
 }
 
-// The first attempt of the task, at any stage, that still holds it.
 function openAttempt(records: readonly AttemptRecord[], task: WorkTask): string | null {
     const open = records.find(
         (record) =>
@@ -327,8 +320,8 @@ function dryRun({ task, stage, repository, branch, naming }: Plan): string[] {
     ];
 }
 
-// The launch sequence's shared state: `record` is the record each action
-// builds on, `written` the last one on disk, null until the pending record is.
+// `record` is what each action builds on; `written` is the last one on disk,
+// null until the pending record is.
 interface Launching {
     plan: Plan;
     state: string;
@@ -374,7 +367,6 @@ async function launch(
     );
 }
 
-// A thrown write becomes a failure naming the action.
 async function perform(name: string, action: Action, launching: Launching): Promise<Result<void>> {
     try {
         return await action(launching);

@@ -52,7 +52,6 @@ export interface RunContext {
         chezmoi: Exec;
         work: WorkReaderFactory;
         selection: SelectionExec;
-        // Stage sessions (design D16): built by main, used by reconcile and launch.
         sessions: SessionManagerFactory;
         workspace: WorkspaceManagerFactory;
         naming: Exec; // claude, bounded to the naming time limit

@@ -57,7 +57,7 @@ interface Setup {
     records?: AttemptRecord[];
     sessions?: Partial<SessionManager>;
     workspace?: Partial<WorkspaceManager>;
-    labels?: string[]; // the labels the task carries in the tracker
+    labels?: string[];
 }
 
 // Everything shares one `calls` log, so a test can assert the order of the whole discard.

@@ -12,7 +12,6 @@ import {
     parseTaskRef,
 } from "./record.ts";
 
-// The shape every record file carries (design D1).
 const RECORD: AttemptRecord = {
     schema: ATTEMPT_SCHEMA,
     id: "linear:DOT-109:test:1",

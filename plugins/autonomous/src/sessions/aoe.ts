@@ -1,8 +1,6 @@
 // The Agent of Empires adapter (design D2, D3; spec stage-sessions, "Session
-// identity", "Observed session state", "Session removal"): the session
-// manager over the `aoe` CLI (1.14.0), one small function per command. Every
-// call goes through the injected exec, so the CLI time limit bounds it, and
-// every error names the aoe command that failed.
+// identity", "Observed session state", "Session removal") over the `aoe` CLI
+// (1.14.0). Every error names the aoe command that failed.
 
 import { realpath } from "node:fs/promises";
 import { resolve } from "node:path";
@@ -51,8 +49,7 @@ const GONE: Observed = {
     agentSessionId: null,
 };
 
-// A status word the table does not know is treated like `unknown`: open and not busy.
-// The caller reports the word verbatim.
+// An unknown status word maps like `unknown`; the caller still reports it verbatim.
 export function mapStatus(status: string): Mapped {
     return STATUSES.get(status) ?? OPEN_IDLE;
 }
@@ -108,7 +105,6 @@ function parseGroups(value: unknown): string[] {
     return paths;
 }
 
-// A path that does not exist on disk is compared as written, made absolute.
 async function canonical(path: string): Promise<string> {
     try {
         return await realpath(path);

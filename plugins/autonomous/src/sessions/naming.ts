@@ -1,8 +1,6 @@
-// Session naming (design D10; spec stage-sessions, "Session title and group"):
-// a managed session is titled `auto <emoji> <name> (<task id>)`, the name at
-// most four English words that Haiku infers from the task. The inference
-// never blocks a launch: a failure, a timeout or an invalid answer falls back
-// to ghd-aoe's deterministic `normalizeTitle`, and the result says which.
+// Session naming (design D10; spec stage-sessions, "Session title and group").
+// The inference never blocks a launch: a failure, a timeout or an invalid
+// answer falls back to ghd-aoe's deterministic `normalizeTitle`.
 
 import { claudePrint, parseMessage } from "../claude-print.ts";
 import type { Exec } from "../exec.ts";
@@ -41,7 +39,6 @@ function buildPrompt(task: WorkTask): string {
     return `${INSTRUCTIONS}\n\n\`\`\`json\n${JSON.stringify(fields, null, 2)}\n\`\`\`\n`;
 }
 
-// Lower-case, then the first letter upper-case: "Stage session manager".
 function capitalise(words: readonly string[]): string {
     return words
         .join(" ")

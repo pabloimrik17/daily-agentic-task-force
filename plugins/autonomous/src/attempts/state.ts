@@ -33,7 +33,6 @@ import {
 
 const RECORD_FILE = "record.json";
 
-// `$AUTONOMOUS_STATE`, else `$XDG_STATE_HOME/autonomous`, else `~/.local/state/autonomous`.
 export function resolveStateDir(env: Record<string, string | undefined>): string {
     const override = env.AUTONOMOUS_STATE;
     if (override !== undefined && override !== "") {
@@ -310,7 +309,6 @@ export async function listRecords(state: string): Promise<AttemptRecord[]> {
     return records.sort((a, b) => Number(a.id > b.id) - Number(a.id < b.id));
 }
 
-// The highest number of that task and stage plus one; 1 when there is none.
 export function nextAttempt(
     records: readonly AttemptRecord[],
     task: TaskRef,

@@ -1,11 +1,9 @@
 // The prompt frame every stage shares (spec stage-sessions, "Session creation
-// arguments"; design D7): the attempt id, the task, the stage's instructions,
-// and the absolute path and exact content of the result marker.
+// arguments"; design D7).
 
 import { RESULT_SCHEMA } from "../attempts/result.ts";
 import type { StagePromptInput } from "./stage.ts";
 
-// The JSON the agent must write, with the attempt id filled in.
 export function expectedMarker(attemptId: string): string {
     return JSON.stringify(
         {

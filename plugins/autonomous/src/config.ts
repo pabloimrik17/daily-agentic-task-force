@@ -212,8 +212,7 @@ const SESSIONS_KEYS = ["tool", "profile", "binary"];
 const WORKSPACE_KEYS = ["root"];
 const NAMING_KEYS = ["model", "effort"];
 
-// Design D13: the user's block (or none), unknown keys rejected, each missing
-// key filled from the shipped defaults and recorded. Validation comes after.
+// Design D13. The filled values are validated afterwards, by the caller.
 function overlay(
     root: Json,
     block: keyof ConfigDefaults,

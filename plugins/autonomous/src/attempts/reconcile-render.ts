@@ -1,8 +1,7 @@
 import type { StepResult } from "../runner.ts";
 import type { ReconciledAttempt, ReconcileData } from "./reconcile.ts";
 
-// Spec "Attempt report": every attempt with its state, its session, whether it
-// needs a person and what was done to it, then the lists a person acts on.
+// Spec "Attempt report".
 export function renderReconcile(result: StepResult<ReconcileData>): string {
     const { attempts, retained, cleanups, needsHuman } = result.data;
     const lines = [`[${result.step}] ${result.outcome} (${result.tier})`];

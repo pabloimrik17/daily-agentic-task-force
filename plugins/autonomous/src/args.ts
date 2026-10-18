@@ -11,9 +11,9 @@ export interface Answer {
 
 export interface RunArgs {
     account: string | undefined;
-    task: { source: Source; id: string } | undefined; // --task <source>:<id> (design D15)
-    stage: string | undefined; // --stage, only with --task
-    discard: string | undefined; // --discard <attempt or task id>
+    task: { source: Source; id: string } | undefined;
+    stage: string | undefined; // only with --task
+    discard: string | undefined; // an attempt id or <source>:<id>
     releaseWorkspace: boolean;
     force: boolean;
     json: boolean;

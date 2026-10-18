@@ -77,9 +77,8 @@ export interface AttemptRecord {
     retained: { at: string; reason: string } | null;
 }
 
-// Open, or completed with a cleanup still owed; a stale cleanup on a discarded
-// or aborted record (legacy data) never holds the task. Launch and discard
-// both decide with this one rule (spec "Open attempts").
+// Open, or completed with a cleanup still owed (spec "Open attempts"); a stale
+// cleanup on a discarded or aborted record (legacy data) never holds the task.
 export function holdsTask(record: AttemptRecord): boolean {
     return (
         OPEN_STATES.includes(record.state) ||

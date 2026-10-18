@@ -27,7 +27,6 @@ async function hasGit(directory: string): Promise<boolean> {
     }
 }
 
-// Absolute paths of the directories directly under `root` that hold a git repository.
 export async function listRepositories(root: string): Promise<string[]> {
     let entries;
     try {

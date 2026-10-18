@@ -1,9 +1,6 @@
 // Discard mode (spec stage-sessions, "Discard mode", "Discard by task id";
-// design D11): the one way a person releases an attempt. In order it removes
-// the session (saving its capture and the agent's conversation id first),
-// removes `taken` from the task and marks the attempt discarded; with
-// `--release-workspace` it then releases the worktree. The first failure stops
-// the discard, and the report says what was already done.
+// design D11): the one way a person releases an attempt. The first failure
+// stops the discard, and the report says what was already done.
 
 import { writeFile } from "node:fs/promises";
 
@@ -42,7 +39,7 @@ export interface DiscardReport {
     schema: typeof DISCARD_SCHEMA;
     startedAt: string;
     outcome: "advance" | "not-evaluable";
-    attempt: string | null; // the attempt id resolved, null when none
+    attempt: string | null;
     task: TaskRef | null;
     found: string[]; // attempt ids found when the task reference resolved to 0 or several
     removed: { session: boolean; taken: boolean; workspace: boolean };
@@ -181,8 +178,6 @@ async function byTask(ref: TaskRef, value: string, state: string): Promise<Resol
     return unresolved(reason, found);
 }
 
-// The capture beside the record, while the session still exists; a failure is
-// reported, never fatal.
 async function saveCapture({ record, deps, report }: Discarding, id: string): Promise<void> {
     const captured = await deps.sessions.capture(id, CAPTURE_LINES);
     if (!captured.ok) {

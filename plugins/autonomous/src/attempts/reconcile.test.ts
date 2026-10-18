@@ -65,7 +65,6 @@ function linear(calls: string[], labels = ["taken", "grill-me"]): Trackers {
     return trackers(calls, { linear: [task("linear", "DOT-109", labels)] });
 }
 
-// A tracker whose `removeLabel` command fails, as a CLI error would.
 function failingRemoval(calls: string[]): Trackers {
     const fakes = linear(calls);
     fakes.linear = {

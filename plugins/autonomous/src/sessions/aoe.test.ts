@@ -75,7 +75,6 @@ function json(value: unknown): ExecResult {
     return { ok: true, stdout: JSON.stringify(value) };
 }
 
-// Answers every aoe command with its recorded output.
 function recorded(args: string[]): ExecResult {
     const command = args
         .filter((arg) => !arg.startsWith("-"))

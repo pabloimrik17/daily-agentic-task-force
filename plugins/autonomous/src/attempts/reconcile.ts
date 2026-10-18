@@ -1,10 +1,6 @@
 // The reconcile step (spec stage-sessions, "The reconcile step" to "Manual
-// sessions are untouched"; design D8): runs first, reads every attempt record
-// and brings each one forward by one function per state — recovers a
-// `pending` attempt, starts a `created` one, observes a `started` one and
-// finalises, retains or reports it, and retries a pending cleanup. Without
-// `--apply` it reads, observes and reports what it would do, writing nothing.
-// It acts only on session ids recorded in an attempt, and never waits.
+// sessions are untouched"; design D8). Without `--apply` it writes nothing. It
+// acts only on session ids recorded in an attempt, and never waits.
 
 import { writeFile } from "node:fs/promises";
 
@@ -22,7 +18,6 @@ import { removeTaken } from "./taken.ts";
 
 const RECONCILE = "reconcile";
 
-// The lines of the session kept in `capture.txt` before it is removed or retained.
 const CAPTURE_LINES = 200;
 
 export type ReconcileAction =
@@ -40,8 +35,8 @@ export type ReconcileAction =
 
 export interface ReconciledAttempt {
     id: string;
-    before: AttemptState; // state read from disk
-    state: AttemptState; // state after the step (equal to `before` without --apply)
+    before: AttemptState;
+    state: AttemptState; // equal to `before` without --apply
     session: {
         state: Observed["state"];
         status: string;
@@ -55,8 +50,8 @@ export interface ReconciledAttempt {
 
 export interface ReconcileData {
     attempts: ReconciledAttempt[]; // every record, sorted by id
-    retained: string[]; // ids in state retained (after the step)
-    cleanups: string[]; // ids completed with cleanup still pending (after the step)
+    retained: string[];
+    cleanups: string[]; // ids completed with cleanup still pending
     needsHuman: string[]; // ids whose session is open and needs a person
     errors: string[]; // manager/tracker command failures, one per attempt that hit one
 }
@@ -69,8 +64,6 @@ const EMPTY: ReconcileData = {
     errors: [],
 };
 
-// What one record's reconciliation ends in: the report line, the record as it
-// stands after the step, and the command failure that stopped it, if any.
 interface Reconciled {
     attempt: ReconciledAttempt;
     record: AttemptRecord;
@@ -166,7 +159,6 @@ function reported(
     };
 }
 
-// A command failure: the attempt keeps its state and the step names the command.
 function failed(
     record: AttemptRecord,
     error: string,
@@ -180,7 +172,6 @@ function failed(
     );
 }
 
-// Every write appends a history entry when the state changes (design D1).
 async function save(
     r: Reconciler,
     record: AttemptRecord,
@@ -199,8 +190,6 @@ function sessionId(record: AttemptRecord): string | null {
 }
 
 const noSession = (record: AttemptRecord) => `record in state ${record.state} names no session`;
-
-// --- pending: recovery (spec "Recovery of a pending attempt") -----------------
 
 async function reconcilePending(r: Reconciler, record: AttemptRecord): Promise<Reconciled> {
     // The launch writes the session block, then `taken`, then creates the session:
@@ -263,8 +252,6 @@ async function ambiguous(r: Reconciler, record: AttemptRecord, ids: string[]): P
     return reported(record, after, { action: "ambiguous", detail: reason });
 }
 
-// --- created: start ------------------------------------------------------------
-
 async function reconcileCreated(r: Reconciler, record: AttemptRecord): Promise<Reconciled> {
     const id = sessionId(record);
     if (id === null) {
@@ -280,8 +267,6 @@ async function reconcileCreated(r: Reconciler, record: AttemptRecord): Promise<R
     const after = await save(r, record, { state: "started" });
     return reported(record, after, { action: "started" });
 }
-
-// --- started: observe and the two proofs (spec "Completion needs two proofs") ---
 
 interface Proofs {
     marker: { ok: true } | { ok: false; reason: string };
@@ -337,8 +322,6 @@ function sessionView(observed: Observed): NonNullable<ReconciledAttempt["session
     return { state, status, busy, needsHuman };
 }
 
-// The recorded session observed; a record without a session id, or a failed
-// observation, is a failure of this attempt.
 async function observeRecorded(
     r: Reconciler,
     record: AttemptRecord,
@@ -354,7 +337,6 @@ async function observeRecorded(
     return { ok: true, id, observed: seen.value };
 }
 
-// A session already gone needs no removal.
 function removeUnlessGone(r: Reconciler, id: string, observed: Observed): Promise<Result<void>> {
     return observed.state === "gone"
         ? Promise.resolve({ ok: true, value: undefined })
@@ -391,13 +373,11 @@ function observation(r: Reconciler, observed: Observed): AttemptRecord["observed
 interface Target {
     record: AttemptRecord; // as read from disk, for `before`
     current: AttemptRecord; // with the observation written
-    id: string; // the recorded session id
+    id: string;
     observed: Observed;
     parts: Partial<ReconciledAttempt>;
 }
 
-// The capture beside the record, while the session still exists; a failure is
-// reported, never fatal.
 async function saveCapture(
     r: Reconciler,
     record: AttemptRecord,
@@ -422,8 +402,7 @@ function joined(notes: string[]): string | null {
     return notes.length > 0 ? notes.join("; ") : null;
 }
 
-// Spec "Retained attempts": `taken` and the session are kept; the capture is
-// taken while the session still exists.
+// Spec "Retained attempts": `taken` and the session are kept.
 async function retain(r: Reconciler, target: Target, failure: string | null): Promise<Reconciled> {
     const { record, current, observed, parts } = target;
     const reason = `session ${observed.status}; ${failure ?? "stage not completed"}`;
@@ -436,11 +415,9 @@ async function retain(r: Reconciler, target: Target, failure: string | null): Pr
     });
 }
 
-// Spec "Finalisation", in order: capture and the agent's conversation id, remove
-// the session, `completed`, then remove `taken`. A session already gone needs
-// neither capture nor removal. A pending cleanup covers both removals: when
-// either fails the attempt stays `completed` with the error and `taken` on the
-// task, and every later run retries what is left (reconcileCleanup).
+// Spec "Finalisation" fixes the order: capture and conversation id, session
+// removal, `completed`, then `taken` removal. A failed removal leaves the
+// cleanup pending for every later run to retry (reconcileCleanup).
 async function finalise(r: Reconciler, target: Target): Promise<Reconciled> {
     const { record, id, observed, parts } = target;
     const notes = await saveCapture(r, target.current, target);
@@ -465,9 +442,8 @@ async function finalise(r: Reconciler, target: Target): Promise<Reconciled> {
     });
 }
 
-// The agent's conversation id, written before the session is removed so a crash
-// after the removal still leaves the pointer; a gone session reports none, and
-// the id saved by an earlier run stays.
+// Written before the session is removed, so a crash after the removal still
+// leaves the pointer; a gone session reports no id and the earlier one stays.
 function saveConversation(
     r: Reconciler,
     record: AttemptRecord,
@@ -481,7 +457,6 @@ function saveConversation(
     return save(r, record, { session: { ...session, agentSessionId } });
 }
 
-// `taken` removed with a read-back; a failure leaves (or keeps) the cleanup pending.
 async function releaseTaken(r: Reconciler, record: AttemptRecord): Promise<AttemptRecord> {
     const removed = await removeTaken(r.trackers[record.task.source], record.task.id);
     if (!removed.ok) {
@@ -489,8 +464,6 @@ async function releaseTaken(r: Reconciler, record: AttemptRecord): Promise<Attem
     }
     return save(r, record, { cleanup: null, taken: { ...record.taken, removed: r.at } });
 }
-
-// --- completed with a pending cleanup (spec "Pending cleanup") ----------------------
 
 async function reconcileCleanup(
     r: Reconciler,
@@ -524,8 +497,6 @@ async function reconcileCleanup(
           });
 }
 
-// --- the outcome ------------------------------------------------------------------
-
 function summarise(done: readonly Reconciled[], ctx: RunContext): StepResult<ReconcileData> {
     const attempts = done.map((entry) => entry.attempt);
     const ids = (keep: (entry: Reconciled) => boolean) =>
@@ -545,7 +516,7 @@ function summarise(done: readonly Reconciled[], ctx: RunContext): StepResult<Rec
     return result("advance", counts(data, ctx.args.apply), data);
 }
 
-// The changes counted in the reasons, with what a dry run says instead.
+// The third element is what a dry run says instead.
 const COUNTED: readonly [ReconcileAction, (count: number) => string, string][] = [
     ["adopted", (n) => `${n} adopted`, "would-adopt"],
     ["aborted", (n) => `${n} aborted`, "would-abort"],
@@ -573,7 +544,7 @@ function counts(data: ReconcileData, apply: boolean): string[] {
     return reasons;
 }
 
-// Without --apply every attempt is unchanged.
+// A cleared cleanup changes the record but not its state.
 function unchanged(attempt: ReconciledAttempt): boolean {
     return attempt.state === attempt.before && attempt.action !== "cleanup-cleared";
 }

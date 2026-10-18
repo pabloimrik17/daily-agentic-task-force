@@ -1,7 +1,6 @@
 // The session manager contract (spec stage-sessions, "Session identity",
-// "Observed session state", "Session removal"; design D2, D3): what the
-// attempt steps need from a session tool, with Agent of Empires as the one
-// implementation. Nothing outside `sessions/` sees the tool's own vocabulary.
+// "Observed session state", "Session removal"; design D2, D3). Nothing outside
+// `sessions/` sees the tool's own vocabulary.
 
 import type { AutonomousConfig } from "../config.ts";
 import type { Result } from "../result.ts";
