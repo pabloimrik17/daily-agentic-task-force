@@ -13,6 +13,8 @@ export function githubWorkReader(exec: Exec, config: GithubConfig): WorkReader {
             const tasks: WorkTask[] = result.value.map((task) => ({
                 ...task,
                 priority: null,
+                project: null,
+                repository: task.id.slice(0, task.id.lastIndexOf("#")),
                 blockedBy: null,
                 children: null,
                 blocks: [],

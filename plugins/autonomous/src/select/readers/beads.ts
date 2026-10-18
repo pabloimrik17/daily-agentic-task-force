@@ -59,6 +59,8 @@ export function beadsWorkReader(exec: Exec, config: BeadsConfig): WorkReader {
                 .map(({ task, priority }) => ({
                     ...task,
                     priority,
+                    project: null,
+                    repository: null,
                     blockedBy: blocked.value.get(task.id) ?? [],
                     blocks: [...blocked.value]
                         .filter(

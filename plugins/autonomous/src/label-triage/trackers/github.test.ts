@@ -245,6 +245,50 @@ describe("githubTracker", () => {
         });
     });
 
+    describe("removeLabel", () => {
+        it("removes one label with the exact argv", async () => {
+            const exec = fakeExec(() => ({ ok: true, stdout: "" }));
+            const tracker = githubTracker(exec, CONFIG);
+            const result = await tracker.removeLabel("pabloimrik17/monolab#296", "taken");
+
+            expect(exec.calls).toEqual([
+                [
+                    "issue",
+                    "edit",
+                    "296",
+                    "--repo",
+                    "pabloimrik17/monolab",
+                    "--remove-label",
+                    "taken",
+                ],
+            ]);
+            expect(result).toEqual({ ok: true, value: undefined });
+        });
+
+        it("reports a CLI error naming the command", async () => {
+            const exec = fakeExec(() => ({ ok: false, error: "gh failed: boom" }));
+            const tracker = githubTracker(exec, CONFIG);
+            const result = await tracker.removeLabel("pabloimrik17/monolab#296", "taken");
+
+            expect(result).toEqual({
+                ok: false,
+                error: "gh issue edit 296 --repo pabloimrik17/monolab --remove-label taken: gh failed: boom",
+            });
+        });
+
+        it("errors on a malformed id", async () => {
+            const exec = fakeExec(() => ({ ok: true, stdout: "" }));
+            const tracker = githubTracker(exec, CONFIG);
+            const result = await tracker.removeLabel("no-hash-here", "taken");
+
+            expect(exec.calls).toEqual([]);
+            expect(result).toEqual({
+                ok: false,
+                error: "no-hash-here is not a valid GitHub task id",
+            });
+        });
+    });
+
     describe("listLabels", () => {
         it("lists labels per repo with the exact argv", async () => {
             const exec = fakeExec(() => ({

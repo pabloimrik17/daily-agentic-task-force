@@ -1,3 +1,8 @@
+import { parseTaskRef } from "./attempts/record.ts";
+import type { Source } from "./config.ts";
+import { STAGES } from "./stages/registry.ts";
+import { isStageId, type StageId } from "./stages/stage.ts";
+
 // One answer passed back to a question of a handoff: the question's id and the
 // option values chosen for it (design D3).
 export interface Answer {
@@ -7,6 +12,10 @@ export interface Answer {
 
 export interface RunArgs {
     account: string | undefined;
+    task: { source: Source; id: string } | undefined;
+    stage: StageId | undefined; // only with --task
+    discard: string | undefined; // an attempt id or <source>:<id>
+    releaseWorkspace: boolean;
     force: boolean;
     json: boolean;
     apply: boolean;
@@ -21,6 +30,8 @@ export const USAGE = [
     "Usage: /autonomous:run [--account <provider-key>] [--force] [--json] [--apply] [--no-handoff]",
     "       /autonomous:run --bootstrap-labels [--json]",
     "       /autonomous:run --apply --answer <id>=<value>[,<value>]... [--json]",
+    "       /autonomous:run --task <source>:<id> [--stage <stage>] [--account <provider-key>] [--force] [--json] [--apply] [--no-handoff]",
+    "       /autonomous:run --apply --discard <attempt-id|source:id> [--release-workspace] [--json]",
 ].join("\n");
 
 const ANSWER_SHAPE = "--answer requires <id>=<value>[,<value>]";
@@ -32,17 +43,25 @@ const SWITCHES = new Map<string, (args: RunArgs) => void>([
     ["--apply", (args) => (args.apply = true)],
     ["--bootstrap-labels", (args) => (args.bootstrapLabels = true)],
     ["--no-handoff", (args) => (args.noHandoff = true)],
+    ["--release-workspace", (args) => (args.releaseWorkspace = true)],
 ]);
 
 // Flags that take the next argument as their value; each returns an error or null.
 const VALUED = new Map<string, (args: RunArgs, value: string | undefined) => string | null>([
     ["--account", readAccount],
     ["--answer", readAnswer],
+    ["--task", readTask],
+    ["--stage", readStage],
+    ["--discard", readDiscard],
 ]);
 
 export function parseArgs(argv: readonly string[]): ParseArgsResult {
     const args: RunArgs = {
         account: undefined,
+        task: undefined,
+        stage: undefined,
+        discard: undefined,
+        releaseWorkspace: false,
         force: false,
         json: false,
         apply: false,
@@ -92,6 +111,48 @@ function readAnswer(args: RunArgs, value: string | undefined): string | null {
     return null;
 }
 
+function readTask(args: RunArgs, value: string | undefined): string | null {
+    if (value === undefined || value.startsWith("--")) {
+        return "--task requires <source>:<id>";
+    }
+    if (args.task !== undefined) {
+        return "--task given more than once";
+    }
+    const ref = parseTaskRef(value);
+    if (ref === null) {
+        return `--task ${value} must be <source>:<id> with source linear, beads or github`;
+    }
+    args.task = ref;
+    return null;
+}
+
+// The stage must be registered, so a typo is a usage error before any tracker is touched.
+function readStage(args: RunArgs, value: string | undefined): string | null {
+    if (value === undefined || value === "" || value.startsWith("--")) {
+        return "--stage requires a stage name";
+    }
+    if (args.stage !== undefined) {
+        return "--stage given more than once";
+    }
+    if (!isStageId(value) || !STAGES.has(value)) {
+        return `--stage ${value} is not a registered stage (${[...STAGES.keys()].join(", ")})`;
+    }
+    args.stage = value;
+    return null;
+}
+
+// Kept as a string: discard mode resolves it to an attempt or to a task's attempts.
+function readDiscard(args: RunArgs, value: string | undefined): string | null {
+    if (value === undefined || value === "" || value.startsWith("--")) {
+        return "--discard requires an attempt id or <source>:<id>";
+    }
+    if (args.discard !== undefined) {
+        return "--discard given more than once";
+    }
+    args.discard = value;
+    return null;
+}
+
 const answering = (args: RunArgs) => args.answers.length > 0;
 const accountOrForce = (args: RunArgs) => args.account !== undefined || args.force;
 
@@ -109,6 +170,24 @@ const COMBINATIONS: readonly (readonly [(args: RunArgs) => boolean, string])[] =
     [
         (args) => answering(args) && accountOrForce(args),
         "--answer can only be combined with --apply and --json",
+    ],
+    [(args) => args.stage !== undefined && args.task === undefined, "--stage requires --task"],
+    [
+        (args) =>
+            args.task !== undefined &&
+            (args.bootstrapLabels || answering(args) || args.discard !== undefined),
+        "--task cannot be combined with --bootstrap-labels, --answer or --discard",
+    ],
+    [(args) => args.discard !== undefined && !args.apply, "--discard requires --apply"],
+    [
+        (args) =>
+            args.discard !== undefined &&
+            (accountOrForce(args) || args.noHandoff || args.bootstrapLabels || answering(args)),
+        "--discard can only be combined with --apply, --json and --release-workspace",
+    ],
+    [
+        (args) => args.releaseWorkspace && args.discard === undefined,
+        "--release-workspace requires --discard",
     ],
 ];
 

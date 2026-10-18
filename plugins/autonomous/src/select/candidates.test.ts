@@ -178,6 +178,15 @@ describe("selectCandidates", () => {
         expect(detail).not.toHaveBeenCalled();
     });
 
+    it("skips the unsupported-stage check when the stage is supplied", async () => {
+        const task = workTask("linear", "TEST-1", ["personal", "AFK"]);
+
+        expect(await evaluate([task], { stage: "test" })).toMatchObject({
+            ok: true,
+            value: { candidates: [{ task, stage: "proposal" }], excluded: [] },
+        });
+    });
+
     it("reports each excluded task only under its first applicable check", async () => {
         const task = workTask("linear", "TEST-1", ["grill-me", "taken"], {
             blockedBy: ["TEST-0"],

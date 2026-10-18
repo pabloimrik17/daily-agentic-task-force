@@ -80,6 +80,41 @@ describe("linearWorkReader", () => {
             ["issue", "view", "DEMO-82", "--no-comments", "--json"],
         ]);
     });
+    it("reads the project name from the issue view, and none from the listing", async () => {
+        const { work } = reader();
+        const listed = await work.list();
+        if (!listed.ok) throw new Error(listed.error);
+        expect(listed.value.map(({ project, repository }) => [project, repository])).toEqual([
+            [null, null],
+            [null, null],
+            [null, null],
+        ]);
+        const result = await work.detail(listed.value[2]!);
+        expect(result.ok && result.value.project).toBe("Dotfiles");
+        expect(result.ok && result.value.repository).toBeNull();
+    });
+    it.each([
+        ["absent", undefined],
+        ["null", null],
+    ])("reads a null project when the view's project is %s", async (_label, project) => {
+        const { project: _recorded, ...withoutProject } = detail;
+        const result = await detailOf(
+            project === undefined ? withoutProject : { ...withoutProject, project },
+        );
+        expect(result.ok && result.value.project).toBeNull();
+    });
+    it("fails naming the path when the project is not an object", async () => {
+        expect(await detailOf({ ...detail, project: "Dotfiles" })).toEqual({
+            ok: false,
+            error: "linear issue view DEMO-82: output does not match the expected shape: $.project must be an object",
+        });
+    });
+    it("fails naming the path when the project has no string name", async () => {
+        expect(await detailOf({ ...detail, project: { name: 7 } })).toEqual({
+            ok: false,
+            error: "linear issue view DEMO-82: output does not match the expected shape: $.project.name must be a string",
+        });
+    });
     it("names linear auth login for an unauthenticated CLI", async () => {
         const { exec, work } = reader();
         const listed = await work.list();

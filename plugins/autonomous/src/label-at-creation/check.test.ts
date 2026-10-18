@@ -8,6 +8,7 @@ const configured: ConfigLoad = {
     ok: true,
     path: "/home/me/.config/autonomous/config.json",
     config: config(),
+    defaulted: [],
 };
 
 function input(source: CheckInput["source"], labels: string[] = [], repo?: string): CheckInput {

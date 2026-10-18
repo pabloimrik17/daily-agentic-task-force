@@ -71,6 +71,28 @@ function parseTaskId(id: string): { ok: true; repo: string; number: string } | {
     return { ok: true, repo, number };
 }
 
+function editLabel(
+    exec: Exec,
+    id: string,
+    flag: "--add-label" | "--remove-label",
+    label: string,
+): Promise<TrackerResult<void>> {
+    const parsedId = parseTaskId(id);
+    if (!parsedId.ok) {
+        return Promise.resolve({ ok: false, error: `${id} is not a valid GitHub task id` });
+    }
+    const { repo, number } = parsedId;
+    return run(exec, `gh issue edit ${number} --repo ${repo} ${flag} ${label}`, [
+        "issue",
+        "edit",
+        number,
+        "--repo",
+        repo,
+        flag,
+        label,
+    ]);
+}
+
 const LIST_FIELDS = "number,title,body,labels,updatedAt,state";
 
 // `gh` has no unlimited listing, so every list asks for one past the cap:
@@ -143,20 +165,11 @@ export function githubTracker(exec: Exec, config: GithubConfig): Tracker {
         },
 
         addLabel(id: string, label: string): Promise<TrackerResult<void>> {
-            const parsedId = parseTaskId(id);
-            if (!parsedId.ok) {
-                return Promise.resolve({ ok: false, error: `${id} is not a valid GitHub task id` });
-            }
-            const { repo, number } = parsedId;
-            return run(exec, `gh issue edit ${number} --repo ${repo} --add-label ${label}`, [
-                "issue",
-                "edit",
-                number,
-                "--repo",
-                repo,
-                "--add-label",
-                label,
-            ]);
+            return editLabel(exec, id, "--add-label", label);
+        },
+
+        removeLabel(id: string, label: string): Promise<TrackerResult<void>> {
+            return editLabel(exec, id, "--remove-label", label);
         },
 
         async listLabels(): Promise<TrackerResult<TrackerLabel[]>> {

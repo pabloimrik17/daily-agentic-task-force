@@ -31,5 +31,17 @@
     "selection": {
         "model": "sonnet",
         "effort": "high"
+    },
+    "sessions": {
+        "tool": "claude",
+        "profile": null,
+        "binary": null
+    },
+    "workspace": {
+        "root": "~/WebstormProjects"
+    },
+    "naming": {
+        "model": "haiku",
+        "effort": "low"
     }
 }

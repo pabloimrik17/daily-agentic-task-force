@@ -27,6 +27,9 @@ export interface Tracker {
     listTasks(): Promise<TrackerResult<TrackerTask[]>>; // only open tasks (per source: see beads.ts, github.ts, linear.ts)
     readTask(id: string): Promise<TrackerResult<TrackerTask>>;
     addLabel(id: string, label: string): Promise<TrackerResult<void>>;
+    // Only the stage sessions' `taken`; triage never calls it. Removing a label the
+    // task does not carry is tracker-defined: read the task first.
+    removeLabel(id: string, label: string): Promise<TrackerResult<void>>;
     listLabels(): Promise<TrackerResult<TrackerLabel[]>>; // all scopes at once
     createLabel(scope: string, name: string, colour: string): Promise<TrackerResult<void>>; // beads: { ok: false, error: "Beads needs no label creation: labels exist by use" }
 }

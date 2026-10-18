@@ -1,4 +1,4 @@
-// Watchlist candidates (spec stonks-watchlist, CONTEXT.md): a ticker whose
+// Watchlist candidates (spec stonks-watchlist, GLOSSARY.md): a ticker whose
 // every entry in the tracking sheet is Comprar, Roger or Operativa.
 
 import type { Estado, TrackingSheet } from "../domain.ts";

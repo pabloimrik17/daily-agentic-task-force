@@ -8,6 +8,7 @@ import type { LabelTriageData } from "../label-triage/step.ts";
 import type { TrackerResult } from "../label-triage/trackers/tracker.ts";
 import { taskKey } from "../label-triage/write.ts";
 import type { StepResult } from "../runner.ts";
+import type { StageId } from "../stages/stage.ts";
 import { isSupported, nextStage } from "./stage.ts";
 import type { Candidate, Excluded, Exclusion, WorkTask } from "./types.ts";
 
@@ -15,6 +16,7 @@ interface CandidateDeps {
     config: AutonomousConfig;
     labelledThisRun: ReadonlySet<string>;
     detail: (task: WorkTask) => Promise<TrackerResult<WorkTask>>;
+    stage?: StageId; // supplied by `--stage`: the next stage's support is not checked
 }
 
 export function labelledThisRun(results: readonly StepResult[]): Set<string> {
@@ -46,7 +48,7 @@ function exclusionBeforeDetail(task: WorkTask, deps: CandidateDeps): Exclusion |
     if (deps.labelledThisRun.has(taskKey(task.source, task.id))) {
         return "labelled-this-run";
     }
-    if (!isSupported(nextStage(task.labels))) {
+    if (deps.stage === undefined && !isSupported(nextStage(task.labels))) {
         return "unsupported-stage";
     }
     if (task.blockedBy !== null && task.blockedBy.length > 0) {

@@ -2,6 +2,9 @@
     "identifier": "DEMO-82",
     "title": "Synthetic parent",
     "description": "A synthetic parent description.",
+    "project": {
+        "name": "Dotfiles"
+    },
     "state": {
         "name": "Backlog",
         "color": "#000000"

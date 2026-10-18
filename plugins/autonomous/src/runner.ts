@@ -4,6 +4,8 @@ import type { Exec } from "./exec.ts";
 import type { JudgementExec } from "./label-triage/judgement.ts";
 import type { TrackerFactory, Trackers } from "./label-triage/trackers/tracker.ts";
 import type { SelectionExec, WorkReaderFactory } from "./select/types.ts";
+import type { SessionManagerFactory } from "./sessions/manager.ts";
+import type { WorkspaceManagerFactory } from "./workspace/manager.ts";
 
 // Provisional contract (design D2): expected to change as further steps land.
 
@@ -50,6 +52,10 @@ export interface RunContext {
         chezmoi: Exec;
         work: WorkReaderFactory;
         selection: SelectionExec;
+        sessions: SessionManagerFactory;
+        workspace: WorkspaceManagerFactory;
+        naming: Exec; // claude, bounded to the naming time limit
+        state: string; // the resolved state directory
     };
 }
 
