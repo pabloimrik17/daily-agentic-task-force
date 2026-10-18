@@ -13,11 +13,12 @@ import type { Excluded, SelectData, WorkReader, WorkTask } from "../select/types
 import type { SessionManager } from "../sessions/manager.ts";
 import { type Naming, nameSession } from "../sessions/naming.ts";
 import { STAGES } from "../stages/registry.ts";
-import type { Stage } from "../stages/stage.ts";
+import type { Stage, StageId } from "../stages/stage.ts";
 import { branchFor, groupFor, inferRepository, listRepositories } from "../workspace/infer.ts";
 import { exclusionName, renderLaunch } from "./launch-render.ts";
 import {
     ATTEMPT_SCHEMA,
+    type AttemptId,
     type AttemptRecord,
     type AttemptState,
     attemptId,
@@ -37,7 +38,7 @@ const LAUNCH = "launch";
 
 export interface LaunchData {
     task: { source: Source; id: string; title: string } | null;
-    stage: string | null;
+    stage: StageId | null;
     input: "selected" | "supplied" | null;
     excluded: Excluded | null;
     repository: { path: string; inferredFrom: string } | null;
@@ -45,7 +46,7 @@ export interface LaunchData {
     group: string | null;
     title: { value: string; source: "llm" | "fallback"; error: string | null } | null;
     workspace: { path: string; created: boolean } | null; // --apply only
-    attempt: { id: string; state: AttemptState; session: string | null } | null; // --apply only; the record's last state
+    attempt: { id: AttemptId; state: AttemptState; session: string | null } | null; // --apply only; the record's last state
 }
 
 const EMPTY: LaunchData = {
@@ -200,7 +201,7 @@ async function readUnit(
     config: AutonomousConfig,
     unit: Unit,
     data: LaunchData,
-): Promise<Gate<{ task: WorkTask; stage: string }>> {
+): Promise<Gate<{ task: WorkTask; stage: StageId }>> {
     const read = await readTask(ctx.io.work(config), unit);
     if (!read.ok) {
         return read;
@@ -250,7 +251,7 @@ async function readTask(
 async function preconditions(
     state: string,
     root: string,
-    read: { task: WorkTask; stage: string },
+    read: { task: WorkTask; stage: StageId },
 ): Promise<Gate<Pick<Plan, "task" | "stage" | "records" | "repository">>> {
     const { task } = read;
     const stage = STAGES.get(read.stage);

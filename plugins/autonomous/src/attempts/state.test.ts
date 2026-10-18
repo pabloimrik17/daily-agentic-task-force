@@ -61,7 +61,7 @@ describe("attempt paths", () => {
     });
 
     it("throws on a malformed id", () => {
-        expect(() => attemptDir("/s", "linear:DOT-109")).toThrow("malformed attempt id");
+        expect(() => attemptDir("/s", "linear::test:1")).toThrow("malformed attempt id");
     });
 });
 
@@ -145,9 +145,10 @@ describe("parseRecord", () => {
         expect(parseRecord(record())).toEqual(record());
     });
 
-    it("rejects a wrong schema, an unknown state and an id that disagrees", () => {
+    it("rejects a wrong schema, an unknown state or stage and an id that disagrees", () => {
         expect(parse((r) => (r.schema = "v2"))).toThrow("$.schema");
         expect(parse((r) => (r.state = "running"))).toThrow("$.state");
+        expect(parse((r) => (r.stage = "grill"))).toThrow("$.stage must be one of");
         expect(parse((r) => (r.id = "linear:DOT-109:test:2"))).toThrow("$.id must equal");
         expect(parse((r) => (r.attempt = 0))).toThrow("$.attempt");
     });
@@ -169,7 +170,7 @@ describe("nextAttempt", () => {
         const records = [
             record(),
             record({ id: "linear:DOT-109:test:2", attempt: 2 }),
-            record({ id: "linear:DOT-109:grill:7", stage: "grill", attempt: 7 }),
+            record({ id: "linear:DOT-109:proposal:7", stage: "proposal", attempt: 7 }),
             record({
                 id: "beads:DOT-109:test:9",
                 task: { source: "beads", id: "DOT-109", title: "x" },
@@ -178,8 +179,8 @@ describe("nextAttempt", () => {
         ];
         const task = { source: "linear", id: "DOT-109" } as const;
         expect(nextAttempt(records, task, "test")).toBe(3);
-        expect(nextAttempt(records, task, "grill")).toBe(8);
-        expect(nextAttempt(records, task, "review")).toBe(1);
+        expect(nextAttempt(records, task, "proposal")).toBe(8);
+        expect(nextAttempt(records, task, "grill-me")).toBe(1);
         expect(nextAttempt([], task, "test")).toBe(1);
         expect(attemptId(task, "test", 3)).toBe("linear:DOT-109:test:3");
     });

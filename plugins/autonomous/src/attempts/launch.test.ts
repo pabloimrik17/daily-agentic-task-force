@@ -17,7 +17,7 @@ import type { SessionManager, SessionSpec } from "../sessions/manager.ts";
 import type { WorkspaceManager } from "../workspace/manager.ts";
 import { launchStep } from "./launch.ts";
 import { renderLaunch } from "./launch-render.ts";
-import type { AttemptRecord } from "./record.ts";
+import type { AttemptId, AttemptRecord } from "./record.ts";
 import {
     attemptDir,
     promptPath,
@@ -172,7 +172,7 @@ const SELECTED_PATH = { args: { task: undefined, stage: undefined } };
 const sessionCalls = (calls: readonly string[]) =>
     calls.filter((call) => /^(?:listGroups|create|start)\b/.test(call));
 
-const readAttempt = (id = ATTEMPT): Promise<AttemptRecord> =>
+const readAttempt = (id: AttemptId = ATTEMPT): Promise<AttemptRecord> =>
     readRecord(recordPath(attemptDir(state, id)));
 
 describe("launch: the unit", () => {

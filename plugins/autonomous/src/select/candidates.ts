@@ -8,6 +8,7 @@ import type { LabelTriageData } from "../label-triage/step.ts";
 import type { TrackerResult } from "../label-triage/trackers/tracker.ts";
 import { taskKey } from "../label-triage/write.ts";
 import type { StepResult } from "../runner.ts";
+import type { StageId } from "../stages/stage.ts";
 import { isSupported, nextStage } from "./stage.ts";
 import type { Candidate, Excluded, Exclusion, WorkTask } from "./types.ts";
 
@@ -15,7 +16,7 @@ interface CandidateDeps {
     config: AutonomousConfig;
     labelledThisRun: ReadonlySet<string>;
     detail: (task: WorkTask) => Promise<TrackerResult<WorkTask>>;
-    stage?: string; // supplied by `--stage`: the next stage's support is not checked
+    stage?: StageId; // supplied by `--stage`: the next stage's support is not checked
 }
 
 export function labelledThisRun(results: readonly StepResult[]): Set<string> {

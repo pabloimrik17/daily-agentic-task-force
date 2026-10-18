@@ -72,6 +72,7 @@ describe("parseTaskRef", () => {
 describe("parseAttemptId", () => {
     it("reads the four parts", () => {
         expect(parseAttemptId("linear:DOT-109:test:3")).toEqual({
+            id: "linear:DOT-109:test:3",
             task: { source: "linear", id: "DOT-109" },
             stage: "test",
             attempt: 3,
@@ -84,6 +85,7 @@ describe("parseAttemptId", () => {
         "jira:DOT-109:test:1",
         "linear::test:1",
         "linear:DOT-109::1",
+        "linear:DOT-109:grill:1",
         "linear:DOT-109:test:0",
         "linear:DOT-109:test:x",
         "linear:DOT-109:test:1:extra",

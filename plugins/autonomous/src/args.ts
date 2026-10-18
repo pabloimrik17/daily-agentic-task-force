@@ -1,6 +1,7 @@
 import { parseTaskRef } from "./attempts/record.ts";
 import type { Source } from "./config.ts";
 import { STAGES } from "./stages/registry.ts";
+import { isStageId, type StageId } from "./stages/stage.ts";
 
 // One answer passed back to a question of a handoff: the question's id and the
 // option values chosen for it (design D3).
@@ -12,7 +13,7 @@ export interface Answer {
 export interface RunArgs {
     account: string | undefined;
     task: { source: Source; id: string } | undefined;
-    stage: string | undefined; // only with --task
+    stage: StageId | undefined; // only with --task
     discard: string | undefined; // an attempt id or <source>:<id>
     releaseWorkspace: boolean;
     force: boolean;
@@ -133,7 +134,7 @@ function readStage(args: RunArgs, value: string | undefined): string | null {
     if (args.stage !== undefined) {
         return "--stage given more than once";
     }
-    if (!STAGES.has(value)) {
+    if (!isStageId(value) || !STAGES.has(value)) {
         return `--stage ${value} is not a registered stage (${[...STAGES.keys()].join(", ")})`;
     }
     args.stage = value;

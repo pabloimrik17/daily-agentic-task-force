@@ -9,6 +9,7 @@ import type { Trackers } from "../label-triage/trackers/tracker.ts";
 import type { SessionManager } from "../sessions/manager.ts";
 import type { WorkspaceManager } from "../workspace/manager.ts";
 import {
+    type AttemptId,
     type AttemptRecord,
     holdsTask,
     parseAttemptId,
@@ -39,9 +40,9 @@ export interface DiscardReport {
     schema: typeof DISCARD_SCHEMA;
     startedAt: string;
     outcome: "advance" | "not-evaluable";
-    attempt: string | null;
+    attempt: AttemptId | null;
     task: TaskRef | null;
-    found: string[]; // attempt ids found when the task reference resolved to 0 or several
+    found: AttemptId[]; // attempt ids found when the task reference resolved to 0 or several
     removed: { session: boolean; taken: boolean; workspace: boolean };
     reasons: string[];
     // `path` and `error` only when the configuration failed to load, leaving nothing
@@ -51,7 +52,7 @@ export interface DiscardReport {
 
 type Resolved =
     | { ok: true; record: AttemptRecord }
-    | { ok: false; reason: string; found: string[] };
+    | { ok: false; reason: string; found: AttemptId[] };
 
 interface Discarding {
     record: AttemptRecord;
@@ -68,7 +69,7 @@ const CAPTURE_LINES = 200;
 
 const messageOf = (error: unknown) => (error instanceof Error ? error.message : String(error));
 
-const unresolved = (reason: string, found: string[] = []): Resolved => ({
+const unresolved = (reason: string, found: AttemptId[] = []): Resolved => ({
     ok: false,
     reason,
     found,
@@ -129,8 +130,9 @@ export function withDefaults(report: DiscardReport, defaulted: string[]): Discar
 }
 
 async function resolve(value: string, state: string): Promise<Resolved> {
-    if (parseAttemptId(value) !== null) {
-        return byAttempt(value, state);
+    const parsed = parseAttemptId(value);
+    if (parsed !== null) {
+        return byAttempt(parsed.id, state);
     }
     const ref = parseTaskRef(value);
     if (ref !== null) {
@@ -139,7 +141,7 @@ async function resolve(value: string, state: string): Promise<Resolved> {
     return unresolved(`not an attempt or task reference: ${value}`);
 }
 
-async function byAttempt(id: string, state: string): Promise<Resolved> {
+async function byAttempt(id: AttemptId, state: string): Promise<Resolved> {
     let record: AttemptRecord;
     try {
         record = await readRecord(recordPath(attemptDir(state, id)));

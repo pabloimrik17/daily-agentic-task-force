@@ -5,6 +5,7 @@
 
 import type { Source } from "../config.ts";
 import type { SessionState, SessionTool } from "../sessions/manager.ts";
+import { isStageId, type StageId } from "../stages/stage.ts";
 
 export const ATTEMPT_SCHEMA = "autonomous.attempt.v1";
 
@@ -19,6 +20,8 @@ export const ATTEMPT_STATES = [
 ] as const;
 
 export type AttemptState = (typeof ATTEMPT_STATES)[number];
+
+export type AttemptId = `${Source}:${string}:${StageId}:${number}`;
 
 // The states in which an attempt still holds its task (spec "The launch step").
 export const OPEN_STATES: readonly AttemptState[] = ["pending", "created", "started", "retained"];
@@ -63,9 +66,9 @@ export interface AttemptObservation {
 
 export interface AttemptRecord {
     schema: typeof ATTEMPT_SCHEMA;
-    id: string; // "<source>:<task>:<stage>:<n>"
+    id: AttemptId;
     task: AttemptTask;
-    stage: string;
+    stage: StageId;
     attempt: number; // n, from 1
     state: AttemptState;
     history: { state: AttemptState; at: string }[];
@@ -91,7 +94,7 @@ export interface TaskRef {
     id: string;
 }
 
-export function attemptId(task: TaskRef, stage: string, attempt: number): string {
+export function attemptId(task: TaskRef, stage: StageId, attempt: number): AttemptId {
     return `${task.source}:${task.id}:${stage}:${attempt}`;
 }
 
@@ -112,14 +115,16 @@ export function parseTaskRef(value: string): TaskRef | null {
 // `<source>:<task>:<stage>:<n>`; null when the value is a task reference or malformed.
 export function parseAttemptId(
     value: string,
-): { task: TaskRef; stage: string; attempt: number } | null {
+): { id: AttemptId; task: TaskRef; stage: StageId; attempt: number } | null {
     const parts = value.split(":");
     if (parts.length !== 4) {
         return null;
     }
     const [source = "", id = "", stage = "", n = ""] = parts;
-    if (!isSource(source) || id === "" || stage === "" || !/^[1-9]\d*$/.test(n)) {
+    if (!isSource(source) || id === "" || !isStageId(stage) || !/^[1-9]\d*$/.test(n)) {
         return null;
     }
-    return { task: { source, id }, stage, attempt: Number(n) };
+    const task = { source, id };
+    const attempt = Number(n);
+    return { id: attemptId(task, stage, attempt), task, stage, attempt };
 }

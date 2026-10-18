@@ -869,8 +869,10 @@ directory, nested by source, task, stage and attempt number:
 A GitHub id contains a `/`, so its directory nests one level deeper:
 `<state>/attempts/github/owner/name#12/test/1/`. Writes go through a temporary
 file and a rename, so a reader never sees a partial record. A record that
-cannot be parsed makes `reconcile` `not-evaluable`, naming the file. The run
-lock lives in the same directory (see [The run lock](#the-run-lock)).
+cannot be parsed, because a key is unknown or its state or stage is outside the
+schema, makes `reconcile` `not-evaluable`, naming the file; `--discard` cannot
+resolve such a record either, so its directory is removed by hand. The run lock
+lives in the same directory (see [The run lock](#the-run-lock)).
 
 ### What it does to each attempt
 

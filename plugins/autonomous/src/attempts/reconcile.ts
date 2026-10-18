@@ -10,7 +10,8 @@ import type { Result } from "../result.ts";
 import type { RunContext, Step, StepResult } from "../runner.ts";
 import type { Observed, SessionManager } from "../sessions/manager.ts";
 import { STAGES } from "../stages/registry.ts";
-import type { AttemptRecord, AttemptSession, AttemptState } from "./record.ts";
+import type { StageId } from "../stages/stage.ts";
+import type { AttemptId, AttemptRecord, AttemptSession, AttemptState } from "./record.ts";
 import { renderReconcile } from "./reconcile-render.ts";
 import { readMarker } from "./result.ts";
 import { attemptDir, capturePath, listRecords, resultPath, writeRecord } from "./state.ts";
@@ -34,7 +35,7 @@ export type ReconcileAction =
     | "cleanup-cleared";
 
 export interface ReconciledAttempt {
-    id: string;
+    id: AttemptId;
     before: AttemptState;
     state: AttemptState; // equal to `before` without --apply
     session: {
@@ -50,9 +51,9 @@ export interface ReconciledAttempt {
 
 export interface ReconcileData {
     attempts: ReconciledAttempt[]; // every record, sorted by id
-    retained: string[];
-    cleanups: string[]; // ids completed with cleanup still pending
-    needsHuman: string[]; // ids whose session is open and needs a person
+    retained: AttemptId[];
+    cleanups: AttemptId[]; // ids completed with cleanup still pending
+    needsHuman: AttemptId[]; // ids whose session is open and needs a person
     errors: string[]; // manager/tracker command failures, one per attempt that hit one
 }
 
@@ -291,7 +292,7 @@ async function checkProofs(r: Reconciler, record: AttemptRecord): Promise<Proofs
 }
 
 // null when the stage's own tracker check holds; an unregistered stage never does.
-function stageCheck(stage: string, task: TrackerTask): string | null {
+function stageCheck(stage: StageId, task: TrackerTask): string | null {
     const implementation = STAGES.get(stage);
     if (implementation === undefined) {
         return `stage ${stage} has no implementation`;

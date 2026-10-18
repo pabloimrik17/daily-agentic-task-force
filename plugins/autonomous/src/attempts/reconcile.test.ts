@@ -10,7 +10,7 @@ import { NOW } from "../quota-gate/test-fixtures.ts";
 import type { RunContext } from "../runner.ts";
 import { mapStatus } from "../sessions/aoe.ts";
 import type { Observed, SessionManager } from "../sessions/manager.ts";
-import type { AttemptRecord } from "./record.ts";
+import type { AttemptId, AttemptRecord } from "./record.ts";
 import { reconcileStep } from "./reconcile.ts";
 import { RESULT_SCHEMA } from "./result.ts";
 import {
@@ -97,7 +97,7 @@ async function given(...records: AttemptRecord[]): Promise<void> {
     }
 }
 
-async function marker(id = ID, attempt = id): Promise<void> {
+async function marker(id: AttemptId = ID, attempt = id): Promise<void> {
     await writeJsonAtomic(resultPath(attemptDir(state, id)), {
         schema: RESULT_SCHEMA,
         attempt,
@@ -108,9 +108,9 @@ async function marker(id = ID, attempt = id): Promise<void> {
     });
 }
 
-const stored = (id = ID) => readRecord(recordPath(attemptDir(state, id)));
-const rawRecord = (id = ID) => readFileSync(recordPath(attemptDir(state, id)), "utf8");
-const captured = (id = ID) => capturePath(attemptDir(state, id));
+const stored = (id: AttemptId = ID) => readRecord(recordPath(attemptDir(state, id)));
+const rawRecord = (id: AttemptId = ID) => readFileSync(recordPath(attemptDir(state, id)), "utf8");
+const captured = (id: AttemptId = ID) => capturePath(attemptDir(state, id));
 
 const pending = (overrides: Partial<AttemptRecord> = {}) =>
     record({

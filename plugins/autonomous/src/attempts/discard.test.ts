@@ -15,7 +15,7 @@ import {
     unconfiguredDiscard,
     withDefaults,
 } from "./discard.ts";
-import type { AttemptRecord } from "./record.ts";
+import type { AttemptId, AttemptRecord } from "./record.ts";
 import { attemptDir, capturePath, readRecord, recordPath, writeRecord } from "./state.ts";
 import { fakeSessions, fakeWorkspace, record, tempState } from "./test-fixtures.ts";
 
@@ -93,7 +93,7 @@ async function setup(options: Setup = {}) {
     return { state, calls, deps, workspace };
 }
 
-const read = (state: string, id = "linear:DOT-109:test:1") =>
+const read = (state: string, id: AttemptId = "linear:DOT-109:test:1") =>
     readRecord(recordPath(attemptDir(state, id)));
 
 describe("discardAttempt by attempt id", () => {

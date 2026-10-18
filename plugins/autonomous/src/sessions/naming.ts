@@ -5,6 +5,7 @@
 import { claudePrint, parseMessage } from "../claude-print.ts";
 import type { Exec } from "../exec.ts";
 import type { WorkTask } from "../select/types.ts";
+import type { StageId } from "../stages/stage.ts";
 import { type Json, rejectUnknownKeys, string } from "../validate.ts";
 
 export const NAMING_TIMEOUT_MS = 10_000;
@@ -116,7 +117,7 @@ export async function nameSession(
     exec: Exec,
     settings: { model: string; effort: string },
     task: WorkTask,
-    stage: { id: string; emoji: string },
+    stage: { id: StageId; emoji: string },
 ): Promise<Naming> {
     const inferred = await infer(exec, settings, task);
     const name = inferred.ok ? inferred.name : fallbackName(task.title) || task.id;

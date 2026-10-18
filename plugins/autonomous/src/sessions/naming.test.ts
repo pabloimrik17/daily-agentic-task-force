@@ -6,7 +6,7 @@ import { fallbackName, NAMING_TIMEOUT_MS, nameSession } from "./naming.ts";
 
 const SETTINGS = { model: "haiku", effort: "low" };
 
-const STAGE = { id: "test", emoji: "🧪" };
+const STAGE = { id: "test", emoji: "🧪" } as const;
 
 const TASK = workTask("linear", "DOT-109", ["personal", "grill-me"], {
     title: "feat(autonomous): stage session manager for the runner",

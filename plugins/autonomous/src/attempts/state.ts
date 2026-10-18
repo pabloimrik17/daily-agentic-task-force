@@ -7,6 +7,7 @@ import { mkdir, readdir, readFile, rename, rm, writeFile } from "node:fs/promise
 import { homedir } from "node:os";
 import { basename, dirname, join } from "node:path";
 
+import { STAGE_IDS, type StageId } from "../stages/stage.ts";
 import {
     array,
     boolean,
@@ -20,6 +21,7 @@ import {
 import {
     ATTEMPT_SCHEMA,
     ATTEMPT_STATES,
+    type AttemptId,
     type AttemptObservation,
     type AttemptRecord,
     type AttemptSession,
@@ -47,7 +49,7 @@ export function resolveStateDir(env: Record<string, string | undefined>): string
 }
 
 // `<state>/attempts/<source>/<task id>/<stage>/<n>`; a GitHub id nests one level deeper.
-export function attemptDir(state: string, id: string): string {
+export function attemptDir(state: string, id: AttemptId): string {
     const parsed = parseAttemptId(id);
     if (parsed === null) {
         throw new Error(`malformed attempt id: ${id}`);
@@ -234,7 +236,7 @@ export function parseRecord(input: unknown): AttemptRecord {
         throw new ParseError(`$.schema must be ${ATTEMPT_SCHEMA}`);
     }
     const task = parseTask(requireObject(root, "task", "$"), "$.task");
-    const stage = string(root, "stage", "$");
+    const stage = literal(root, "stage", "$", STAGE_IDS);
     const attempt = parseAttemptNumber(root, "$");
     const id = string(root, "id", "$");
     const expected = attemptId(task, stage, attempt);
@@ -243,7 +245,7 @@ export function parseRecord(input: unknown): AttemptRecord {
     }
     return {
         schema: ATTEMPT_SCHEMA,
-        id,
+        id: expected,
         task,
         stage,
         attempt,
@@ -312,7 +314,7 @@ export async function listRecords(state: string): Promise<AttemptRecord[]> {
 export function nextAttempt(
     records: readonly AttemptRecord[],
     task: TaskRef,
-    stage: string,
+    stage: StageId,
 ): number {
     const numbers = records
         .filter(
