@@ -1,6 +1,6 @@
 {
     "name": "autonomous",
-    "version": "2.0.0",
+    "version": "2.1.0",
     "description": "Autonomous loop entry point with deterministic gate steps and a skill that labels new Linear, Beads and GitHub tasks at creation",
     "author": {
         "name": "Pablo F.G.",

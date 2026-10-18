@@ -1,5 +1,12 @@
 # Changelog
 
+## [2.1.0](https://github.com/pabloimrik17/daily-agentic-task-force/compare/autonomous--v2.0.0...autonomous--v2.1.0) (2026-10-18)
+
+
+### Features
+
+* **autonomous:** manage stage sessions through Agent of Empires (DOT-109) ([#37](https://github.com/pabloimrik17/daily-agentic-task-force/issues/37)) ([a8aeb5a](https://github.com/pabloimrik17/daily-agentic-task-force/commit/a8aeb5a1c08130a21ab8bf95b6f2cc2b628de8b5))
+
 ## [2.0.0](https://github.com/pabloimrik17/daily-agentic-task-force/compare/autonomous--v1.2.0...autonomous--v2.0.0) (2026-10-15)
 
 
