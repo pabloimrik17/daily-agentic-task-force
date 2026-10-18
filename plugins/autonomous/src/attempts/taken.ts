@@ -41,8 +41,8 @@ export async function addTaken(tracker: Tracker, id: string): Promise<LabelWrite
 }
 
 // A task that no longer carries `taken` (removed by hand, or never written
-// because the add failed) counts as removed: Linear refuses to remove a label
-// the issue does not carry, and nothing would be gained by asking.
+// because the add failed) counts as removed: a tracker may refuse to remove a
+// label the task does not carry.
 export async function removeTaken(tracker: Tracker, id: string): Promise<LabelWrite> {
     const before = await tracker.readTask(id);
     if (!before.ok) {

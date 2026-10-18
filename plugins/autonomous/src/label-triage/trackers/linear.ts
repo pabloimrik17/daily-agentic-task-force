@@ -144,6 +144,7 @@ export function linearTracker(exec: Exec, _config: LinearConfig): Tracker {
             );
         },
 
+        // Fails when the issue does not carry the label.
         removeLabel(id: string, label: string): Promise<TrackerResult<void>> {
             return run(
                 exec,
