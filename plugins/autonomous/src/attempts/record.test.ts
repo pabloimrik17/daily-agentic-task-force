@@ -5,6 +5,7 @@ import {
     ATTEMPT_STATES,
     type AttemptRecord,
     attemptId,
+    holdsTask,
     isSource,
     OPEN_STATES,
     parseAttemptId,
@@ -106,4 +107,22 @@ describe("isSource", () => {
 
 it("holds the task while pending, created, started or retained", () => {
     expect(OPEN_STATES).toEqual(["pending", "created", "started", "retained"]);
+});
+
+it("holds the task while open, or completed with a cleanup still owed", () => {
+    const cleanup = { pending: true as const, error: "aoe remove failed" };
+    const held = ATTEMPT_STATES.map((state) => [
+        state,
+        holdsTask({ ...RECORD, state, cleanup: null }),
+        holdsTask({ ...RECORD, state, cleanup }),
+    ]);
+    expect(held).toEqual([
+        ["pending", true, true],
+        ["created", true, true],
+        ["started", true, true],
+        ["completed", false, true],
+        ["retained", true, true],
+        ["aborted", false, false],
+        ["discarded", false, false],
+    ]);
 });

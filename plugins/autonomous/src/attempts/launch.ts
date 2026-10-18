@@ -25,7 +25,7 @@ import {
     type AttemptRecord,
     type AttemptState,
     attemptId,
-    OPEN_STATES,
+    holdsTask,
 } from "./record.ts";
 import {
     attemptDir,
@@ -301,11 +301,6 @@ function openAttempt(records: readonly AttemptRecord[], task: WorkTask): string 
     const state = open.cleanup === null ? open.state : `${open.state} with a pending cleanup`;
     return `attempt ${open.id} is ${state}`;
 }
-
-// Open, or completed with a cleanup still owed; a stale cleanup on a discarded
-// or aborted record (legacy data) never blocks a launch.
-const holdsTask = (record: AttemptRecord): boolean =>
-    OPEN_STATES.includes(record.state) || (record.state === "completed" && record.cleanup !== null);
 
 async function inferFor(
     root: string,

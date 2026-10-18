@@ -11,7 +11,13 @@ import type { RunArgs } from "../args.ts";
 import type { Trackers } from "../label-triage/trackers/tracker.ts";
 import type { SessionManager } from "../sessions/manager.ts";
 import type { WorkspaceManager } from "../workspace/manager.ts";
-import { type AttemptRecord, parseAttemptId, parseTaskRef, type TaskRef } from "./record.ts";
+import {
+    type AttemptRecord,
+    holdsTask,
+    parseAttemptId,
+    parseTaskRef,
+    type TaskRef,
+} from "./record.ts";
 import {
     attemptDir,
     capturePath,
@@ -150,15 +156,6 @@ async function byAttempt(id: string, state: string): Promise<Resolved> {
     return holdsTask(record)
         ? { ok: true, record }
         : unresolved(`attempt ${id} is ${record.state}; nothing to discard`);
-}
-
-// A closed attempt no longer holds `taken`: a later attempt of the task may.
-// Only a completed attempt with a pending cleanup still owes its removal.
-function holdsTask(record: AttemptRecord): boolean {
-    if (record.state === "aborted" || record.state === "discarded") {
-        return false;
-    }
-    return record.state !== "completed" || record.cleanup !== null;
 }
 
 async function byTask(ref: TaskRef, value: string, state: string): Promise<Resolved> {

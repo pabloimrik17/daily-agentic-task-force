@@ -23,6 +23,7 @@ interface Seen {
     text: string;
     owner: LockOwner | null; // null when the file does not parse
     mtimeMs: number;
+    ino: number;
 }
 
 const OWNERLESS_GRACE_MS = 10_000;
@@ -54,9 +55,9 @@ function parseOwner(text: string): LockOwner | null {
 // null when the file is gone.
 async function look(file: string): Promise<Seen | null> {
     try {
-        const { mtimeMs } = await stat(file);
+        const { mtimeMs, ino } = await stat(file);
         const text = await readFile(file, "utf8");
-        return { text, owner: parseOwner(text), mtimeMs };
+        return { text, owner: parseOwner(text), mtimeMs, ino };
     } catch (error) {
         if ((error as NodeJS.ErrnoException).code === "ENOENT") {
             return null;
@@ -79,8 +80,10 @@ async function create(file: string, owner: LockOwner): Promise<boolean> {
 }
 
 // Renames a stale lock aside; false when what moved was not what was observed
-// (another run took the lock in between), after putting it back.
-async function reclaim(file: string, observed: string): Promise<boolean> {
+// (another run took the lock in between), after putting it back. Contents
+// alone cannot tell: a replacement still being created is as empty as a stale
+// ownerless lock, so the file itself and its mtime must match too.
+async function reclaim(file: string, observed: Seen): Promise<boolean> {
     const aside = `${file}.${process.pid}.${randomUUID()}.stale`;
     try {
         await rename(file, aside);
@@ -88,7 +91,12 @@ async function reclaim(file: string, observed: string): Promise<boolean> {
         return (error as NodeJS.ErrnoException).code === "ENOENT";
     }
     const moved = await readFile(aside, "utf8").catch(() => "");
-    if (moved === observed) {
+    const movedStat = await stat(aside).catch(() => null);
+    if (
+        moved === observed.text &&
+        movedStat?.ino === observed.ino &&
+        movedStat.mtimeMs === observed.mtimeMs
+    ) {
         await rm(aside, { force: true });
         return true;
     }
@@ -130,7 +138,7 @@ async function acquire(state: string, pid: number, now: Date): Promise<LockResul
     if (seen && holds(seen, now)) {
         return heldBy(file, seen);
     }
-    if (seen !== null && !(await reclaim(file, seen.text))) {
+    if (seen !== null && !(await reclaim(file, seen))) {
         return heldBy(file, await look(file));
     }
     if (await create(file, owner)) {
