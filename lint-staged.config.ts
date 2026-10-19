@@ -1,6 +1,6 @@
 import { defineConfig } from "lint-staged/config";
 import { existsSync } from "node:fs";
-import { relative } from "node:path";
+import path from "node:path";
 
 const TYPESCRIPT_FILES = /\.ts$/;
 const MARKDOWN_FILES = /\.md$/;
@@ -8,14 +8,14 @@ const FALLOW_FILES = /\.(?:ts|js|cjs|mjs|json|jsonc|md)$/;
 const RENOVATE_FILES = /(?:^|\/)renovate\.json$/;
 
 function toRelativePath(filename: string): string {
-    return relative(process.cwd(), filename).replace(/\\/g, "/");
+    return path.relative(process.cwd(), filename).replaceAll("\\", "/");
 }
 
 /** lint-staged splits commands with string-argv, which has no escapes: quote with the character the path lacks. */
 function quoted(filename: string): string {
     if (!existsSync(filename)) {
         throw new Error(
-            `lint-staged passed a path that does not exist (it rewrites "\\" in names): ${filename}`,
+            String.raw`lint-staged passed a path that does not exist (it rewrites "\" in names): ${filename}`,
         );
     }
     const quote = filename.includes("'") ? '"' : "'";
@@ -41,9 +41,11 @@ export default defineConfig({
     // Steps run in order, so writers never overlap; an array a step returns runs in parallel.
     "**/*": [
         "oxfmt --no-error-on-unmatched-pattern --ignore-path .oxfmtignore",
-        (filenames) => forStaged(TYPESCRIPT_FILES, "eslint --fix", filenames),
-        (filenames) => forStaged(MARKDOWN_FILES, "markdownlint --fix", filenames),
-        (filenames) => [
+        (filenames: readonly string[]): string[] =>
+            forStaged(TYPESCRIPT_FILES, "eslint --fix", filenames),
+        (filenames: readonly string[]): string[] =>
+            forStaged(MARKDOWN_FILES, "markdownlint --fix", filenames),
+        (filenames: readonly string[]): string[] => [
             // New-only ratchet vs the merge-base; the full-repo gate lives in push CI.
             ...whenStaged(FALLOW_FILES, "bun run fallow audit", filenames),
             ...forStaged(
