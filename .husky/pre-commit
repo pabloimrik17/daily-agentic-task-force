@@ -1,2 +1,3 @@
 bun run validate-branch-name
-bun run lint-staged --config lint-staged.config.ts
+# If this hook is killed, restore hidden work from the "lint-staged automatic backup" stash with git stash apply.
+bun run lint-staged --hide-all --config lint-staged.config.ts
