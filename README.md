@@ -74,9 +74,11 @@ brew install mise && mise install
 
 mise (2026.10.0 or newer) manages only the security binaries the git hooks run:
 gitleaks, osv-scanner, zizmor and actionlint. Their versions are pinned in
-`mise.toml`, with checksums in `mise.lock`. A hook that needs a binary that is
-missing fails with a one-line "run mise trust && mise install" hint. It never
-installs the binary itself and never falls back to a copy on `PATH`.
+`mise.toml`, with checksums in `mise.lock`. A hook that finds mise itself
+missing fails with a one-line "run brew install mise && mise install" hint. One
+that finds a binary missing, or `mise.toml` untrusted, fails with a one-line
+"run mise trust && mise install" hint. It never installs the binary itself and
+never falls back to a copy on `PATH`.
 
 mise refuses a `mise.toml` it has not trusted, and every new worktree or clone
 is a new path, so run `mise trust && mise install` once in each. To skip that,
@@ -106,9 +108,11 @@ Commits and pushes are gated by husky. Branches must match
   rebase. CI enforces the branch name on pull requests.
 - **commit-msg** runs `commitlint`.
 - **pre-push** runs, in order: gitleaks over the pushed commits not yet on the
-  remote, osv-scanner on every tracked lockfile (dev dependencies included),
-  knip, typecheck and the unit tests. A push that only deletes remote refs runs
-  nothing. knip runs at pre-push and in CI, not at pre-commit.
+  remote, including the diffs of merge commits; osv-scanner on every lockfile as
+  committed in the pushed commits (dev dependencies included, not the working
+  tree), with the `osv-scanner.toml` from those commits; then knip, typecheck and
+  the unit tests, which run on the working tree. A push that only deletes remote
+  refs runs nothing. knip runs at pre-push and in CI, not at pre-commit.
 
 pre-push needs network access for the OSV advisory database. In an emergency,
 `git push --no-verify` skips it; CI is the authority.

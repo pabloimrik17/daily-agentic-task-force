@@ -70,7 +70,7 @@ The helper stays shell, so it has no vitest suite. Its behaviour is covered by t
 
 `.husky/pre-push` calls `sh scripts/hooks/pre-push.sh "$@"`. The script reads git's stdin, one line per ref: `<local ref> <local sha> <remote ref> <remote sha>`.
 
-For each ref, gitleaks runs `gitleaks git --redact -v --no-banner --log-opts="<range>"`, with the range chosen as follows:
+For each ref, gitleaks runs `gitleaks git --redact -v --no-banner --log-opts="<range> --diff-merges=first-parent"`, with the range chosen as follows. `--diff-merges=first-parent` makes `git log -p` print a diff for merge commits, which it otherwise omits, so a secret introduced while resolving a merge is scanned too.
 
 | Case                                                 | What happens                                     |
 | ---------------------------------------------------- | ------------------------------------------------ |
@@ -82,10 +82,12 @@ When every ref is a deletion, the script exits 0 before running anything.
 
 After gitleaks, the script runs the remaining checks in order:
 
-1. osv-scanner, once, with one `-L` per tracked lockfile. Lockfiles are found through `git ls-files` matched against known names (`bun.lock`, `package-lock.json`, `pnpm-lock.yaml`, `yarn.lock`, …), so the template works in any repository. When no lockfile is tracked, osv-scanner is skipped.
+1. osv-scanner, once, with one `-L` per lockfile in the pushed commits. For each pushed sha, lockfiles are found through `git ls-tree` matched against known names (`bun.lock`, `package-lock.json`, `pnpm-lock.yaml`, `yarn.lock`, …) and written with `git show <sha>:<path>` into a temporary directory, together with any `osv-scanner.toml`, so the scan sees what is pushed rather than the working tree and suppressions are still discovered. When no pushed commit has a lockfile, osv-scanner is skipped.
 2. `bun run lint:knip`.
 3. `bun run typecheck`.
 4. `bun run test`.
+
+knip, the typecheck and the tests run on the working tree, the usual pre-push trade-off: checking out each pushed commit would need an install per push and break the time budget. CI runs them on the pushed commit.
 
 The script stops at the first failure. Security checks run first because they are the cheapest and the most important.
 

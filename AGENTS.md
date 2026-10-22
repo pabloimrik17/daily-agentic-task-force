@@ -74,11 +74,12 @@ Security binaries (gitleaks, osv-scanner, zizmor, actionlint) come from mise
 (2026.10.0 or newer), not from Bun: install with `brew install mise && mise install`.
 Versions are pinned in `mise.toml` and checksummed in `mise.lock`; mise declares
 no runtime, and Bun stays on `.bun-version`. Hooks run these binaries through
-`scripts/hooks/mise-tool.sh`, which fails with a one-line
-"run mise trust && mise install" hint when mise or the tool is missing. It never
-installs and never uses a copy on `PATH`. mise refuses an untrusted `mise.toml`,
-and every new worktree is a new path: run `mise trust && mise install` there
-before the first commit.
+`scripts/hooks/mise-tool.sh`, which fails with a one-line hint: "run brew install
+mise && mise install" when mise is missing, "run mise trust && mise install"
+when the tool is missing or `mise.toml` is untrusted. It never installs and
+never uses a copy on `PATH`. mise refuses an untrusted `mise.toml`, and every
+new worktree is a new path: run `mise trust && mise install` there before the
+first commit.
 
 Type-aware linting is real here: the root `tsconfig.json` uses
 `include: ["**/*.ts"]` with no exclusions for config files, so a new `.ts` file
@@ -101,10 +102,11 @@ Renovate validator when `renovate.json` is staged, `fallow audit`, gitleaks over
 the staged changes (redacted output), and `zizmor --offline` plus `actionlint`
 when a file under `.github/workflows/` is staged.
 
-pre-push runs, in order: gitleaks over the pushed commits not yet on the remote,
-osv-scanner on every tracked lockfile (dev dependencies included), knip,
-typecheck, unit tests. A deletion-only push runs nothing. knip runs at pre-push
-and in CI, never at pre-commit. pre-push needs network (the OSV API). Do not use
+pre-push runs, in order: gitleaks over the pushed commits not yet on the remote
+(merge-commit diffs included); osv-scanner on the lockfiles and `osv-scanner.toml`
+of the pushed commits, not the working tree (dev dependencies included); then
+knip, typecheck and unit tests, on the working tree. A deletion-only push runs
+nothing. knip runs at pre-push and in CI, never at pre-commit. pre-push needs network (the OSV API). Do not use
 `git push --no-verify` except in an emergency; CI is the authority.
 
 Fix an osv-scanner advisory by upgrading first. Suppress it only in

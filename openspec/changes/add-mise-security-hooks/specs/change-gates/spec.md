@@ -67,13 +67,13 @@ The pre-commit hook SHALL validate the current branch name against `validate-bra
 
 Before a push leaves the machine, the pre-push hook SHALL run these checks in order:
 
-1. gitleaks over the commits being pushed that are not on the remote yet.
-2. osv-scanner on every lockfile tracked by git.
+1. gitleaks over the commits being pushed that are not on the remote yet, including the diffs of merge commits.
+2. osv-scanner on every lockfile in the pushed commits, read from those commits rather than the working tree, together with the `osv-scanner.toml` they contain.
 3. knip.
 4. The repository typecheck.
 5. The unit tests.
 
-Any failing check SHALL abort the push. A push that only deletes remote refs SHALL run no check.
+knip, the typecheck and the unit tests run on the working tree; CI runs them on the pushed commit. Any failing check SHALL abort the push. A push that only deletes remote refs SHALL run no check.
 
 #### Scenario: Secret in a pushed commit
 
@@ -90,10 +90,20 @@ Any failing check SHALL abort the push. A push that only deletes remote refs SHA
 - **WHEN** a branch is pushed whose earlier commits are already on the remote
 - **THEN** gitleaks scans only the new commits
 
+#### Scenario: Secret added in a merge commit
+
+- **WHEN** a merge commit being pushed adds a token that matches a gitleaks rule in its own changes, not in either parent
+- **THEN** the push is aborted, and the report names the commit and rule without printing the secret value
+
 #### Scenario: Vulnerable dependency
 
-- **WHEN** a tracked lockfile resolves a package version with a known advisory, dev dependency or not, that is not suppressed
+- **WHEN** a lockfile in a pushed commit resolves a package version with a known advisory, dev dependency or not, that is not suppressed
 - **THEN** the push is aborted and the advisory is printed
+
+#### Scenario: Vulnerable lockfile committed, safe copy uncommitted
+
+- **WHEN** a pushed commit has a vulnerable lockfile, and the working tree has an uncommitted safe version of it or another branch is checked out
+- **THEN** osv-scanner scans the committed lockfile and the push is aborted
 
 #### Scenario: Ref deletion
 
