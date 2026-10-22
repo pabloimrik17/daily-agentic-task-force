@@ -104,12 +104,12 @@ Commits and pushes are gated by husky. Branches must match
   skipped on a detached HEAD, for example while amending during an interactive
   rebase. CI enforces the branch name on pull requests.
 - **commit-msg** runs `commitlint`.
-- **pre-push** runs, in order: gitleaks over the pushed commits not yet on the
-  remote, including the diffs of merge commits; osv-scanner on every lockfile as
-  committed in the pushed commits (dev dependencies included, not the working
-  tree), with the `osv-scanner.toml` from those commits; then knip, typecheck and
-  the unit tests, which run on the working tree. A push that only deletes remote
-  refs runs nothing. knip runs at pre-push and in CI, not at pre-commit.
+- **pre-push** runs, in order: gitleaks over the commits on `HEAD` that no
+  remote has yet, including the diffs of merge commits; osv-scanner on
+  `bun.lock` (dev dependencies included); then knip, typecheck and the unit
+  tests. Every check looks at `HEAD` and the working tree, and a push that only
+  deletes remote refs runs them too. knip runs at pre-push and in CI, not at
+  pre-commit.
 
 pre-push needs network access for the OSV advisory database. In an emergency,
 `git push --no-verify` skips it; CI is the authority.

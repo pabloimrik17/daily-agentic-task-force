@@ -91,11 +91,11 @@ Renovate validator when `renovate.json` is staged, `fallow audit`, gitleaks over
 the staged changes (redacted output), and `zizmor --offline` plus `actionlint`
 when a file under `.github/workflows/` is staged.
 
-pre-push runs, in order: gitleaks over the pushed commits not yet on the remote
-(merge-commit diffs included); osv-scanner on the lockfiles and `osv-scanner.toml`
-of the pushed commits, not the working tree (dev dependencies included); then
-knip, typecheck and unit tests, on the working tree. A deletion-only push runs
-nothing. knip runs at pre-push and in CI, never at pre-commit. pre-push needs network (the OSV API). Do not use
+pre-push runs, in order: gitleaks over the commits on HEAD that no remote has yet
+(merge-commit diffs included); osv-scanner on `bun.lock` (dev dependencies
+included); then knip, typecheck and unit tests. Every check looks at HEAD and the
+working tree, and a deletion-only push runs them too. knip runs at pre-push and
+in CI, never at pre-commit. pre-push needs network (the OSV API). Do not use
 `git push --no-verify` except in an emergency; CI is the authority.
 
 Fix an osv-scanner advisory by upgrading first. Suppress it only in

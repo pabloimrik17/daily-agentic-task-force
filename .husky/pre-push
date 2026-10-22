@@ -1,1 +1,8 @@
-sh scripts/hooks/pre-push.sh "$@"
+# With auto-install off, mise x would run any same-named binary on PATH instead of the pinned one.
+export MISE_EXEC_AUTO_INSTALL=true MISE_AUTO_INSTALL=true
+mise x -- gitleaks git --redact -v --no-banner --log-opts="--remerge-diff HEAD --not --remotes"
+mise x -- osv-scanner scan source -L bun.lock
+# Repo-specific checks: sibling repos swap these for their own.
+bun run lint:knip
+bun run typecheck
+bun run test

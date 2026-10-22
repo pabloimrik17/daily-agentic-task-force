@@ -17,8 +17,8 @@ The current pre-commit also refuses every commit made without a branch (detached
 - **pre-commit keeps** oxfmt, staged ESLint, markdownlint, the Renovate validator when `renovate.json` is staged, and `fallow audit`.
 - **pre-commit no longer blocks commits on a detached HEAD**: the branch-name check runs only when HEAD is on a branch.
 - **New pre-push hook**, the last local stop, which runs in this order:
-    1. gitleaks over the commits being pushed.
-    2. osv-scanner on every tracked lockfile; any advisory fails, dev dependencies included.
+    1. gitleaks over the outgoing commits on HEAD.
+    2. osv-scanner on `bun.lock`; any advisory fails, dev dependencies included.
     3. knip.
     4. typecheck.
     5. unit tests.
@@ -46,7 +46,7 @@ None. `plugin-marketplace` keeps its validation requirements unchanged; this cha
 
 ## Impact
 
-- **New files**: `mise.toml`, `mise.lock`, `.husky/pre-push`, helper scripts under `scripts/hooks/`, and `osv-scanner.toml` or zizmor configuration only if the baseline needs suppressions.
+- **New files**: `mise.toml`, `mise.lock`, `.husky/pre-push`, and `osv-scanner.toml` or zizmor configuration only if the baseline needs suppressions.
 - **Changed files**:
     - `.husky/pre-commit`: detached-HEAD guard and gitleaks.
     - `lint-staged.config.ts`: zizmor and actionlint on staged workflows.

@@ -73,17 +73,16 @@
 
 ## 5. pre-push
 
-- [x] 5.1 Add `.husky/pre-push` and `scripts/hooks/pre-push.sh` (design D2): one gitleaks call over the pushed shas `--not --remotes=<remote>`, osv-scanner over the lockfiles extracted from the tip of each pushed ref, then `bun run lint:knip`, `bun run typecheck` and `bun run test`, stopping at the first failure.
-    - Verify the range by hand: a new branch scans only its new commits, a second push of the same branch scans only the added commit, and two refs in one push are covered by a single gitleaks call.
-    - Verify that a deletion-only push runs nothing.
+- [x] 5.1 Add `.husky/pre-push` with the checks inline (design D2): gitleaks over `HEAD --not --remotes` with `--remerge-diff`, osv-scanner on `bun.lock`, then `bun run lint:knip`, `bun run typecheck` and `bun run test`. (A `scripts/hooks/pre-push.sh` reading git's stdin was built first and dropped in review.)
+    - Verify a new branch scans only its new commits, and a second push of the same branch scans only the added commit.
 - [x] 5.2 Verify the push scenarios against a scratch bare remote (`git init --bare` in the scratchpad, added as a temporary remote and removed afterwards):
     - A clean branch pushes.
     - A commit made with `--no-verify` that adds a generated fake token is refused, and the output shows no token.
     - Pushing again after an amend that removes the token succeeds.
     - A merge commit whose resolution adds a token is refused ("Secret added in a merge commit"), with no token in the output.
-    - A pushed commit with a vulnerable lockfile is refused while the working tree has a safe uncommitted copy, and when another branch is checked out ("Vulnerable lockfile committed, safe copy uncommitted").
+    - A committed vulnerable `bun.lock` is refused by osv-scanner.
     - Total pre-push time stays under 60 s.
-- [x] 5.3 Verify the osv-scanner gate fails on an advisory: point the script's osv-scanner call at a scratch copy of a lockfile that resolves a package version with a known advisory. Verify a non-zero exit with the advisory printed, and that the real `bun.lock` passes.
+- [x] 5.3 Verify the osv-scanner gate fails on an advisory: point the hook's osv-scanner call at a scratch copy of a lockfile that resolves a package version with a known advisory. Verify a non-zero exit with the advisory printed, and that the real `bun.lock` passes.
 - [x] 5.4 Document pre-push in `README.md` and `AGENTS.md`:
     - The five checks.
     - That knip runs at pre-push and in CI, not at pre-commit.
@@ -114,4 +113,4 @@
 
 - After merge, check the first Renovate run: the Dependency Dashboard lists the four mise tools, and an upgrade PR touches both `mise.toml` and `mise.lock`. If the lock is left stale, open a follow-up and amend the `security-tooling` upgrade requirement (design Risks).
 - Archive the change once the PR is merged and the review requirements are met, then close `agentic-task-6c2p.18`.
-- Note in `agentic-task-6c2p.19` and `.20` what the template is (`mise.toml`, `scripts/hooks/*.sh`, the hook order) and which lines are repo-specific.
+- Note in `agentic-task-6c2p.19` and `.20` what the template is (`mise.toml`, the `.husky/*` hooks and `lint-staged.config.ts`, the hook order) and which lines are repo-specific.

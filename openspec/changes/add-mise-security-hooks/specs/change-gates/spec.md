@@ -63,17 +63,17 @@ The pre-commit hook SHALL validate the current branch name against `validate-bra
 - **WHEN** a contributor commits while HEAD is detached, for example while amending a commit during an interactive rebase
 - **THEN** the branch-name check is skipped, and the commit succeeds if every other check passes
 
-### Requirement: Pre-push checks the pushed commits
+### Requirement: Pre-push checks the outgoing commits
 
 Before a push leaves the machine, the pre-push hook SHALL run these checks in order:
 
-1. gitleaks over the commits being pushed that are not on the remote yet, including the diffs of merge commits.
-2. osv-scanner on every lockfile at the tip of each pushed ref, read from that commit rather than the working tree, together with the `osv-scanner.toml` it contains. Intermediate commits are not scanned: what lands is the tip.
+1. gitleaks over the commits on HEAD that no remote-tracking ref has yet, including the diffs of merge commits.
+2. osv-scanner on the repository's lockfile (`bun.lock` here).
 3. knip.
 4. The repository typecheck.
 5. The unit tests.
 
-knip, the typecheck and the unit tests run on the working tree; CI runs them on the pushed commit. Any failing check SHALL abort the push. A push that only deletes remote refs SHALL run no check.
+The checks look at HEAD and the working tree, not at the refs being pushed; CI checks the pull request. Any failing check SHALL abort the push.
 
 #### Scenario: Secret in a pushed commit
 
@@ -82,12 +82,12 @@ knip, the typecheck and the unit tests run on the working tree; CI runs them on 
 
 #### Scenario: New branch
 
-- **WHEN** a branch that does not exist on the remote is pushed
-- **THEN** gitleaks scans only the commits that are not reachable from any ref of that remote
+- **WHEN** the checked-out branch, which does not exist on the remote, is pushed
+- **THEN** gitleaks scans only the commits that no remote-tracking ref has
 
 #### Scenario: Commits already on the remote
 
-- **WHEN** a branch is pushed whose earlier commits are already on the remote
+- **WHEN** the checked-out branch is pushed and its earlier commits are already on the remote
 - **THEN** gitleaks scans only the new commits
 
 #### Scenario: Secret added in a merge commit
@@ -97,18 +97,8 @@ knip, the typecheck and the unit tests run on the working tree; CI runs them on 
 
 #### Scenario: Vulnerable dependency
 
-- **WHEN** a lockfile at the tip of a pushed ref resolves a package version with a known advisory, dev dependency or not, that is not suppressed
+- **WHEN** the lockfile resolves a package version with a known advisory, dev dependency or not, that is not suppressed
 - **THEN** the push is aborted and the advisory is printed
-
-#### Scenario: Vulnerable lockfile committed, safe copy uncommitted
-
-- **WHEN** the tip of a pushed ref has a vulnerable lockfile, and the working tree has an uncommitted safe version of it or another branch is checked out
-- **THEN** osv-scanner scans the committed lockfile and the push is aborted
-
-#### Scenario: Ref deletion
-
-- **WHEN** the push only deletes a remote branch
-- **THEN** the hook runs no check and the push proceeds
 
 ### Requirement: knip runs at pre-push, not pre-commit
 

@@ -50,38 +50,36 @@ See `proposal.md` (Why) for the motivation, and `specs/security-tooling` and `sp
 
 ### D1. Hooks call `mise x --` directly
 
-Every security binary runs as `mise x -- <bin> <args>`, written straight into `.husky/pre-commit`, `lint-staged.config.ts` and `scripts/hooks/pre-push.sh`. mise is a hard requirement for committing and pushing: without it the hook fails with the shell's "command not found".
+Every security binary runs as `mise x -- <bin> <args>`, written straight into `.husky/pre-commit`, `lint-staged.config.ts` and `.husky/pre-push`. mise is a hard requirement for committing and pushing: without it the hook fails with the shell's "command not found".
 
-`mise x` resolves the version pinned in `mise.toml`, so a same-named binary elsewhere on `PATH` never runs. A tool that is declared but not installed yet is installed by `mise x` on first use; contributors normally have it already from the setup step. Both hooks `export MISE_EXEC_AUTO_INSTALL=true`, because a contributor environment with auto-install off would make `mise x` warn and run whatever same-named binary is on `PATH` (verified with mise 2026.10.17).
+`mise x` resolves the version pinned in `mise.toml`, so a same-named binary elsewhere on `PATH` never runs. A tool that is declared but not installed yet is installed by `mise x` on first use; contributors normally have it already from the setup step. Both hooks `export MISE_EXEC_AUTO_INSTALL=true MISE_AUTO_INSTALL=true`, because mise 2026.10.17 skips the install when either setting is off, and then `mise x` warns and runs whatever same-named binary is on `PATH` (verified with a fake binary).
 
 Alternatives considered:
 
 - **A helper script that refuses to auto-install and prints a one-line hint**: implemented first, then dropped in review (2026-10-22) as unneeded indirection. mise is mandatory, so the hint adds little, and an install on first use is acceptable.
 - **`mise x` with auto-install off**: rejected. It falls back to an unmanaged binary on `PATH` with only a warning.
 
-### D2. The pre-push hook is a POSIX `sh` script
+### D2. The pre-push checks are written inline in `.husky/pre-push`
 
-`.husky/pre-push` calls `sh scripts/hooks/pre-push.sh "$@"`. The script reads git's stdin, one line per ref: `<local ref> <local sha> <remote ref> <remote sha>`.
+Like the pre-commit hook, `.husky/pre-push` lists its checks directly, with no script behind it:
 
-The script collects the local sha of every ref that is not a deletion, then runs gitleaks once over all of them:
+1. `mise x -- gitleaks git --redact -v --no-banner --log-opts="--remerge-diff HEAD --not --remotes"`: the commits on HEAD that no remote-tracking ref has yet. `git log -p` prints no diff for merge commits on its own. `--remerge-diff` (git 2.36 or newer) diffs each merge against git's automatic merge result, so a secret added while resolving a merge is scanned, and what the merged-in branch already brought is not reported again. gitleaks reports a finding in a conflict resolution with a `b/` prefix on the path (verified with gitleaks 8.30.1), which matters only for a `.gitleaksignore` fingerprint on such a finding.
+2. `mise x -- osv-scanner scan source -L bun.lock`. A sibling repo names its own lockfiles.
+3. `bun run lint:knip`.
+4. `bun run typecheck`.
+5. `bun run test`.
 
-`mise x -- gitleaks git --redact -v --no-banner --log-opts="--remerge-diff <sha>… --not --remotes=<remote>"`
+husky runs the hook with `sh -e`, so it stops at the first failure. Security checks run first because they are the cheapest and the most important.
 
-That range is every pushed commit that no remote-tracking ref of that remote already has, which covers new and updated branches alike. `git log -p` prints no diff for merge commits on its own. `--remerge-diff` (git 2.36 or newer) diffs each merge against git's automatic merge result, so a secret added while resolving a merge is scanned, and what the merged-in branch already brought is not reported again. `--diff-merges=first-parent` was tried first and dropped in review for that noise. gitleaks reports a finding in a conflict resolution with a `b/` prefix on the path (verified with gitleaks 8.30.1), which matters only for a `.gitleaksignore` fingerprint on such a finding. When every ref is a deletion, the script exits 0 before running anything.
+Everything looks at HEAD and the working tree, not at the refs git is pushing. That is the usual pre-push trade-off, chosen in review on #42 over a script that parsed git's stdin. It costs three things, all covered by CI on the pull request (`.28`):
 
-After gitleaks, the script runs the remaining checks in order:
-
-1. osv-scanner, once, with one `-L` per lockfile at the tip of each pushed ref. For each pushed sha (the ref tips; intermediate commits are not scanned, since what lands is the tip), lockfiles are found through `git ls-tree` matched against known names (`bun.lock`, `package-lock.json`, `pnpm-lock.yaml`, `yarn.lock`, …) and written with `git show <sha>:<path>` into a temporary directory, together with any `osv-scanner.toml`, so the scan sees what is pushed rather than the working tree and suppressions are still discovered. When no pushed commit has a lockfile, osv-scanner is skipped.
-2. `bun run lint:knip`.
-3. `bun run typecheck`.
-4. `bun run test`.
-
-knip, the typecheck and the tests run on the working tree, the usual pre-push trade-off: checking out each pushed commit would need an install per push and break the time budget. CI runs them on the pushed commit.
-
-The script stops at the first failure. Security checks run first because they are the cheapest and the most important.
+- Pushing a branch other than the checked-out one checks HEAD instead.
+- An uncommitted change to `bun.lock` is scanned instead of the committed one.
+- A push that only deletes remote refs still runs every check.
 
 Alternatives considered:
 
+- **A POSIX script reading git's stdin** (per-ref ranges, lockfiles extracted from each pushed tip into a temporary directory, a deletion-only early exit): implemented first, then dropped in review as over-engineering for a local hook that CI backs up.
 - **`--all` or full-history gitleaks on every push**: rejected. It is too slow and would duplicate the weekly cron in `.28`.
 - **Affected-only typecheck and tests**: rejected for now. The measured 15 s fits the 30-60 s budget. Revisit if the total passes 60 s.
 
@@ -146,8 +144,7 @@ Before the hooks are switched on, each scanner runs once over the whole reposito
     - **Outcome (2026-10-22, mise 2026.10.17):** trust is required. In a fresh `git worktree add --detach`, `mise which gitleaks` fails with "Config files in … are not trusted", and mise refuses to run the tool. An explicit `mise install` trusts the config and then succeeds. Applied: README describes the per-worktree `mise trust && mise install` and `mise settings add trusted_config_paths <parent dir>`; DOT-118 adds a `mise install` to the global worktrunk post-start so new worktrees need no manual step.
 - **Renovate may not regenerate `mise.lock`**: the Mend-hosted app may not run `mise lock`. → Check the first Renovate run after merge. If the lock is left stale, open a follow-up, either lock-file maintenance or a manual relock rule, and amend the `security-tooling` upgrade requirement in that follow-up.
 - **osv-scanner needs the OSV API**: an outage blocks pushes. → `git push --no-verify` in an emergency. CI covers the gap once `.28` lands.
-- **Stale remote-tracking refs**: gitleaks excludes what the local `refs/remotes/<remote>/*` already has. If someone rewinds the remote branch and the local tracking ref is stale, re-pushing those commits does not scan them again. They were scanned when first pushed. Accepted (review on #42).
-- **Push to a URL**: `--remotes=<url>` matches no ref, so gitleaks scans the whole history reachable from the pushed commit. That is slower but never weaker. Accepted.
+- **Stale remote-tracking refs**: gitleaks excludes what the local `refs/remotes/*` already has. If someone rewinds the remote branch and the local tracking ref is stale, re-pushing those commits does not scan them again. They were scanned when first pushed. Accepted (review on #42).
 - **Pre-commit budget**: `fallow audit` alone has been measured at 2.5-4.2 s on other repositories. → Measure the full pre-commit on a typical change. If it passes 5 s, report it rather than drop a check.
     - **Outcome (2026-10-22):** over budget. A three-file commit (one `.ts`, one `.md`, one `.json`) took 9.6-12.6 s over three runs. Most of it is type-aware `eslint --fix` on the staged `.ts` (5-10 s), which the hook already ran before this change; `fallow audit` takes about 1.1 s. This change adds gitleaks (about 0.8 s, of which about 0.6 s is mise start-up). No check was dropped. Speeding up ESLint on staged files is left for a follow-up.
 - **Hooks are bypassable**: until `.28`, only the branch name has a CI backstop. Accepted for the pilot. The repository is public, and GitHub secret scanning with push protection is on.
