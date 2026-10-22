@@ -26,6 +26,13 @@ jobs:
             - name: Install dependencies
               run: bun install --frozen-lockfile
 
+            # -t because actions/checkout leaves a detached HEAD on PRs.
+            - name: 🔍 Validate branch name
+              run: bun run validate-branch-name -t "$HEAD_REF"
+              env:
+                  HEAD_REF: ${{ github.head_ref }}
+              if: ${{ github.event_name == 'pull_request' }}
+
             - name: 🔍 Check formatting
               run: bun run lint:oxfmt
 
