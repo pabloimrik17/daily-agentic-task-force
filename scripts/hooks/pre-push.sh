@@ -26,7 +26,7 @@ EOF_REFS
 [ -n "$shas" ] || exit 0
 
 # The pushed commits no remote-tracking ref of this remote has, new and updated branches alike.
-mise x -- gitleaks git --redact -v --no-banner --log-opts="--diff-merges=first-parent $shas --not --remotes=$remote"
+mise x -- gitleaks git --redact -v --no-banner --log-opts="--remerge-diff $shas --not --remotes=$remote"
 
 # osv-scanner reads the lockfiles of the pushed commits, not the working tree: extract each
 # one (and the osv-scanner.toml files beside them) from every pushed sha, one -L per file.

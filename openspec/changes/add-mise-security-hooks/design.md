@@ -65,13 +65,13 @@ Alternatives considered:
 
 The script collects the local sha of every ref that is not a deletion, then runs gitleaks once over all of them:
 
-`mise x -- gitleaks git --redact -v --no-banner --log-opts="--diff-merges=first-parent <sha>… --not --remotes=<remote>"`
+`mise x -- gitleaks git --redact -v --no-banner --log-opts="--remerge-diff <sha>… --not --remotes=<remote>"`
 
-That range is every pushed commit that no remote-tracking ref of that remote already has, which covers new and updated branches alike. `--diff-merges=first-parent` makes `git log -p` print a diff for merge commits, which it otherwise omits, so a secret introduced while resolving a merge is scanned too. When every ref is a deletion, the script exits 0 before running anything.
+That range is every pushed commit that no remote-tracking ref of that remote already has, which covers new and updated branches alike. `git log -p` prints no diff for merge commits on its own. `--remerge-diff` (git 2.36 or newer) diffs each merge against git's automatic merge result, so a secret added while resolving a merge is scanned, and what the merged-in branch already brought is not reported again. `--diff-merges=first-parent` was tried first and dropped in review for that noise. gitleaks reports a finding in a conflict resolution with a `b/` prefix on the path (verified with gitleaks 8.30.1), which matters only for a `.gitleaksignore` fingerprint on such a finding. When every ref is a deletion, the script exits 0 before running anything.
 
 After gitleaks, the script runs the remaining checks in order:
 
-1. osv-scanner, once, with one `-L` per lockfile in the pushed commits. For each pushed sha, lockfiles are found through `git ls-tree` matched against known names (`bun.lock`, `package-lock.json`, `pnpm-lock.yaml`, `yarn.lock`, …) and written with `git show <sha>:<path>` into a temporary directory, together with any `osv-scanner.toml`, so the scan sees what is pushed rather than the working tree and suppressions are still discovered. When no pushed commit has a lockfile, osv-scanner is skipped.
+1. osv-scanner, once, with one `-L` per lockfile at the tip of each pushed ref. For each pushed sha (the ref tips; intermediate commits are not scanned, since what lands is the tip), lockfiles are found through `git ls-tree` matched against known names (`bun.lock`, `package-lock.json`, `pnpm-lock.yaml`, `yarn.lock`, …) and written with `git show <sha>:<path>` into a temporary directory, together with any `osv-scanner.toml`, so the scan sees what is pushed rather than the working tree and suppressions are still discovered. When no pushed commit has a lockfile, osv-scanner is skipped.
 2. `bun run lint:knip`.
 3. `bun run typecheck`.
 4. `bun run test`.

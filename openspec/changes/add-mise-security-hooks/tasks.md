@@ -73,13 +73,15 @@
 
 ## 5. pre-push
 
-- [x] 5.1 Add `.husky/pre-push` and `scripts/hooks/pre-push.sh` (design D2): range resolution per ref, gitleaks per range, osv-scanner over tracked lockfiles, then `bun run lint:knip`, `bun run typecheck` and `bun run test`, stopping at the first failure.
-    - Verify the range logic by hand: feed the script the stdin lines for a new branch, an updated branch and a deletion, and check with `sh -x` which ranges reach gitleaks.
+- [x] 5.1 Add `.husky/pre-push` and `scripts/hooks/pre-push.sh` (design D2): one gitleaks call over the pushed shas `--not --remotes=<remote>`, osv-scanner over the lockfiles extracted from the tip of each pushed ref, then `bun run lint:knip`, `bun run typecheck` and `bun run test`, stopping at the first failure.
+    - Verify the range by hand: a new branch scans only its new commits, a second push of the same branch scans only the added commit, and two refs in one push are covered by a single gitleaks call.
     - Verify that a deletion-only push runs nothing.
 - [x] 5.2 Verify the push scenarios against a scratch bare remote (`git init --bare` in the scratchpad, added as a temporary remote and removed afterwards):
     - A clean branch pushes.
     - A commit made with `--no-verify` that adds a generated fake token is refused, and the output shows no token.
     - Pushing again after an amend that removes the token succeeds.
+    - A merge commit whose resolution adds a token is refused ("Secret added in a merge commit"), with no token in the output.
+    - A pushed commit with a vulnerable lockfile is refused while the working tree has a safe uncommitted copy, and when another branch is checked out ("Vulnerable lockfile committed, safe copy uncommitted").
     - Total pre-push time stays under 60 s.
 - [x] 5.3 Verify the osv-scanner gate fails on an advisory: point the script's osv-scanner call at a scratch copy of a lockfile that resolves a package version with a known advisory. Verify a non-zero exit with the advisory printed, and that the real `bun.lock` passes.
 - [x] 5.4 Document pre-push in `README.md` and `AGENTS.md`:
