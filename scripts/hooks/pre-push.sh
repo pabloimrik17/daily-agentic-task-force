@@ -3,6 +3,8 @@
 # $1 is the remote name or URL; stdin has one line per ref:
 #   <local ref> <local sha> <remote ref> <remote sha>
 set -eu
+# With auto-install off, mise x would run any same-named binary on PATH instead of the pinned one.
+export MISE_EXEC_AUTO_INSTALL=true
 
 remote=$1
 zeros=0000000000000000000000000000000000000000

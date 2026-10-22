@@ -29,7 +29,7 @@
     - With `PATH` stripped of mise, a hook that needs gitleaks exits non-zero.
 - [x] 2.5 Document the setup:
     - In `README.md` "Working on this repository", give the one-line install `brew install mise && mise install`, and say that mise manages only the security binaries while Bun stays on `.bun-version`.
-    - Add the matching line to `AGENTS.md`'s Toolchain section.
+    - `AGENTS.md` carries no mise setup (decided in review); new worktrees get `mise install` from the worktrunk post-start (DOT-118).
 
     Verify with `bun run lint:markdown` and `bun run lint:oxfmt`.
 

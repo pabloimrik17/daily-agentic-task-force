@@ -52,7 +52,7 @@ See `proposal.md` (Why) for the motivation, and `specs/security-tooling` and `sp
 
 Every security binary runs as `mise x -- <bin> <args>`, written straight into `.husky/pre-commit`, `lint-staged.config.ts` and `scripts/hooks/pre-push.sh`. mise is a hard requirement for committing and pushing: without it the hook fails with the shell's "command not found".
 
-`mise x` resolves the version pinned in `mise.toml`, so a same-named binary elsewhere on `PATH` never runs. A tool that is declared but not installed yet is installed by `mise x` on first use (`exec_auto_install`); contributors normally have it already from the setup step.
+`mise x` resolves the version pinned in `mise.toml`, so a same-named binary elsewhere on `PATH` never runs. A tool that is declared but not installed yet is installed by `mise x` on first use; contributors normally have it already from the setup step. Both hooks `export MISE_EXEC_AUTO_INSTALL=true`, because a contributor environment with auto-install off would make `mise x` warn and run whatever same-named binary is on `PATH` (verified with mise 2026.10.17).
 
 Alternatives considered:
 
@@ -146,6 +146,7 @@ Before the hooks are switched on, each scanner runs once over the whole reposito
     - **Outcome (2026-10-22, mise 2026.10.17):** trust is required. In a fresh `git worktree add --detach`, `mise which gitleaks` fails with "Config files in … are not trusted", and mise refuses to run the tool. An explicit `mise install` trusts the config and then succeeds. Applied: README describes the per-worktree `mise trust && mise install` and `mise settings add trusted_config_paths <parent dir>`; DOT-118 adds a `mise install` to the global worktrunk post-start so new worktrees need no manual step.
 - **Renovate may not regenerate `mise.lock`**: the Mend-hosted app may not run `mise lock`. → Check the first Renovate run after merge. If the lock is left stale, open a follow-up, either lock-file maintenance or a manual relock rule, and amend the `security-tooling` upgrade requirement in that follow-up.
 - **osv-scanner needs the OSV API**: an outage blocks pushes. → `git push --no-verify` in an emergency. CI covers the gap once `.28` lands.
+- **Stale remote-tracking refs**: gitleaks excludes what the local `refs/remotes/<remote>/*` already has. If someone rewinds the remote branch and the local tracking ref is stale, re-pushing those commits does not scan them again. They were scanned when first pushed. Accepted (review on #42).
 - **Push to a URL**: `--remotes=<url>` matches no ref, so gitleaks scans the whole history reachable from the pushed commit. That is slower but never weaker. Accepted.
 - **Pre-commit budget**: `fallow audit` alone has been measured at 2.5-4.2 s on other repositories. → Measure the full pre-commit on a typical change. If it passes 5 s, report it rather than drop a check.
     - **Outcome (2026-10-22):** over budget. A three-file commit (one `.ts`, one `.md`, one `.json`) took 9.6-12.6 s over three runs. Most of it is type-aware `eslint --fix` on the staged `.ts` (5-10 s), which the hook already ran before this change; `fallow audit` takes about 1.1 s. This change adds gitleaks (about 0.8 s, of which about 0.6 s is mise start-up). No check was dropped. Speeding up ESLint on staged files is left for a follow-up.
