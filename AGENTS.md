@@ -70,17 +70,6 @@ version and no changelog — only plugins are versioned.
 | `bun run typecheck`        | TypeScript                                             |
 | `bun run test`             | Vitest, across repo scripts and every plugin workspace |
 
-Security binaries (gitleaks, osv-scanner, zizmor, actionlint) come from mise
-(2026.10.0 or newer), not from Bun: install with `brew install mise && mise install`.
-Versions are pinned in `mise.toml` and checksummed in `mise.lock`; mise declares
-no runtime, and Bun stays on `.bun-version`. Hooks run these binaries through
-`scripts/hooks/mise-tool.sh`, which fails with a one-line hint: "run brew install
-mise && mise install" when mise is missing, "run mise trust && mise install"
-when the tool is missing or `mise.toml` is untrusted. It never installs and
-never uses a copy on `PATH`. mise refuses an untrusted `mise.toml`, and every
-new worktree is a new path: run `mise trust && mise install` there before the
-first commit.
-
 Type-aware linting is real here: the root `tsconfig.json` uses
 `include: ["**/*.ts"]` with no exclusions for config files, so a new `.ts` file
 outside that glob fails the parser rather than being skipped quietly.

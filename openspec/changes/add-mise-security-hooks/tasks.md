@@ -22,12 +22,11 @@
     - zizmor's backend is a release binary, not pipx or cargo; if it is, pin `aqua:` or `github:` explicitly and relock.
     - `mise install --locked` succeeds.
 - [x] 2.3 Check mise trust in a fresh worktree (a scratch `git worktree add --detach`, removed afterwards). Run `mise install` and `mise which gitleaks` there.
-    - If mise reports the config as untrusted, apply the design's mitigation: the helper hint and the README `trusted_config_paths` note.
+    - If mise reports the config as untrusted, apply the design's mitigation: the README per-worktree trust and `trusted_config_paths` note.
     - Record the outcome in the design's Risks.
-- [x] 2.4 Add `scripts/hooks/mise-tool.sh` (design D1). Verify each `security-tooling` "Missing tool fails with a hint" scenario by hand:
-    - With gitleaks installed, the helper runs it (`sh scripts/hooks/mise-tool.sh gitleaks version` prints 8.30.1).
-    - With `PATH` stripped of mise, it exits non-zero with a single install-mise line.
-    - With gitleaks uninstalled (`mise uninstall gitleaks`, reinstalled afterwards), it exits non-zero with a single `gitleaks … mise install` line, even when another gitleaks is on `PATH`.
+- [x] 2.4 Run every security binary as `mise x -- <bin>` in the hooks (design D1; a `scripts/hooks/mise-tool.sh` helper was built first and dropped in review). Verify each `security-tooling` "Hooks run the pinned binaries through mise" scenario by hand:
+    - With another gitleaks first on `PATH`, `mise x -- gitleaks version` prints 8.30.1.
+    - With `PATH` stripped of mise, a hook that needs gitleaks exits non-zero.
 - [x] 2.5 Document the setup:
     - In `README.md` "Working on this repository", give the one-line install `brew install mise && mise install`, and say that mise manages only the security binaries while Bun stays on `.bun-version`.
     - Add the matching line to `AGENTS.md`'s Toolchain section.
@@ -57,7 +56,7 @@
 - [x] 4.1 Guard the branch check in `.husky/pre-commit` so it runs only when `git symbolic-ref -q HEAD` succeeds (design D3). Verify both cases:
     - In a scratch detached worktree, a commit with a harmless staged change succeeds, then the worktree is removed.
     - On a scratch branch named `wip-thing`, a commit is aborted by the branch check.
-- [x] 4.2 Add `sh scripts/hooks/mise-tool.sh gitleaks git --pre-commit --staged --redact -v --no-banner` after the lint-staged call (design D3). Verify the "Staged fake secret" and "Unstaged secret" scenarios with a generated fake token in a scratch file, never committed:
+- [x] 4.2 Add `mise x -- gitleaks git --pre-commit --staged --redact -v --no-banner` after the lint-staged call (design D3). Verify the "Staged fake secret" and "Unstaged secret" scenarios with a generated fake token in a scratch file, never committed:
     - When the token is staged, the commit is aborted and the output shows the rule and file but no token.
     - When the token is only unstaged, the commit proceeds.
 - [x] 4.3 Add `WORKFLOW_FILES` and the zizmor `--offline` and actionlint `-shellcheck= -pyflakes=` entries to the parallel step of `lint-staged.config.ts` (design D4). Verify:

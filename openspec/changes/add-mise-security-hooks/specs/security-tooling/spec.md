@@ -53,24 +53,19 @@ The repository's contributor documentation SHALL give a single command that inst
 - **WHEN** a contributor on macOS without mise runs the documented command in a clean clone
 - **THEN** every declared security binary is installed and the git hooks can run
 
-### Requirement: Missing tool fails with a hint
+### Requirement: Hooks run the pinned binaries through mise
 
-When a git hook needs a declared security binary and mise or that binary is not installed, the hook SHALL fail. It SHALL print one line naming the missing tool and telling the contributor to run `mise install` (or to install mise first). The hook SHALL NOT install the tool itself and SHALL NOT run a same-named binary found elsewhere on `PATH`.
+A git hook that needs a declared security binary SHALL run it with `mise x --`, so the version pinned in `mise.toml` runs and a same-named binary elsewhere on `PATH` does not. mise SHALL be required to commit and push: without it, the hook fails.
 
-#### Scenario: Tool not installed
+#### Scenario: Unmanaged copy on PATH
 
-- **WHEN** a hook needs gitleaks and mise is installed but gitleaks is not
-- **THEN** the hook exits non-zero and prints a single line containing `gitleaks` and `mise install`
+- **WHEN** a hook runs gitleaks and another gitleaks is on `PATH`
+- **THEN** the hook runs the gitleaks version pinned in `mise.toml`
 
 #### Scenario: mise not installed
 
 - **WHEN** a hook needs a security binary and `mise` is not on `PATH`
-- **THEN** the hook exits non-zero and prints a single line telling the contributor to install mise and run `mise install`
-
-#### Scenario: Unmanaged copy on PATH
-
-- **WHEN** the declared gitleaks is not installed through mise but another gitleaks is on `PATH`
-- **THEN** the hook still fails with the hint and does not run the other copy
+- **THEN** the hook exits non-zero
 
 ### Requirement: Automated upgrades
 

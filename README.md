@@ -72,13 +72,10 @@ bun install
 brew install mise && mise install
 ```
 
-mise (2026.10.0 or newer) manages only the security binaries the git hooks run:
-gitleaks, osv-scanner, zizmor and actionlint. Their versions are pinned in
-`mise.toml`, with checksums in `mise.lock`. A hook that finds mise itself
-missing fails with a one-line "run brew install mise && mise install" hint. One
-that finds a binary missing, or `mise.toml` untrusted, fails with a one-line
-"run mise trust && mise install" hint. It never installs the binary itself and
-never falls back to a copy on `PATH`.
+mise (2026.10.0 or newer) is required. It manages only the security binaries
+the git hooks run: gitleaks, osv-scanner, zizmor and actionlint. Their versions
+are pinned in `mise.toml`, with checksums in `mise.lock`, and the hooks call
+them with `mise x`.
 
 mise refuses a `mise.toml` it has not trusted, and every new worktree or clone
 is a new path, so run `mise trust && mise install` once in each. To skip that,

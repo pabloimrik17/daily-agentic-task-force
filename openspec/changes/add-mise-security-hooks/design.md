@@ -38,7 +38,7 @@ See `proposal.md` (Why) for the motivation, and `specs/security-tooling` and `sp
 **Goals:**
 
 - Hook behaviour that a sibling repository can copy by swapping only the repo-specific commands: format and lint, typecheck, tests.
-- Deterministic results. The same binary versions run everywhere, nothing installs during a hook, and nothing depends on what else happens to be on `PATH`.
+- Deterministic results. The same binary versions run everywhere, whatever else happens to be on `PATH`.
 - Every hook-only check has a CI backstop, or a task that will add one (`.28`).
 
 **Non-Goals:**
@@ -48,37 +48,26 @@ See `proposal.md` (Why) for the motivation, and `specs/security-tooling` and `sp
 
 ## Decisions
 
-### D1. One POSIX `sh` helper runs every security binary
+### D1. Hooks call `mise x --` directly
 
-`scripts/hooks/mise-tool.sh <bin> [args…]` works in three steps:
+Every security binary runs as `mise x -- <bin> <args>`, written straight into `.husky/pre-commit`, `lint-staged.config.ts` and `scripts/hooks/pre-push.sh`. mise is a hard requirement for committing and pushing: without it the hook fails with the shell's "command not found".
 
-1. Fail with the install hint when `command -v mise` finds nothing.
-2. Fail with `<bin> is not installed: run mise install` when `mise which <bin>` fails.
-3. Otherwise run `MISE_EXEC_AUTO_INSTALL=false exec mise x -- <bin> "$@"`.
-
-The hint is printed on one line to stderr.
+`mise x` resolves the version pinned in `mise.toml`, so a same-named binary elsewhere on `PATH` never runs. A tool that is declared but not installed yet is installed by `mise x` on first use (`exec_auto_install`); contributors normally have it already from the setup step.
 
 Alternatives considered:
 
-- **Plain `mise x --`**: rejected. It installs during a commit, which means network access and an unverified wait, and the contributor never sees the hint the policy asks for.
+- **A helper script that refuses to auto-install and prints a one-line hint**: implemented first, then dropped in review (2026-10-22) as unneeded indirection. mise is mandatory, so the hint adds little, and an install on first use is acceptable.
 - **`mise x` with auto-install off**: rejected. It falls back to an unmanaged binary on `PATH` with only a warning.
-- **A Bun/TypeScript helper**: rejected for the template. dotfiles may have no Bun, and the logic is a few lines.
-
-The helper stays shell, so it has no vitest suite. Its behaviour is covered by the manual verification tasks, which follow the spec scenarios.
 
 ### D2. The pre-push hook is a POSIX `sh` script
 
 `.husky/pre-push` calls `sh scripts/hooks/pre-push.sh "$@"`. The script reads git's stdin, one line per ref: `<local ref> <local sha> <remote ref> <remote sha>`.
 
-For each ref, gitleaks runs `gitleaks git --redact -v --no-banner --log-opts="<range> --diff-merges=first-parent"`, with the range chosen as follows. `--diff-merges=first-parent` makes `git log -p` print a diff for merge commits, which it otherwise omits, so a secret introduced while resolving a merge is scanned too.
+The script collects the local sha of every ref that is not a deletion, then runs gitleaks once over all of them:
 
-| Case                                                 | What happens                                     |
-| ---------------------------------------------------- | ------------------------------------------------ |
-| Local sha is all zeros (a deletion)                  | Skip the ref                                     |
-| Remote sha is all zeros, or not present locally      | Range is `<local sha> --not --remotes=<remote>`  |
-| Otherwise                                            | Range is `<remote sha>..<local sha>`             |
+`mise x -- gitleaks git --redact -v --no-banner --log-opts="--diff-merges=first-parent <sha>… --not --remotes=<remote>"`
 
-When every ref is a deletion, the script exits 0 before running anything.
+That range is every pushed commit that no remote-tracking ref of that remote already has, which covers new and updated branches alike. `--diff-merges=first-parent` makes `git log -p` print a diff for merge commits, which it otherwise omits, so a secret introduced while resolving a merge is scanned too. When every ref is a deletion, the script exits 0 before running anything.
 
 After gitleaks, the script runs the remaining checks in order:
 
@@ -102,7 +91,7 @@ Alternatives considered:
 
 1. The branch check, guarded so it only runs on a branch: `git symbolic-ref -q HEAD >/dev/null && bun run validate-branch-name`, written as an `if` so the detached case continues.
 2. The existing lint-staged call.
-3. `sh scripts/hooks/mise-tool.sh gitleaks git --pre-commit --staged --redact -v --no-banner`.
+3. `mise x -- gitleaks git --pre-commit --staged --redact -v --no-banner`.
 
 gitleaks runs after lint-staged, so it scans the final index after formatters re-stage. It stays outside lint-staged because it reads the index itself and needs no file list.
 
@@ -112,8 +101,8 @@ On the guard, the alternatives are equivalent. `git branch --show-current` being
 
 A new `WORKFLOW_FILES` pattern, `^\.github/workflows/.+\.ya?ml$`, joins the existing parallel step. Both tools are read-only and only see the staged workflow files:
 
-- `forStaged(WORKFLOW_FILES, "sh scripts/hooks/mise-tool.sh zizmor --offline", …)`
-- `forStaged(WORKFLOW_FILES, "sh scripts/hooks/mise-tool.sh actionlint -shellcheck= -pyflakes=", …)`
+- `forStaged(WORKFLOW_FILES, "mise x -- zizmor --offline", …)`
+- `forStaged(WORKFLOW_FILES, "mise x -- actionlint -shellcheck= -pyflakes=", …)`
 
 Why each flag:
 
@@ -153,8 +142,8 @@ Before the hooks are switched on, each scanner runs once over the whole reposito
 
 ## Risks / Trade-offs
 
-- **mise refuses an untrusted `mise.toml`**: every new worktree is a new path, and mise may refuse an untrusted config there. → Verify in a fresh worktree. If trust is required, the helper's hint says `mise trust && mise install`, and the README documents `trusted_config_paths`, or a worktrunk post-start `mise trust`.
-    - **Outcome (2026-10-22, mise 2026.10.17):** trust is required. In a fresh `git worktree add --detach`, `mise which gitleaks` fails with "Config files in … are not trusted", so the helper reports the tool as missing. An explicit `mise install` trusts the config and then succeeds. Applied: the helper hint reads `run mise trust && mise install`, and README and AGENTS.md describe the per-worktree trust and `mise settings add trusted_config_paths <parent dir>`.
+- **mise refuses an untrusted `mise.toml`**: every new worktree is a new path, and mise may refuse an untrusted config there. → Verify in a fresh worktree. If trust is required, the README documents `mise trust && mise install` per worktree and `trusted_config_paths`, or a worktrunk post-start runs it.
+    - **Outcome (2026-10-22, mise 2026.10.17):** trust is required. In a fresh `git worktree add --detach`, `mise which gitleaks` fails with "Config files in … are not trusted", and mise refuses to run the tool. An explicit `mise install` trusts the config and then succeeds. Applied: README describes the per-worktree `mise trust && mise install` and `mise settings add trusted_config_paths <parent dir>`; DOT-118 adds a `mise install` to the global worktrunk post-start so new worktrees need no manual step.
 - **Renovate may not regenerate `mise.lock`**: the Mend-hosted app may not run `mise lock`. → Check the first Renovate run after merge. If the lock is left stale, open a follow-up, either lock-file maintenance or a manual relock rule, and amend the `security-tooling` upgrade requirement in that follow-up.
 - **osv-scanner needs the OSV API**: an outage blocks pushes. → `git push --no-verify` in an emergency. CI covers the gap once `.28` lands.
 - **Push to a URL**: `--remotes=<url>` matches no ref, so gitleaks scans the whole history reachable from the pushed commit. That is slower but never weaker. Accepted.
@@ -165,7 +154,7 @@ Before the hooks are switched on, each scanner runs once over the whole reposito
 ## Migration Plan
 
 1. Merge the change with CI green.
-2. Contributors run `brew install mise && mise install` once. Until they do, the next commit or push fails with the hint.
+2. Contributors run `brew install mise && mise install` once. Until they do, the next commit or push fails.
 3. Rollback is reverting the merge commit. Nothing else holds state.
 
 ## Open Questions

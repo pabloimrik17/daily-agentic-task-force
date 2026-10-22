@@ -14,42 +14,25 @@ tmp=$(mktemp -d)
 trap 'rm -rf "$tmp"' EXIT
 trap 'exit 1' INT TERM
 
-ranges=
 shas=
-while read -r _local_ref local_sha _remote_ref remote_sha; do
-    [ -n "$local_sha" ] || continue
+while read -r _local_ref local_sha _remote_ref _remote_sha; do
     # Deleting a remote ref pushes no commits.
-    [ "$local_sha" != "$zeros" ] || continue
-    shas="$shas$local_sha
-"
-    if [ "$remote_sha" = "$zeros" ] || ! git cat-file -e "${remote_sha}^{commit}" 2>/dev/null; then
-        # New branch, or the remote tip is unknown here: scan what no ref of the remote has.
-        range="$local_sha --not --remotes=$remote"
-    else
-        range="$remote_sha..$local_sha"
+    if [ -n "$local_sha" ] && [ "$local_sha" != "$zeros" ]; then
+        shas="${shas:+$shas }$local_sha"
     fi
-    ranges="$ranges$range
-"
 done <<EOF_REFS
 $refs
 EOF_REFS
+[ -n "$shas" ] || exit 0
 
-# Every ref was a deletion (or nothing was pushed).
-[ -n "$ranges" ] || exit 0
-
-while IFS= read -r range; do
-    [ -n "$range" ] || continue
-    # </dev/null: the loop's stdin holds the remaining ranges.
-    sh scripts/hooks/mise-tool.sh gitleaks git --redact -v --no-banner --log-opts="--diff-merges=first-parent $range" </dev/null
-done <<EOF_RANGES
-$ranges
-EOF_RANGES
+# The pushed commits no remote-tracking ref of this remote has, new and updated branches alike.
+mise x -- gitleaks git --redact -v --no-banner --log-opts="--diff-merges=first-parent $shas --not --remotes=$remote"
 
 # osv-scanner reads the lockfiles of the pushed commits, not the working tree: extract each
 # one (and the osv-scanner.toml files beside them) from every pushed sha, one -L per file.
 set -- scan source
 lockfiles=0
-for sha in $(printf '%s' "$shas" | sort -u); do
+for sha in $(printf '%s' "$shas" | tr ' ' '\n' | sort -u); do
     paths=$(git ls-tree -r --name-only "$sha")
     while IFS= read -r path; do
         case ${path##*/} in
@@ -67,7 +50,7 @@ $paths
 EOF_PATHS
 done
 if [ "$lockfiles" -gt 0 ]; then
-    sh scripts/hooks/mise-tool.sh osv-scanner "$@"
+    mise x -- osv-scanner "$@"
 fi
 
 # Repo-specific checks: sibling repos swap these three for their own.

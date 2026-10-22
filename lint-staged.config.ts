@@ -54,16 +54,8 @@ export default defineConfig({
                 "bunx --package renovate@44.101.2 renovate-config-validator --strict",
                 filenames,
             ),
-            ...forStaged(
-                WORKFLOW_FILES,
-                "sh scripts/hooks/mise-tool.sh zizmor --offline",
-                filenames,
-            ),
-            ...forStaged(
-                WORKFLOW_FILES,
-                "sh scripts/hooks/mise-tool.sh actionlint -shellcheck= -pyflakes=",
-                filenames,
-            ),
+            ...forStaged(WORKFLOW_FILES, "mise x -- zizmor --offline", filenames),
+            ...forStaged(WORKFLOW_FILES, "mise x -- actionlint -shellcheck= -pyflakes=", filenames),
         ],
     ],
 });

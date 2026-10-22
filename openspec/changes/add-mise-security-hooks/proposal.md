@@ -10,7 +10,7 @@ The current pre-commit also refuses every commit made without a branch (detached
 
 - **Security binaries through mise**: a root `mise.toml` that pins osv-scanner 2.6.0, gitleaks 8.30.1, zizmor and `aqua:rhysd/actionlint`, plus a committed `mise.lock` with checksums for linux-x64, macos-arm64 and macos-x64 (the Intel Mac this pilot is developed on). The file requires mise ≥ 2026.10.0. Bun stays on `.bun-version`; mise manages security binaries only.
 - **One install line** for contributors: `brew install mise && mise install`.
-- **A missing tool fails the hook**: every security binary runs through one helper. The helper fails with a one-line "run mise install" hint when mise or the tool is missing, instead of installing it silently or falling back to whatever is on `PATH`.
+- **Hooks call mise directly**: every security binary runs as `mise x -- <tool>`, so the pinned version runs, never another copy on `PATH`. mise is required to commit and push.
 - **pre-commit gains**:
     - gitleaks over the staged changes, with redacted output.
     - zizmor (offline) and actionlint when a workflow file is staged.
@@ -53,7 +53,7 @@ None. `plugin-marketplace` keeps its validation requirements unchanged; this cha
     - `.github/workflows/ci.yml`: branch-name step.
     - `README.md` and `AGENTS.md`.
     - Workflow files, but only if zizmor or actionlint findings need fixing.
-- **Contributors** need mise ≥ 2026.10.0. A commit or push without `mise install` fails with the hint.
+- **Contributors** need mise ≥ 2026.10.0. Without mise, a commit or push fails.
 - **Network**: pre-push needs network for osv-scanner's advisory database. Pushing needs network anyway.
 - **Renovate**: its mise manager picks up `mise.toml` without configuration changes. Whether it keeps `mise.lock` in sync is checked on the first Renovate run after merge.
 - **No plugin changes**: no plugin is released by this change.

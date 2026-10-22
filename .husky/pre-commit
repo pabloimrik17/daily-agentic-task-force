@@ -4,4 +4,4 @@ if git symbolic-ref -q HEAD >/dev/null; then
 fi
 # If this hook is killed, restore hidden work from the "lint-staged automatic backup" stash with git stash apply.
 bun run lint-staged --hide-all --config lint-staged.config.ts
-sh scripts/hooks/mise-tool.sh gitleaks git --pre-commit --staged --redact -v --no-banner
+mise x -- gitleaks git --pre-commit --staged --redact -v --no-banner
