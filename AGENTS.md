@@ -82,8 +82,25 @@ as one tool failing on files the others skip.
 ## Commits
 
 Conventional commits, enforced by commitlint on commit-msg. Branch names are
-enforced on pre-commit: `main`, `develop`, or
-`<feature|fix|hotfix|chore|renovate>/<name>`.
+`main`, `develop`, or `<feature|fix|hotfix|chore|renovate>/<name>`. They are
+checked on pre-commit, skipped on a detached HEAD, and enforced by CI on pull
+requests.
+
+pre-commit checks only what is staged: oxfmt, staged ESLint, markdownlint, the
+Renovate validator when `renovate.json` is staged, `fallow audit`, gitleaks over
+the staged changes (redacted output), and `zizmor --offline` plus `actionlint`
+when a file under `.github/workflows/` is staged.
+
+pre-push runs, in order: gitleaks over the commits on HEAD that no remote has yet
+(merge-commit diffs included); osv-scanner on `bun.lock` (dev dependencies
+included); then knip, typecheck and unit tests. Every check looks at HEAD and the
+working tree, and a deletion-only push runs them too. knip runs at pre-push and
+in CI, never at pre-commit. pre-push needs network (the OSV API). Do not use
+`git push --no-verify` except in an emergency; CI is the authority.
+
+Fix an osv-scanner advisory by upgrading first. Suppress it only in
+`osv-scanner.toml`, with `ignoreUntil` no more than 90 days after adding it, a
+reason, and `Owner: pfe`. An expired suppression fails the push again.
 
 Scope plugin changes to the plugin (`feat(datf-lab): ...`) so release-please
 attributes them to the right changelog.

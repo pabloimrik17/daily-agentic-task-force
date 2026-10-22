@@ -1,3 +1,9 @@
-bun run validate-branch-name
+# With auto-install off, mise x would run any same-named binary on PATH instead of the pinned one.
+export MISE_EXEC_AUTO_INSTALL=true MISE_AUTO_INSTALL=true
+# Detached HEAD (e.g. amending in a rebase) has no branch name to validate; CI checks PR branch names.
+if git symbolic-ref -q HEAD >/dev/null; then
+    bun run validate-branch-name
+fi
 # If this hook is killed, restore hidden work from the "lint-staged automatic backup" stash with git stash apply.
 bun run lint-staged --hide-all --config lint-staged.config.ts
+mise x -- gitleaks git --pre-commit --staged --redact -v --no-banner

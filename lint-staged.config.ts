@@ -6,6 +6,7 @@ const TYPESCRIPT_FILES = /\.ts$/;
 const MARKDOWN_FILES = /\.md$/;
 const FALLOW_FILES = /\.(?:ts|js|cjs|mjs|json|jsonc|md)$/;
 const RENOVATE_FILES = /(?:^|\/)renovate\.json$/;
+const WORKFLOW_FILES = /^\.github\/workflows\/.+\.ya?ml$/;
 
 function toRelativePath(filename: string): string {
     return path.relative(process.cwd(), filename).replaceAll("\\", "/");
@@ -53,6 +54,8 @@ export default defineConfig({
                 "bunx --package renovate@44.101.2 renovate-config-validator --strict",
                 filenames,
             ),
+            ...forStaged(WORKFLOW_FILES, "mise x -- zizmor --offline", filenames),
+            ...forStaged(WORKFLOW_FILES, "mise x -- actionlint -shellcheck= -pyflakes=", filenames),
         ],
     ],
 });
