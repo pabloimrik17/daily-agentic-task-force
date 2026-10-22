@@ -69,7 +69,19 @@ Bun is the runtime and the package manager; the version is pinned in
 
 ```bash
 bun install
+brew install mise && mise install
 ```
+
+mise (2026.10.0 or newer) manages only the security binaries the git hooks run:
+gitleaks, osv-scanner, zizmor and actionlint. Their versions are pinned in
+`mise.toml`, with checksums in `mise.lock`. A hook that needs a binary that is
+missing fails with a one-line "run mise trust && mise install" hint. It never
+installs the binary itself and never falls back to a copy on `PATH`.
+
+mise refuses a `mise.toml` it has not trusted, and every new worktree or clone
+is a new path, so run `mise trust && mise install` once in each. To skip that,
+trust the parent folder of your checkouts once, for example
+`mise settings add trusted_config_paths ~/WebstormProjects`.
 
 | Command                    | What it checks                                         |
 | -------------------------- | ------------------------------------------------------ |
@@ -82,9 +94,29 @@ bun install
 | `bun run typecheck`        | TypeScript                                             |
 | `bun run test`             | Vitest, across repo scripts and every plugin workspace |
 
-Commits are gated by husky: `validate-branch-name` and `lint-staged` on
-pre-commit, `commitlint` on commit-msg. Branches must match
+Commits and pushes are gated by husky. Branches must match
 `main`, `develop`, or `<feature|fix|hotfix|chore|renovate>/<name>`.
+
+- **pre-commit** checks only what is staged: `validate-branch-name`, then
+  `lint-staged` (oxfmt, ESLint on staged TypeScript, markdownlint, the Renovate
+  validator when `renovate.json` is staged, `fallow audit`, and `zizmor --offline`
+  plus `actionlint` when a file under `.github/workflows/` is staged), then
+  gitleaks over the staged changes with redacted output. The branch-name check is
+  skipped on a detached HEAD, for example while amending during an interactive
+  rebase. CI enforces the branch name on pull requests.
+- **commit-msg** runs `commitlint`.
+- **pre-push** runs, in order: gitleaks over the pushed commits not yet on the
+  remote, osv-scanner on every tracked lockfile (dev dependencies included),
+  knip, typecheck and the unit tests. A push that only deletes remote refs runs
+  nothing. knip runs at pre-push and in CI, not at pre-commit.
+
+pre-push needs network access for the OSV advisory database. In an emergency,
+`git push --no-verify` skips it; CI is the authority.
+
+To fix an osv-scanner advisory, upgrade the dependency first. Suppress it only in
+`osv-scanner.toml`, with an `ignoreUntil` date no more than 90 days after you add
+it, a reason, and `Owner: pfe`. When the date passes, the advisory fails the push
+again.
 
 ## Adding a plugin
 

@@ -25,6 +25,8 @@ jobs:
               uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
               with:
                   fetch-depth: 1
+                  # Pullfrog uses its own installation token for GitHub operations.
+                  persist-credentials: false
             - name: Run agent
               uses: pullfrog/pullfrog@ed800018463e1b84e8e3377f662173aed1da98b0 # v0.1.95
               with:

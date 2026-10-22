@@ -70,6 +70,16 @@ version and no changelog — only plugins are versioned.
 | `bun run typecheck`        | TypeScript                                             |
 | `bun run test`             | Vitest, across repo scripts and every plugin workspace |
 
+Security binaries (gitleaks, osv-scanner, zizmor, actionlint) come from mise
+(2026.10.0 or newer), not from Bun: install with `brew install mise && mise install`.
+Versions are pinned in `mise.toml` and checksummed in `mise.lock`; mise declares
+no runtime, and Bun stays on `.bun-version`. Hooks run these binaries through
+`scripts/hooks/mise-tool.sh`, which fails with a one-line
+"run mise trust && mise install" hint when mise or the tool is missing. It never
+installs and never uses a copy on `PATH`. mise refuses an untrusted `mise.toml`,
+and every new worktree is a new path: run `mise trust && mise install` there
+before the first commit.
+
 Type-aware linting is real here: the root `tsconfig.json` uses
 `include: ["**/*.ts"]` with no exclusions for config files, so a new `.ts` file
 outside that glob fails the parser rather than being skipped quietly.
@@ -82,8 +92,24 @@ as one tool failing on files the others skip.
 ## Commits
 
 Conventional commits, enforced by commitlint on commit-msg. Branch names are
-enforced on pre-commit: `main`, `develop`, or
-`<feature|fix|hotfix|chore|renovate>/<name>`.
+`main`, `develop`, or `<feature|fix|hotfix|chore|renovate>/<name>`. They are
+checked on pre-commit, skipped on a detached HEAD, and enforced by CI on pull
+requests.
+
+pre-commit checks only what is staged: oxfmt, staged ESLint, markdownlint, the
+Renovate validator when `renovate.json` is staged, `fallow audit`, gitleaks over
+the staged changes (redacted output), and `zizmor --offline` plus `actionlint`
+when a file under `.github/workflows/` is staged.
+
+pre-push runs, in order: gitleaks over the pushed commits not yet on the remote,
+osv-scanner on every tracked lockfile (dev dependencies included), knip,
+typecheck, unit tests. A deletion-only push runs nothing. knip runs at pre-push
+and in CI, never at pre-commit. pre-push needs network (the OSV API). Do not use
+`git push --no-verify` except in an emergency; CI is the authority.
+
+Fix an osv-scanner advisory by upgrading first. Suppress it only in
+`osv-scanner.toml`, with `ignoreUntil` no more than 90 days after adding it, a
+reason, and `Owner: pfe`. An expired suppression fails the push again.
 
 Scope plugin changes to the plugin (`feat(datf-lab): ...`) so release-please
 attributes them to the right changelog.
