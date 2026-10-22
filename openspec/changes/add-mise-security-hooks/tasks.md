@@ -105,7 +105,7 @@
     - `bunx @fission-ai/openspec@1.11.0 validate --changes --no-interactive`.
 
     Verify all pass.
-- [ ] 7.3 With the user's authority to commit and push, commit with conventional messages (scope `chore` or `ci`, no plugin scope, so release-please releases nothing). Stage `bun.lock` only with the dependency fixes from 3.2, leaving out the release-please version drift (`agentic-task-jisf`). Push with the new pre-push hook active and open the PR.
+- [x] 7.3 With the user's authority to commit and push, commit with conventional messages (scope `chore` or `ci`, no plugin scope, so release-please releases nothing). Stage `bun.lock` only with the dependency fixes from 3.2, leaving out the release-please version drift (`agentic-task-jisf`). Push with the new pre-push hook active and open the PR.
     - Verify CI is green, including the branch-name step.
     - Verify the PR checklist maps to the task's acceptance criteria.
 
