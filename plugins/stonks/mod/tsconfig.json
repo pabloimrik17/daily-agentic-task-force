@@ -4,8 +4,9 @@
     // in `types/`, whose global declarations (URL, crypto, h) clash with Bun's
     // in the root program. `bun run typecheck` runs both (design D17).
     "compilerOptions": {
-        "target": "ESNext",
-        "lib": ["ESNext"],
+        // Claude Code 2.1.289's vendored API specifies ES2023 (types/claude-code.d.ts).
+        "target": "ES2023",
+        "lib": ["ES2023"],
         "types": [],
         "module": "ESNext",
         "moduleResolution": "bundler",

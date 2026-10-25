@@ -33,6 +33,13 @@ export default tseslint.config(
         rules: { "tsdoc/syntax": "error" },
     },
     {
+        languageOptions: { ecmaVersion: 2024 },
+    },
+    {
+        files: ["plugins/stonks/mod/**/*.ts"],
+        languageOptions: { ecmaVersion: 2023 },
+    },
+    {
         files: ["**/*.{cjs,mjs}"],
         languageOptions: {
             globals: {
