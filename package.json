@@ -16,8 +16,8 @@
         "lint:markdown": "markdownlint .",
         "lint:markdown:fix": "markdownlint --fix .",
         "lint:marketplace": "bun run scripts/validate-marketplace.ts",
-        "lint:oxfmt": "oxfmt --check --ignore-path .oxfmtignore",
-        "lint:oxfmt:fix": "oxfmt --ignore-path .oxfmtignore",
+        "lint:oxfmt": "oxfmt --check",
+        "lint:oxfmt:fix": "oxfmt",
         "test": "vitest run",
         "typecheck": "tsc --noEmit && bun run --filter './plugins/*' typecheck"
     },

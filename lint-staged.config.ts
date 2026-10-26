@@ -41,7 +41,7 @@ function whenStaged(pattern: RegExp, command: string, filenames: readonly string
 export default defineConfig({
     // Steps run in order, so writers never overlap; an array a step returns runs in parallel.
     "**/*": [
-        "oxfmt --no-error-on-unmatched-pattern --ignore-path .oxfmtignore",
+        "oxfmt --no-error-on-unmatched-pattern",
         (filenames: readonly string[]): string[] =>
             forStaged(TYPESCRIPT_FILES, "eslint --fix", filenames),
         (filenames: readonly string[]): string[] =>
