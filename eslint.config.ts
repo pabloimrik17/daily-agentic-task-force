@@ -1,5 +1,6 @@
 import eslint from "@eslint/js";
 import regexpPlugin from "eslint-plugin-regexp";
+import pluginTsdoc from "eslint-plugin-tsdoc";
 import globals from "globals";
 import tseslint from "typescript-eslint";
 
@@ -26,6 +27,11 @@ export default tseslint.config(
     eslint.configs.recommended,
     tseslint.configs.recommended,
     regexpPlugin.configs.recommended,
+    {
+        files: [tseslint.globs.ts],
+        plugins: { tsdoc: pluginTsdoc },
+        rules: { "tsdoc/syntax": "error" },
+    },
     {
         files: ["**/*.{cjs,mjs}"],
         languageOptions: {
