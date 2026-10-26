@@ -29,6 +29,7 @@
         "@types/bun": "1.4.2",
         "eslint": "10.7.0",
         "eslint-plugin-regexp": "3.1.1",
+        "eslint-plugin-tsdoc": "0.5.4",
         "fallow": "3.34.0",
         "globals": "17.13.0",
         "husky": "9.1.7",
