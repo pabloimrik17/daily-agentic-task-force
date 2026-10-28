@@ -3,6 +3,7 @@ import { existsSync } from "node:fs";
 import path from "node:path";
 
 const ESLINT_FILES = /\.(?:ts|ya?ml)$/;
+const YAML_FILES = /\.ya?ml$/;
 const MARKDOWN_FILES = /\.md$/;
 const FALLOW_FILES = /\.(?:ts|js|cjs|mjs|json|jsonc|md)$/;
 const RENOVATE_FILES = /(?:^|\/)renovate\.json$/;
@@ -44,6 +45,9 @@ export default defineConfig({
         "oxfmt --no-error-on-unmatched-pattern",
         (filenames: readonly string[]): string[] =>
             forStaged(ESLINT_FILES, "eslint --fix --no-warn-ignored", filenames),
+        // eslint-plugin-yml's block-style fixes indent by 8, which oxfmt rejects.
+        (filenames: readonly string[]): string[] =>
+            forStaged(YAML_FILES, "oxfmt --no-error-on-unmatched-pattern", filenames),
         (filenames: readonly string[]): string[] =>
             forStaged(MARKDOWN_FILES, "markdownlint --fix", filenames),
         (filenames: readonly string[]): string[] => [

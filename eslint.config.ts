@@ -73,14 +73,13 @@ export default tseslint.config(
             "preserve-caught-error": "warn",
         },
     },
-    // YAML files. flat/prettier switches off the layout rules oxfmt owns, which
-    // also drops four checks oxfmt does not cover; they are re-armed here, last,
-    // so nothing after can disable them again. Type-aware rules stay on the
-    // `**/*.ts` block above, so YAML is never type-checked.
+    // flat/prettier switches off the layout rules oxfmt owns, and with them three
+    // checks oxfmt does not cover, re-armed below. block-mapping-colon-indicator-newline
+    // stays off: oxfmt breaks long flow collections after the colon, and its fixer
+    // deletes comments there.
     {
         extends: [pluginYml.configs["flat/standard"], pluginYml.configs["flat/prettier"]],
         rules: {
-            "yml/block-mapping-colon-indicator-newline": "error",
             "yml/file-extension": ["error", { extension: "yml" }],
             "yml/no-boolean-key": "error",
             "yml/no-multiple-empty-lines": "error",
