@@ -44,4 +44,22 @@ export default {
             ignoreDependencies: ["claude-code"],
         },
     },
+    // `include` narrows the run to the listed types and `cycles` is not one of the
+    // defaults, so the defaults are spelled out to keep them alongside it.
+    include: [
+        "files",
+        "dependencies",
+        "unlisted",
+        "binaries",
+        "unresolved",
+        "exports",
+        "types",
+        "enumMembers",
+        "namespaceMembers",
+        "duplicates",
+        "catalog",
+        "catalogReferences",
+        "cycles",
+    ],
+    rules: { cycles: "error" },
 } satisfies KnipConfig;
