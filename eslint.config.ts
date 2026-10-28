@@ -73,16 +73,15 @@ export default tseslint.config(
             "preserve-caught-error": "warn",
         },
     },
-    // flat/prettier switches off the layout rules oxfmt owns, and with them three
-    // checks oxfmt does not cover, re-armed below. block-mapping-colon-indicator-newline
-    // stays off: oxfmt breaks long flow collections after the colon, and its fixer
-    // deletes comments there.
+    // Re-arms what flat/prettier disables but oxfmt does not check; indent mirrors
+    // oxfmt so block-style fixes land clean. colon-indicator stays off: it fights oxfmt.
     {
         extends: [pluginYml.configs["flat/standard"], pluginYml.configs["flat/prettier"]],
         rules: {
             "yml/file-extension": ["error", { extension: "yml" }],
+            "yml/indent": ["error", 4, { indicatorValueIndent: 2 }],
             "yml/no-boolean-key": "error",
-            "yml/no-multiple-empty-lines": "error",
+            "yml/no-multiple-empty-lines": ["error", { max: 1, maxEOF: 0 }],
             "yml/no-trailing-spaces": "error",
             "yml/no-trailing-zeros": "error",
         },
