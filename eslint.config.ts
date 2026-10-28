@@ -73,15 +73,18 @@ export default tseslint.config(
             "preserve-caught-error": "warn",
         },
     },
-    // Re-arms what flat/prettier disables but oxfmt does not check; indent mirrors
-    // oxfmt so block-style fixes land clean. colon-indicator stays off: it fights oxfmt.
+    // Re-arms what flat/prettier disables but oxfmt does not check. The block-style and
+    // colon-indicator rules stay off: they fight oxfmt.
+    // Revisit on eslint-plugin-yml upgrades: block-style can return with yml/indent once
+    // its fix stops rewriting `|2` block scalars (broken in 3.9.0).
     {
         extends: [pluginYml.configs["flat/standard"], pluginYml.configs["flat/prettier"]],
         rules: {
+            "yml/block-mapping": "off",
+            "yml/block-sequence": "off",
             "yml/file-extension": ["error", { extension: "yml" }],
-            "yml/indent": ["error", 4, { indicatorValueIndent: 2 }],
             "yml/no-boolean-key": "error",
-            "yml/no-multiple-empty-lines": ["error", { max: 1, maxEOF: 0 }],
+            "yml/no-multiple-empty-lines": "error",
             "yml/no-trailing-spaces": "error",
             "yml/no-trailing-zeros": "error",
         },
