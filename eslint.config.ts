@@ -1,6 +1,7 @@
 import eslint from "@eslint/js";
 import regexpPlugin from "eslint-plugin-regexp";
 import pluginTsdoc from "eslint-plugin-tsdoc";
+import pluginYml from "eslint-plugin-yml";
 import globals from "globals";
 import tseslint from "typescript-eslint";
 
@@ -70,6 +71,29 @@ export default tseslint.config(
             ],
             "no-constant-binary-expression": ["error", { checkRelationalComparisons: true }],
             "preserve-caught-error": "warn",
+        },
+    },
+    // YAML files. flat/prettier switches off the layout rules oxfmt owns, which
+    // also drops four checks oxfmt does not cover; they are re-armed here, last,
+    // so nothing after can disable them again. Type-aware rules stay on the
+    // `**/*.ts` block above, so YAML is never type-checked.
+    {
+        extends: [pluginYml.configs["flat/standard"], pluginYml.configs["flat/prettier"]],
+        rules: {
+            "yml/block-mapping-colon-indicator-newline": "error",
+            "yml/file-extension": ["error", { extension: "yml" }],
+            "yml/no-boolean-key": "error",
+            "yml/no-multiple-empty-lines": "error",
+            "yml/no-trailing-spaces": "error",
+            "yml/no-trailing-zeros": "error",
+        },
+    },
+    // `claude plugin eval` discovers cases as `<eval dir>/**/case.yaml` (see
+    // `claude plugin eval --help`); a `.yml` name would not be picked up.
+    {
+        files: ["plugins/*/evals/**/case.yaml"],
+        rules: {
+            "yml/file-extension": "off",
         },
     },
 );
