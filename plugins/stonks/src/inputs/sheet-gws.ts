@@ -7,9 +7,9 @@ import { spawn } from "node:child_process";
 
 import type { StonksConfig } from "../domain.ts";
 
-export type SheetErrorKind = "gws-missing" | "gws-unauthorised" | "gws-failed" | "gws-bad-output";
+type SheetErrorKind = "gws-missing" | "gws-unauthorised" | "gws-failed" | "gws-bad-output";
 
-export interface SheetError {
+interface SheetError {
     kind: SheetErrorKind;
     message: string;
 }

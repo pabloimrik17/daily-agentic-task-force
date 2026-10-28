@@ -4,7 +4,7 @@
 // mirror `src/domain.ts`; the mod cannot import that file at run time, so the
 // subset it draws is restated here as types only.
 
-export type PaneSeverity = "alert" | "discrepancy" | "warning" | "informational" | "not-evaluable";
+type PaneSeverity = "alert" | "discrepancy" | "warning" | "informational" | "not-evaluable";
 
 export type PaneFinding = {
     check: string;

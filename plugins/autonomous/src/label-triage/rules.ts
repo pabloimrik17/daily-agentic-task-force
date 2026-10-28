@@ -9,7 +9,7 @@ import { type Group, GROUPS, isValidGroup } from "../label-contract/contract.ts"
 
 // `human`: an answer to a question of the handoff, applied in answer mode; no triage
 // report renders it.
-export type Tier = "code" | "llm" | "human";
+type Tier = "code" | "llm" | "human";
 
 export interface Derivation {
     source: Source;
