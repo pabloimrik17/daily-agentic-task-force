@@ -40,4 +40,6 @@ export default {
             ignoreDependencies: ["claude-code"],
         },
     },
+    // Only the cycles-only run (knip --cycles) reports circular imports; the default run leaves them out.
+    rules: { cycles: "error" },
 } satisfies KnipConfig;
