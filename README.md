@@ -97,7 +97,7 @@ Commits and pushes are gated by husky. Branches must match
 `main`, `develop`, or `<feature|fix|hotfix|chore|renovate>/<name>`.
 
 - **pre-commit** checks only what is staged: `validate-branch-name`, then
-  `lint-staged` (oxfmt, ESLint on staged TypeScript, markdownlint, the Renovate
+  `lint-staged` (oxfmt, ESLint on staged TypeScript and YAML, markdownlint, the Renovate
   validator when `renovate.json` is staged, `fallow audit`, and `zizmor --offline`
   plus `actionlint` when a file under `.github/workflows/` is staged), then
   gitleaks over the staged changes with redacted output. The branch-name check is

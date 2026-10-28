@@ -3,13 +3,13 @@ name: Validate Renovate config
 on:
     pull_request:
         paths:
-            - "renovate.json"
-            - "renovate.json5"
-            - ".renovaterc"
-            - ".renovaterc.json"
-            - ".renovaterc.json5"
-            - ".github/renovate.json"
-            - ".github/renovate.json5"
+            - renovate.json
+            - renovate.json5
+            - .renovaterc
+            - .renovaterc.json
+            - .renovaterc.json5
+            - .github/renovate.json
+            - .github/renovate.json5
 
 permissions:
     contents: read
