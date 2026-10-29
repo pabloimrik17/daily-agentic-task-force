@@ -15,10 +15,6 @@ export default {
     ],
     // pinned per-invocation via `bunx --package renovate@<version>`, never installed
     ignoreDependencies: ["renovate"],
-    ignoreExportsUsedInFile: {
-        interface: true,
-        type: true,
-    },
     workspaces: {
         ".": {
             entry: ["scripts/*.ts", "scripts/**/*.test.ts"],

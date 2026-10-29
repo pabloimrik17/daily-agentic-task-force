@@ -33,7 +33,7 @@ export type Exclusion =
     | "blocked"
     | "split";
 
-export type Autonomy = EntryLabel; // the entry label that sets how far an agent may go alone
+type Autonomy = EntryLabel; // the entry label that sets how far an agent may go alone
 
 // A task every check permitted, with what the comparison needs about it.
 export interface Candidate {

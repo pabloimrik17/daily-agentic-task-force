@@ -4,7 +4,7 @@ import { type Projection, project } from "./project.ts";
 
 const EVALUATED_WINDOWS = ["session", "weekly"] as const;
 
-export type WindowName = (typeof EVALUATED_WINDOWS)[number];
+type WindowName = (typeof EVALUATED_WINDOWS)[number];
 
 export interface WindowReport {
     name: WindowName;

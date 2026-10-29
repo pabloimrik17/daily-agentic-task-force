@@ -5,7 +5,7 @@ import type { Listing, StockLink } from "../domain.ts";
 import { formatListing } from "../domain.ts";
 import { normaliseTicker, parseListing } from "../ticker.ts";
 
-export interface LearntListing {
+interface LearntListing {
     /** Exchange-qualified, `NasdaqGS:HOOL`. */
     symbol: string;
     name: string | null;

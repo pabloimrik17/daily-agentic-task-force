@@ -21,7 +21,7 @@ const RECONCILE = "reconcile";
 
 const CAPTURE_LINES = 200;
 
-export type ReconcileAction =
+type ReconcileAction =
     | "none"
     | "adopted"
     | "aborted"

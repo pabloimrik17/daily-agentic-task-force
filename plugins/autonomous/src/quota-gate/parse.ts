@@ -33,7 +33,7 @@ export interface OpenUsageProvider {
     resources: Record<string, OpenUsageResource>;
 }
 
-export interface OpenUsageError {
+interface OpenUsageError {
     providerId: string;
     message: string;
 }
