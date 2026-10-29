@@ -1,6 +1,7 @@
 import eslint from "@eslint/js";
 import regexpPlugin from "eslint-plugin-regexp";
 import pluginTsdoc from "eslint-plugin-tsdoc";
+import pluginYml from "eslint-plugin-yml";
 import globals from "globals";
 import tseslint from "typescript-eslint";
 
@@ -70,6 +71,30 @@ export default tseslint.config(
             ],
             "no-constant-binary-expression": ["error", { checkRelationalComparisons: true }],
             "preserve-caught-error": "warn",
+        },
+    },
+    // Re-arms what flat/prettier disables but oxfmt does not check. The block-style and
+    // colon-indicator rules stay off: they fight oxfmt.
+    // Revisit on eslint-plugin-yml upgrades: block-style can return with yml/indent once
+    // its fix stops rewriting `|2` block scalars (broken in 3.9.0).
+    {
+        extends: [pluginYml.configs["flat/standard"], pluginYml.configs["flat/prettier"]],
+        rules: {
+            "yml/block-mapping": "off",
+            "yml/block-sequence": "off",
+            "yml/file-extension": ["error", { extension: "yml" }],
+            "yml/no-boolean-key": "error",
+            "yml/no-multiple-empty-lines": "error",
+            "yml/no-trailing-spaces": "error",
+            "yml/no-trailing-zeros": "error",
+        },
+    },
+    // `claude plugin eval` discovers cases as `<eval dir>/**/case.yaml` (see
+    // `claude plugin eval --help`); a `.yml` name would not be picked up.
+    {
+        files: ["plugins/*/evals/**/case.yaml"],
+        rules: {
+            "yml/file-extension": "off",
         },
     },
 );
