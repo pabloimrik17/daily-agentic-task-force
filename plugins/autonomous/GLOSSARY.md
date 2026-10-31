@@ -12,10 +12,40 @@ yet (DOT-110, [ADR 0001](docs/adr/0001-properties-persist-stages-replace.md)).
 
 ### Progress
 
+**Task**:
+A piece of work recorded in its tracker, carrying its current definition and
+the references needed to continue it.
+_Avoid_: ticket, issue
+
 **Stage**:
 One stage of advancing a task, performed by a fresh agent in a single session,
 such as the grill or proposal preparation.
 _Avoid_: step
+
+**Grill**:
+The stage that refines a task with the human before proposal preparation. It
+ends with a confirmed definition and a decided autonomy.
+_Avoid_: refinement
+
+**Definition**:
+The confirmed description of a task: its objective, its non-goals, its
+acceptance criteria, the decisions that shape it and its autonomy. A grill
+produces it, and the task's tracker holds the current one.
+_Avoid_: result, spec
+
+**Non-goals**:
+What a task's definition explicitly leaves out.
+_Avoid_: scope, out of scope
+
+**Stage summary**:
+A comment a stage leaves on its task for the next agent, holding what the
+definition does not: rejected options, open nuances and the skills to use.
+_Avoid_: continuation note, handoff
+
+**Split**:
+The division of a task into subtasks during its grill, each with its own
+definition and autonomy, while the parent keeps the overall definition.
+_Avoid_: breakdown
 
 **Work unit**:
 A task together with its next stage.
@@ -43,6 +73,10 @@ _Avoid_: claimed, locked
 **Candidate**:
 A work unit that every verifiable constraint permits now. Selection compares
 candidates; it never chooses anything else.
+
+**Subtask**:
+A task whose tracker records another task as its parent. While any subtask is
+open, its parent is never a candidate.
 
 ### Sessions
 
@@ -97,9 +131,13 @@ _Avoid_: taken label
 
 ### Labels
 
+**Scope label**:
+`work` or `personal`: whose work a task is. It is a property, kept for the
+whole life of the task.
+
 **Autonomy label**:
 `AFK` or `HITL`: how a human takes part in a task. It is a property, kept for
-the whole life of the task.
+the whole life of the task, and provisional while the task is in its grill.
 _Avoid_: participation mode
 
 **Stage label**:
