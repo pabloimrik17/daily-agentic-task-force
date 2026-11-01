@@ -373,6 +373,42 @@ describe("githubTracker", () => {
         });
     });
 
+    describe("recolourLabel", () => {
+        const LABEL = { scope: "pabloimrik17/monolab", name: "AFK", colour: "#000000" };
+
+        it("edits the colour with the exact argv, stripped of its leading #", async () => {
+            const exec = fakeExec(() => ({ ok: true, stdout: "" }));
+            const tracker = githubTracker(exec, CONFIG);
+            const result = await tracker.recolourLabel(LABEL, "#5e6ad2");
+
+            expect(exec.calls).toEqual([
+                ["label", "edit", "AFK", "--repo", "pabloimrik17/monolab", "--color", "5e6ad2"],
+            ]);
+            expect(result).toEqual({ ok: true, value: undefined });
+        });
+
+        it("recolours in the repo the label lives in", async () => {
+            const exec = fakeExec(() => ({ ok: true, stdout: "" }));
+            const tracker = githubTracker(exec, MULTI_CONFIG);
+            await tracker.recolourLabel({ ...LABEL, scope: "pabloimrik17/other" }, "#eb5757");
+
+            expect(exec.calls).toEqual([
+                ["label", "edit", "AFK", "--repo", "pabloimrik17/other", "--color", "eb5757"],
+            ]);
+        });
+
+        it("reports a CLI error naming the command", async () => {
+            const exec = fakeExec(() => ({ ok: false, error: "gh failed: boom" }));
+            const tracker = githubTracker(exec, CONFIG);
+            const result = await tracker.recolourLabel(LABEL, "#5e6ad2");
+
+            expect(result).toEqual({
+                ok: false,
+                error: "gh label edit AFK --repo pabloimrik17/monolab --color 5e6ad2: gh failed: boom",
+            });
+        });
+    });
+
     describe("tracker shape", () => {
         it("declares its configured repos as label scopes and label creation", () => {
             const tracker = githubTracker(

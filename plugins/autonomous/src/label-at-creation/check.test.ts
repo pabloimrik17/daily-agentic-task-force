@@ -19,20 +19,29 @@ function judged(group: JudgedGroup["group"], labels: string[], confidence: numbe
     return { group, labels, confidence };
 }
 
-describe("prepare", () => {
-    it("derives Linear scope from its structural rule", () => {
+// The shipped Linear alias for `grill-me` (config.example.json).
+function withGrillAlias(): ConfigLoad {
+    const load = { ...configured, config: config() };
+    if (load.ok) load.config.sources.linear.aliases = { "grill-me": ["Grill Me"] };
+    return load;
+}
+
+describe("Helper reports the state of each group", () => {
+    it("Linear with a structural rule", () => {
         expect(prepare(input("linear"), configured)).toEqual([
             "scope: derived personal (every linear task is personal)",
-            "entry: judge (AFK, HITL, grill-me)",
+            "autonomy: judge (AFK, HITL, grill-me)",
+            "stage: follows autonomy",
         ]);
     });
 
-    it("does not use the GitHub structural rule outside configured repositories", () => {
+    it("Unconfigured GitHub repository", () => {
         const load = { ...configured, config: config() };
         if (load.ok) load.config.sources.github.scope = "personal";
         expect(prepare(input("github", [], "other/repo"), load)).toEqual([
             "scope: judge (work, personal)",
-            "entry: judge (AFK, HITL, grill-me)",
+            "autonomy: judge (AFK, HITL, grill-me)",
+            "stage: follows autonomy",
             "repository other/repo is not configured; contract labels may not exist there",
         ]);
     });
@@ -43,75 +52,131 @@ describe("prepare", () => {
         for (const repo of ["owner/repo", "Owner/Repo"]) {
             expect(prepare(input("github", [], repo), load)).toEqual([
                 "scope: derived personal (every github task is personal)",
-                "entry: judge (AFK, HITL, grill-me)",
+                "autonomy: judge (AFK, HITL, grill-me)",
+                "stage: follows autonomy",
             ]);
         }
     });
 
-    it("recognises user-named labels and labels inherited from a parent", () => {
-        expect(prepare(input("linear", ["HITL"]), configured)[1]).toBe("entry: present HITL");
-        expect(prepare(input("beads", ["work", "AFK"]), configured)).toEqual([
-            "scope: present work",
-            "entry: present AFK",
+    it("Labels named by the user", () => {
+        expect(prepare(input("linear", ["HITL"]), configured)).toEqual([
+            "scope: derived personal (every linear task is personal)",
+            "autonomy: present HITL",
+            "stage: derived proposal (autonomy HITL)",
         ]);
     });
 
-    it("reports two named scopes as a conflict", () => {
+    it("Labels inherited from a parent", () => {
+        expect(prepare(input("beads", ["work", "AFK"]), configured)).toEqual([
+            "scope: present work",
+            "autonomy: present AFK",
+            "stage: derived proposal (autonomy AFK)",
+        ]);
+    });
+
+    it("Grill named by the user", () => {
+        expect(prepare(input("linear", ["grill-me"]), configured)).toEqual([
+            "scope: derived personal (every linear task is personal)",
+            "autonomy: not needed (grill-me)",
+            "stage: present grill-me",
+        ]);
+    });
+
+    it("Both scopes named", () => {
         expect(prepare(input("beads", ["work", "personal"]), configured)[0]).toBe(
             "scope: conflict work, personal",
         );
     });
+
+    it("offers no grill when the task will carry a stage label", () => {
+        expect(prepare(input("beads", ["proposal"]), configured)).toEqual([
+            "scope: judge (work, personal)",
+            "autonomy: judge (AFK, HITL)",
+            "stage: present proposal",
+        ]);
+    });
+
+    it("reports two named stage labels as a conflict, with no grill to offer", () => {
+        expect(prepare(input("beads", ["grill-me", "proposal"]), configured)).toEqual([
+            "scope: judge (work, personal)",
+            "autonomy: judge (AFK, HITL)",
+            "stage: conflict grill-me, proposal",
+        ]);
+    });
+
+    it("reports two named autonomy labels as a conflict and the stage as following it", () => {
+        expect(prepare(input("beads", ["work", "AFK", "HITL"]), configured)).toEqual([
+            "scope: present work",
+            "autonomy: conflict AFK, HITL",
+            "stage: follows autonomy",
+        ]);
+    });
+
+    it("derives the stage from a grill-me alias in the autonomy evidence", () => {
+        expect(prepare(input("linear", ["Grill Me"]), withGrillAlias())).toEqual([
+            "scope: derived personal (every linear task is personal)",
+            "autonomy: derived grill-me (alias Grill Me)",
+            "stage: derived grill-me (alias Grill Me)",
+        ]);
+    });
 });
 
-describe("decide", () => {
-    it("applies a confident entry and the derived scope", () => {
-        expect(check(input("linear"), configured, [judged("entry", ["AFK"], 0.97)])).toEqual([
-            "apply: personal, AFK",
+describe("Helper decides what to apply and what to ask", () => {
+    it("Confident entry", () => {
+        expect(check(input("linear"), configured, [judged("autonomy", ["AFK"], 0.97)])).toEqual([
+            "apply: personal, AFK, proposal",
         ]);
     });
 
-    it("asks about entry below the configured threshold", () => {
-        expect(check(input("linear"), configured, [judged("entry", ["AFK"], 0.8)])).toEqual([
+    it("Entry below threshold", () => {
+        expect(check(input("linear"), configured, [judged("autonomy", ["AFK"], 0.8)])).toEqual([
             "apply: personal",
-            "ask entry: below threshold 0.95: 0.80; options AFK, HITL, grill-me",
+            "ask autonomy: below threshold 0.95: 0.80; options AFK, HITL, grill-me",
         ]);
     });
 
-    it("asks about an invalid judgement", () => {
+    it("Invalid judgement", () => {
         expect(
-            check(input("linear"), configured, [judged("entry", ["AFK", "HITL"], 0.99)]),
+            check(input("linear"), configured, [judged("autonomy", ["AFK", "HITL"], 0.99)]),
         ).toEqual([
             "apply: personal",
-            "ask entry: invalid under the contract: AFK with HITL; options AFK, HITL, grill-me",
+            "ask autonomy: invalid under the contract: AFK with HITL; options AFK, HITL, grill-me",
         ]);
     });
 
-    it("asks when judgement disagrees with structural evidence", () => {
+    it("Grill judged", () => {
+        expect(
+            check(input("linear"), configured, [judged("autonomy", ["grill-me"], 0.97)]),
+        ).toEqual(["apply: personal, grill-me"]);
+    });
+
+    it("Judgement disagrees with evidence", () => {
         const lines = check(input("linear"), configured, [judged("scope", ["work"], 0.99)]);
         expect(lines[0]).toBe("apply: none");
         expect(lines[1]).toContain(
             "evidence personal (every linear task is personal) disagrees with judgement work",
         );
-        expect(lines[2]).toContain("ask entry: no judgement given");
+        expect(lines[2]).toContain("ask autonomy: no judgement given");
     });
 
-    it("applies the derived group independently of a low-confidence group", () => {
-        expect(check(input("linear"), configured, [judged("entry", ["AFK"], 0.6)])[0]).toBe(
+    it("One group applied, one asked", () => {
+        expect(check(input("linear"), configured, [judged("autonomy", ["AFK"], 0.6)])).toEqual([
             "apply: personal",
-        );
+            "ask autonomy: below threshold 0.95: 0.60; options AFK, HITL, grill-me",
+        ]);
     });
 
     it("applies a judgement exactly at the threshold", () => {
-        expect(check(input("linear"), configured, [judged("entry", ["AFK"], 0.95)])[0]).toBe(
-            "apply: personal, AFK",
+        expect(check(input("linear"), configured, [judged("autonomy", ["AFK"], 0.95)])[0]).toBe(
+            "apply: personal, AFK, proposal",
         );
     });
 
     it("uses the configured threshold of 0.9", () => {
         const load = { ...configured, config: config() };
         if (load.ok) load.config.judgement.threshold = 0.9;
-        expect(check(input("linear"), load, [judged("entry", ["AFK"], 0.92)])[0]).toBe(
-            "apply: personal, AFK",
+        expect(check(input("linear"), load, [judged("autonomy", ["AFK"], 0.92)])[0]).toBe(
+            "apply: personal, AFK, proposal",
         );
     });
 
@@ -121,7 +186,70 @@ describe("decide", () => {
         );
     });
 
-    it("applies present labels but no judgement when configuration is absent", () => {
+    it("brings proposal with an autonomy label the user named", () => {
+        expect(check(input("linear", ["HITL"]), configured, [])).toEqual([
+            "apply: personal, HITL, proposal",
+        ]);
+    });
+
+    it("applies the stage the user named and never adds a second one", () => {
+        expect(
+            check(input("linear", ["proposal"]), configured, [judged("autonomy", ["AFK"], 0.99)]),
+        ).toEqual(["apply: personal, AFK, proposal"]);
+    });
+
+    it("applies grill-me named by the user with no autonomy to ask about", () => {
+        expect(check(input("linear", ["grill-me"]), configured, [])).toEqual([
+            "apply: personal, grill-me",
+        ]);
+    });
+
+    it("asks about grill-me judged for a task that will carry a stage label", () => {
+        expect(
+            check(input("linear", ["proposal"]), configured, [
+                judged("autonomy", ["grill-me"], 0.99),
+            ]),
+        ).toEqual([
+            "apply: personal, proposal",
+            "ask autonomy: invalid under the contract: grill-me with a stage label: proposal; options AFK, HITL",
+        ]);
+    });
+
+    it("applies grill-me alone for a grill-me alias, with no judgement needed", () => {
+        expect(check(input("linear", ["Grill Me"]), withGrillAlias(), [])).toEqual([
+            "apply: personal, grill-me",
+        ]);
+    });
+
+    it("asks when the judgement disagrees with a grill-me alias", () => {
+        const lines = check(input("linear", ["Grill Me"]), withGrillAlias(), [
+            judged("autonomy", ["AFK"], 0.99),
+        ]);
+        expect(lines[0]).toBe("apply: personal");
+        expect(lines[1]).toContain(
+            "evidence grill-me (alias Grill Me) disagrees with judgement AFK",
+        );
+        expect(lines[1]).toContain("options AFK, HITL, grill-me");
+    });
+
+    it("Both stages named", () => {
+        expect(check(input("linear", ["grill-me", "proposal"]), configured, [])).toEqual([
+            "apply: personal",
+            "ask autonomy: no judgement given; options AFK, HITL",
+            "ask stage: conflicting present labels: grill-me, proposal; options grill-me, proposal",
+        ]);
+    });
+
+    it("asks about two named autonomy labels and applies no stage", () => {
+        expect(check(input("beads", ["work", "AFK", "HITL"]), configured, [])).toEqual([
+            "apply: work",
+            "ask autonomy: conflicting present labels: AFK, HITL; options AFK, HITL, grill-me",
+        ]);
+    });
+});
+
+describe("Missing configuration degrades to asking", () => {
+    it("No configuration file", () => {
         const missing = loadConfig({ AUTONOMOUS_CONFIG: "/missing/config.json" }, () => {
             const error = new Error("not found") as NodeJS.ErrnoException;
             error.code = "ENOENT";
@@ -130,9 +258,13 @@ describe("decide", () => {
         expect(prepare(input("linear", ["personal"]), missing).join("\n")).toContain(
             "/missing/config.json",
         );
-        const result = check(input("linear", ["personal"]), missing, [judged("entry", ["AFK"], 1)]);
+        const result = check(input("linear", ["personal"]), missing, [
+            judged("autonomy", ["AFK"], 1),
+        ]);
         expect(result[0]).toBe("apply: personal");
-        expect(result[1]).toBe("ask entry: configuration unavailable; options AFK, HITL, grill-me");
+        expect(result[1]).toBe(
+            "ask autonomy: configuration unavailable; options AFK, HITL, grill-me",
+        );
         expect(result[2]).toContain("configuration /missing/config.json:");
     });
 });

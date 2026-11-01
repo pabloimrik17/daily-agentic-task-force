@@ -258,6 +258,20 @@ describe("beadsTracker", () => {
         });
     });
 
+    describe("recolourLabel", () => {
+        it("always refuses: beads has no label colours", async () => {
+            const exec = fakeExec(() => ({ ok: true, stdout: "" }));
+            const tracker = beadsTracker(exec, CONFIG);
+            const result = await tracker.recolourLabel(
+                { scope: "beads", name: "work", colour: null },
+                "#2f80ed",
+            );
+
+            expect(exec.calls).toEqual([]);
+            expect(result).toEqual({ ok: false, error: "Beads has no label colours" });
+        });
+    });
+
     describe("tracker shape", () => {
         it("declares no label scopes and no label creation", () => {
             const tracker = beadsTracker(

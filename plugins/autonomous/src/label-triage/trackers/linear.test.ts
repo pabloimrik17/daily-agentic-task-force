@@ -281,9 +281,57 @@ describe("linearTracker", () => {
             expect(result).toEqual({
                 ok: true,
                 value: [
-                    { scope: "workspace", name: "AFK", colour: "#5e6ad2" },
-                    { scope: "DOT", name: "bug", colour: "#eb5757" },
+                    { scope: "workspace", name: "AFK", colour: "#5e6ad2", id: "l1" },
+                    { scope: "DOT", name: "bug", colour: "#eb5757", id: "l2" },
                 ],
+            });
+        });
+
+        it("fills the id of a workspace label and of a team label", async () => {
+            const exec = fakeExec(() => ({
+                ok: true,
+                stdout: JSON.stringify({
+                    nodes: [
+                        { id: "uuid-1", name: "AFK", color: "#5e6ad2", team: null },
+                        { id: "uuid-2", name: "AFK", color: "#5e6ad2", team: { key: "DOT" } },
+                    ],
+                }),
+            }));
+            const result = await linearTracker(exec, CONFIG).listLabels();
+
+            expect(result.ok && result.value.map((label) => label.id)).toEqual([
+                "uuid-1",
+                "uuid-2",
+            ]);
+        });
+
+        it("leaves the id absent when the listing carries none", async () => {
+            const exec = fakeExec(() => ({
+                ok: true,
+                stdout: JSON.stringify({
+                    nodes: [{ name: "AFK", color: "#5e6ad2", team: null }],
+                }),
+            }));
+            const result = await linearTracker(exec, CONFIG).listLabels();
+
+            expect(result).toEqual({
+                ok: true,
+                value: [{ scope: "workspace", name: "AFK", colour: "#5e6ad2" }],
+            });
+        });
+
+        it("reports an id that is not a string, naming the JSON path", async () => {
+            const exec = fakeExec(() => ({
+                ok: true,
+                stdout: JSON.stringify({
+                    nodes: [{ id: 7, name: "AFK", color: "#5e6ad2", team: null }],
+                }),
+            }));
+            const result = await linearTracker(exec, CONFIG).listLabels();
+
+            expect(result).toEqual({
+                ok: false,
+                error: "linear label list --all: output does not match the expected shape: $.nodes[0].id must be a string",
             });
         });
     });
@@ -306,6 +354,115 @@ describe("linearTracker", () => {
             expect(exec.calls).toEqual([]);
             expect(result.ok).toBe(false);
             expect(!result.ok && result.error).toContain('scope "DOT"');
+        });
+    });
+
+    describe("recolourLabel", () => {
+        const LABEL = { scope: "workspace", name: "AFK", colour: "#000000", id: "uuid-1" };
+        const MUTATION =
+            "mutation($id: String!, $color: String!) { issueLabelUpdate(id: $id, input: { color: $color }) { success } }";
+        const COMMAND = "linear api issueLabelUpdate --variable id=uuid-1 --variable color=#5e6ad2";
+
+        it("updates the colour through linear api with the exact argv, keeping the #", async () => {
+            const exec = fakeExec(() => ({
+                ok: true,
+                stdout: JSON.stringify({ data: { issueLabelUpdate: { success: true } } }),
+            }));
+            const result = await linearTracker(exec, CONFIG).recolourLabel(LABEL, "#5e6ad2");
+
+            expect(exec.calls).toEqual([
+                ["api", MUTATION, "--variable", "id=uuid-1", "--variable", "color=#5e6ad2"],
+            ]);
+            expect(result).toEqual({ ok: true, value: undefined });
+        });
+
+        it("recolours a team label by its id as well", async () => {
+            const exec = fakeExec(() => ({
+                ok: true,
+                stdout: JSON.stringify({ data: { issueLabelUpdate: { success: true } } }),
+            }));
+            const result = await linearTracker(exec, CONFIG).recolourLabel(
+                { ...LABEL, scope: "DOT", id: "uuid-2" },
+                "#eb5757",
+            );
+
+            expect(exec.calls[0]?.slice(2)).toEqual([
+                "--variable",
+                "id=uuid-2",
+                "--variable",
+                "color=#eb5757",
+            ]);
+            expect(result).toEqual({ ok: true, value: undefined });
+        });
+
+        it("fails when the response reports success false", async () => {
+            const exec = fakeExec(() => ({
+                ok: true,
+                stdout: JSON.stringify({ data: { issueLabelUpdate: { success: false } } }),
+            }));
+            const result = await linearTracker(exec, CONFIG).recolourLabel(LABEL, "#5e6ad2");
+
+            expect(result).toEqual({
+                ok: false,
+                error: `${COMMAND}: Linear did not report success`,
+            });
+        });
+
+        it("fails when the response carries no mutation result, naming the JSON path", async () => {
+            const exec = fakeExec(() => ({
+                ok: true,
+                stdout: JSON.stringify({ errors: [{ message: "Entity not found" }], data: null }),
+            }));
+            const result = await linearTracker(exec, CONFIG).recolourLabel(LABEL, "#5e6ad2");
+
+            expect(result).toEqual({
+                ok: false,
+                error: `${COMMAND}: output does not match the expected shape: $.data must be an object`,
+            });
+        });
+
+        it("fails when the response is not valid JSON, naming the command", async () => {
+            const exec = fakeExec(() => ({ ok: true, stdout: "not json" }));
+            const result = await linearTracker(exec, CONFIG).recolourLabel(LABEL, "#5e6ad2");
+
+            expect(result.ok).toBe(false);
+            expect(!result.ok && result.error).toMatch(
+                new RegExp(`^${COMMAND}: output is not valid JSON: `),
+            );
+        });
+
+        it("fails without running anything when the label has no id", async () => {
+            const exec = fakeExec(() => ({ ok: true, stdout: "{}" }));
+            const result = await linearTracker(exec, CONFIG).recolourLabel(
+                { scope: "workspace", name: "AFK", colour: "#000000" },
+                "#5e6ad2",
+            );
+
+            expect(exec.calls).toEqual([]);
+            expect(result).toEqual({
+                ok: false,
+                error: "linear api issueLabelUpdate: label AFK (scope workspace) has no id",
+            });
+        });
+
+        it("maps the unauthenticated case naming linear auth login", async () => {
+            const exec = fakeExec(() => ({
+                ok: false,
+                error: "linear failed: Run `linear auth login` to authenticate.",
+            }));
+            const result = await linearTracker(exec, CONFIG).recolourLabel(LABEL, "#5e6ad2");
+
+            expect(result).toEqual({
+                ok: false,
+                error: `${COMMAND}: Linear CLI is not authenticated, run \`linear auth login\``,
+            });
+        });
+
+        it("reports a CLI error naming the command", async () => {
+            const exec = fakeExec(() => ({ ok: false, error: "linear failed: boom" }));
+            const result = await linearTracker(exec, CONFIG).recolourLabel(LABEL, "#5e6ad2");
+
+            expect(result).toEqual({ ok: false, error: `${COMMAND}: linear failed: boom` });
         });
     });
 
