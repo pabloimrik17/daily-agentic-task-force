@@ -1,3 +1,4 @@
+import { GROUPS, type Group } from "../label-contract/contract.ts";
 import type { StepResult } from "../runner.ts";
 import type { LabelTriageData, SourceCounts } from "./step.ts";
 import { READ_BACK_MISMATCH, type TriageRecord, type WriteFailure } from "./write.ts";
@@ -49,9 +50,12 @@ export function renderLabelTriage(result: StepResult<LabelTriageData>): string {
 function renderCounts(s: SourceCounts): string {
     return (
         `  ${s.source.padEnd(9)} read ${String(s.read).padEnd(3)}  complete ${s.complete}` +
-        `  missing scope ${s.missing.scope} / entry ${s.missing.entry}` +
-        `  conflict scope ${s.conflict.scope} / entry ${s.conflict.entry}`
+        `  missing ${perGroup(s.missing)}  conflict ${perGroup(s.conflict)}`
     );
+}
+
+function perGroup(counts: Record<Group, number>): string {
+    return (Object.keys(GROUPS) as Group[]).map((group) => `${group} ${counts[group]}`).join(" / ");
 }
 
 function renderDerived(record: TriageRecord): string {

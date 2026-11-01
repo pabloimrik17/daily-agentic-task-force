@@ -3,7 +3,7 @@
 // deterministic for a given input so the report is reproducible, and
 // validity is checked before the confidence threshold.
 
-import { GROUPS, type Group, isValidGroup } from "../label-contract/contract.ts";
+import { GROUPS, type Group, isStageLabel, isValidDecision } from "../label-contract/contract.ts";
 import type { Detection } from "../label-contract/detect.ts";
 import type { Derivation } from "./rules.ts";
 
@@ -57,29 +57,47 @@ export function selectForJudgement(
     };
 }
 
-export function violation(group: Group, labels: readonly string[]): string {
+// Why a group's labels are invalid under the contract for a task with these labels. The
+// autonomy vocabulary includes `grill-me`, an autonomy decision.
+export function violation(
+    group: Group,
+    labels: readonly string[],
+    taskLabels: readonly string[],
+): string {
     if (labels.length === 0) {
         return "no label";
     }
-    const allowed = GROUPS[group] as readonly string[];
-    const unknown = labels.find((label) => !allowed.includes(label));
+    const vocabulary: readonly string[] =
+        group === "autonomy" ? [...GROUPS.autonomy, "grill-me"] : GROUPS[group];
+    const unknown = labels.find((label) => !vocabulary.includes(label));
     if (unknown !== undefined) {
         return `unknown label ${unknown}`;
     }
-    if (group === "scope") {
-        return `two scope labels: ${labels.join(", ")}`;
+    if (group !== "autonomy") {
+        return `two ${group} labels: ${labels.join(", ")}`;
     }
-    return "AFK with HITL";
+    return autonomyViolation(labels, taskLabels);
+}
+
+function autonomyViolation(labels: readonly string[], taskLabels: readonly string[]): string {
+    if (labels.includes("AFK") && labels.includes("HITL")) {
+        return "AFK with HITL";
+    }
+    if (labels.length > 1) {
+        return `two autonomy labels: ${labels.join(", ")}`;
+    }
+    return `grill-me with a stage label: ${taskLabels.filter(isStageLabel).join(", ")}`;
 }
 
 export function decide(
     derivation: Derivation,
     threshold: number,
+    taskLabels: readonly string[],
 ): { status: "eligible" | "asked"; reason: string } {
-    if (!isValidGroup(derivation.group, derivation.labels)) {
+    if (!isValidDecision(derivation.group, derivation.labels, taskLabels)) {
         return {
             status: "asked",
-            reason: `invalid under the contract: ${violation(derivation.group, derivation.labels)}`,
+            reason: `invalid under the contract: ${violation(derivation.group, derivation.labels, taskLabels)}`,
         };
     }
     if (derivation.confidence < threshold) {

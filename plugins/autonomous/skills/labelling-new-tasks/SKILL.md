@@ -14,12 +14,12 @@ once per task, with its own `prepare` and `decide` calls, even when tasks look
 alike or share labels.
 
 1. Collect every label the task will carry: labels the user names and other
-   planned labels. For `bd create --parent <id>` without
+   planned ones. For `bd create --parent <id>` without
    `--no-inherit-labels`, read the parent's labels with `bd show <id>` and
    include them. Write each contract label in its exact spelling, `work`,
-   `personal`, `AFK`, `HITL` or `grill-me`, so `afk` becomes `AFK` and
-   `Grill Me` becomes `grill-me`. Pass and create only the corrected form,
-   never the variant as well.
+   `personal`, `AFK`, `HITL`, `grill-me` or `proposal`, so `afk` becomes `AFK`
+   and `Grill Me` becomes `grill-me`. Pass and create only the corrected form,
+   never the variant.
 2. Run `prepare`, adding `--repo` only for GitHub and one `--label` per
    collected label:
 
@@ -27,35 +27,35 @@ alike or share labels.
     bun ${CLAUDE_PLUGIN_ROOT}/src/label-at-creation/cli.ts prepare --source <linear|beads|github> [--repo <owner/name>] [--label <name>]...
     ```
 
-    Read the printed criteria and each group's `present`, `derived`,
-    `conflict`, or `judge` line.
+    Read the criteria and each group line.
 
 3. Judge every `judge` group, and a `derived` group only when the conversation
    contradicts its evidence. Judge from the whole conversation and the intended
-   title and description, with labels from that group and an honest confidence
-   written as a decimal such as `0.9`. **Always run `decide`**, including when
-   `prepare` reports a conflict or no group needs judgement. Pass the same
-   source, repo, and labels, plus one `--judged` per judged group:
+   title and description, with that group's labels and an honest decimal
+   confidence such as `0.9`. **Always run `decide`**, including when `prepare`
+   reports a conflict or no group needs judgement. Pass the same source, repo,
+   and labels, plus one `--judged` per judged group:
 
     ```bash
-    bun ${CLAUDE_PLUGIN_ROOT}/src/label-at-creation/cli.ts decide --source <linear|beads|github> [--repo <owner/name>] [--label <name>]... [--judged <group>=<label>[,<label>]@<confidence>]...
+    bun ${CLAUDE_PLUGIN_ROOT}/src/label-at-creation/cli.ts decide --source <linear|beads|github> [--repo <owner/name>] [--label <name>]... [--judged <scope|autonomy>=<label>[,<label>]@<confidence>]...
     ```
 
-    Only `decide` determines which labels to apply or ask about.
+    Only `decide` chooses the labels to apply or ask about, adding `proposal`
+    beside an autonomy label; `grill-me` alone means "decide it in a grill".
 
 4. For each `ask` line, use the `AskUserQuestion` tool when it is available:
-   ask one question before creation with that group's listed options and
-   reason. Run `decide` again with that group's `--label` values replaced by
-   the answer and its `--judged` removed. When that tool is absent, do not ask
-   in plain text or wait for a reply: create now with the returned `apply` labels (`none`
-   means no contract label), then name each omitted group and its reason in the
-   reply for later `/autonomous:run --apply` triage. If a group is still asked
-   about after the second `decide`, take that same path.
-5. Create the task with all non-contract labels originally intended plus the
-   helper's `apply` labels in the create call itself, using the session's
-   tracker tool. With `bd create --parent`, also pass `--no-inherit-labels`:
-   the parent's non-contract labels are already in that list, and Beads would
-   otherwise copy the parent's contract labels back beside `apply`.
+   ask one question before creation with that group's options and reason. Run
+   `decide` again with that group's `--label` values replaced by the answer and
+   its `--judged` removed. When that tool is absent, do not ask in plain text
+   or wait for a reply: create now with the `apply` labels (`none` means no
+   contract label), then name each omitted group and its reason in the reply
+   for later `/autonomous:run --apply` triage. If a group is still asked about
+   after the second `decide`, take that same path.
+5. Create the task with its intended non-contract labels plus the helper's
+   `apply` labels in the create call itself, using the session's tracker tool.
+   With `bd create --parent`, also pass `--no-inherit-labels`: the parent's
+   non-contract labels are already in that list, and Beads would otherwise
+   copy the parent's contract labels back beside `apply`.
 
 | Tool                  | Label input at creation                            |
 | --------------------- | -------------------------------------------------- |

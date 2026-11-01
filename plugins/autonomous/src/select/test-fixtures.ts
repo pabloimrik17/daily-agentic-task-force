@@ -34,7 +34,7 @@ export function candidate(overrides: Partial<Candidate> = {}): Candidate {
     return {
         task: workTask(),
         scope: "personal",
-        autonomy: "grill-me",
+        autonomy: null,
         stage: "grill-me",
         ...overrides,
     };

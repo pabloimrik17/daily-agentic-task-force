@@ -26,6 +26,7 @@ function tracker(script: Script, source: Source = "beads"): Tracker & { calls: s
         listTasks: refuse,
         listLabels: refuse,
         createLabel: refuse,
+        recolourLabel: refuse,
         readTask: (id): Promise<TrackerResult<TrackerTask>> => {
             calls.push(`readTask:${id}`);
             if (script.readError !== undefined) {

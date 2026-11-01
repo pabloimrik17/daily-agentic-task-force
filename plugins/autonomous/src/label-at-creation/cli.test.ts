@@ -31,27 +31,64 @@ describe("label-at-creation CLI", () => {
         expect(result.stdout[1]).toContain("scope: derived personal");
     });
 
-    it("decides using the configured threshold", () => {
-        const result = invoke(["decide", "--source", "linear", "--judged", "entry=AFK@0.97"]);
+    it("prints the state of the scope, autonomy and stage groups for a prepare", () => {
+        const result = invoke(["prepare", "--source", "linear", "--label", "HITL"]);
         expect(result.code).toBe(0);
-        expect(result.stdout).toEqual(["apply: personal, AFK"]);
+        expect(result.stdout[1]).toBe(
+            [
+                "scope: derived personal (every linear task is personal)",
+                "autonomy: present HITL",
+                "stage: derived proposal (autonomy HITL)",
+            ].join("\n"),
+        );
+    });
+
+    it("decides using the configured threshold, accepting --judged autonomy", () => {
+        const result = invoke(["decide", "--source", "linear", "--judged", "autonomy=AFK@0.97"]);
+        expect(result.code).toBe(0);
+        expect(result.stdout).toEqual(["apply: personal, AFK, proposal"]);
+    });
+
+    it("prints the labels to apply and the group to ask about for a decide", () => {
+        const result = invoke(["decide", "--source", "linear", "--judged", "autonomy=AFK@0.8"]);
+        expect(result.code).toBe(0);
+        expect(result.stdout).toEqual([
+            [
+                "apply: personal",
+                "ask autonomy: below threshold 0.95: 0.80; options AFK, HITL, grill-me",
+            ].join("\n"),
+        ]);
+    });
+
+    it("applies grill-me alone for an autonomy judged grill-me", () => {
+        const result = invoke([
+            "decide",
+            "--source",
+            "linear",
+            "--judged",
+            "autonomy=grill-me@0.97",
+        ]);
+        expect(result.code).toBe(0);
+        expect(result.stdout).toEqual(["apply: personal, grill-me"]);
     });
 
     it.each([
         [["prepare", "--source", "other"], "--source"],
         [["prepare", "--source", "github"], "--repo is required"],
         [["prepare", "--source", "linear", "--repo", "owner/repo"], "--repo is only"],
-        [["prepare", "--source", "linear", "--judged", "entry=AFK@0.97"], "--judged is only"],
-        [["decide", "--source", "linear", "--judged", "entry=AFK@1.2"], "confidence"],
+        [["prepare", "--source", "linear", "--judged", "autonomy=AFK@0.97"], "--judged is only"],
+        [["decide", "--source", "linear", "--judged", "entry=AFK@0.97"], "invalid --judged"],
+        [["decide", "--source", "linear", "--judged", "stage=proposal@0.97"], "invalid --judged"],
+        [["decide", "--source", "linear", "--judged", "autonomy=AFK@1.2"], "confidence"],
         [
             [
                 "decide",
                 "--source",
                 "linear",
                 "--judged",
-                "entry=AFK@0.9",
+                "autonomy=AFK@0.9",
                 "--judged",
-                "entry=HITL@0.9",
+                "autonomy=HITL@0.9",
             ],
             "group given twice",
         ],
@@ -65,7 +102,7 @@ describe("label-at-creation CLI", () => {
 
     it("prints criteria and a decision after an ENOENT config read", () => {
         const result = invoke(
-            ["decide", "--source", "linear", "--label", "personal", "--judged", "entry=AFK@1"],
+            ["decide", "--source", "linear", "--label", "personal", "--judged", "autonomy=AFK@1"],
             () => {
                 const error = new Error("not found") as NodeJS.ErrnoException;
                 error.code = "ENOENT";
@@ -75,7 +112,7 @@ describe("label-at-creation CLI", () => {
         expect(result.code).toBe(0);
         expect(result.stdout[0]).toContain("Every task carries");
         expect(result.stdout[1]).toContain("apply: personal");
-        expect(result.stdout[1]).toContain("ask entry:");
+        expect(result.stdout[1]).toContain("ask autonomy:");
         expect(result.stdout[1]).toContain("/home/me/.config/autonomous/config.json");
     });
 });

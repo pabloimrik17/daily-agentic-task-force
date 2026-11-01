@@ -1,8 +1,9 @@
 // Label bootstrap (spec label-contract, "Label bootstrap"): makes every
-// contract label exist on every enabled source. It only ever creates missing
-// labels; an existing label is left as it is, even with a differing colour,
-// which it reports. Unlike the triage step, one failing source does not stop
-// the others (design D9).
+// contract label exist on every enabled source with the contract's colour. It
+// creates a missing label and recolours an existing one whose colour differs,
+// in each scope where it appears; a label outside the contract is never
+// touched or reported. Unlike the triage step, one failing source does not
+// stop the others.
 
 import type { AutonomousConfig, ContractLabel, Source } from "../config.ts";
 import type { Tracker, TrackerLabel, Trackers } from "../label-triage/trackers/tracker.ts";
@@ -11,7 +12,7 @@ import { COLOURS, LABELS } from "./contract.ts";
 export interface BootstrapLabel {
     scope: string;
     label: ContractLabel;
-    status: "created" | "present" | "failed";
+    status: "created" | "recoloured" | "present" | "failed";
     colour: string | null;
     expected: string | null;
     note: string | null;
@@ -91,11 +92,52 @@ async function bootstrapSource(tracker: Tracker): Promise<BootstrapSource> {
     const labels: BootstrapLabel[] = [];
     for (const scope of tracker.labelScopes) {
         for (const label of LABELS) {
-            const existing = findExisting(tracker, listed.value, scope, label);
-            labels.push(existing ? present(label, existing) : await create(tracker, scope, label));
+            labels.push(...(await bootstrapLabel(tracker, listed.value, scope, label)));
         }
     }
     return { ...base, labels };
+}
+
+async function bootstrapLabel(
+    tracker: Tracker,
+    listed: TrackerLabel[],
+    scope: string,
+    label: ContractLabel,
+): Promise<BootstrapLabel[]> {
+    const existing = findExisting(tracker, listed, scope, label);
+    if (!existing) {
+        return [await create(tracker, scope, label)];
+    }
+    const stale = sameName(tracker, listed, scope, label).filter((entry) =>
+        hasOtherColour(entry, label),
+    );
+    const existingIsStale = stale.some((entry) => entry === existing);
+    const reported: BootstrapLabel[] = existingIsStale ? [] : [present(label, existing)];
+    for (const entry of stale) {
+        reported.push(await recolour(tracker, entry, label, entry.colour));
+    }
+    return reported;
+}
+
+// Every listed label the bootstrap looks at for one contract label: on Linear the
+// workspace and every team, whose labels are separate objects; on GitHub only the
+// repository in scope.
+function sameName(
+    tracker: Tracker,
+    listed: TrackerLabel[],
+    scope: string,
+    label: ContractLabel,
+): TrackerLabel[] {
+    return listed.filter(
+        (entry) => entry.name === label && (tracker.source === "linear" || entry.scope === scope),
+    );
+}
+
+function hasOtherColour(
+    entry: TrackerLabel,
+    label: ContractLabel,
+): entry is TrackerLabel & { colour: string } {
+    return entry.colour !== null && entry.colour.toLowerCase() !== COLOURS[label];
 }
 
 // On Linear a same-name label in any team already exists for the contract, and a
@@ -114,16 +156,29 @@ function findExisting(
 }
 
 function present(label: ContractLabel, existing: TrackerLabel): BootstrapLabel {
-    const expected = COLOURS[label];
-    const differs = existing.colour !== null && existing.colour.toLowerCase() !== expected;
     return {
         scope: existing.scope,
         label,
         status: "present",
         colour: existing.colour,
-        expected: differs ? expected : null,
-        note: differs ? "colour differs" : null,
+        expected: null,
+        note: null,
     };
+}
+
+async function recolour(
+    tracker: Tracker,
+    existing: TrackerLabel,
+    label: ContractLabel,
+    old: string,
+): Promise<BootstrapLabel> {
+    const colour = COLOURS[label];
+    const result = await tracker.recolourLabel(existing, colour);
+    const base = { scope: existing.scope, label, expected: null };
+    if (!result.ok) {
+        return { ...base, status: "failed", colour: null, note: result.error };
+    }
+    return { ...base, status: "recoloured", colour, note: `was ${old}` };
 }
 
 async function create(
@@ -167,7 +222,12 @@ function renderSource(entry: BootstrapSource): string[] {
 }
 
 function renderScope(labels: BootstrapLabel[]): string {
-    const statuses: readonly BootstrapLabel["status"][] = ["created", "present", "failed"];
+    const statuses: readonly BootstrapLabel["status"][] = [
+        "created",
+        "recoloured",
+        "present",
+        "failed",
+    ];
     return statuses
         .map((status) => {
             const items = labels.filter((label) => label.status === status).map(renderItem);
@@ -178,11 +238,8 @@ function renderScope(labels: BootstrapLabel[]): string {
 }
 
 function renderItem(label: BootstrapLabel): string {
-    if (label.status === "failed") {
+    if (label.status === "failed" || label.status === "recoloured") {
         return `${label.label} (${label.note ?? ""})`;
-    }
-    if (label.expected !== null) {
-        return `${label.label} (colour ${label.colour ?? "none"}, expected ${label.expected})`;
     }
     return label.label;
 }

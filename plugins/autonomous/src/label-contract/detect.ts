@@ -5,7 +5,7 @@
 
 import type { ContractLabel, SourceRules } from "../config.ts";
 import type { TrackerTask } from "../label-triage/trackers/tracker.ts";
-import { GROUPS, type Group, isContractLabel, isValidGroup } from "./contract.ts";
+import { GROUPS, type Group, isContractLabel, isValidGroup, optionsFor } from "./contract.ts";
 
 export interface Evidence {
     label: ContractLabel;
@@ -13,10 +13,13 @@ export interface Evidence {
     detail: string; // `alias nazaries` | `every linear task is personal`
 }
 
+// `deferred` is for autonomy only, when the task has no autonomy label and its only
+// stage label is `grill-me`; the grill decides it.
 export type GroupState =
     | { status: "present"; labels: ContractLabel[] }
     | { status: "missing"; evidence: Evidence[] }
-    | { status: "conflict"; labels: ContractLabel[] };
+    | { status: "conflict"; labels: ContractLabel[] }
+    | { status: "deferred" };
 
 export interface Detection {
     task: TrackerTask;
@@ -29,9 +32,27 @@ export function detect(task: TrackerTask, rules: SourceRules): Detection {
         task,
         groups: {
             scope: groupState("scope", present, task, rules),
-            entry: groupState("entry", present, task, rules),
+            autonomy: isDeferred(present)
+                ? { status: "deferred" }
+                : groupState("autonomy", present, task, rules),
+            stage: groupState("stage", present, task, rules),
         },
     };
+}
+
+export function isComplete(state: GroupState): boolean {
+    return state.status === "present" || state.status === "deferred";
+}
+
+function isDeferred(present: ContractLabel[]): boolean {
+    const stage = labelsOf("stage", present);
+    return (
+        labelsOf("autonomy", present).length === 0 && stage.length === 1 && stage[0] === "grill-me"
+    );
+}
+
+function labelsOf(group: Group, present: ContractLabel[]): ContractLabel[] {
+    return present.filter((label) => GROUPS[group].includes(label));
 }
 
 function groupState(
@@ -40,7 +61,7 @@ function groupState(
     task: TrackerTask,
     rules: SourceRules,
 ): GroupState {
-    const labels = present.filter((label) => GROUPS[group].includes(label));
+    const labels = labelsOf(group, present);
     if (labels.length === 0) {
         return { status: "missing", evidence: evidenceFor(group, task, rules) };
     }
@@ -50,10 +71,17 @@ function groupState(
     return { status: "conflict", labels };
 }
 
+// An autonomy decision may be `grill-me` while the task has no stage label, so an alias
+// for `grill-me` is also evidence for the autonomy decision; the stage then follows it.
+function evidenceLabels(group: Group, task: TrackerTask): ContractLabel[] {
+    return group === "autonomy"
+        ? optionsFor(group, task.labels).filter(isContractLabel)
+        : [...GROUPS[group]];
+}
+
 function evidenceFor(group: Group, task: TrackerTask, rules: SourceRules): Evidence[] {
     const evidence: Evidence[] = [];
-    const groupLabels = GROUPS[group];
-    for (const label of groupLabels) {
+    for (const label of evidenceLabels(group, task)) {
         const aliases = rules.aliases?.[label] ?? [];
         for (const alias of aliases) {
             if (task.labels.includes(alias)) {

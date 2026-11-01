@@ -86,7 +86,7 @@ function selectResult(overrides: Partial<SelectedUnit> = {}): StepResult<SelectD
         id: "DOT-109",
         title: "Stage session manager",
         stage: "grill-me",
-        autonomy: "grill-me",
+        autonomy: null,
         scope: "personal",
         explanation: "The only candidate.",
         exception: null,
@@ -251,7 +251,7 @@ describe("launch: the unit", () => {
     });
 
     it("launches --stage test on a task whose next stage is proposal", async () => {
-        const afk = { ...TASK, labels: ["personal", "AFK"] };
+        const afk = { ...TASK, labels: ["personal", "AFK", "proposal"] };
         const { ctx } = setup({ tasks: [afk] });
 
         const result = await launchStep.run(ctx);

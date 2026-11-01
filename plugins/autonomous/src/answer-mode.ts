@@ -1,10 +1,16 @@
-// Answer mode (spec autonomous-run, "Answer mode"; handoff design D3): each
-// answer goes to the step its id names, and that step validates and applies
-// it. Routing is all this module decides: an answer to a step that takes none
-// is rejected here, and every other status comes from the step itself.
+// Answer mode (spec autonomous-run, "Answer mode"): each answer goes to the handler its id
+// names, a step that answers or the transition, and that handler validates and applies it.
+// Routing is all this module decides: an answer whose id names no handler is rejected here,
+// and every other status comes from the handler itself.
 
 import type { Answer } from "./args.ts";
 import type { AnswerContext, AnswerRecord, Step } from "./runner.ts";
+
+// Whoever answers: the text of an answer's id before the first `:` names it.
+export interface AnswerHandler {
+    id: string;
+    answer(answers: readonly Answer[], ctx: AnswerContext): Promise<AnswerRecord[]>;
+}
 
 interface AnswersReport {
     schema: "autonomous.answers.v1";
@@ -19,17 +25,21 @@ type AnsweringStep = Step & Required<Pick<Step, "answer">>;
 
 const answering = (step: Step): step is AnsweringStep => step.answer !== undefined;
 
+export function answeringSteps(steps: readonly Step[]): AnswerHandler[] {
+    return steps.filter(answering);
+}
+
 export async function applyAnswers(
-    steps: readonly Step[],
+    handlers: readonly AnswerHandler[],
     answers: readonly Answer[],
     ctx: AnswerContext,
     startedAt: Date,
 ): Promise<AnswersReport> {
-    const handlers = new Map(steps.filter(answering).map((step) => [step.id, step]));
+    const byId = new Map(handlers.map((handler) => [handler.id, handler]));
     const records = new Map<string, AnswerRecord>();
-    // Each step gets all its answers in one call, so it can order its writes itself.
+    // Each handler gets all its answers in one call, so it can order its writes itself.
     for (const [stepId, routed] of route(answers)) {
-        const handler = handlers.get(stepId);
+        const handler = byId.get(stepId);
         const made =
             handler === undefined
                 ? routed.map((answer) => rejected(answer, stepId))

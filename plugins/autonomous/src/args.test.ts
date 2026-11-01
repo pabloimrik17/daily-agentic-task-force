@@ -14,6 +14,7 @@ const DEFAULTS: RunArgs = {
     bootstrapLabels: false,
     noHandoff: false,
     answers: [],
+    transition: undefined,
 };
 
 function accepted(overrides: Partial<RunArgs>) {
@@ -54,10 +55,10 @@ describe("parseArgs", () => {
     });
 
     it("reads one --answer with --apply", () => {
-        expect(parseArgs(["--apply", "--answer", "label-triage:beads:X-12:entry=HITL"])).toEqual(
+        expect(parseArgs(["--apply", "--answer", "label-triage:beads:X-12:autonomy=HITL"])).toEqual(
             accepted({
                 apply: true,
-                answers: [{ id: "label-triage:beads:X-12:entry", values: ["HITL"] }],
+                answers: [{ id: "label-triage:beads:X-12:autonomy", values: ["HITL"] }],
             }),
         );
     });
@@ -66,7 +67,7 @@ describe("parseArgs", () => {
         expect(
             parseArgs([
                 "--answer",
-                "label-triage:github:owner/repo#12:entry=HITL,grill-me",
+                "label-triage:github:owner/repo#12:autonomy=HITL,grill-me",
                 "--apply",
                 "--answer",
                 "label-triage:linear:DOT-104:scope=work",
@@ -79,7 +80,10 @@ describe("parseArgs", () => {
                 apply: true,
                 json: true,
                 answers: [
-                    { id: "label-triage:github:owner/repo#12:entry", values: ["HITL", "grill-me"] },
+                    {
+                        id: "label-triage:github:owner/repo#12:autonomy",
+                        values: ["HITL", "grill-me"],
+                    },
                     { id: "label-triage:linear:DOT-104:scope", values: ["work"] },
                     { id: "other:a", values: ["b=c"] },
                 ],
@@ -119,6 +123,22 @@ describe("parseArgs", () => {
                 json: true,
                 apply: true,
                 noHandoff: true,
+            }),
+        );
+    });
+
+    it("reads --apply --transition", () => {
+        expect(parseArgs(["--apply", "--transition", "linear:DOT-110"])).toEqual(
+            accepted({ apply: true, transition: { source: "linear", id: "DOT-110" } }),
+        );
+    });
+
+    it("reads --apply --transition with --json, splitting at the first colon", () => {
+        expect(parseArgs(["--transition", "github:owner/repo#12", "--json", "--apply"])).toEqual(
+            accepted({
+                apply: true,
+                json: true,
+                transition: { source: "github", id: "owner/repo#12" },
             }),
         );
     });
@@ -163,11 +183,11 @@ describe("parseArgs", () => {
         ],
         [
             ["--bootstrap-labels", "--no-handoff"],
-            "--no-handoff cannot be combined with --bootstrap-labels or --answer",
+            "--no-handoff cannot be combined with --bootstrap-labels, --answer or --transition",
         ],
         [
             ["--apply", "--no-handoff", "--answer", "a:b=c"],
-            "--no-handoff cannot be combined with --bootstrap-labels or --answer",
+            "--no-handoff cannot be combined with --bootstrap-labels, --answer or --transition",
         ],
         [["--answer", "a:b=HITL"], "--answer requires --apply"],
         [["--json", "--answer", "a:b=HITL"], "--answer requires --apply"],
@@ -223,15 +243,15 @@ describe("parseArgs", () => {
         [["--stage", "test"], "--stage requires --task"],
         [
             ["--task", "linear:A-1", "--bootstrap-labels"],
-            "--task cannot be combined with --bootstrap-labels, --answer or --discard",
+            "--task cannot be combined with --bootstrap-labels, --answer, --discard or --transition",
         ],
         [
             ["--task", "linear:A-1", "--apply", "--answer", "a:b=HITL"],
-            "--task cannot be combined with --bootstrap-labels, --answer or --discard",
+            "--task cannot be combined with --bootstrap-labels, --answer, --discard or --transition",
         ],
         [
             ["--task", "linear:A-1", "--apply", "--discard", "linear:A-1"],
-            "--task cannot be combined with --bootstrap-labels, --answer or --discard",
+            "--task cannot be combined with --bootstrap-labels, --answer, --discard or --transition",
         ],
         [["--discard"], "--discard requires an attempt id or <source>:<id>"],
         [["--discard", "--apply"], "--discard requires an attempt id or <source>:<id>"],
@@ -258,6 +278,71 @@ describe("parseArgs", () => {
             "--discard can only be combined with --apply, --json and --release-workspace",
         ],
         [["--stage", "test", "--apply", "--discard", "beads:X-1"], "--stage requires --task"],
+        [["--transition"], "--transition requires <source>:<id>"],
+        [["--apply", "--transition"], "--transition requires <source>:<id>"],
+        [["--apply", "--transition", "--json"], "--transition requires <source>:<id>"],
+        [
+            ["--apply", "--transition", "linear:A-1", "--transition", "linear:A-2"],
+            "--transition given more than once",
+        ],
+        [
+            ["--apply", "--transition", "DOT-110"],
+            "--transition DOT-110 must be <source>:<id> with source linear, beads or github",
+        ],
+        [
+            ["--apply", "--transition", "jira:DOT-110"],
+            "--transition jira:DOT-110 must be <source>:<id> with source linear, beads or github",
+        ],
+        [
+            ["--apply", "--transition", "linear:"],
+            "--transition linear: must be <source>:<id> with source linear, beads or github",
+        ],
+        [["--transition", "linear:DOT-110"], "--transition requires --apply"],
+        [["--transition", "linear:DOT-110", "--json"], "--transition requires --apply"],
+        [
+            ["--apply", "--transition", "linear:DOT-110", "--no-handoff"],
+            "--no-handoff cannot be combined with --bootstrap-labels, --answer or --transition",
+        ],
+        [
+            ["--apply", "--transition", "linear:DOT-110", "--answer", "a:b=HITL"],
+            "--transition can only be combined with --apply and --json",
+        ],
+        [
+            ["--apply", "--transition", "linear:DOT-110", "--task", "linear:DOT-111"],
+            "--task cannot be combined with --bootstrap-labels, --answer, --discard or --transition",
+        ],
+        [
+            [
+                "--apply",
+                "--transition",
+                "linear:DOT-110",
+                "--task",
+                "linear:DOT-111",
+                "--stage",
+                "test",
+            ],
+            "--task cannot be combined with --bootstrap-labels, --answer, --discard or --transition",
+        ],
+        [
+            ["--apply", "--transition", "linear:DOT-110", "--discard", "beads:X-1"],
+            "--transition can only be combined with --apply and --json",
+        ],
+        [
+            ["--apply", "--transition", "linear:DOT-110", "--bootstrap-labels"],
+            "--bootstrap-labels can only be combined with --json",
+        ],
+        [
+            ["--apply", "--transition", "linear:DOT-110", "--account", "claude"],
+            "--transition can only be combined with --apply and --json",
+        ],
+        [
+            ["--apply", "--transition", "linear:DOT-110", "--force"],
+            "--transition can only be combined with --apply and --json",
+        ],
+        [
+            ["--apply", "--transition", "linear:DOT-110", "--release-workspace"],
+            "--transition can only be combined with --apply and --json",
+        ],
         [["--release-workspace"], "--release-workspace requires --discard"],
         [["--apply", "--release-workspace"], "--release-workspace requires --discard"],
     ])("rejects %j", (argv, error) => {
