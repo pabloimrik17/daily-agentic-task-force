@@ -1,7 +1,7 @@
 // Reproduces `projectedUsage` from OpenUsage's `Pace.evaluate` (v0.7.12),
 // including every condition under which it returns no result.
 
-export type ProjectionUnavailableReason =
+type ProjectionUnavailableReason =
     | "non-positive-limit"
     | "non-positive-window"
     | "no-consumption"

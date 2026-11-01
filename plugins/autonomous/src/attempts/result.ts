@@ -9,7 +9,7 @@ import { array, type Json, object, ParseError, rejectUnknownKeys, string } from 
 
 export const RESULT_SCHEMA = "autonomous.result.v1";
 
-export interface ResultMarker {
+interface ResultMarker {
     schema: typeof RESULT_SCHEMA;
     attempt: string;
     outcome: "completed";
