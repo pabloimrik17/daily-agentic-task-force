@@ -1,8 +1,7 @@
-// Answer mode (spec autonomous-run, "Answer mode"; handoff design D3): each
-// answer goes to the handler its id names, a step that answers or the
-// transition (design D5), and that handler validates and applies it. Routing
-// is all this module decides: an answer whose id names no handler is rejected
-// here, and every other status comes from the handler itself.
+// Answer mode (spec autonomous-run, "Answer mode"): each answer goes to the handler its id
+// names, a step that answers or the transition, and that handler validates and applies it.
+// Routing is all this module decides: an answer whose id names no handler is rejected here,
+// and every other status comes from the handler itself.
 
 import type { Answer } from "./args.ts";
 import type { AnswerContext, AnswerRecord, Step } from "./runner.ts";
@@ -26,7 +25,6 @@ type AnsweringStep = Step & Required<Pick<Step, "answer">>;
 
 const answering = (step: Step): step is AnsweringStep => step.answer !== undefined;
 
-// The steps that take answers, as handlers.
 export function answeringSteps(steps: readonly Step[]): AnswerHandler[] {
     return steps.filter(answering);
 }

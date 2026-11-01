@@ -1,11 +1,11 @@
-// The label-triage step (spec label-triage; design D7, D8): reads every
-// enabled source, detects the contract groups, derives what is missing by rule
-// and then by judgement, and writes only with --apply. Reading fails closed —
-// a source that cannot be read makes the step not evaluable, with no partial
+// The label-triage step (spec label-triage): reads every enabled source,
+// detects the contract groups, derives what is missing by rule and then by
+// judgement, and writes only with --apply. Reading fails closed — a source
+// that cannot be read makes the step not evaluable, with no partial
 // evaluation — while judging degrades: a failed judgement leaves its tasks not
 // judged and the outcome unaffected. The step never returns `wait`. The groups
-// it leaves for the human become its questions (handoff design D4). The stage
-// is never judged or asked: it follows the autonomy decision.
+// it leaves for the human become its questions. The stage is never judged or
+// asked: it follows the autonomy decision.
 
 import type { AutonomousConfig, Source } from "../config.ts";
 import {
@@ -167,9 +167,6 @@ function judgementCandidates(detections: Detection[]): Map<Detection, DecidedGro
     return candidates;
 }
 
-// Each derivation is decided against its task's labels (design D2). An eligible autonomy
-// decision is expanded into the records it writes: `grill-me` as a stage, `AFK` or
-// `HITL` followed by `proposal` (design D3).
 function decideAll(
     derivations: Derivation[],
     tasks: ReadonlyMap<string, TrackerTask>,
@@ -191,7 +188,6 @@ function decideAll(
     return { eligible, asked };
 }
 
-// A deferred autonomy counts as complete, like a present group (design D1).
 function countSource(source: Source, detections: Detection[]): SourceCounts {
     const own = detections.filter((detection) => detection.task.source === source);
     const count = (status: "missing" | "conflict"): Record<Group, number> => ({
@@ -332,7 +328,7 @@ function labelCount(records: TriageRecord[]): number {
 }
 
 // `missing`: the label-availability notes, one line per label a tracker lacks (naming the
-// bootstrap) and, without --apply, per source whose labels could not be listed (design D4).
+// bootstrap) and, without --apply, per source whose labels could not be listed.
 function reasonsFor(data: LabelTriageData, missing: readonly string[]): string[] {
     const reasons = data.sources.map(
         (s) =>

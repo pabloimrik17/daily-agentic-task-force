@@ -266,7 +266,6 @@ describe("main --bootstrap-labels", () => {
     );
     afterAll(() => rmSync(dir, { recursive: true, force: true }));
 
-    // Every contract label in the workspace with its contract colour, `recoloured` overridden.
     const everyLabel = (differing: Record<string, string> = {}): TrackerLabel[] =>
         LABELS.map((name) => ({
             scope: "workspace",
@@ -1029,7 +1028,6 @@ describe("main --transition", () => {
     const missing = join(dir, "absent.json");
     const missingError = `configuration file not found at ${missing}; create it from the example at ${EXAMPLE_PATH}`;
 
-    // Beads task B-1 with `labels`; `log` records a step run, OpenUsage or the trackers built.
     function transitionDeps(
         labels: string[],
         env: Record<string, string> = { AUTONOMOUS_CONFIG: configPath },

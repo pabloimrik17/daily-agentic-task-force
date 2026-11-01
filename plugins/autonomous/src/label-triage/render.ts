@@ -54,7 +54,6 @@ function renderCounts(s: SourceCounts): string {
     );
 }
 
-// `scope 1 / autonomy 2 / stage 0`, in the contract's group order.
 function perGroup(counts: Record<Group, number>): string {
     return (Object.keys(GROUPS) as Group[]).map((group) => `${group} ${counts[group]}`).join(" / ");
 }

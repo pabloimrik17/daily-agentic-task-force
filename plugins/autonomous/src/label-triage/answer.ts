@@ -1,11 +1,8 @@
 // Answers to triage questions (spec label-triage, "Apply answers to triage
-// questions"; handoff design D5): each answer names its question's group, the
-// task is read again, and the answer is checked against the options for the
-// task's stage (design D2), so only a group still missing is written. An
-// autonomy answer writes the stage that follows it (design D3). The survivors
-// go through the step's own additive write with the label check, read-back and
-// per-source stop. The answer wins over the evidence and the judgement the run
-// had, and whether the task is still open is never checked.
+// questions"): the task is read again and each answer is checked against the
+// options for the task's stage, so only a group still missing is written, through
+// the step's own additive write. The answer wins over the evidence and the
+// judgement the run had, and whether the task is still open is never checked.
 
 import type { Answer } from "../args.ts";
 import { type Group, isValidDecision } from "../label-contract/contract.ts";
@@ -23,8 +20,7 @@ import {
     type WriteFailure,
 } from "./write.ts";
 
-// An answer settled before any write, or the derivations to write for it with the task
-// just read: the answered decision first, then the stage that follows it.
+// `derivations` holds the answered decision first, then the stage that follows it.
 type Checked =
     | { record: AnswerRecord }
     | { answer: Answer; derivations: Derivation[]; task: TrackerTask };
@@ -100,10 +96,9 @@ async function check(answer: Answer, ctx: AnswerContext): Promise<Checked> {
     return { answer, derivations, task };
 }
 
-// Validity depends on the task's stage (design D2): a `grill-me` answer that only the
-// stage set since the question makes invalid is skipped, naming the stage; any other
-// invalid answer is rejected. A group no longer missing (a deferred autonomy included)
-// is skipped, naming what was found.
+// Validity depends on the task's stage: a `grill-me` answer that only the stage set since
+// the question makes invalid is skipped, naming the stage; any other invalid answer is
+// rejected.
 function settledByTask(
     group: Group,
     values: readonly string[],
@@ -124,7 +119,7 @@ function settledByTask(
         : { status: "skipped", detail: found(group, state) };
 }
 
-// Never called for a missing group. A deferred autonomy waits for the task's grill (design D1).
+// Never called for a missing group.
 function found(group: Group, state: GroupState): string {
     if (state.status === "conflict") {
         return `${group} in conflict: ${state.labels.join(", ")}`;
@@ -139,9 +134,7 @@ function recordKey(derivation: Derivation): string {
     return `${taskKey(derivation.source, derivation.taskId)}:${derivation.group}`;
 }
 
-// The answer is applied only when every record it wrote was; otherwise the first record
-// not applied says why. A label the tracker lacks fails the answer without stopping the
-// source (design D4).
+// A label the tracker lacks fails the answer without stopping the source.
 function fromWrites(
     entry: { answer: Answer; derivations: Derivation[]; task: TrackerTask },
     writes: Writes,
