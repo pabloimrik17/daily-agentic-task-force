@@ -4,8 +4,8 @@ import { describe, expect, it } from "vitest";
 
 import { LABELS } from "../label-contract/contract.ts";
 
-// criteria.md is the single text the judgement prompt and the creation helper print
-// (design D10); it covers the grouped labels only, since triage never decides taken.
+// criteria.md is the single text the judgement prompt and the creation helper print;
+// it covers the grouped labels only, since triage never decides taken.
 const CRITERIA = readFileSync(new URL("./criteria.md", import.meta.url), "utf8");
 
 describe("criteria.md", () => {

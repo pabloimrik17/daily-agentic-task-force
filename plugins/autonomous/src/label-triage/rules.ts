@@ -3,7 +3,7 @@
 // from its own evidence alone, before any judgement is requested. A valid set
 // of evidence labels yields a derivation with confidence 1; a conflicting set
 // is reported to the human instead. The stage is never derived from evidence:
-// it follows the autonomy (design D3).
+// it follows the autonomy.
 
 import type { Source } from "../config.ts";
 import { type Detection, type Evidence } from "../label-contract/detect.ts";
@@ -57,7 +57,7 @@ export function deriveByRule(detection: Detection): { derived: Derivation[]; ask
     return { derived, asked };
 }
 
-// Design D3: the derivations an eligible autonomy decision writes, in write order.
+// The derivations an eligible autonomy decision writes, in write order.
 // `grill-me` is recorded in the stage group alone; `AFK` or `HITL` brings `proposal`
 // while the task has no stage label. A decision of another group is returned as is.
 export function recordsForAutonomy(
@@ -84,7 +84,6 @@ export function recordsForAutonomy(
     ];
 }
 
-// A task that carries an autonomy label and no stage label gets `proposal` by rule.
 function stageFromAutonomy(detection: Detection): Derivation | undefined {
     const autonomy = detection.groups.autonomy;
     if (detection.groups.stage.status !== "missing" || autonomy.status !== "present") {

@@ -29,7 +29,7 @@ type FlagHandler = (draft: Draft, value: string) => string | undefined;
 
 const SOURCES: readonly string[] = ["linear", "beads", "github"];
 
-// The stage is never judged: it follows the autonomy (design D10).
+// The stage is never judged: it follows the autonomy.
 const JUDGED = new RegExp(`^(${DECIDED_GROUPS.join("|")})=(.*)@(\\d+(?:\\.\\d+)?)$`);
 
 function parseJudged(value: string, judged: readonly JudgedGroup[]): JudgedGroup | string {

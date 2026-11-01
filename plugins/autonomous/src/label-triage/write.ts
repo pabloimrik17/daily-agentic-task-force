@@ -1,12 +1,12 @@
 // Additive writes with read-back (spec label-triage, "Write only with
 // --apply, additively, with read-back" and "Labels missing on a tracker are
-// not written"; design D4): every write adds labels, never replaces or removes
-// them, and is verified by reading the task back. A write error, a read-back
-// mismatch or a label listing that fails stops writes to that source for the
-// rest of the run; the other sources keep going. A label the tracker lacks is
-// not written: its derivation stays proposed and the source keeps writing. Without
-// --apply the same lookup runs read-only to preview what --apply would skip: a
-// listing that fails there is a note, not a failure.
+// not written"): every write adds labels, never replaces or removes them, and
+// is verified by reading the task back. A write error, a read-back mismatch or
+// a label listing that fails stops writes to that source for the rest of the
+// run; the other sources keep going. A label the tracker lacks is not written:
+// its derivation stays proposed and the source keeps writing. Without --apply
+// the same lookup runs read-only to preview what --apply would skip: a listing
+// that fails there is a note, not a failure.
 
 import type { Source } from "../config.ts";
 import type { Group } from "../label-contract/contract.ts";
@@ -41,7 +41,7 @@ interface Written {
 const SOURCE_ORDER: readonly Source[] = ["beads", "github", "linear"];
 
 // A write cut short leaves at worst an autonomy without its stage, which the next run
-// completes by rule (design D3).
+// completes by rule.
 const GROUP_ORDER: readonly Group[] = ["scope", "autonomy", "stage"];
 
 // Prefix of the error a read-back mismatch reports; the report renders it apart.
@@ -117,7 +117,6 @@ export async function applyDerivations(
     return written;
 }
 
-// Tasks in the order they first appear; each task's derivations scope, autonomy, stage.
 function inWriteOrder(derivations: readonly Derivation[]): Derivation[] {
     const byTask = new Map<string, Derivation[]>();
     for (const derivation of derivations) {
@@ -127,7 +126,6 @@ function inWriteOrder(derivations: readonly Derivation[]): Derivation[] {
     return [...byTask.values()].flatMap((own) => own.sort((a, b) => rank(a) - rank(b)));
 }
 
-// The source's labels are listed once, the first time it has something to write.
 async function writeSource(
     tracker: Tracker,
     derivations: readonly Derivation[],
@@ -156,7 +154,6 @@ async function writeSource(
     }
 }
 
-// A label the tracker lacks is never written, so the derivation was never attempted.
 async function writeChecked(
     tracker: Tracker,
     check: LabelCheck,
@@ -174,7 +171,6 @@ async function writeChecked(
     return writeOne(tracker, derivation, before);
 }
 
-// The detail for the first label of the derivation the tracker lacks, or null.
 function missingDetailOf(check: LabelCheck, derivation: Derivation): string | null {
     const absent = derivation.labels.find((label) => !check(label, derivation.taskId));
     return absent === undefined ? null : missingLabelDetail(absent, derivation.source);
@@ -186,9 +182,8 @@ function note(written: Written, text: string): void {
     }
 }
 
-// Without --apply nothing is written; the source's labels are still listed, once, when it
-// has something to write, so each derivation shows what --apply would skip. A listing that
-// fails writes nothing and fails nothing: the derivations stay proposed and one note says why.
+// Labels are listed even without --apply, so each derivation shows what --apply would skip;
+// a listing that fails here is only a note.
 async function previewSource(
     tracker: Tracker,
     derivations: readonly Derivation[],

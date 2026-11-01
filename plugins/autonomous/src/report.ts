@@ -1,8 +1,8 @@
 import type { RunArgs } from "./args.ts";
 import type { HandoffQuestion, RunResult, Step, StepOutcome, StepResult } from "./runner.ts";
 
-// What the run asks the agent that ran the command to do next (design D1).
-// Transition mode emits one too, rendered by the same functions (design D7).
+// What the run asks the agent that ran the command to do next. Transition mode emits one
+// too, rendered by the same functions.
 export interface Handoff {
     questions: HandoffQuestion[];
     remaining: number; // contributed questions left out by the cap
@@ -49,7 +49,7 @@ export function buildHandoff(questions: readonly HandoffQuestion[]): Handoff {
     };
 }
 
-// Design D2: the handoff travels as the last line, one JSON document the command reads back.
+// The handoff travels as the last line, one JSON document the command reads back.
 export function renderHandoffLine(handoff: Handoff): string {
     return `handoff: ${JSON.stringify(handoff)}`;
 }

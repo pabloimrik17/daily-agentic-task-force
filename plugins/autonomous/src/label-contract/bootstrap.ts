@@ -3,7 +3,7 @@
 // creates a missing label and recolours an existing one whose colour differs,
 // in each scope where it appears; a label outside the contract is never
 // touched or reported. Unlike the triage step, one failing source does not
-// stop the others (design D9).
+// stop the others.
 
 import type { AutonomousConfig, ContractLabel, Source } from "../config.ts";
 import type { Tracker, TrackerLabel, Trackers } from "../label-triage/trackers/tracker.ts";
@@ -111,8 +111,6 @@ async function bootstrapLabel(
     const stale = sameName(tracker, listed, scope, label).filter((entry) =>
         hasOtherColour(entry, label),
     );
-    // The label found is reported as present unless it is itself one of the stale
-    // ones; it comes first, then each recoloured label in listing order.
     const existingIsStale = stale.some((entry) => entry === existing);
     const reported: BootstrapLabel[] = existingIsStale ? [] : [present(label, existing)];
     for (const entry of stale) {
@@ -135,7 +133,6 @@ function sameName(
     );
 }
 
-// A label with no listed colour is left as present, as before.
 function hasOtherColour(
     entry: TrackerLabel,
     label: ContractLabel,

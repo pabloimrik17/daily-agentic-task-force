@@ -1,10 +1,6 @@
-// Answers to the transition question (spec autonomous-run, "Transition
-// answers"; spec label-contract, "A transition replaces the stage"; design D6):
-// the task is read again, the tracker's labels are checked before any write
-// (design D4), then the answered autonomy and `proposal` are added and read
-// back, and only then are the other autonomy and `grill-me` removed and the
-// task read back again. Nothing else is ever removed, aliases included. Each
-// answer writes one task, so a failure settles that answer alone.
+// Answers to the transition question (spec autonomous-run, "Transition answers"; spec
+// label-contract, "A transition replaces the stage"). Nothing besides the other autonomy and
+// `grill-me` is ever removed, aliases included.
 
 import type { Answer } from "../args.ts";
 import type { AnswerHandler } from "../answer-mode.ts";
@@ -19,9 +15,9 @@ interface Moving {
     tracker: Tracker;
     ref: TaskRef;
     autonomy: AutonomyLabel;
-    before: string[]; // the task's labels, read again for this answer
-    added: string[]; // what phase 1 adds: the answered autonomy, then proposal, when absent
-    removed: string[]; // what phase 2 removes: every other autonomy, then grill-me
+    before: string[];
+    added: string[];
+    removed: string[];
 }
 
 type Settlement = { status: AnswerStatus; detail: string };
@@ -33,7 +29,6 @@ const INVALID_VALUE = `invalid for the transition: expected one of ${AUTONOMY_OP
 
 const NOTHING_REMOVED = "; nothing was removed";
 
-// Design D6: a retry finds grill-me still there and only does what is left.
 const ANSWER_AGAIN = `; ${FROM_STAGE} may remain beside ${TO_STAGE}, answering again completes the transition`;
 
 const list = (labels: readonly string[]) => `[${labels.join(", ")}]`;
@@ -83,7 +78,7 @@ function answeredAutonomy(values: readonly string[]): AutonomyLabel | null {
 const stageOf = (labels: readonly string[]) => labels.filter(isStageLabel);
 
 // grill-me goes last, so a removal cut short always leaves the task in grill-me and
-// a second answer completes it (design D6).
+// a second answer completes it.
 function plan(tracker: Tracker, ref: TaskRef, autonomy: AutonomyLabel, before: string[]): Moving {
     const added = [autonomy, TO_STAGE].filter((label) => !before.includes(label));
     const replaced = before.filter((label) => isAutonomyLabel(label) && label !== autonomy);
@@ -101,7 +96,7 @@ async function move(moving: Moving): Promise<Settlement> {
     return { status: "applied", detail: appliedDetail(moving) };
 }
 
-// Before any write (design D4): one listing; Beads is never checked.
+// One listing before any write; Beads is never checked.
 async function checkLabels({ tracker, ref, autonomy }: Moving): Promise<string | null> {
     const check = await labelCheckFor(tracker);
     if (!check.ok) {
@@ -142,7 +137,6 @@ async function readLabels({ tracker, ref }: Moving): Promise<TrackerResult<strin
     return read.ok ? { ok: true, value: read.value.labels } : read;
 }
 
-// The task's labels after a failed write, or null when it cannot be read either.
 async function labelsNow(moving: Moving): Promise<string[] | null> {
     const read = await readLabels(moving);
     return read.ok ? read.value : null;
@@ -158,7 +152,6 @@ function stillInGrill(after: readonly string[] | null): string {
     return after === null || after.includes(FROM_STAGE) ? ANSWER_AGAIN : "";
 }
 
-// The task must hold exactly before + added - removed, compared as sets.
 async function readBack(moving: Moving, removed: readonly string[]): Promise<string | null> {
     const { before, added } = moving;
     const read = await readLabels(moving);

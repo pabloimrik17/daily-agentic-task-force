@@ -1,7 +1,5 @@
-// The next stage of a task (design D4): the stage label it carries. A task
-// without exactly one has no next stage, and selection excludes it under
-// classification before it asks. `SUPPORTED_STAGES` grows once the proposal
-// stage runs.
+// A task without exactly one stage label has no next stage, and selection excludes it under
+// classification before it asks. `SUPPORTED_STAGES` grows once the proposal stage runs.
 
 import { isStageLabel } from "../label-contract/contract.ts";
 import type { StageName } from "./types.ts";

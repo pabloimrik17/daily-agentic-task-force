@@ -247,9 +247,8 @@ async function runAnswers(args: RunArgs, steps: readonly Step[], deps: MainDeps)
     return exitCodeFor(report.outcome);
 }
 
-// Design D5, D7: transition mode reads the task and emits its question as a
-// handoff rendered like the run report's. Like answer mode, it runs no step and
-// takes no run lock: neither it nor its answer touches an attempt.
+// Like answer mode, transition mode runs no step and takes no run lock: neither it nor its
+// answer touches an attempt.
 async function runTransitionMode(ref: TaskRef, args: RunArgs, deps: MainDeps): Promise<number> {
     const startedAt = deps.now();
     const load = modeConfig(args, deps, (path, error) =>
