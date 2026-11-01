@@ -82,6 +82,36 @@ as for scope).
 Every created label has colour `#bb87fc`; every recolour reports its old
 colour in its note; nothing outside the contract was reported or touched.
 
+## Step 2b: the real Linear recolour
+
+Verification finding V3: the Linear recolour path (`linear api` with the
+`issueLabelUpdate` mutation) had only run under tests with a fake exec, because
+nothing on Linear needed recolouring in step 2. The user authorised the check in
+the Inbox on 2026-11-01 and ran the commands from the Claude Code session at
+11:27 UTC, with the plugin's exact mutation text and flags (the harness denies
+that write to a teammate). The label is `taken`, workspace level, id
+`d8acea84-d882-4459-b23b-cafd52cdc28d`, contract colour `#95a2b3`.
+
+```bash
+linear api 'mutation($id: String!, $color: String!) { issueLabelUpdate(id: $id, input: { color: $color }) { success } }' \
+  --variable id=d8acea84-d882-4459-b23b-cafd52cdc28d --variable color=#000000
+bun plugins/autonomous/src/run.ts --bootstrap-labels --json
+```
+
+| Step          | Time (UTC) | Result                                                   |
+| ------------- | ---------- | -------------------------------------------------------- |
+| Hand recolour | 11:27:13   | `{"data":{"issueLabelUpdate":{"success":true}}}`         |
+| Read back     | 11:27:19   | `taken` `#000000`, `updatedAt` 11:27:13                  |
+| Bootstrap     | 11:27:29   | outcome `advance`, schema `autonomous.bootstrap.v1`      |
+| Read back     | 11:27:35   | `taken` `#95a2b3`, `updatedAt` 11:27:35                  |
+
+The bootstrap reported, in `linear` scope `workspace`, `taken` with status
+`recoloured`, colour `#95a2b3` and note `was #000000`; the other six contract
+labels `present`; on GitHub all seven labels `present` in the four configured
+repositories; nothing created. The mutation shape, the `--variable` arguments
+and the `id` taken from the label listing work against the real API, and the
+design's risk mitigation for `linear api` is carried out.
+
 ## Step 3: transition of a throwaway Beads task
 
 Authorised by the user on 2026-11-01 in the Plannotator Inbox thread "DOT-110
