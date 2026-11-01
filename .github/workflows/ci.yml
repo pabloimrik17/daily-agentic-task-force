@@ -56,7 +56,7 @@ jobs:
 
             # Schema only. The version and name invariants are lint:marketplace's job.
             - name: 🔍 Validate marketplace schema
-              run: bunx @anthropic-ai/claude-code@2.1.278 plugin validate .claude-plugin/marketplace.json --strict
+              run: bunx @anthropic-ai/claude-code@2.1.312 plugin validate .claude-plugin/marketplace.json --strict
 
             - name: 🔍 Validate OpenSpec change proposals
               run: bunx @fission-ai/openspec@1.11.0 validate --changes --strict --no-interactive
