@@ -3,7 +3,7 @@
 // the comparison (D6) and the step's data (D9).
 
 import type { AutonomousConfig, Scope, Source } from "../config.ts";
-import type { EntryLabel } from "../label-contract/contract.ts";
+import type { AutonomyLabel } from "../label-contract/contract.ts";
 import type { TrackerResult, TrackerTask } from "../label-triage/trackers/tracker.ts";
 
 export interface WorkTask extends TrackerTask {
@@ -33,13 +33,13 @@ export type Exclusion =
     | "blocked"
     | "split";
 
-export type Autonomy = EntryLabel; // the entry label that sets how far an agent may go alone
+export type Autonomy = AutonomyLabel; // the label that sets how far an agent may go alone
 
 // A task every check permitted, with what the comparison needs about it.
 export interface Candidate {
     task: WorkTask; // after detail(): description and children filled
     scope: Scope;
-    autonomy: Autonomy;
+    autonomy: Autonomy | null; // null for a task in grill-me without one
     stage: StageName;
 }
 
@@ -73,7 +73,7 @@ export interface SelectedUnit {
     id: string;
     title: string;
     stage: StageName;
-    autonomy: Autonomy;
+    autonomy: Autonomy | null;
     scope: Scope;
     explanation: string;
     exception: string | null; // non-null only when scope differs from the machine scope

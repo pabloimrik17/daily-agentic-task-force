@@ -1,4 +1,5 @@
 import {
+    answeringSteps,
     applyAnswers,
     renderAnswersJson,
     renderAnswersText,
@@ -17,6 +18,7 @@ import {
 import { launchStep } from "./attempts/launch.ts";
 import { acquireLock } from "./attempts/lock.ts";
 import { reconcileStep } from "./attempts/reconcile.ts";
+import type { TaskRef } from "./attempts/record.ts";
 import { resolveStateDir } from "./attempts/state.ts";
 import { PRINT_TIMEOUT_MS } from "./claude-print.ts";
 import { type ConfigLoad, loadConfig } from "./config.ts";
@@ -49,6 +51,13 @@ import type { SelectionExec, WorkReaderFactory } from "./select/types.ts";
 import { aoeSessions } from "./sessions/aoe.ts";
 import type { SessionManagerFactory } from "./sessions/manager.ts";
 import { NAMING_TIMEOUT_MS } from "./sessions/naming.ts";
+import { transitionHandler } from "./transition/answer.ts";
+import {
+    renderTransitionJson,
+    renderTransitionText,
+    runTransition,
+    unconfiguredTransition,
+} from "./transition/mode.ts";
 import type { WorkspaceManagerFactory } from "./workspace/manager.ts";
 import { worktrunkWorkspace } from "./workspace/worktrunk.ts";
 
@@ -102,6 +111,9 @@ export async function main(argv: readonly string[], deps: MainDeps): Promise<num
 function dispatch(args: RunArgs, steps: readonly Step[], deps: MainDeps): Promise<number> {
     if (args.bootstrapLabels) {
         return runBootstrap(args, deps);
+    }
+    if (args.transition !== undefined) {
+        return runTransitionMode(args.transition, args, deps);
     }
     if (args.answers.length > 0) {
         return runAnswers(args, steps, deps);
@@ -229,8 +241,26 @@ async function runAnswers(args: RunArgs, steps: readonly Step[], deps: MainDeps)
     }
     const { config } = load;
     const ctx = { config, trackers: deps.trackers(config) };
-    const report = await applyAnswers(steps, args.answers, ctx, startedAt);
+    const handlers = [...answeringSteps(steps), transitionHandler];
+    const report = await applyAnswers(handlers, args.answers, ctx, startedAt);
     deps.stdout(args.json ? renderAnswersJson(report) : renderAnswersText(report));
+    return exitCodeFor(report.outcome);
+}
+
+// Design D5, D7: transition mode reads the task and emits its question as a
+// handoff rendered like the run report's. Like answer mode, it runs no step and
+// takes no run lock: neither it nor its answer touches an attempt.
+async function runTransitionMode(ref: TaskRef, args: RunArgs, deps: MainDeps): Promise<number> {
+    const startedAt = deps.now();
+    const load = modeConfig(args, deps, (path, error) =>
+        renderTransitionJson(unconfiguredTransition(path, error, startedAt)),
+    );
+    if (load === null) {
+        return exitCodeFor("not-evaluable");
+    }
+    const { config } = load;
+    const report = await runTransition(ref, { config, trackers: deps.trackers(config) }, startedAt);
+    deps.stdout(args.json ? renderTransitionJson(report) : renderTransitionText(report));
     return exitCodeFor(report.outcome);
 }
 

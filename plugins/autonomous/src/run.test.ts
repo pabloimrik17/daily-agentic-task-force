@@ -15,8 +15,14 @@ import type { Answer } from "./args.ts";
 import { fakeSessions, fakeWorkspace, record, tempState } from "./attempts/test-fixtures.ts";
 import { attemptDir, recordPath, writeRecord } from "./attempts/state.ts";
 import { type AutonomousConfig, CONFIG_SCHEMA, EXAMPLE_PATH } from "./config.ts";
+import { COLOURS, LABELS } from "./label-contract/contract.ts";
 import { config, fakeJudgement, task, trackers } from "./label-triage/test-fixtures.ts";
-import type { Tracker, TrackerLabel, Trackers } from "./label-triage/trackers/tracker.ts";
+import type {
+    Tracker,
+    TrackerLabel,
+    TrackerResult,
+    Trackers,
+} from "./label-triage/trackers/tracker.ts";
 import { fakeExec, limits, NOW, provider, session, weekly } from "./quota-gate/test-fixtures.ts";
 import { main, type MainDeps } from "./run.ts";
 import type {
@@ -120,12 +126,12 @@ describe("main", () => {
         expect(await main([], d)).toBe(code);
     });
 
-    it("prints one autonomous.run.v1 JSON document with --json", async () => {
+    it("prints one autonomous.run.v2 JSON document with --json", async () => {
         const { d, out } = deps([fakeStep("wait")]);
         await main(["--json"], d);
         expect(out).toHaveLength(1);
         expect(JSON.parse(out[0] as string)).toEqual({
-            schema: "autonomous.run.v1",
+            schema: "autonomous.run.v2",
             startedAt: NOW.toISOString(),
             steps: [
                 {
@@ -260,7 +266,19 @@ describe("main --bootstrap-labels", () => {
     );
     afterAll(() => rmSync(dir, { recursive: true, force: true }));
 
-    function linear(labels: TrackerLabel[] | string): Tracker {
+    // Every contract label in the workspace with its contract colour, `recoloured` overridden.
+    const everyLabel = (differing: Record<string, string> = {}): TrackerLabel[] =>
+        LABELS.map((name) => ({
+            scope: "workspace",
+            name,
+            colour: differing[name] ?? COLOURS[name],
+            id: `label-${name}`,
+        }));
+
+    function linear(
+        labels: TrackerLabel[] | string,
+        outcomes: { create?: TrackerResult<void>; recolour?: TrackerResult<void> } = {},
+    ): Tracker {
         const unused = () => Promise.reject(new Error("unused"));
         return {
             source: "linear",
@@ -276,7 +294,9 @@ describe("main --bootstrap-labels", () => {
                         ? { ok: false, error: labels }
                         : { ok: true, value: labels },
                 ),
-            createLabel: () => Promise.resolve({ ok: true, value: undefined }),
+            createLabel: () => Promise.resolve(outcomes.create ?? { ok: true, value: undefined }),
+            recolourLabel: () =>
+                Promise.resolve(outcomes.recolour ?? { ok: true, value: undefined }),
         };
     }
 
@@ -314,7 +334,7 @@ describe("main --bootstrap-labels", () => {
             [
                 `label bootstrap — started ${NOW.toISOString()}`,
                 "outcome: advance",
-                "  linear    workspace: created work, personal, AFK, HITL, grill-me, taken",
+                "  linear    workspace: created work, personal, AFK, HITL, grill-me, proposal, taken",
             ].join("\n"),
         ]);
     });
@@ -338,6 +358,62 @@ describe("main --bootstrap-labels", () => {
         expect(await main(["--bootstrap-labels"], d)).toBe(3);
         expect(calls.steps).toBe(0);
         expect(out[0]).toContain("outcome: not-evaluable");
+    });
+
+    it("exits 3 and reports the label as failed when a label cannot be created", async () => {
+        const missing = everyLabel().filter((label) => label.name !== "proposal");
+        const error = "linear label create -n proposal -c #bb87fc: linear failed: rate limited";
+        const { d, out } = bootstrapDeps(linear(missing, { create: { ok: false, error } }));
+        expect(await main(["--bootstrap-labels"], d)).toBe(3);
+        expect(out).toEqual([
+            [
+                `label bootstrap — started ${NOW.toISOString()}`,
+                "outcome: not-evaluable",
+                `  linear    workspace: present work, personal, AFK, HITL, grill-me, taken; failed proposal (${error})`,
+            ].join("\n"),
+        ]);
+    });
+
+    it("exits 0 and reports the label as recoloured when only a colour differed", async () => {
+        const { d, out, calls } = bootstrapDeps(linear(everyLabel({ AFK: "#000000" })));
+        expect(await main(["--bootstrap-labels"], d)).toBe(0);
+        expect(calls.steps).toBe(0);
+        expect(out).toEqual([
+            [
+                `label bootstrap — started ${NOW.toISOString()}`,
+                "outcome: advance",
+                "  linear    workspace: recoloured AFK (was #000000); present work, personal, HITL, grill-me, proposal, taken",
+            ].join("\n"),
+        ]);
+    });
+
+    it("reports a recoloured label with status recoloured in the JSON document", async () => {
+        const { d, out } = bootstrapDeps(linear(everyLabel({ AFK: "#000000" })));
+        expect(await main(["--bootstrap-labels", "--json"], d)).toBe(0);
+        const report = JSON.parse(out[0] as string) as {
+            sources: { labels: { label: string; status: string; colour: string | null }[] }[];
+        };
+        expect(report.sources[0]?.labels.find((label) => label.label === "AFK")).toMatchObject({
+            status: "recoloured",
+            colour: "#5e6ad2",
+            note: "was #000000",
+        });
+    });
+
+    it("exits 3 and reports the label as failed when a recolour fails", async () => {
+        const error =
+            "linear api issueLabelUpdate --variable id=label-AFK: Linear did not report success";
+        const { d, out } = bootstrapDeps(
+            linear(everyLabel({ AFK: "#000000" }), { recolour: { ok: false, error } }),
+        );
+        expect(await main(["--bootstrap-labels"], d)).toBe(3);
+        expect(out).toEqual([
+            [
+                `label bootstrap — started ${NOW.toISOString()}`,
+                "outcome: not-evaluable",
+                `  linear    workspace: present work, personal, HITL, grill-me, proposal, taken; failed AFK (${error})`,
+            ].join("\n"),
+        ]);
     });
 
     it("exits 3 naming the path when the configuration file is missing", async () => {
@@ -404,6 +480,7 @@ describe("main with the real steps", () => {
             removeLabel: unused,
             listLabels: unused,
             createLabel: unused,
+            recolourLabel: unused,
         };
     }
 
@@ -570,6 +647,20 @@ describe("main with the real steps", () => {
             comparison: { model: "sonnet", effort: "high" },
         } satisfies SelectData);
     });
+
+    it("prints an autonomous.run.v2 document that names no entry group with --json", async () => {
+        const calls: string[] = [];
+        const { d, out } = deps(undefined, {
+            env: { AUTONOMOUS_CONFIG: configPath },
+            openUsage: capacity(),
+            trackers: emptyTrackers,
+            ...selecting(calls),
+        });
+        expect(await main(["--json"], d)).toBe(2);
+        expect(out).toHaveLength(1);
+        expect(JSON.parse(out[0] as string)).toMatchObject({ schema: "autonomous.run.v2" });
+        expect(out[0]).not.toMatch(/"entry"/);
+    });
 });
 
 describe("main --answer", () => {
@@ -667,8 +758,8 @@ describe("main --answer", () => {
             return Promise.resolve(records(answers, "applied"));
         });
         const { d, out, err, fake } = answerDeps(log, [triage, silent(log)]);
-        expect(await main(["--apply", ...answerArgs("triage:B-1:entry=HITL")], d)).toBe(0);
-        expect(log).toEqual(["trackers", "triage:answer triage:B-1:entry=HITL"]);
+        expect(await main(["--apply", ...answerArgs("triage:B-1:autonomy=HITL")], d)).toBe(0);
+        expect(log).toEqual(["trackers", "triage:answer triage:B-1:autonomy=HITL"]);
         expect(seen).toHaveLength(1);
         expect(seen[0]?.config).toEqual(settings);
         expect(seen[0]?.trackers).toBe(fake);
@@ -683,14 +774,14 @@ describe("main --answer", () => {
             AUTONOMOUS_CONFIG: configPath,
             AUTONOMOUS_STATE: dir,
         });
-        expect(await main(["--apply", ...answerArgs("triage:B-1:entry=HITL")], d)).toBe(0);
-        expect(log).toEqual(["trackers", "triage:answer triage:B-1:entry=HITL"]);
+        expect(await main(["--apply", ...answerArgs("triage:B-1:autonomy=HITL")], d)).toBe(0);
+        expect(log).toEqual(["trackers", "triage:answer triage:B-1:autonomy=HITL"]);
     });
 
     it("prints usage and exits 1 for an answer without --apply", async () => {
         const log: string[] = [];
         const { d, out, err } = answerDeps(log, [answering("triage", log)]);
-        expect(await main(answerArgs("triage:B-1:entry=HITL"), d)).toBe(1);
+        expect(await main(answerArgs("triage:B-1:autonomy=HITL"), d)).toBe(1);
         expect(out).toEqual([]);
         expect(err.join("\n")).toContain("--answer requires --apply");
         expect(err.join("\n")).toContain("Usage: /autonomous:run");
@@ -777,9 +868,9 @@ describe("main --answer", () => {
     it("prints one autonomous.answers.v1 JSON document with --json and no handoff", async () => {
         const log: string[] = [];
         const { d, out, err } = answerDeps(log, [answering("triage", log)]);
-        expect(await main(["--apply", "--json", ...answerArgs("triage:B-1:entry=HITL")], d)).toBe(
-            0,
-        );
+        expect(
+            await main(["--apply", "--json", ...answerArgs("triage:B-1:autonomy=HITL")], d),
+        ).toBe(0);
         expect(err).toEqual([]);
         expect(out).toHaveLength(1);
         const report = JSON.parse(out[0] as string) as unknown;
@@ -789,7 +880,7 @@ describe("main --answer", () => {
             outcome: "advance",
             answers: [
                 {
-                    id: "triage:B-1:entry",
+                    id: "triage:B-1:autonomy",
                     labels: ["HITL"],
                     status: "applied",
                     detail: "applied by the fake",
@@ -875,7 +966,7 @@ describe("main --answer", () => {
             ok: true,
             answers: request.tasks.map((t) => ({
                 id: t.id,
-                entry: { labels: ["HITL"], confidence: 0.8, reason: "needs a decision" },
+                autonomy: { labels: ["HITL"], confidence: 0.8, reason: "needs a decision" },
             })),
         }));
         const openUsage = capacity();
@@ -884,7 +975,7 @@ describe("main --answer", () => {
             openUsage,
             trackers: () => fake,
             judgement,
-            // B-1 still lacks its entry group, so select advances on another, complete task.
+            // B-1 still lacks its autonomy group, so select advances on another, complete task.
             chezmoi: fakeChezmoi({ machineType: "personal" }, []),
             work: () => [fakeReader("beads", [workTask("beads", "B-2", ["work", "grill-me"])], [])],
         };
@@ -896,7 +987,7 @@ describe("main --answer", () => {
             handoff?: { questions: HandoffQuestion[]; remaining: number };
         };
         expect(handoff?.remaining).toBe(0);
-        expect(handoff?.questions.map((q) => q.id)).toEqual(["label-triage:beads:B-1:entry"]);
+        expect(handoff?.questions.map((q) => q.id)).toEqual(["label-triage:beads:B-1:autonomy"]);
         const question = handoff?.questions[0];
         expect(question?.options.map((option) => option.value)).toContain("HITL");
 
@@ -915,8 +1006,217 @@ describe("main --answer", () => {
         expect(calls.slice(listed)).not.toContain("beads:listTasks");
         expect(await fake.beads.readTask("B-1")).toMatchObject({
             ok: true,
-            value: { labels: ["work", "HITL"] },
+            value: { labels: ["work", "HITL", "proposal"] },
         });
+    });
+});
+
+describe("main --transition", () => {
+    const dir = mkdtempSync(join(tmpdir(), "autonomous-transition-"));
+    const configPath = join(dir, "config.json");
+    // Only Beads is enabled; its trackers check no label before a write.
+    const settings: AutonomousConfig = {
+        ...config(),
+        sources: {
+            linear: { enabled: false },
+            beads: { enabled: true, directory: "/repo" },
+            github: { enabled: false, repos: [] },
+        },
+    };
+    writeFileSync(configPath, JSON.stringify(settings));
+    afterAll(() => rmSync(dir, { recursive: true, force: true }));
+
+    const missing = join(dir, "absent.json");
+    const missingError = `configuration file not found at ${missing}; create it from the example at ${EXAMPLE_PATH}`;
+
+    // Beads task B-1 with `labels`; `log` records a step run, OpenUsage or the trackers built.
+    function transitionDeps(
+        labels: string[],
+        env: Record<string, string> = { AUTONOMOUS_CONFIG: configPath },
+    ) {
+        const calls: string[] = [];
+        const log: string[] = [];
+        const fake = trackers(calls, { beads: [task("beads", "B-1", labels)] });
+        const step: Step = {
+            id: "fake",
+            run: () => {
+                log.push("fake:run");
+                return Promise.reject(new Error("fake ran"));
+            },
+            render: () => "",
+        };
+        const result = deps([step], {
+            env,
+            openUsage: () => {
+                log.push("openUsage");
+                return Promise.resolve({ ok: false, error: "unused" });
+            },
+            trackers: () => {
+                log.push("trackers");
+                return fake;
+            },
+        });
+        return { ...result, calls, log, fake };
+    }
+
+    const transitionArgs = (...extra: string[]) => [
+        "--apply",
+        "--transition",
+        "beads:B-1",
+        ...extra,
+    ];
+
+    interface TransitionDocument {
+        schema: string;
+        outcome: string;
+        task: { source: string; id: string; labels: string[] } | null;
+        reasons: string[];
+        handoff?: { questions: HandoffQuestion[]; remaining: number };
+        config?: { path: string; error: string };
+    }
+
+    const documentOf = (out: string[]) => JSON.parse(out[0] as string) as TransitionDocument;
+
+    const answersOf = (out: string[]) =>
+        (JSON.parse(out[0] as string) as { answers: AnswerRecord[] }).answers.map((record) => [
+            record.id,
+            record.status,
+            record.detail,
+        ]);
+
+    it("Task in grill-me: exits 0, runs no step and ends the text report with the handoff", async () => {
+        const { d, out, err, calls, log } = transitionDeps(["personal", "grill-me"]);
+        expect(await main(transitionArgs(), d)).toBe(0);
+        expect(err).toEqual([]);
+        expect(out).toHaveLength(1);
+        const lines = (out[0] as string).split("\n");
+        expect(lines[0]).toBe(`autonomous transition — started ${NOW.toISOString()}`);
+        const last = lines.at(-1) ?? "";
+        expect(last.startsWith("handoff: ")).toBe(true);
+        const handoff = JSON.parse(last.slice("handoff: ".length)) as {
+            questions: HandoffQuestion[];
+            remaining: number;
+        };
+        expect(handoff.questions.map((question) => question.id)).toEqual(["transition:beads:B-1"]);
+        expect(log).toEqual(["trackers"]);
+        expect(calls).toEqual(["beads:readTask:B-1"]);
+    });
+
+    it("takes no run lock: a lock another run holds does not stop it and is left as it was", async () => {
+        const { dir: held } = heldLock();
+        const lock = join(held, "run.lock");
+        const before = readFileSync(lock, "utf8");
+        const { d, log } = transitionDeps(["personal", "grill-me"], {
+            AUTONOMOUS_CONFIG: configPath,
+            AUTONOMOUS_STATE: held,
+        });
+        expect(await main(transitionArgs(), d)).toBe(0);
+        expect(readFileSync(lock, "utf8")).toBe(before);
+        expect(log).toEqual(["trackers"]);
+    });
+
+    it("Transition JSON report: one autonomous.transition.v1 document with a handoff of one question", async () => {
+        const { d, out, err } = transitionDeps(["personal", "grill-me"]);
+        expect(await main(transitionArgs("--json"), d)).toBe(0);
+        expect(err).toEqual([]);
+        expect(out).toHaveLength(1);
+        const report = documentOf(out);
+        expect(report).toMatchObject({
+            schema: "autonomous.transition.v1",
+            outcome: "advance",
+            task: { source: "beads", id: "B-1", labels: ["personal", "grill-me"] },
+            reasons: [],
+        });
+        expect(report.handoff?.questions.map((question) => question.id)).toEqual([
+            "transition:beads:B-1",
+        ]);
+    });
+
+    it("Task not in grill-me: exits 3 with the reason and no handoff", async () => {
+        const { d, out, calls } = transitionDeps(["personal", "AFK", "proposal"]);
+        expect(await main(transitionArgs("--json"), d)).toBe(3);
+        const report = documentOf(out);
+        expect(report.outcome).toBe("not-evaluable");
+        expect(report.reasons).toEqual([
+            "beads B-1 is not in grill-me (labels [personal, AFK, proposal])",
+        ]);
+        expect(report).not.toHaveProperty("handoff");
+        expect(calls).toEqual(["beads:readTask:B-1"]);
+    });
+
+    it("Transition without apply: prints usage and exits 1", async () => {
+        const { d, out, err, log } = transitionDeps(["personal", "grill-me"]);
+        expect(await main(["--transition", "beads:B-1"], d)).toBe(1);
+        expect(out).toEqual([]);
+        expect(err.join("\n")).toContain("--transition requires --apply");
+        expect(err.join("\n")).toContain("Usage: /autonomous:run");
+        expect(log).toEqual([]);
+    });
+
+    it("exits 3 naming the path when the configuration file is missing", async () => {
+        const { d, out, err, log } = transitionDeps(["personal", "grill-me"], {
+            AUTONOMOUS_CONFIG: missing,
+        });
+        expect(await main(transitionArgs(), d)).toBe(3);
+        expect(out).toEqual([]);
+        expect(err).toEqual([missingError]);
+        expect(log).toEqual([]);
+    });
+
+    it("prints the missing configuration as one autonomous.transition.v1 document with --json", async () => {
+        const { d, out, err, log } = transitionDeps(["personal", "grill-me"], {
+            AUTONOMOUS_CONFIG: missing,
+        });
+        expect(await main(transitionArgs("--json"), d)).toBe(3);
+        expect(err).toEqual([missingError]);
+        expect(out).toHaveLength(1);
+        expect(JSON.parse(out[0] as string)).toEqual({
+            schema: "autonomous.transition.v1",
+            startedAt: NOW.toISOString(),
+            outcome: "not-evaluable",
+            task: null,
+            reasons: [],
+            config: { path: missing, error: missingError },
+        });
+        expect(log).toEqual([]);
+    });
+
+    it("Transition answer: the answer to the handoff's question applies the transition and exits 0", async () => {
+        const asked = transitionDeps(["work", "HITL", "grill-me"]);
+        expect(await main(transitionArgs("--json"), asked.d)).toBe(0);
+        const question = documentOf(asked.out).handoff?.questions[0];
+        const id = question?.id ?? "";
+        expect(id).toBe("transition:beads:B-1");
+        expect(question?.options.map((option) => option.value)).toEqual(["AFK", "HITL", null]);
+
+        // A second invocation over the same fake, as the command does with the answer.
+        const answered = deps([], {
+            env: { AUTONOMOUS_CONFIG: configPath },
+            trackers: () => asked.fake,
+        });
+        expect(await main(["--apply", "--json", "--answer", `${id}=AFK`], answered.d)).toBe(0);
+        expect(answered.err).toEqual([]);
+        expect(JSON.parse(answered.out[0] as string)).toMatchObject({
+            schema: "autonomous.answers.v1",
+            outcome: "advance",
+            answers: [{ id, labels: ["AFK"], status: "applied" }],
+        });
+        const read = await asked.fake.beads.readTask("B-1");
+        expect(read.ok ? [...read.value.labels].sort() : []).toEqual(["AFK", "proposal", "work"]);
+    });
+
+    it("still rejects an answer whose id names no step and not the transition", async () => {
+        const { d, out } = transitionDeps(["work", "grill-me"]);
+        const argv = ["--apply", "--json", "--answer", "nope:1=AFK"];
+        expect(await main([...argv, "--answer", "transition:beads:B-1=HITL"], d)).toBe(3);
+        expect(answersOf(out)).toEqual([
+            ["nope:1", "rejected", "no step nope takes answers"],
+            [
+                "transition:beads:B-1",
+                "applied",
+                "added HITL, proposal, removed grill-me on beads B-1, read back",
+            ],
+        ]);
     });
 });
 
@@ -1005,7 +1305,7 @@ describe("main stage-session wiring", () => {
         expect(existsSync(join(dir, "run.lock"))).toBe(true);
     });
 
-    it("prints the held lock in one autonomous.run.v1 JSON document with --json", async () => {
+    it("prints the held lock in one autonomous.run.v2 JSON document with --json", async () => {
         const log: string[] = [];
         const { dir, error } = heldLock();
         const { d, out } = deps([named("reconcile", "advance", log)], {
@@ -1015,7 +1315,7 @@ describe("main stage-session wiring", () => {
         expect(log).toEqual([]);
         expect(out).toHaveLength(1);
         expect(JSON.parse(out[0] as string)).toEqual({
-            schema: "autonomous.run.v1",
+            schema: "autonomous.run.v2",
             startedAt: NOW.toISOString(),
             steps: [],
             outcome: "not-evaluable",

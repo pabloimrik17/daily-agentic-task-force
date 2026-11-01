@@ -1,10 +1,11 @@
-// The id of a triage question (handoff design D4): `label-triage:<source>:<taskId>:<group>`.
+// The id of a triage question (handoff design D4): `label-triage:<source>:<taskId>:<group>`,
+// where the group is `scope` or `autonomy`: the stage is never asked (design D3).
 // Task ids contain no `:` (Beads `agentic-task-8v0`, Linear `DOT-104`, GitHub
 // `owner/name#12`), so the source and the group are split off at the first and
 // the last `:`, and the rest is the task id.
 
 import type { Source } from "../config.ts";
-import { GROUPS, type Group } from "../label-contract/contract.ts";
+import { DECIDED_GROUPS, type DecidedGroup } from "../label-contract/contract.ts";
 
 export const LABEL_TRIAGE = "label-triage";
 
@@ -13,7 +14,7 @@ const SOURCES: readonly Source[] = ["beads", "github", "linear"];
 export interface QuestionTarget {
     source: Source;
     taskId: string;
-    group: Group;
+    group: DecidedGroup;
 }
 
 export function questionId(target: QuestionTarget): string {
@@ -35,7 +36,7 @@ export function parseQuestionId(
     if (!(SOURCES as readonly string[]).includes(source)) {
         return { ok: false, error: `unknown source ${source}` };
     }
-    if (!Object.hasOwn(GROUPS, group)) {
+    if (!(DECIDED_GROUPS as readonly string[]).includes(group)) {
         return { ok: false, error: `unknown group ${group}` };
     }
     return {
@@ -43,7 +44,7 @@ export function parseQuestionId(
         target: {
             source: source as Source,
             taskId: rest.slice(first + 1, last),
-            group: group as Group,
+            group: group as DecidedGroup,
         },
     };
 }

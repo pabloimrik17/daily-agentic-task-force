@@ -30,7 +30,9 @@ function readers(calls: string[]) {
                 workTask("linear", "DOT-4", ["personal", "grill-me", "taken"], {
                     title: "Being worked on",
                 }),
-                workTask("linear", "DOT-5", ["personal", "AFK"], { title: "Write the proposal" }),
+                workTask("linear", "DOT-5", ["personal", "AFK", "proposal"], {
+                    title: "Write the proposal",
+                }),
             ],
             calls,
         ),
@@ -85,6 +87,38 @@ describe("renderSelect", () => {
         );
     });
 
+    it("gives the autonomy of a selected grill task without one as none", async () => {
+        const calls: string[] = [];
+        const result = await selectStep.run(
+            selectContext({
+                calls,
+                readers: [
+                    fakeReader(
+                        "linear",
+                        [workTask("linear", "DOT-1", ["personal", "grill-me"])],
+                        calls,
+                    ),
+                ],
+            }),
+        );
+        expect(selectStep.render(result)).toBe(
+            [
+                "[select] advance (code)",
+                "  machine scope  personal",
+                "  selected  linear → DOT-1 → Task DOT-1",
+                "    stage        grill-me",
+                "    autonomy     none",
+                "    scope        personal",
+                "    explanation  It was the only candidate.",
+                "  candidates: 1 task",
+                "    linear → DOT-1 → Task DOT-1 (personal, grill-me)",
+                "  not evaluated: github: dependencies and children",
+                "  reasons:",
+                "    - selected linear → DOT-1 for grill-me, from 1 candidate",
+            ].join("\n"),
+        );
+    });
+
     it("marks a choice outside the machine scope with its exception reason", async () => {
         const text = await renderWith({
             source: "beads",
@@ -98,7 +132,7 @@ describe("renderSelect", () => {
                 "  machine scope  personal",
                 "  selected  beads → B-7 → Rotate the API keys",
                 "    stage        grill-me",
-                "    autonomy     grill-me",
+                "    autonomy     none",
                 "    scope        work",
                 "    explanation  The keys expire today.",
                 "    exception    outside the machine scope: A work deadline today.",
@@ -118,7 +152,7 @@ describe("renderSelect", () => {
                     fakeReader(
                         "beads",
                         ["B-1", "B-2", "B-3"].map((id) =>
-                            workTask("beads", id, ["personal", "AFK"]),
+                            workTask("beads", id, ["personal", "AFK", "proposal"]),
                         ),
                         calls,
                     ),

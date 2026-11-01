@@ -2,13 +2,14 @@ import type { RunArgs } from "./args.ts";
 import type { HandoffQuestion, RunResult, Step, StepOutcome, StepResult } from "./runner.ts";
 
 // What the run asks the agent that ran the command to do next (design D1).
-interface Handoff {
+// Transition mode emits one too, rendered by the same functions (design D7).
+export interface Handoff {
     questions: HandoffQuestion[];
     remaining: number; // contributed questions left out by the cap
 }
 
 export interface RunReport {
-    schema: "autonomous.run.v1";
+    schema: "autonomous.run.v2";
     startedAt: string;
     steps: StepResult[];
     outcome: StepOutcome;
@@ -27,7 +28,7 @@ export function buildReport(
     defaulted: string[] = [],
 ): RunReport {
     const report: RunReport = {
-        schema: "autonomous.run.v1",
+        schema: "autonomous.run.v2",
         startedAt: startedAt.toISOString(),
         steps: run.results,
         outcome: run.outcome,
@@ -36,12 +37,21 @@ export function buildReport(
         report.config = { defaulted };
     }
     if (args.apply && !args.noHandoff && run.questions.length > 0) {
-        report.handoff = {
-            questions: run.questions.slice(0, MAX_QUESTIONS),
-            remaining: Math.max(0, run.questions.length - MAX_QUESTIONS),
-        };
+        report.handoff = buildHandoff(run.questions);
     }
     return report;
+}
+
+export function buildHandoff(questions: readonly HandoffQuestion[]): Handoff {
+    return {
+        questions: questions.slice(0, MAX_QUESTIONS),
+        remaining: Math.max(0, questions.length - MAX_QUESTIONS),
+    };
+}
+
+// Design D2: the handoff travels as the last line, one JSON document the command reads back.
+export function renderHandoffLine(handoff: Handoff): string {
+    return `handoff: ${JSON.stringify(handoff)}`;
 }
 
 export function renderJson(report: RunReport): string {
@@ -61,9 +71,7 @@ export function renderText(report: RunReport, steps: readonly Step[]): string {
         ...defaults,
     ].join("\n");
     const lock = report.lock === undefined ? [] : [`lock: ${report.lock.error}`];
-    // Design D2: the handoff travels as the last line, one JSON document the command reads back.
-    const handoff =
-        report.handoff === undefined ? [] : [`handoff: ${JSON.stringify(report.handoff)}`];
+    const handoff = report.handoff === undefined ? [] : [renderHandoffLine(report.handoff)];
     return [header, ...lock, ...sections, ...handoff].join("\n\n");
 }
 

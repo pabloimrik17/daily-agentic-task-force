@@ -61,7 +61,7 @@ function renderSelected(selected: SelectedUnit): string[] {
     const lines = [
         `  selected  ${selected.source} → ${selected.id} → ${selected.title}`,
         `    stage        ${selected.stage}`,
-        `    autonomy     ${selected.autonomy}`,
+        `    autonomy     ${selected.autonomy ?? "none"}`,
         `    scope        ${selected.scope}`,
         `    explanation  ${selected.explanation}`,
     ];

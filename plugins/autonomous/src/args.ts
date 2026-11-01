@@ -1,4 +1,4 @@
-import { parseTaskRef } from "./attempts/record.ts";
+import { parseTaskRef, type TaskRef } from "./attempts/record.ts";
 import type { Source } from "./config.ts";
 import { STAGES } from "./stages/registry.ts";
 import { isStageId, type StageId } from "./stages/stage.ts";
@@ -22,6 +22,7 @@ export interface RunArgs {
     bootstrapLabels: boolean;
     noHandoff: boolean;
     answers: Answer[];
+    transition: { source: Source; id: string } | undefined;
 }
 
 export type ParseArgsResult = { ok: true; args: RunArgs } | { ok: false; error: string };
@@ -32,6 +33,7 @@ export const USAGE = [
     "       /autonomous:run --apply --answer <id>=<value>[,<value>]... [--json]",
     "       /autonomous:run --task <source>:<id> [--stage <stage>] [--account <provider-key>] [--force] [--json] [--apply] [--no-handoff]",
     "       /autonomous:run --apply --discard <attempt-id|source:id> [--release-workspace] [--json]",
+    "       /autonomous:run --apply --transition <source>:<task> [--json]",
 ].join("\n");
 
 const ANSWER_SHAPE = "--answer requires <id>=<value>[,<value>]";
@@ -53,6 +55,7 @@ const VALUED = new Map<string, (args: RunArgs, value: string | undefined) => str
     ["--task", readTask],
     ["--stage", readStage],
     ["--discard", readDiscard],
+    ["--transition", readTransition],
 ]);
 
 export function parseArgs(argv: readonly string[]): ParseArgsResult {
@@ -68,6 +71,7 @@ export function parseArgs(argv: readonly string[]): ParseArgsResult {
         bootstrapLabels: false,
         noHandoff: false,
         answers: [],
+        transition: undefined,
     };
     for (let i = 0; i < argv.length; i++) {
         const arg = argv[i] ?? "";
@@ -112,18 +116,43 @@ function readAnswer(args: RunArgs, value: string | undefined): string | null {
 }
 
 function readTask(args: RunArgs, value: string | undefined): string | null {
-    if (value === undefined || value.startsWith("--")) {
-        return "--task requires <source>:<id>";
+    const read = readTaskRef("--task", args.task, value);
+    if (!read.ok) {
+        return read.error;
     }
-    if (args.task !== undefined) {
-        return "--task given more than once";
+    args.task = read.ref;
+    return null;
+}
+
+function readTransition(args: RunArgs, value: string | undefined): string | null {
+    const read = readTaskRef("--transition", args.transition, value);
+    if (!read.ok) {
+        return read.error;
+    }
+    args.transition = read.ref;
+    return null;
+}
+
+// --task and --transition each take one <source>:<id>, given once.
+function readTaskRef(
+    flag: string,
+    current: TaskRef | undefined,
+    value: string | undefined,
+): { ok: true; ref: TaskRef } | { ok: false; error: string } {
+    if (value === undefined || value.startsWith("--")) {
+        return { ok: false, error: `${flag} requires <source>:<id>` };
+    }
+    if (current !== undefined) {
+        return { ok: false, error: `${flag} given more than once` };
     }
     const ref = parseTaskRef(value);
     if (ref === null) {
-        return `--task ${value} must be <source>:<id> with source linear, beads or github`;
+        return {
+            ok: false,
+            error: `${flag} ${value} must be <source>:<id> with source linear, beads or github`,
+        };
     }
-    args.task = ref;
-    return null;
+    return { ok: true, ref };
 }
 
 // The stage must be registered, so a typo is a usage error before any tracker is touched.
@@ -154,13 +183,28 @@ function readDiscard(args: RunArgs, value: string | undefined): string | null {
 }
 
 const answering = (args: RunArgs) => args.answers.length > 0;
+const transitioning = (args: RunArgs) => args.transition !== undefined;
 const accountOrForce = (args: RunArgs) => args.account !== undefined || args.force;
+
+// Every flag other than --apply and --json, for the modes that accept only those.
+const otherFlags = (args: RunArgs) =>
+    [
+        accountOrForce(args),
+        args.noHandoff,
+        args.bootstrapLabels,
+        answering(args),
+        args.task !== undefined,
+        args.stage !== undefined,
+        args.discard !== undefined,
+        args.releaseWorkspace,
+    ].some(Boolean);
 
 // Flag combinations that are usage errors, checked in order.
 const COMBINATIONS: readonly (readonly [(args: RunArgs) => boolean, string])[] = [
     [
-        (args) => args.noHandoff && (args.bootstrapLabels || answering(args)),
-        "--no-handoff cannot be combined with --bootstrap-labels or --answer",
+        (args) =>
+            args.noHandoff && (args.bootstrapLabels || answering(args) || transitioning(args)),
+        "--no-handoff cannot be combined with --bootstrap-labels, --answer or --transition",
     ],
     [
         (args) => args.bootstrapLabels && (accountOrForce(args) || args.apply || answering(args)),
@@ -175,8 +219,11 @@ const COMBINATIONS: readonly (readonly [(args: RunArgs) => boolean, string])[] =
     [
         (args) =>
             args.task !== undefined &&
-            (args.bootstrapLabels || answering(args) || args.discard !== undefined),
-        "--task cannot be combined with --bootstrap-labels, --answer or --discard",
+            (args.bootstrapLabels ||
+                answering(args) ||
+                args.discard !== undefined ||
+                transitioning(args)),
+        "--task cannot be combined with --bootstrap-labels, --answer, --discard or --transition",
     ],
     [(args) => args.discard !== undefined && !args.apply, "--discard requires --apply"],
     [
@@ -184,6 +231,11 @@ const COMBINATIONS: readonly (readonly [(args: RunArgs) => boolean, string])[] =
             args.discard !== undefined &&
             (accountOrForce(args) || args.noHandoff || args.bootstrapLabels || answering(args)),
         "--discard can only be combined with --apply, --json and --release-workspace",
+    ],
+    [(args) => transitioning(args) && !args.apply, "--transition requires --apply"],
+    [
+        (args) => transitioning(args) && otherFlags(args),
+        "--transition can only be combined with --apply and --json",
     ],
     [
         (args) => args.releaseWorkspace && args.discard === undefined,

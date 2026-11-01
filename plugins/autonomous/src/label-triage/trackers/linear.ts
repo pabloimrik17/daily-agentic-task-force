@@ -6,7 +6,7 @@
 
 import type { LinearConfig } from "../../config.ts";
 import type { Exec } from "../../exec.ts";
-import { array, type Json, object, optional, ParseError, string } from "../../validate.ts";
+import { array, boolean, type Json, object, optional, ParseError, string } from "../../validate.ts";
 import { run, runJson } from "./cli-json.ts";
 import type { Tracker, TrackerLabel, TrackerResult, TrackerTask } from "./tracker.ts";
 
@@ -98,7 +98,13 @@ function labelEntry(entry: Json, path: string): TrackerLabel {
     const teamValue = entry.team;
     const scope =
         teamValue === null ? "workspace" : string(object(teamValue, teamPath), "key", teamPath);
-    return { scope, name: string(entry, "name", path), colour: color.toLowerCase() };
+    const id = optional(entry, "id", path, string);
+    return {
+        scope,
+        name: string(entry, "name", path),
+        colour: color.toLowerCase(),
+        ...(id === undefined ? {} : { id }),
+    };
 }
 
 function parseLabels(value: unknown): TrackerLabel[] {
@@ -107,6 +113,43 @@ function parseLabels(value: unknown): TrackerLabel[] {
     return nodes.map((item, index) =>
         labelEntry(object(item, `$.nodes[${index}]`), `$.nodes[${index}]`),
     );
+}
+
+// Label bootstrap, "recolour": the one write `linear label` has no command for.
+const RECOLOUR_MUTATION =
+    "mutation($id: String!, $color: String!) { issueLabelUpdate(id: $id, input: { color: $color }) { success } }";
+
+function parseRecoloured(value: unknown): boolean {
+    const path = "$.data.issueLabelUpdate";
+    const data = object(object(value, "$").data, "$.data");
+    return boolean(object(data.issueLabelUpdate, path), "success", path);
+}
+
+async function recolour(
+    exec: Exec,
+    label: TrackerLabel,
+    colour: string,
+): Promise<TrackerResult<void>> {
+    if (label.id === undefined) {
+        return {
+            ok: false,
+            error: `linear api issueLabelUpdate: label ${label.name} (scope ${label.scope}) has no id`,
+        };
+    }
+    const command = `linear api issueLabelUpdate --variable id=${label.id} --variable color=${colour}`;
+    const result = await runJson(
+        exec,
+        command,
+        ["api", RECOLOUR_MUTATION, "--variable", `id=${label.id}`, "--variable", `color=${colour}`],
+        parseRecoloured,
+        mapExecError,
+    );
+    if (!result.ok) {
+        return result;
+    }
+    return result.value
+        ? { ok: true, value: undefined }
+        : { ok: false, error: `${command}: Linear did not report success` };
 }
 
 export function linearTracker(exec: Exec, _config: LinearConfig): Tracker {
@@ -177,6 +220,10 @@ export function linearTracker(exec: Exec, _config: LinearConfig): Tracker {
                 ["label", "create", "-n", name, "-c", colour],
                 mapExecError,
             );
+        },
+
+        recolourLabel(label: TrackerLabel, colour: string): Promise<TrackerResult<void>> {
+            return recolour(exec, label, colour);
         },
     };
 }

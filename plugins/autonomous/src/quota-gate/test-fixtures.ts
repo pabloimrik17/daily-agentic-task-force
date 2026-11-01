@@ -64,6 +64,7 @@ export function context(exec: OpenUsageExec, args: Partial<RunArgs> = {}): RunCo
             task: undefined,
             stage: undefined,
             discard: undefined,
+            transition: undefined,
             releaseWorkspace: false,
             force: false,
             json: false,

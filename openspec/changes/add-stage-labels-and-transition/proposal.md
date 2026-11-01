@@ -87,5 +87,5 @@ None.
     - `skills/labelling-new-tasks/SKILL.md`, whose spelling list gains `proposal`.
     - The eval graders that name the entry group.
     - `README.md` and `GLOSSARY.md`.
-- **Trackers**: none until a user runs `--bootstrap-labels`, which creates `proposal` on Linear and on the configured GitHub repositories and recolours any differing contract label. After the upgrade, the first `--apply` run adds `proposal` to every open task that has an autonomy label and no stage label (91 tasks on 2026-09-30).
+- **Trackers**: none until a user runs `--bootstrap-labels`, which creates `proposal` on Linear and on the configured GitHub repositories and recolours any differing contract label. After the upgrade, the first `--apply` run adds `proposal` to every open task that has an autonomy label and no stage label. The dry run of 2026-11-01 proposes 636 `proposal` writes: 613 on Beads, 22 on Linear and 1 on GitHub.
 - **Dependencies**: none new. Recolouring needs `linear-cli` with `linear api` (2.6.0) and `gh` with `gh label edit`.

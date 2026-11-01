@@ -255,14 +255,28 @@ For a task with no autonomy and no stage label, the autonomy decision SHALL choo
 
 ### Requirement: Labels missing on a tracker are not written
 
-Before writing with `--apply`, the step SHALL check that the task's tracker has each label to write: Linear at workspace level or in any team, GitHub in the task's repository. Beads is never checked. A label the tracker lacks SHALL NOT be written. Its derivation SHALL be reported as proposed, naming the label and `--bootstrap-labels`. The task's other labels and the source's other writes SHALL continue.
+Before writing, the step SHALL check that the task's tracker has each label to write: Linear at workspace level or in any team, GitHub in the task's repository. Beads is never checked. The check SHALL run with and without `--apply`, previewing what `--apply` would skip. A label the tracker lacks SHALL NOT be written. Its derivation SHALL be reported as proposed, naming the label and `--bootstrap-labels`. The task's other labels and the source's other writes SHALL continue.
 
 #### Scenario: proposal not bootstrapped on Linear
 
 - **WHEN** a run with `--apply` derives `proposal` for a Linear task and the Linear workspace has no `proposal` label
 - **THEN** `proposal` is reported as proposed with a note to run `--bootstrap-labels`, and the other Linear writes of the run still happen
 
+#### Scenario: Dry run reports a missing label
+
+- **WHEN** a run without `--apply` derives `proposal` for a Linear task and Linear lacks `proposal`
+- **THEN** the derivation is reported as proposed with the detail naming `--bootstrap-labels`, and nothing is written
+
 #### Scenario: Beads
 
 - **WHEN** a run with `--apply` derives `proposal` for a Beads task
 - **THEN** `proposal` is written without any check
+
+### Requirement: A failing label listing without --apply is a reason
+
+When the step cannot list a tracker's labels in a run without `--apply`, it SHALL report one reason naming the source and the error, leave that tracker's derivations proposed and report no failure.
+
+#### Scenario: Dry run with a failing listing
+
+- **WHEN** a run without `--apply` cannot list the labels of Linear
+- **THEN** the Linear derivations are reported as proposed without a note, a reason says the Linear labels could not be listed, and nothing fails

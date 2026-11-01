@@ -44,7 +44,7 @@ function record(overrides: Partial<TriageRecord> = {}): TriageRecord {
         source: "linear",
         taskId: "TEST-1",
         title: "Task TEST-1",
-        group: "entry",
+        group: "stage",
         labels: ["grill-me"],
         confidence: 1,
         reason: "Test classification",
@@ -62,7 +62,7 @@ describe("selectCandidates", () => {
         expect(await evaluate([task])).toEqual({
             ok: true,
             value: {
-                candidates: [{ task, scope: "personal", autonomy: "grill-me", stage: "grill-me" }],
+                candidates: [{ task, scope: "personal", autonomy: null, stage: "grill-me" }],
                 excluded: [],
             },
         });
@@ -80,8 +80,8 @@ describe("selectCandidates", () => {
         });
     });
 
-    it("reports taken before unsupported stage for an AFK task", async () => {
-        const task = workTask("beads", "task-1", ["work", "AFK", "taken"]);
+    it("reports taken, not unsupported stage, for a taken AFK task", async () => {
+        const task = workTask("beads", "task-1", ["work", "AFK", "proposal", "taken"]);
 
         expect(await evaluate([task])).toMatchObject({
             ok: true,
@@ -142,10 +142,21 @@ describe("selectCandidates", () => {
         });
     });
 
+    it("excludes a task without a stage label under classification", async () => {
+        const task = workTask("linear", "TEST-1", ["personal", "AFK"]);
+
+        expect(await evaluate([task])).toMatchObject({
+            ok: true,
+            value: { candidates: [], excluded: [{ reason: "classification" }] },
+        });
+    });
+
     it.each([
         ["personal", "work", "grill-me"],
         ["personal"],
+        ["personal", "proposal"],
         ["personal", "AFK", "HITL", "grill-me"],
+        ["personal", "AFK", "grill-me", "proposal"],
     ])("excludes missing or conflicting classification %j", async (...labels) => {
         expect(await evaluate([workTask("linear", "TEST-1", labels)])).toMatchObject({
             ok: true,
@@ -157,7 +168,7 @@ describe("selectCandidates", () => {
         { labels: ["grill-me", "taken"], reason: "classification" },
         { labels: ["personal", "grill-me", "taken"], reason: "taken" },
         { labels: ["personal", "grill-me"], reason: "labelled-this-run", labelled: true },
-        { labels: ["personal", "AFK"], reason: "unsupported-stage" },
+        { labels: ["personal", "AFK", "proposal"], reason: "unsupported-stage" },
         { labels: ["personal", "grill-me"], reason: "blocked", blocked: true },
     ])("never reads detail for $reason", async ({ labels, reason, labelled, blocked }) => {
         const task = workTask("linear", "TEST-1", labels, {
@@ -178,8 +189,17 @@ describe("selectCandidates", () => {
         expect(detail).not.toHaveBeenCalled();
     });
 
+    it("excludes a task in proposal with autonomy as an unsupported stage", async () => {
+        const task = workTask("linear", "TEST-1", ["personal", "AFK", "proposal"]);
+
+        expect(await evaluate([task])).toMatchObject({
+            ok: true,
+            value: { candidates: [], excluded: [{ reason: "unsupported-stage" }] },
+        });
+    });
+
     it("skips the unsupported-stage check when the stage is supplied", async () => {
-        const task = workTask("linear", "TEST-1", ["personal", "AFK"]);
+        const task = workTask("linear", "TEST-1", ["personal", "AFK", "proposal"]);
 
         expect(await evaluate([task], { stage: "test" })).toMatchObject({
             ok: true,
@@ -236,6 +256,15 @@ describe("selectCandidates", () => {
         });
     });
 
+    it("keeps a grill task without autonomy as a candidate with a null autonomy", async () => {
+        const task = workTask("beads", "task-1", ["work", "grill-me"]);
+
+        expect(await evaluate([task])).toMatchObject({
+            ok: true,
+            value: { candidates: [{ task, scope: "work", autonomy: null, stage: "grill-me" }] },
+        });
+    });
+
     it.each(["AFK", "HITL"])("keeps %s autonomy when combined with grill-me", async (autonomy) => {
         const task = workTask("linear", "TEST-1", ["personal", autonomy, "grill-me"]);
 
@@ -262,6 +291,34 @@ describe("selectCandidates", () => {
             value: { candidates: [{ task: { source: "linear", id: "TEST-1" } }] },
         });
     });
+
+    it("excludes a task whose triage write failed after adding grill-me", async () => {
+        const task = workTask();
+        const failed = record({ status: "failed", detail: "linear: add label failed" });
+
+        expect(
+            await evaluate([task], { labelledThisRun: labelledThisRun([triageResult([failed])]) }),
+        ).toMatchObject({
+            ok: true,
+            value: { candidates: [], excluded: [{ reason: "labelled-this-run" }] },
+        });
+    });
+
+    it.each<TriageRecord["status"]>(["proposed", "asked"])(
+        "does not exclude a task triage only left %s",
+        async (status) => {
+            const task = workTask();
+
+            expect(
+                await evaluate([task], {
+                    labelledThisRun: labelledThisRun([triageResult([record({ status })])]),
+                }),
+            ).toMatchObject({
+                ok: true,
+                value: { candidates: [{ task }], excluded: [] },
+            });
+        },
+    );
 
     it("passes a detail error through unchanged and stops reading", async () => {
         const detail = vi.fn(() =>

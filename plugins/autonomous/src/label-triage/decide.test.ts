@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import type { Detection, Evidence, GroupState } from "../label-contract/detect.ts";
-import { decide, orderForJudgement, selectForJudgement } from "./decide.ts";
+import { decide, orderForJudgement, selectForJudgement, violation } from "./decide.ts";
 import type { Derivation } from "./rules.ts";
 import type { TrackerTask } from "./trackers/tracker.ts";
 
@@ -23,7 +23,7 @@ const detection = (
     scope: GroupState = missing(),
 ): Detection => ({
     task: task(overrides),
-    groups: { scope, entry: missing() },
+    groups: { scope, autonomy: missing(), stage: missing() },
 });
 
 const derivation = (overrides: Partial<Derivation> = {}): Derivation => ({
@@ -38,49 +38,127 @@ const derivation = (overrides: Partial<Derivation> = {}): Derivation => ({
     ...overrides,
 });
 
-describe("decide", () => {
-    it("is eligible when confidence is at or above the threshold and the labels are valid", () => {
-        expect(decide(derivation({ confidence: 1 }), 0.95)).toEqual({
+// Spec label-triage, "Confidence threshold per group": one test per scenario.
+describe("decide: confidence threshold per group", () => {
+    it("One group above, one below: scope by rule is eligible, autonomy judged at 0.8 is asked", () => {
+        expect(decide(derivation({ confidence: 1 }), 0.95, [])).toEqual({
             status: "eligible",
             reason: "",
         });
-    });
-
-    it("asks when confidence is below the threshold", () => {
-        expect(decide(derivation({ confidence: 0.8 }), 0.95)).toEqual({
-            status: "asked",
-            reason: "below threshold 0.95: 0.80",
-        });
-    });
-
-    it("asks a confident but invalid judgement, AFK with HITL, before checking the threshold", () => {
         expect(
-            decide(derivation({ group: "entry", labels: ["AFK", "HITL"], confidence: 0.99 }), 0.95),
+            decide(
+                derivation({ group: "autonomy", labels: ["HITL"], confidence: 0.8, tier: "llm" }),
+                0.95,
+                [],
+            ),
+        ).toEqual({ status: "asked", reason: "below threshold 0.95: 0.80" });
+    });
+
+    it("Invalid judgement: AFK and HITL at 0.99 are asked as a conflict, not written", () => {
+        expect(
+            decide(
+                derivation({ group: "autonomy", labels: ["AFK", "HITL"], confidence: 0.99 }),
+                0.95,
+                [],
+            ),
         ).toEqual({
             status: "asked",
             reason: "invalid under the contract: AFK with HITL",
         });
     });
 
+    it("Grill judged for a task in proposal: grill-me at 0.99 is asked as invalid, not written", () => {
+        expect(
+            decide(
+                derivation({
+                    group: "autonomy",
+                    labels: ["grill-me"],
+                    confidence: 0.99,
+                    tier: "llm",
+                }),
+                0.95,
+                ["personal", "proposal"],
+            ),
+        ).toEqual({
+            status: "asked",
+            reason: "invalid under the contract: grill-me with a stage label: proposal",
+        });
+    });
+});
+
+describe("decide", () => {
+    it("is eligible when confidence is at or above the threshold and the labels are valid", () => {
+        expect(decide(derivation({ confidence: 1 }), 0.95, [])).toEqual({
+            status: "eligible",
+            reason: "",
+        });
+    });
+
+    it("asks when confidence is below the threshold", () => {
+        expect(decide(derivation({ confidence: 0.8 }), 0.95, [])).toEqual({
+            status: "asked",
+            reason: "below threshold 0.95: 0.80",
+        });
+    });
+
+    it("is eligible for grill-me judged for a task with no stage label", () => {
+        expect(
+            decide(
+                derivation({ group: "autonomy", labels: ["grill-me"], confidence: 0.97 }),
+                0.95,
+                ["personal"],
+            ),
+        ).toEqual({ status: "eligible", reason: "" });
+    });
+
     it("asks with the unknown label named when a label is outside the vocabulary", () => {
-        expect(decide(derivation({ group: "entry", labels: ["not-a-label"] }), 0.95)).toEqual({
+        expect(
+            decide(derivation({ group: "autonomy", labels: ["not-a-label"] }), 0.95, []),
+        ).toEqual({
             status: "asked",
             reason: "invalid under the contract: unknown label not-a-label",
         });
     });
 
+    it("asks with the label named when an autonomy decision is a label of another group", () => {
+        expect(decide(derivation({ group: "autonomy", labels: ["work"] }), 0.95, [])).toEqual({
+            status: "asked",
+            reason: "invalid under the contract: unknown label work",
+        });
+    });
+
     it("asks naming both scope labels when a group carries two", () => {
-        expect(decide(derivation({ labels: ["work", "personal"] }), 0.95)).toEqual({
+        expect(decide(derivation({ labels: ["work", "personal"] }), 0.95, [])).toEqual({
             status: "asked",
             reason: "invalid under the contract: two scope labels: work, personal",
         });
     });
 
     it("asks when a group carries no label", () => {
-        expect(decide(derivation({ labels: [] }), 0.95)).toEqual({
+        expect(decide(derivation({ labels: [] }), 0.95, [])).toEqual({
             status: "asked",
             reason: "invalid under the contract: no label",
         });
+    });
+});
+
+describe("violation", () => {
+    it("names both stage labels", () => {
+        expect(violation("stage", ["grill-me", "proposal"], [])).toBe(
+            "two stage labels: grill-me, proposal",
+        );
+    });
+
+    it("names both autonomy decisions when one of them is grill-me", () => {
+        expect(violation("autonomy", ["HITL", "grill-me"], [])).toBe(
+            "two autonomy labels: HITL, grill-me",
+        );
+    });
+
+    it("names the task's stage labels for a grill-me decision", () => {
+        expect(violation("autonomy", ["grill-me"], ["work", "grill-me"])).toBe(
+            "grill-me with a stage label: grill-me",
+        );
     });
 });
 

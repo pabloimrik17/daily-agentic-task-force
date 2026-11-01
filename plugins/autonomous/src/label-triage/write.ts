@@ -1,18 +1,23 @@
 // Additive writes with read-back (spec label-triage, "Write only with
-// --apply, additively, with read-back"): every write adds labels, never
-// replaces or removes them, and is verified by reading the task back. A
-// write error or a read-back mismatch stops writes to that source for the
-// rest of the run; the other sources keep going.
+// --apply, additively, with read-back" and "Labels missing on a tracker are
+// not written"; design D4): every write adds labels, never replaces or removes
+// them, and is verified by reading the task back. A write error, a read-back
+// mismatch or a label listing that fails stops writes to that source for the
+// rest of the run; the other sources keep going. A label the tracker lacks is
+// not written: its derivation stays proposed and the source keeps writing. Without
+// --apply the same lookup runs read-only to preview what --apply would skip: a
+// listing that fails there is a note, not a failure.
 
 import type { Source } from "../config.ts";
+import type { Group } from "../label-contract/contract.ts";
 import type { Derivation } from "./rules.ts";
-import type { Tracker, TrackerTask, Trackers } from "./trackers/tracker.ts";
+import type { Tracker, TrackerResult, TrackerTask, Trackers } from "./trackers/tracker.ts";
 
 export type RecordStatus = "applied" | "proposed" | "asked" | "failed";
 
 export interface TriageRecord extends Derivation {
     status: RecordStatus;
-    detail: string | null; // decide reason for asked; write failure text for failed
+    detail: string | null; // decide reason for asked; write failure text for failed; missing label for proposed
 }
 
 export interface WriteFailure {
@@ -24,13 +29,62 @@ export interface WriteFailure {
     error: string;
 }
 
+// Whether the task's tracker has a label; `taskId` places a GitHub task in its repository.
+export type LabelCheck = (label: string, taskId: string) => boolean;
+
+interface Written {
+    records: TriageRecord[];
+    failures: WriteFailure[];
+    missing: string[]; // the label-availability notes, each distinct one once: a missingLabelDetail, or a dry run's failed listing
+}
+
 const SOURCE_ORDER: readonly Source[] = ["beads", "github", "linear"];
+
+// A write cut short leaves at worst an autonomy without its stage, which the next run
+// completes by rule (design D3).
+const GROUP_ORDER: readonly Group[] = ["scope", "autonomy", "stage"];
 
 // Prefix of the error a read-back mismatch reports; the report renders it apart.
 export const READ_BACK_MISMATCH = "read-back mismatch";
 
+export const BOOTSTRAP_HINT = "run --bootstrap-labels";
+
+export function missingLabelDetail(label: string, source: Source): string {
+    return `${label} is missing on ${source}; ${BOOTSTRAP_HINT}`;
+}
+
 export function taskKey(source: Source, id: string): string {
     return `${source}:${id}`;
+}
+
+// Beads creates labels by use and is never checked. Linear has a label in any scope,
+// workspace or team; GitHub only in the task's own repository, whatever its letter case.
+export async function labelCheckFor(tracker: Tracker): Promise<TrackerResult<LabelCheck>> {
+    if (!tracker.createsLabels) {
+        return { ok: true, value: () => true };
+    }
+    const listed = await tracker.listLabels();
+    if (!listed.ok) {
+        return listed;
+    }
+    const labels = listed.value;
+    const perRepository = tracker.source === "github";
+    return {
+        ok: true,
+        value: (name, taskId) =>
+            labels.some(
+                (label) =>
+                    label.name === name &&
+                    (!perRepository ||
+                        label.scope.toLowerCase() === repositoryOf(taskId).toLowerCase()),
+            ),
+    };
+}
+
+// `owner/name#12` → `owner/name`.
+function repositoryOf(taskId: string): string {
+    const hash = taskId.indexOf("#");
+    return hash === -1 ? taskId : taskId.slice(0, hash);
 }
 
 export async function applyDerivations(
@@ -38,68 +92,146 @@ export async function applyDerivations(
     tasks: Map<string, TrackerTask>,
     trackers: Trackers,
     apply: boolean,
-): Promise<{ records: TriageRecord[]; failures: WriteFailure[] }> {
-    if (!apply) {
-        return {
-            records: eligible.map((derivation) => ({
-                ...derivation,
-                status: "proposed",
-                detail: null,
-            })),
-            failures: [],
-        };
-    }
-
-    const records: TriageRecord[] = [];
-    const failures: WriteFailure[] = [];
+): Promise<{ records: TriageRecord[]; failures: WriteFailure[]; missing: string[] }> {
+    // Without --apply the records list what would be written, in the order it would be.
+    const bySource = SOURCE_ORDER.map((source) =>
+        inWriteOrder(eligible.filter((derivation) => derivation.source === source)),
+    );
+    const written: Written = { records: [], failures: [], missing: [] };
     // The listing's labels plus those this run has added, so a task's second derivation
     // expects the first one's labels in its read-back.
     const known = new Map<string, string[]>();
-    for (const source of SOURCE_ORDER) {
-        let stopped = false;
-        for (const derivation of eligible.filter((d) => d.source === source)) {
-            if (stopped) {
-                records.push({
-                    ...derivation,
-                    status: "proposed",
-                    detail: `skipped after a write failure on ${source}`,
-                });
-                continue;
-            }
-            const key = taskKey(source, derivation.taskId);
-            const before = known.get(key) ?? tasks.get(key)?.labels ?? [];
-            const outcome = await writeOne(trackers[source], derivation, before);
-            if (outcome.ok) {
-                const added = derivation.labels.filter((label) => !before.includes(label));
-                known.set(key, [...before, ...added]);
-                records.push({ ...derivation, status: "applied", detail: null });
-            } else {
-                records.push({ ...derivation, status: "failed", detail: outcome.error });
-                failures.push({
-                    source,
-                    taskId: derivation.taskId,
-                    labels: derivation.labels,
-                    before,
-                    after: outcome.after,
-                    error: outcome.error,
-                });
-                stopped = true;
-            }
+    const labelsBefore = (derivation: Derivation): string[] => {
+        const key = taskKey(derivation.source, derivation.taskId);
+        return known.get(key) ?? tasks.get(key)?.labels ?? [];
+    };
+    for (const own of bySource) {
+        const [first] = own;
+        if (first !== undefined) {
+            const tracker = trackers[first.source];
+            await (apply
+                ? writeSource(tracker, own, labelsBefore, known, written)
+                : previewSource(tracker, own, written));
         }
     }
-    return { records, failures };
+    return written;
 }
 
-// A write cut short leaves the human-facing labels behind: grill-me, then HITL, land
-// before the rest, AFK last.
-function writeRank(label: string): number {
-    if (label === "grill-me") {
-        return 0;
+// Tasks in the order they first appear; each task's derivations scope, autonomy, stage.
+function inWriteOrder(derivations: readonly Derivation[]): Derivation[] {
+    const byTask = new Map<string, Derivation[]>();
+    for (const derivation of derivations) {
+        byTask.set(derivation.taskId, [...(byTask.get(derivation.taskId) ?? []), derivation]);
     }
-    if (label === "HITL") {
-        return 1;
+    const rank = (derivation: Derivation) => GROUP_ORDER.indexOf(derivation.group);
+    return [...byTask.values()].flatMap((own) => own.sort((a, b) => rank(a) - rank(b)));
+}
+
+// The source's labels are listed once, the first time it has something to write.
+async function writeSource(
+    tracker: Tracker,
+    derivations: readonly Derivation[],
+    labelsBefore: (derivation: Derivation) => string[],
+    known: Map<string, string[]>,
+    written: Written,
+): Promise<void> {
+    const check = await labelCheckFor(tracker);
+    for (const [index, derivation] of derivations.entries()) {
+        const before = labelsBefore(derivation);
+        const outcome = check.ok
+            ? await writeChecked(tracker, check.value, derivation, before)
+            : { ok: false as const, error: check.error, after: null };
+        if (outcome.ok) {
+            const added = derivation.labels.filter((label) => !before.includes(label));
+            known.set(taskKey(derivation.source, derivation.taskId), [...before, ...added]);
+            written.records.push({ ...derivation, status: "applied", detail: null });
+        } else if ("missing" in outcome) {
+            written.records.push({ ...derivation, status: "proposed", detail: outcome.missing });
+            note(written, outcome.missing);
+        } else {
+            fail(derivation, before, outcome, written);
+            skipRest(derivations.slice(index + 1), written);
+            return;
+        }
     }
-    return label === "AFK" ? 3 : 2;
+}
+
+// A label the tracker lacks is never written, so the derivation was never attempted.
+async function writeChecked(
+    tracker: Tracker,
+    check: LabelCheck,
+    derivation: Derivation,
+    before: string[],
+): Promise<
+    | { ok: true }
+    | { ok: false; missing: string }
+    | { ok: false; error: string; after: string[] | null }
+> {
+    const missing = missingDetailOf(check, derivation);
+    if (missing !== null) {
+        return { ok: false, missing };
+    }
+    return writeOne(tracker, derivation, before);
+}
+
+// The detail for the first label of the derivation the tracker lacks, or null.
+function missingDetailOf(check: LabelCheck, derivation: Derivation): string | null {
+    const absent = derivation.labels.find((label) => !check(label, derivation.taskId));
+    return absent === undefined ? null : missingLabelDetail(absent, derivation.source);
+}
+
+function note(written: Written, text: string): void {
+    if (!written.missing.includes(text)) {
+        written.missing.push(text);
+    }
+}
+
+// Without --apply nothing is written; the source's labels are still listed, once, when it
+// has something to write, so each derivation shows what --apply would skip. A listing that
+// fails writes nothing and fails nothing: the derivations stay proposed and one note says why.
+async function previewSource(
+    tracker: Tracker,
+    derivations: readonly Derivation[],
+    written: Written,
+): Promise<void> {
+    const check = await labelCheckFor(tracker);
+    if (!check.ok) {
+        note(written, `labels on ${tracker.source} could not be listed: ${check.error}`);
+    }
+    for (const derivation of derivations) {
+        const detail = check.ok ? missingDetailOf(check.value, derivation) : null;
+        written.records.push({ ...derivation, status: "proposed", detail });
+        if (detail !== null) {
+            note(written, detail);
+        }
+    }
+}
+
+function fail(
+    derivation: Derivation,
+    before: string[],
+    outcome: { error: string; after: string[] | null },
+    written: Written,
+): void {
+    written.records.push({ ...derivation, status: "failed", detail: outcome.error });
+    written.failures.push({
+        source: derivation.source,
+        taskId: derivation.taskId,
+        labels: derivation.labels,
+        before,
+        after: outcome.after,
+        error: outcome.error,
+    });
+}
+
+function skipRest(derivations: readonly Derivation[], written: Written): void {
+    for (const derivation of derivations) {
+        written.records.push({
+            ...derivation,
+            status: "proposed",
+            detail: `skipped after a write failure on ${derivation.source}`,
+        });
+    }
 }
 
 async function writeOne(
@@ -107,8 +239,7 @@ async function writeOne(
     derivation: Derivation,
     before: string[],
 ): Promise<{ ok: true } | { ok: false; error: string; after: string[] | null }> {
-    const labels = [...derivation.labels].sort((a, b) => writeRank(a) - writeRank(b));
-    for (const [index, label] of labels.entries()) {
+    for (const [index, label] of derivation.labels.entries()) {
         const result = await tracker.addLabel(derivation.taskId, label);
         if (!result.ok) {
             if (index === 0) {

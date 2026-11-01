@@ -2,7 +2,7 @@
 // applies wins. Only tasks surviving the inexpensive checks need detail.
 
 import type { AutonomousConfig } from "../config.ts";
-import { detect } from "../label-contract/detect.ts";
+import { detect, isComplete } from "../label-contract/detect.ts";
 import { LABEL_TRIAGE } from "../label-triage/question-id.ts";
 import type { LabelTriageData } from "../label-triage/step.ts";
 import type { TrackerResult } from "../label-triage/trackers/tracker.ts";
@@ -37,9 +37,21 @@ export function labelledThisRun(results: readonly StepResult[]): Set<string> {
     return keys;
 }
 
+// Classification (spec work-selection): every group present, or autonomy deferred
+// while the stage is grill-me.
+function isClassified(task: WorkTask, config: AutonomousConfig): boolean {
+    const { groups } = detect(task, config.sources[task.source]);
+    return Object.values(groups).every(isComplete);
+}
+
+// A task without a next stage cannot pass classification, but would count as unsupported.
+function isUnsupportedStage(task: WorkTask, deps: CandidateDeps): boolean {
+    const stage = nextStage(task.labels);
+    return deps.stage === undefined && (stage === null || !isSupported(stage));
+}
+
 function exclusionBeforeDetail(task: WorkTask, deps: CandidateDeps): Exclusion | null {
-    const { groups } = detect(task, deps.config.sources[task.source]);
-    if (groups.scope.status !== "present" || groups.entry.status !== "present") {
+    if (!isClassified(task, deps.config)) {
         return "classification";
     }
     if (task.labels.includes("taken")) {
@@ -48,7 +60,7 @@ function exclusionBeforeDetail(task: WorkTask, deps: CandidateDeps): Exclusion |
     if (deps.labelledThisRun.has(taskKey(task.source, task.id))) {
         return "labelled-this-run";
     }
-    if (deps.stage === undefined && !isSupported(nextStage(task.labels))) {
+    if (isUnsupportedStage(task, deps)) {
         return "unsupported-stage";
     }
     if (task.blockedBy !== null && task.blockedBy.length > 0) {
@@ -57,18 +69,18 @@ function exclusionBeforeDetail(task: WorkTask, deps: CandidateDeps): Exclusion |
     return null;
 }
 
-function candidate(task: WorkTask): Candidate {
+// Null when the task has no next stage, which classification rules out.
+function candidate(task: WorkTask): Candidate | null {
+    const stage = nextStage(task.labels);
+    if (stage === null) {
+        return null;
+    }
     const autonomy = task.labels.includes("AFK")
         ? "AFK"
         : task.labels.includes("HITL")
           ? "HITL"
-          : "grill-me";
-    return {
-        task,
-        scope: task.labels.includes("work") ? "work" : "personal",
-        autonomy,
-        stage: nextStage(task.labels),
-    };
+          : null;
+    return { task, scope: task.labels.includes("work") ? "work" : "personal", autonomy, stage };
 }
 
 export async function selectCandidates(
@@ -87,8 +99,12 @@ export async function selectCandidates(
             if (detailed.value.children !== null && detailed.value.children.length > 0) {
                 reason = "split";
             } else {
-                candidates.push(candidate(detailed.value));
-                continue;
+                const found = candidate(detailed.value);
+                if (found !== null) {
+                    candidates.push(found);
+                    continue;
+                }
+                reason = "unsupported-stage";
             }
         }
         excluded.push({ source: task.source, id: task.id, title: task.title, reason });

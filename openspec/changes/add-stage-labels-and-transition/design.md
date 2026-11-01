@@ -68,6 +68,8 @@ The question id stays `label-triage:<source>:<task>:autonomy`. The answer handle
 - **A missing label:** its derivation becomes `proposed`, with the detail `<label> is missing on <source>; run --bootstrap-labels`. The step's reasons collect the missing labels, and the source keeps writing.
 - **A failing `listLabels`:** it counts as a write error for that source, as a failing `addLabel` would.
 
+The lookup also runs without `--apply`, read-only, so the dry run reports each label a tracker lacks with the same detail and previews what `--apply` would skip: the dry run is the preview of the first `--apply`, which can hold dozens of `proposal` writes. A failing `listLabels` there writes nothing and fails nothing: the source's derivations stay `proposed`, and one reason, `labels on <source> could not be listed: <error>`, joins the label notes the step's reasons collect.
+
 Answers go through the same path. In answer mode, a derivation skipped for a missing label is mapped to `failed` with that detail, without stopping the source.
 
 A derivation skipped this way was never attempted, so it does not put the task in the set that selection excludes as "labelled this run".
@@ -131,7 +133,7 @@ The command reads only `handoff`, so it is unaffected.
 `prepare` prints `scope:`, `autonomy:` and `stage:`.
 
 - **Autonomy line:** it can also be `not needed (grill-me)`.
-- **Stage line:** it can be `present`, `conflict`, `derived proposal (autonomy <label>)` or `follows autonomy`.
+- **Stage line:** it can be `present`, `conflict`, `derived proposal (autonomy <label>)`, `derived grill-me (<evidence>)` or `follows autonomy`.
 - **`--judged`:** it accepts `scope` and `autonomy`.
 - **`decide`:** it prints `proposal` among the labels to apply when an `AFK` or `HITL` is applied and no stage is named.
 
@@ -139,7 +141,7 @@ The skill's spelling list gains `proposal`, and its wording says autonomy where 
 
 ## Risks / Trade-offs
 
-- **[The first `--apply` run after the upgrade writes many labels]** About 91 tasks had an autonomy label and no stage on 2026-09-30, and rule writes are uncapped, as they are today for scope. → A run without `--apply` first lists every `proposal` it would write. Writes are additive and read back, and the stop on mismatch is per source.
+- **[The first `--apply` run after the upgrade writes many labels]** The dry run of 2026-11-01 proposes 636 `proposal` writes: 613 on Beads, 22 on Linear and 1 on GitHub, because the Beads database has grown to 1140 open tasks. Rule writes are uncapped, as they are today for scope. → A run without `--apply` first lists every `proposal` it would write. Writes are additive and read back, and the stop on mismatch is per source.
 - **[A transition cut short leaves `grill-me` with `proposal`]** → Reported as `failed` with both label sets. Selection excludes the task under classification, and answering the transition again finishes it (D6).
 - **[`linear api` and its GraphQL shape are outside our control]** → A recolour failure is reported per label and never blocks creation. Tests use a fake exec, and the manual check runs the real mutation against one label.
 - **[Some reader of `autonomous.run.v1` breaks]** → None is known: `commands/run.md` reads only `handoff`, and the schema string announces the change.

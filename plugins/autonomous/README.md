@@ -18,12 +18,15 @@ steps, in this order:
 With `--apply`, a run can also end with questions for the human, which
 `/autonomous:run` asks and applies in one round (see
 [The handoff](#the-handoff)). `--apply` can now also create sessions and
-worktrees and write the `taken` label.
+worktrees and write the `taken` label. A separate mode, `--transition`, runs no
+step: it reads a task in `grill-me` and hands off the question that moves it to
+`proposal` (see [Transition mode](#transition-mode)).
 
 **The contracts are provisional.** The step contract, the run report and the
 runner shape are a first iteration and are expected to change as further steps
-are added. The JSON report is versioned (`autonomous.run.v1`) so consumers can
-detect a change.
+are added. The JSON report is versioned (`autonomous.run.v2`) so consumers can
+detect a change: version 2 names the label groups `scope`, `autonomy` and
+`stage` in the triage and selection data.
 
 ## Domain language
 
@@ -32,8 +35,9 @@ candidate, attempt, managed session, stage contract, workspace, result marker,
 retained attempt, pending cleanup, run lock, handoff, question, round, answer
 mode) are defined in [`GLOSSARY.md`](GLOSSARY.md).
 [ADR 0001](docs/adr/0001-properties-persist-stages-replace.md) records the
-label model agreed for DOT-110: properties persist, stages replace. It is not
-implemented yet.
+label model of DOT-110: properties persist, stages replace. The
+[label contract](#the-label-contract) implements it; the grill-me stage that
+uses it is change 2 of DOT-110 and is not implemented yet.
 [ADR 0002](docs/adr/0002-remove-taken-on-finalisation.md) records why the
 runner removes `taken` when an attempt is finalised or discarded.
 [ADR 0003](docs/adr/0003-optional-config-blocks-with-shipped-defaults.md)
@@ -95,21 +99,23 @@ adding the Linear CLI there is tracked as DOT-82 sub-issue 7.
 /autonomous:run --bootstrap-labels [--json]
 /autonomous:run --apply --answer <id>=<value>[,<value>]... [--json]
 /autonomous:run --apply --discard <attempt-id|source:id> [--release-workspace] [--json]
+/autonomous:run --apply --transition <source>:<task> [--json]
 ```
 
-| Flag                                | Effect                                                                                                                                                                                                                                                                     |
-| ----------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `--account <provider-key>`          | Claude account to evaluate (`claude` or `claude@<id>`). Required when several Claude accounts are present                                                                                                                                                                  |
-| `--force`                           | Ask OpenUsage to bypass its shared cache                                                                                                                                                                                                                                   |
-| `--json`                            | Print one `autonomous.run.v1` JSON document instead of the text report; with `--bootstrap-labels`, one `autonomous.bootstrap.v1` document; with `--answer`, one `autonomous.answers.v1` document; with `--discard`, one `autonomous.discard.v1` document                   |
-| `--apply`                           | Let steps write. Without it a run has no side effects beyond the CLIs' own caches and the run lock. Required by `--answer` and `--discard`                                                                                                                                 |
-| `--no-handoff`                      | Emit no handoff; the questions stay in the step's report. For runs with no human present, such as a `/loop`. Not combined with `--bootstrap-labels` or `--answer`                                                                                                          |
-| `--answer <id>=<value>[,<value>]`   | [Answer mode](#answer-mode): apply the answer to the question `<id>` and exit, running no step. Repeat it once per question. Only combines with `--apply` and `--json`                                                                                                     |
-| `--bootstrap-labels`                | Run only the label bootstrap and exit. Only combines with `--json`                                                                                                                                                                                                         |
-| `--task <source>:<id>`              | Give that task to `launch` instead of running `label-triage` and `select`. `<source>` is `linear`, `beads` or `github`, split at the first `:`. Given once. Not combined with `--bootstrap-labels`, `--answer` or `--discard`. See [The supplied task](#the-supplied-task) |
-| `--stage <stage>`                   | The stage `launch` runs for the supplied task. Requires `--task`. Given once. Its name is not checked when the arguments are parsed: an unregistered stage makes `launch` wait                                                                                             |
-| `--discard <attempt-id\|source:id>` | [Discard mode](#discard-mode): discard that attempt, or the one open attempt of that task, and exit, running no step. Requires `--apply`. Only combines with `--apply`, `--json` and `--release-workspace`. Given once                                                     |
-| `--release-workspace`               | With `--discard`, also release the attempt's worktree. Requires `--discard`                                                                                                                                                                                                |
+| Flag                                | Effect                                                                                                                                                                                                                                                                                                                                                                                                          |
+| ----------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `--account <provider-key>`          | Claude account to evaluate (`claude` or `claude@<id>`). Required when several Claude accounts are present                                                                                                                                                                                                                                                                                                       |
+| `--force`                           | Ask OpenUsage to bypass its shared cache                                                                                                                                                                                                                                                                                                                                                                        |
+| `--json`                            | Print one `autonomous.run.v2` JSON document instead of the text report; with `--bootstrap-labels`, one `autonomous.bootstrap.v1` document; with `--answer`, one `autonomous.answers.v1` document; with `--discard`, one `autonomous.discard.v1` document; with `--transition`, one `autonomous.transition.v1` document                                                                                          |
+| `--apply`                           | Let steps write. Without it a run has no side effects beyond the CLIs' own caches and the run lock. Required by `--answer`, `--discard` and `--transition`                                                                                                                                                                                                                                                      |
+| `--no-handoff`                      | Emit no handoff; the questions stay in the step's report. For runs with no human present, such as a `/loop`. Not combined with `--bootstrap-labels`, `--answer` or `--transition`                                                                                                                                                                                                                               |
+| `--answer <id>=<value>[,<value>]`   | [Answer mode](#answer-mode): apply the answer to the question `<id>` and exit, running no step. Repeat it once per question. Only combines with `--apply` and `--json`                                                                                                                                                                                                                                          |
+| `--bootstrap-labels`                | Run only the label bootstrap and exit. Only combines with `--json`                                                                                                                                                                                                                                                                                                                                              |
+| `--task <source>:<id>`              | Give that task to `launch` instead of running `label-triage` and `select`. `<source>` is `linear`, `beads` or `github`, split at the first `:`. Given once. Not combined with `--bootstrap-labels`, `--answer`, `--discard` or `--transition`. See [The supplied task](#the-supplied-task)                                                                                                                      |
+| `--stage <stage>`                   | The stage `launch` runs for the supplied task. Requires `--task`. Given once. Its name is checked when the arguments are parsed: a stage that is not registered is a usage error (exit 1) that names the registered stages                                                                                                                                                                                      |
+| `--discard <attempt-id\|source:id>` | [Discard mode](#discard-mode): discard that attempt, or the one open attempt of that task, and exit, running no step. Requires `--apply`. Only combines with `--apply`, `--json` and `--release-workspace`. Given once                                                                                                                                                                                          |
+| `--release-workspace`               | With `--discard`, also release the attempt's worktree. Requires `--discard`                                                                                                                                                                                                                                                                                                                                     |
+| `--transition <source>:<task>`      | [Transition mode](#transition-mode): read the task, which must carry `grill-me`, and hand off the question that moves it to `proposal`, running no step. `<source>` is `linear`, `beads` or `github`, split at the first `:`. Requires `--apply`. Only combines with `--apply` and `--json`. Given once. Not combined with `--no-handoff`, `--answer`, `--task`, `--stage`, `--discard` or `--bootstrap-labels` |
 
 The script can also be run directly, which is what a shell or `/loop` should
 branch on:
@@ -119,10 +125,10 @@ bun plugins/autonomous/src/run.ts --account claude --json --apply --no-handoff
 ```
 
 `--apply` and `--bootstrap-labels` are the only ways anything is written;
-answer mode and discard mode require `--apply`. They are separate write paths
-that cannot be combined, and each must be typed explicitly: nothing adds
-either on its own. With `--apply`, `reconcile` and `launch` write attempt
-records, sessions, worktrees and the `taken` label.
+answer mode, discard mode and transition mode require `--apply`. They are
+separate write paths that cannot be combined, and each must be typed
+explicitly: nothing adds either on its own. With `--apply`, `reconcile` and
+`launch` write attempt records, sessions, worktrees and the `taken` label.
 The one exception is the answer invocation of `/autonomous:run`, which passes
 `--apply` again; it only follows a run the user started with `--apply`. A
 `/loop` that should write passes `--apply` explicitly, and `--no-handoff` with
@@ -148,11 +154,11 @@ header, the line `lock: <error>` (in JSON, the report's `lock` field,
 
 For `/autonomous:run --bootstrap-labels [--json]`:
 
-| Code | Outcome                                                                                             |
-| ---- | --------------------------------------------------------------------------------------------------- |
-| 0    | Every label is present or was created on every enabled source                                       |
-| 3    | The configuration could not be loaded, a source could not be evaluated, or a label failed to create |
-| 1    | Invalid arguments or a failure of the runner itself                                                 |
+| Code | Outcome                                                                                                         |
+| ---- | --------------------------------------------------------------------------------------------------------------- |
+| 0    | Every label is present, was created or was recoloured on every enabled source                                   |
+| 3    | The configuration could not be loaded, a source could not be evaluated, or a label failed to create or recolour |
+| 1    | Invalid arguments or a failure of the runner itself                                                             |
 
 For `/autonomous:run --apply --answer <id>=<value>[,<value>]... [--json]`:
 
@@ -161,6 +167,14 @@ For `/autonomous:run --apply --answer <id>=<value>[,<value>]... [--json]`:
 | 0    | `advance` — every answer was applied or skipped                                              |
 | 3    | `not-evaluable` — an answer was rejected or failed, or the configuration could not be loaded |
 | 1    | Invalid arguments or a failure of the runner itself                                          |
+
+For `/autonomous:run --apply --transition <source>:<task> [--json]`:
+
+| Code | Outcome                                                                                                                                 |
+| ---- | --------------------------------------------------------------------------------------------------------------------------------------- |
+| 0    | `advance` — the task is in `grill-me` and a handoff was emitted                                                                         |
+| 3    | `not-evaluable` — the task is not in `grill-me`, its source is disabled, it could not be read, or the configuration could not be loaded |
+| 1    | Invalid arguments or a failure of the runner itself                                                                                     |
 
 For `/autonomous:run --apply --discard <attempt-id|source:id> [--release-workspace] [--json]`:
 
@@ -174,8 +188,10 @@ For `/autonomous:run --apply --discard <attempt-id|source:id> [--release-workspa
 
 The handoff is the part of the run report addressed to the agent that ran the
 command: what the run asks it to do next. Its only kind today is a list of
-questions for the human, and only `label-triage` contributes them (see
-[Questions for the human](#questions-for-the-human)).
+questions for the human. `label-triage` contributes them (see
+[Questions for the human](#questions-for-the-human)), and so does
+[transition mode](#transition-mode), which emits a handoff with one question
+through the same mechanism.
 
 A run emits a handoff only when all three hold:
 
@@ -193,14 +209,14 @@ report.
 
 Each question carries:
 
-| Field         | Content                                                                                                          |
-| ------------- | ---------------------------------------------------------------------------------------------------------------- |
-| `id`          | Names the step and the question's target; unique within the handoff and opaque to the command                    |
-| `step`        | The id of the step that contributed it                                                                           |
-| `header`      | At most 12 characters                                                                                            |
-| `question`    | The question text                                                                                                |
-| `options`     | Two to four options, each a `label` shown to the human, a `value` passed back as the answer, and a `description` |
-| `multiSelect` | Whether several options may be chosen                                                                            |
+| Field         | Content                                                                                                           |
+| ------------- | ----------------------------------------------------------------------------------------------------------------- |
+| `id`          | Names the step, or the transition, and the question's target; unique within the handoff and opaque to the command |
+| `step`        | The id of the step that contributed it, or `transition`                                                           |
+| `header`      | At most 12 characters                                                                                             |
+| `question`    | The question text                                                                                                 |
+| `options`     | Two to four options, each a `label` shown to the human, a `value` passed back as the answer, and a `description`  |
+| `multiSelect` | Whether several options may be chosen                                                                             |
 
 Every question has exactly one option whose `value` is null, meaning "no
 answer for now": choosing it answers nothing, and its value is never passed
@@ -211,6 +227,8 @@ With `--json`, the handoff is the report's `handoff` field. Without `--json`,
 the text report's last line is `handoff:` and a space, followed by the same
 handoff as one line of JSON, so the command reads the same document in both
 modes. A run that emits no handoff carries neither the field nor that line.
+Transition mode renders its handoff with the same functions, so the command
+reads its report exactly like a run report.
 
 ### The round
 
@@ -261,24 +279,28 @@ Each `--answer` is split at its first `=` into the question's id and its
 values, and the values at `,`. These are usage errors (exit 1):
 
 - `--answer` without `--apply`;
-- `--answer` with `--account`, `--force`, `--no-handoff` or
-  `--bootstrap-labels`: it only combines with `--apply` and `--json`;
+- `--answer` with `--account`, `--force`, `--no-handoff`,
+  `--bootstrap-labels` or `--transition`: it only combines with `--apply` and
+  `--json`;
 - an `--answer` without `=`, with an empty id or with an empty value;
 - two `--answer` for the same id.
 
-Each answer goes to the step named by its id's text before the first `:`, and
-that step validates and applies it under its own rules. Today only
-`label-triage` takes answers (see
-[Applying an answer](#applying-an-answer)). Every answer is processed, whatever
-the status of the others, and reported with its id, its labels, a status and a
-detail:
+Each answer goes to the step or the transition named by its id's text before
+the first `:`, and that step or the transition validates and applies it under
+its own rules. Two take answers: the `label-triage` step (see
+[Applying an answer](#applying-an-answer)) and the transition, whose ids start
+with `transition:` (see [The transition answer](#the-transition-answer)). An
+answer whose id names neither is `rejected` with the detail
+`no step <name> takes answers`, as in `no step foo takes answers` for the id
+`foo:x`. Every answer is processed, whatever the status of the others, and
+reported with its id, its labels, a status and a detail:
 
-| Status     | When                                                                                                                                                                                                     |
-| ---------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `applied`  | The answer was written and read back                                                                                                                                                                     |
-| `skipped`  | Its target no longer needs it: the group is now present or in conflict on the task. Nothing is written                                                                                                   |
-| `rejected` | It is not valid for its question: its id names no step that takes answers or is malformed, its source is unknown or disabled, its group is unknown, or its labels are not valid for the question's group |
-| `failed`   | The task cannot be read, the write fails or is not confirmed by the read-back, or it was not written because an earlier write to that source failed in the same invocation                               |
+| Status     | When                                                                                                                                                                                                                   |
+| ---------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `applied`  | The answer was written and read back                                                                                                                                                                                   |
+| `skipped`  | Its target no longer needs it: the group is now present or in conflict on the task, a `grill-me` answer finds a stage label, or a transition answer finds the task no longer in `grill-me`. Nothing is written         |
+| `rejected` | It is not valid for its question: its id names no step or transition that takes answers or is malformed, its source is unknown or disabled, its group is unknown, or its labels are not valid for the question's group |
+| `failed`   | The task cannot be read, the tracker lacks a label to write, the write fails or is not confirmed by the read-back, or it was not written because an earlier write to that source failed in the same invocation         |
 
 With `--json` the report is one JSON document identified by
 `schema: "autonomous.answers.v1"`:
@@ -289,6 +311,205 @@ information. When the configuration cannot be loaded, the error is printed on
 stderr and, with `--json`, the document holds `config: { path, error }` and no
 answers; without `--json`, the error is reported on stderr only. The answer
 report never carries a handoff.
+
+## Transition mode
+
+```text
+/autonomous:run --apply --transition <source>:<task> [--json]
+```
+
+A grill ends by moving its task from `grill-me` to `proposal`, on a human's
+answer. Transition mode starts that move: it reads the task and hands off one
+question, the task's autonomy. It runs no step, so it needs no quota and no
+judgement, and it takes no [run lock](#the-run-lock): it writes labels, not
+attempts. The answer comes back through [answer mode](#answer-mode), which does
+the writing (see [The transition answer](#the-transition-answer)). The grill
+stage, change 2 of DOT-110, runs it at its end; it can also be run by hand. It
+reads labels only: it does not check that a grill took place.
+
+`<source>` is `linear`, `beads` or `github`, split at the first `:`. These are
+usage errors (exit 1):
+
+- `--transition` without `--apply`;
+- `--transition` with any flag other than `--apply` and `--json`;
+- a value without `:` or with an unknown source;
+- `--transition` given twice.
+
+`/autonomous:run` relays the report's handoff exactly like a run report's, asks
+the question and runs answer mode once with the answer, so
+`/autonomous:run --apply --transition <source>:<task>` moves a task in one
+round (see [The round](#the-round)). From a shell, quote the answer, because
+GitHub task ids contain `#`:
+
+```bash
+bun plugins/autonomous/src/run.ts --apply --transition linear:DOT-110
+bun plugins/autonomous/src/run.ts --apply --answer 'transition:linear:DOT-110=AFK'
+```
+
+### The transition report
+
+The report holds the start time, the outcome, the task (its source, id, title
+and labels, or null when it was not read), the reasons and the handoff. The
+outcome is `advance` exactly when a handoff is emitted, and `not-evaluable`
+otherwise, with the reason:
+
+| Reason                                                 | When                                      |
+| ------------------------------------------------------ | ----------------------------------------- |
+| `<source> is not enabled`                              | The source is disabled; no task is read   |
+| The tracker's error                                    | The task cannot be read; the task is null |
+| `<source> <id> is not in grill-me (labels [<labels>])` | The task does not carry `grill-me`        |
+
+A task in `grill-me` has no reasons and one question in its handoff. A task
+that is not in `grill-me`, from a disabled source or unreadable has no handoff.
+The exit codes are in [Exit codes](#exit-codes). A configuration that cannot be
+loaded is reported as in answer mode: the error is printed on stderr and, with
+`--json`, the document holds `config: { path, error }`, a null task and no
+reasons.
+
+With `--json` the report is one document identified by
+`schema: "autonomous.transition.v1"`. For a Linear task `DOT-110` carrying
+`work`, `HITL` and `grill-me`:
+
+```json
+{
+    "schema": "autonomous.transition.v1",
+    "startedAt": "2026-11-01T09:00:00.000Z",
+    "outcome": "advance",
+    "task": {
+        "source": "linear",
+        "id": "DOT-110",
+        "title": "Grill-me stage",
+        "labels": ["work", "HITL", "grill-me"]
+    },
+    "reasons": [],
+    "handoff": {
+        "questions": [
+            {
+                "id": "transition:linear:DOT-110",
+                "step": "transition",
+                "header": "DOT-110",
+                "question": "linear DOT-110 \"Grill-me stage\": the grill is over. Which autonomy does the task keep?\nLabels: [work, HITL, grill-me]",
+                "options": [
+                    {
+                        "label": "AFK",
+                        "value": "AFK",
+                        "description": "An agent may advance the task without a human."
+                    },
+                    {
+                        "label": "HITL",
+                        "value": "HITL",
+                        "description": "current · An agent may advance the task, but a human intervenes during or at the end of each stage."
+                    },
+                    {
+                        "label": "Later",
+                        "value": null,
+                        "description": "Leave the task in grill-me"
+                    }
+                ],
+                "multiSelect": false
+            }
+        ],
+        "remaining": 0
+    }
+}
+```
+
+Without `--json` the same report is text and, when a handoff is emitted, its
+last line is `handoff:` and a space followed by the handoff as one line of
+JSON, as in a run report. Here that line is shortened:
+
+```text
+autonomous transition — started 2026-11-01T09:00:00.000Z
+outcome: advance
+task: linear DOT-110 → "Grill-me stage" → labels [work, HITL, grill-me]
+handoff: {"questions":[{"id":"transition:linear:DOT-110","step":"transition", …}],"remaining":0}
+```
+
+For a task that is not in `grill-me`, the text report names the reason and
+carries no handoff line:
+
+```text
+autonomous transition — started 2026-11-01T09:00:00.000Z
+outcome: not-evaluable
+task: linear DOT-110 → "Grill-me stage" → labels [personal, AFK, proposal]
+reasons:
+  - linear DOT-110 is not in grill-me (labels [personal, AFK, proposal])
+```
+
+### The transition question
+
+The question has the id `transition:<source>:<task>`, the step `transition` and
+a single choice. The task is everything after the second `:`; task ids contain
+no `:`. The header is the task id when it has at most 12 characters, and
+`autonomy` otherwise. The text has two lines:
+
+```text
+<source> <taskId> "<title>": the grill is over. Which autonomy does the task keep?
+Labels: [<labels on the task>]
+```
+
+The options are `AFK` and `HITL`, each described by its meaning (see
+[The label contract](#the-label-contract)), then `Later`. An option the task
+already carries is prefixed with `current ·` in its description, so a task that
+carries `HITL` shows `HITL` as current, and a task with no autonomy label shows
+none. `Later` has a null value and the description `Leave the task in
+grill-me`. The question never asks for scope: scope is a property, and the
+grill does not change it.
+
+### The transition answer
+
+The answer is a single `AFK` or `HITL`, passed to answer mode as
+`--apply --answer 'transition:<source>:<task>=<value>'`. The transition
+validates it and reports one status for it:
+
+| Status     | When                                                                                                                                                                        |
+| ---------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `applied`  | The transition was written and read back                                                                                                                                    |
+| `skipped`  | The task, read again, no longer carries `grill-me`. Nothing is written                                                                                                      |
+| `rejected` | The value is not a single `AFK` or `HITL`, the id is malformed, or the source is unknown or disabled                                                                        |
+| `failed`   | The task cannot be read, the tracker lacks `proposal` or the answered autonomy (the detail names `--bootstrap-labels`; nothing is written), or a write or a read-back fails |
+
+`Later` has a null value, which the command never passes back, so it writes
+nothing and the task stays in `grill-me`.
+
+The transition runs in phases, and reads the task back after each write phase:
+
+1. **Check.** The tracker must have the answered autonomy and `proposal`, as in
+   [Labels the tracker lacks](#labels-the-tracker-lacks): one listing, Linear
+   in any scope, GitHub in the task's repository, Beads unchecked. This happens
+   before any write.
+2. **Add.** The answered autonomy and `proposal` are added, each only when the
+   task lacks it. The task is read back and must hold exactly its earlier
+   labels plus the added ones.
+3. **Remove.** Every other autonomy label is removed, and then `grill-me`. The
+   task is read back.
+4. **Verify.** The final labels must equal the earlier labels, plus the added
+   ones, minus the removed ones.
+
+Labels are added before any is removed. The transition removes only the stage it
+leaves, `grill-me`, and the autonomy labels the answer replaces. It never
+removes scope, `taken`, an alias or any other label: a Beads task that carries
+`nazaries`, `work` and `grill-me` ends with `nazaries`, `work`, the answered
+autonomy and `proposal`. This is the first exception to the rule that the loop
+never removes a label; the second is `taken`.
+
+A transition cut short reports `failed` with the label sets. A failure while
+adding removes nothing. `grill-me` is removed last, so a failure while removing
+always leaves it on the task, possibly beside `proposal`, which the contract
+reports as a stage conflict. Answering the transition again completes it: the
+task still carries `grill-me`, so only the labels not yet added or removed are
+written. An applied answer lists only what it did:
+
+```text
+autonomous answers — started 2026-11-01T09:00:00.000Z
+outcome: advance
+  applied   transition:linear:DOT-110 → AFK → added AFK, proposal, removed HITL, grill-me on linear DOT-110, read back
+```
+
+Answering a task that has moved on is `skipped`, with the detail
+`already moved on: stage [proposal]`. A `grill-me` answer to the transition
+question is `rejected`, with `invalid for the transition: expected one of AFK,
+HITL`.
 
 ## Configuration
 
@@ -410,14 +631,27 @@ A run whose configuration sets every key shows neither.
 
 ## The label contract
 
-Every task carries two label groups:
+Every task carries labels from three groups:
 
-| Group | Labels                    | Rule                                                                                  |
-| ----- | ------------------------- | ------------------------------------------------------------------------------------- |
-| scope | `work`, `personal`        | Exactly one. `work` is Nazaries work                                                  |
-| entry | `AFK`, `HITL`, `grill-me` | At least one. `AFK` and `HITL` never together; `grill-me` precedes both when combined |
+| Group    | Labels                 | Rule                                                                |
+| -------- | ---------------------- | ------------------------------------------------------------------- |
+| scope    | `work`, `personal`     | Exactly one. `work` is Nazaries work                                |
+| autonomy | `AFK`, `HITL`          | Exactly one. It may be absent only while the stage is `grill-me`    |
+| stage    | `grill-me`, `proposal` | Exactly one. Two stage labels are a conflict, for a human to settle |
 
-`taken` belongs to neither group. It is never required, never missing and never
+Two labels of one group are a conflict, reported for a human to settle: neither
+detection, triage nor the bootstrap removes or replaces either label. A task in
+`grill-me` with no autonomy label is complete: the contract reports its autonomy
+as deferred, because the grill decides it, and triage, selection and the
+creation helper count a deferred autonomy as present. A task in `proposal` with
+no autonomy label is missing its autonomy. `HITL` with `grill-me` is valid: the
+autonomy was decided ahead of the grill.
+
+Scope and autonomy are properties, kept for the whole life of a task. The stage
+says where the task is, and a transition replaces it (see
+[Transition mode](#transition-mode)).
+
+`taken` belongs to no group. It is never required, never missing and never
 in conflict, and triage neither derives it nor asks about it. The runner writes
 it, at launch (see [The `taken` label](#the-taken-label)).
 
@@ -426,8 +660,11 @@ contract: which scope to prefer is the job of the
 [`select` step](#the-select-step), by machine. `AFK` means an agent may
 advance the task without a human; `HITL` means an agent may advance it, but a
 human intervenes during or at the end of each stage; `grill-me` means the task
-must be refined with a human before anyone works on it. `taken` means an agent
-or a person is advancing the task now.
+must be refined with a human in a grill before anyone works on it, and its
+autonomy, when it has one, is provisional until the grill confirms it.
+`proposal` means the task is ready for proposal preparation, its autonomy
+decided and any grill it needed over. `taken` means an agent or a person is
+advancing the task now.
 
 Add `taken` to a task you work on by hand. It is the only evidence that a task
 is taken: a tracker status such as Beads `in_progress` does not count, so work
@@ -437,24 +674,44 @@ only for the attempts it launches (see [The `taken` label](#the-taken-label));
 `label-triage` never does, and a `taken` you added by hand stays until you
 remove it.
 
-Spelling is exact and case-sensitive: `Grill Me` is not `grill-me`. Colours,
-applied where the tracker supports them:
+The loop never removes a label, with two exceptions: a transition removes the
+stage it leaves and the autonomy labels its answer replaces, and the runner
+removes `taken`. Triage and its answers stay additive. Nothing removes an alias
+or any other label outside the contract.
+
+Spelling is exact and case-sensitive: `Grill Me` is not `grill-me`, and
+`Proposal` is not `proposal`. Colours, applied where the tracker supports them:
 
 | Label      | Colour    |
 | ---------- | --------- |
 | `AFK`      | `#5e6ad2` |
 | `HITL`     | `#eb5757` |
 | `grill-me` | `#f2994a` |
+| `proposal` | `#bb87fc` |
 | `work`     | `#2f80ed` |
 | `personal` | `#27ae60` |
 | `taken`    | `#95a2b3` |
 
-The loop never creates labels on its own. `--bootstrap-labels` does, `taken`
-included: at
-workspace level on Linear (a same-name label in any team counts as present),
-per repo on GitHub, and not at all on Beads, where labels exist only by use. An existing label with a different colour is left
-untouched and reported, never overwritten. Legacy names configured as
-`aliases` are evidence for a rule and are never removed.
+The loop never creates labels on its own. `--bootstrap-labels` does, `proposal`
+and `taken` included: at workspace level on Linear (a same-name label in any
+team counts as present), per repo on GitHub, and not at all on Beads, where
+labels exist only by use.
+
+The bootstrap also recolours. It changes every same-name contract label whose
+colour differs from the table, in each scope where it appears. On Linear that
+is the workspace and every team that has the label, each recoloured and
+reported as its own `recoloured` entry. On GitHub it is one scope per
+configured repository. Linear is recoloured through `linear api` with the
+`issueLabelUpdate` mutation, because `linear-cli` 2.6.0 has no label update;
+GitHub through `gh label edit --color`. Beads has no colours. Each recoloured
+label is reported with the status `recoloured`, which the text report prints as
+`recoloured AFK (was #000000)`. A recolour that fails counts as failed, which
+makes the bootstrap exit 3, and the other labels are still processed. The
+bootstrap never touches a label outside the contract, and never renames or
+deletes one. Its JSON report keeps the schema `autonomous.bootstrap.v1`:
+`recoloured` is one more value of a label's `status`.
+Legacy names configured as `aliases` are evidence for a rule and are never
+removed.
 
 ## Labelling at creation
 
@@ -465,9 +722,11 @@ closure or pull requests. It checks labels before creation. For an unresolved
 group in an interactive session, it asks one question using that group's
 options and reason, then checks the answer. When it cannot ask, it creates
 with the confident labels and names each omitted group in its reply for the
-next triage run. A Beads task created under a parent gets `--no-inherit-labels`
-and the parent's non-contract labels listed explicitly, so its contract labels
-are exactly the ones the helper decided.
+next triage run. It writes each contract label in its exact spelling (`work`,
+`personal`, `AFK`, `HITL`, `grill-me`, `proposal`), so `afk` becomes `AFK` and
+`Grill Me` becomes `grill-me`. A Beads task created under a parent gets
+`--no-inherit-labels` and the parent's non-contract labels listed explicitly, so
+its contract labels are exactly the ones the helper decided.
 
 The skill triggers from its description, and a crowded skill listing can drop
 it. When the listing exceeds its budget, Claude Code shortens descriptions to
@@ -491,22 +750,40 @@ judgement.
 
 ```text
 bun plugins/autonomous/src/label-at-creation/cli.ts prepare --source <linear|beads|github> [--repo <owner/name>] [--label <name>]...
-bun plugins/autonomous/src/label-at-creation/cli.ts decide  --source <linear|beads|github> [--repo <owner/name>] [--label <name>]... [--judged <group>=<label>[,<label>]@<confidence>]...
+bun plugins/autonomous/src/label-at-creation/cli.ts decide  --source <linear|beads|github> [--repo <owner/name>] [--label <name>]... [--judged <scope|autonomy>=<label>[,<label>]@<confidence>]...
 ```
 
 `--source` is required. `--repo` is required for GitHub and rejected for the
 other sources. Repeat `--label` for every label the new task will carry,
 including user-named and inherited labels. In `decide`, repeat `--judged` for
-each group the creating agent judges; the confidence must be from 0 to 1.
+each group the creating agent judges, `scope` or `autonomy`: the stage is never
+judged, because it follows the autonomy. The confidence must be from 0 to 1.
 `prepare` rejects `--judged`.
 
-`prepare` prints the criteria verbatim, then `scope:` and `entry:` lines as
-`present`, `derived <labels> (<evidence>)`, `conflict <labels>` or `judge
-(<group labels>)`. `decide` prints `apply: <labels>` (or `apply: none`) and an
-`ask <group>: <reason>; options <labels>` line for each unresolved group. Both
-modes name a missing configuration. An unconfigured GitHub repository is noted
-because the contract labels may not exist there. A printed decision exits 0;
-invalid usage prints the usage text and exits 1.
+`prepare` prints the criteria verbatim, then `scope:`, `autonomy:` and `stage:`
+lines. The scope and autonomy lines read `present <labels>`,
+`derived <labels> (<evidence>)`, `conflict <labels>` or
+`judge (<group labels>)`. The autonomy to judge lists `AFK, HITL, grill-me` for
+a task with no stage label, and the autonomy of a task that will carry
+`grill-me` reads `not needed (grill-me)`. The stage line reads:
+
+- `present <labels>`, when the task will carry a stage label;
+- `conflict <labels>`, when it will carry two;
+- `derived proposal (autonomy <label>)`, when the autonomy is present or
+  derived;
+- `derived grill-me (<evidence>)`, when an alias for `grill-me` decides the
+  autonomy;
+- `follows autonomy`, when the autonomy is still to be judged.
+
+`decide` prints `apply: <labels>` (or `apply: none`) and an
+`ask <group>: <reason>; options <labels>` line for each unresolved group. An
+applied `AFK` or `HITL` brings `proposal` with it when the task carries no stage
+label, and a `grill-me` judgement applies `grill-me` alone, with no autonomy
+label. `grill-me` judged for a task that will carry a stage label is invalid, so
+the autonomy is asked about. Both modes name a missing configuration. An
+unconfigured GitHub repository is noted because the contract labels may not
+exist there. A printed decision exits 0; invalid usage prints the usage text and
+exits 1.
 
 Its parts are tiered by the same rule as the run's steps:
 
@@ -557,10 +834,10 @@ carrying a group conflict.
 
 Each missing group is first derived by a deterministic rule from its evidence
 (aliases, the source's structural `scope`), and a group whose evidence
-conflicts is listed for a human. A group with no evidence — usually entry, and
-scope on a source without a structural rule — is derived by an LLM judgement,
-batched and capped, ordered with `work` evidence first and then by most
-recently updated. Only a group at or above the
+conflicts is listed for a human. A group with no evidence — usually autonomy,
+and scope on a source without a structural rule — is derived by an LLM
+judgement, batched and capped, ordered with `work` evidence first and then by
+most recently updated. Only a group at or above the
 configured `threshold`, and valid under the contract, is written, and only
 with `--apply`: writes are additive, read back to confirm, and a source stops
 writing on the first mismatch — nothing is ever removed. An unreadable source
@@ -571,17 +848,78 @@ everything else is still listed for a human.
 The report carries, per source and group, counts and
 `source → task → labels → reason` lines (whether applied or only proposed,
 the tier, the confidence), the tasks left for a human, and any write failure.
-The JSON form carries one record per derived group with its status, so an
-error rate can be measured from reports alone, with no other state kept
-between runs.
+The counts are keyed by group, `scope`, `autonomy` and `stage`, and each JSON
+record names its group. A source's line in the reasons reads
+`<source>: N read, N complete, N missing scope, N missing autonomy, N missing stage, N in conflict`.
+A deferred autonomy counts as complete. The JSON form carries one record per
+derived group with its status, so an error rate can be measured from reports
+alone, with no other state kept between runs.
 
-The first `--apply` is the intended one-off clean-up of the existing backlog
-(roughly 400 Beads issues gaining `work`, roughly 90 Linear and GitHub issues
-gaining `personal`): run without `--apply` first and read the report before
-applying. That first `--apply` issues about a thousand CLI calls and exceeds
-the command's timeout, so it must be run from a shell
+A first `--apply` over an existing backlog can write hundreds of labels by
+rule, and rule writes are uncapped. Each write is one add and one read-back, so
+such a run issues over 1,000 CLI calls and exceeds the command's timeout. Run
+without `--apply` first and read the report. Then run the `--apply` from a shell
 (`bun plugins/autonomous/src/run.ts --account <key> --apply`), not through
-`/autonomous:run`.
+`/autonomous:run`. The current example is the first `--apply` after the upgrade
+that introduced `proposal`, which writes it to every open task that has an
+autonomy label and no stage label (see
+[Labels the tracker lacks](#labels-the-tracker-lacks)).
+
+### The stage and the autonomy decision
+
+Scope and autonomy are decided; the stage is never judged or asked on its own.
+It follows the autonomy (see [The label contract](#the-label-contract)):
+
+- A task with an autonomy label and no stage label gets `proposal` by rule: tier
+  `code`, confidence 1, reason `autonomy AFK is present`.
+- An eligible autonomy decision of `AFK` or `HITL` for a task with no stage
+  label also brings a `proposal` derivation, with tier `code`, confidence 1 and
+  reason `follows autonomy AFK`.
+- An eligible `grill-me` becomes a stage derivation. It keeps the decision's
+  tier, confidence and reason, and no autonomy label and no `proposal` is
+  written.
+- While the autonomy is undecided, the stage stays missing. A task in `grill-me`
+  without autonomy needs no autonomy decision.
+
+The autonomy decision offers `AFK`, `HITL` and `grill-me` ("decide it in a
+grill") only for a task with no stage label. For a task with a stage label it
+offers `AFK` and `HITL`, so a `grill-me` judged for a task in `proposal` is
+invalid and is asked. The question and the validity check take their options
+from the same function, so they cannot disagree.
+
+Each decision is recorded in the group of the label it writes. The writes for a
+task are ordered scope, autonomy, stage, so a write cut short leaves at worst an
+autonomy without a stage, which the next run completes by rule. A run without
+`--apply` lists every `proposal` it would write as proposed.
+
+### Labels the tracker lacks
+
+The step never writes a label the tracker lacks. With or without `--apply`, it
+lists a source's labels once, the first time the source has something to write,
+and checks each label against the listing:
+
+| Source | A label is available when                       |
+| ------ | ----------------------------------------------- |
+| Linear | the workspace or any team has it                |
+| GitHub | the task's own repository, `owner/name`, has it |
+| Beads  | never checked: labels exist by use              |
+
+A label the tracker lacks is not written. Its derivation stays `proposed`, with
+the detail `<label> is missing on <source>; run --bootstrap-labels`, and the
+step's reasons name the label. A run without `--apply` makes the same check and
+reports the same detail, so a dry run previews what `--apply` would skip. The
+task's other labels and the source's other writes continue. With `--apply`, a
+listing that fails stops the source, as a failed write does; in a dry run it
+adds a reason and stops nothing. A derivation skipped this way was never
+attempted, so `select` does not count its task as labelled this run. After an
+upgrade, run `--bootstrap-labels` to create `proposal`; until then its
+derivation stays proposed on Linear and on GitHub. The first `--apply` after
+that adds `proposal` to every open task that has an autonomy label and no stage
+label. That first run writes several hundred labels, each write being one add
+plus one read-back. Read the list of proposed `proposal` writes in the dry run
+first, then run that `--apply` from a shell
+(`bun plugins/autonomous/src/run.ts --account <key> --apply`), because the
+command's timeout cannot hold it.
 
 ### Questions for the human
 
@@ -606,7 +944,7 @@ Questions are ordered like the judgement:
 2. then the most recently updated;
 3. then by task id.
 
-For the same task, the scope question comes before the entry question. The
+For the same task, the scope question comes before the autonomy question. The
 handoff takes the first 4; the others stay in the report's "for the human"
 list. `Later` is not remembered and the order does not depend on earlier
 answers, so a question left for `Later` comes back at the same place in the
@@ -632,10 +970,15 @@ the judgement read. Its whitespace is collapsed, and `…` marks a cut.
 The options are the group's contract labels in contract order, each described
 by its meaning (see [The label contract](#the-label-contract)), then `Later`:
 
-| Group | Options                            |
-| ----- | ---------------------------------- |
-| scope | `work`, `personal`, `Later`        |
-| entry | `AFK`, `HITL`, `grill-me`, `Later` |
+| Group    | Options                            |
+| -------- | ---------------------------------- |
+| scope    | `work`, `personal`, `Later`        |
+| autonomy | `AFK`, `HITL`, `grill-me`, `Later` |
+
+`grill-me` is an autonomy option only for a task with no stage label; for a task
+carrying `grill-me` or `proposal`, the autonomy question offers `AFK`, `HITL`
+and `Later`. Only scope and autonomy are asked: the stage never becomes a
+question.
 
 An option the judgement chose keeps its place, and its description is
 prefixed with `judged <confidence> · <reason> —` before the meaning, as in the
@@ -646,19 +989,19 @@ prefix; the evidence is on the second line. `Later` has a null value and the
 description `Leave it for a later run`. Both questions take a single choice.
 
 The header is the task id when it has at most 12 characters, and the group
-name otherwise: `DOT-104` for Linear `DOT-104`, `entry` or `scope` for Beads
-`agentic-task-8v0`. The id is `label-triage:<source>:<taskId>:<group>`; task
-ids contain no `:`.
+name otherwise: `DOT-104` for Linear `DOT-104`, `autonomy` or `scope` for Beads
+`agentic-task-8v0`. The id is `label-triage:<source>:<taskId>:<group>`, with
+`scope` or `autonomy` as the group; task ids contain no `:`.
 
-An entry question for a Beads task judged `HITL` at 0.80, below a threshold of
-0.95:
+An autonomy question for a Beads task with no stage label, judged `HITL` at
+0.80, below a threshold of 0.95:
 
 ```json
 {
-    "id": "label-triage:beads:agentic-task-8v0:entry",
+    "id": "label-triage:beads:agentic-task-8v0:autonomy",
     "step": "label-triage",
-    "header": "entry",
-    "question": "beads agentic-task-8v0 \"Sync the dotfiles on login\": which entry label?\nSeen: labels [work] → HITL (llm, 0.80) → below threshold 0.95: 0.80 — The result needs a human check\nDescription: Run the sync script when a session starts.",
+    "header": "autonomy",
+    "question": "beads agentic-task-8v0 \"Sync the dotfiles on login\": which autonomy label?\nSeen: labels [work] → HITL (llm, 0.80) → below threshold 0.95: 0.80 — The result needs a human check\nDescription: Run the sync script when a session starts.",
     "options": [
         {
             "label": "AFK",
@@ -673,7 +1016,7 @@ An entry question for a Beads task judged `HITL` at 0.80, below a threshold of
         {
             "label": "grill-me",
             "value": "grill-me",
-            "description": "The task must be refined with a human before anyone works on it, and it takes precedence over AFK and HITL when combined."
+            "description": "The task must be refined with a human in a grill before anyone works on it."
         },
         { "label": "Later", "value": null, "description": "Leave it for a later run" }
     ],
@@ -687,18 +1030,26 @@ In [answer mode](#answer-mode), the step applies an answer to one of its
 questions only when three conditions hold:
 
 - the answer names an enabled source;
-- its labels all belong to the question's group and are valid under the
-  contract;
-- the task, read again through its tracker, still has that group missing.
+- its labels are options of the question's group and are valid under the
+  contract for the task's stage;
+- the task, read again through its tracker, still has that group missing, and
+  for a `grill-me` answer still has no stage label.
+
+An `AFK` or `HITL` answer for a task without a stage label writes the autonomy
+and `proposal`. A `grill-me` answer writes only `grill-me`.
 
 An answer with a malformed id, an unknown or disabled source, an unknown
 group, or labels that fail that check is `rejected`, with the reason. One
 whose task now has the group present or in conflict is `skipped`, naming the
-labels found, and nothing is written. One whose task cannot be read is
-`failed`, naming the command that failed.
+labels found, and nothing is written; so is a `grill-me` answer once the task
+carries a stage label, naming it. One whose task cannot be read is `failed`,
+naming the command that failed.
 
 The remaining answers go through the same additive write, read-back and
-per-source stop as the step's own writes. Nothing is removed. A
+per-source stop as the step's own writes, with the same check that the tracker
+has each label (see [Labels the tracker lacks](#labels-the-tracker-lacks)).
+Nothing is removed. A label the tracker lacks makes that answer `failed`, naming
+the label and `--bootstrap-labels`, without stopping the source. A
 write error or a read-back mismatch makes that answer `failed`, with the label
 sets, and stops further answers to that source in the same invocation. The
 answer takes precedence over the evidence and the judgement the run had for
@@ -750,21 +1101,23 @@ In order, the step:
    canceled issue never reaches selection, so its relations are not checked.
 3. Excludes tasks, each reported once, under the first reason that applies:
 
-    | Order | Exclusion         | When                                                                                  |
-    | ----- | ----------------- | ------------------------------------------------------------------------------------- |
-    | 1     | classification    | A scope or entry group is missing or in conflict                                      |
-    | 2     | taken             | The task carries `taken`                                                              |
-    | 3     | labelled this run | `label-triage` applied a label to it in this run, or a write to it failed in this run |
-    | 4     | unsupported stage | Its next stage is not supported                                                       |
-    | 5     | blocked           | It has an open blocker                                                                |
-    | 6     | split             | It has an open child                                                                  |
+    | Order | Exclusion         | When                                                                                                              |
+    | ----- | ----------------- | ----------------------------------------------------------------------------------------------------------------- |
+    | 1     | classification    | A scope, autonomy or stage group is missing or in conflict; autonomy is not missing while the stage is `grill-me` |
+    | 2     | taken             | The task carries `taken`                                                                                          |
+    | 3     | labelled this run | `label-triage` applied a label to it in this run, or a write to it failed in this run                             |
+    | 4     | unsupported stage | Its next stage is not supported                                                                                   |
+    | 5     | blocked           | It has an open blocker                                                                                            |
+    | 6     | split             | It has an open child                                                                                              |
 
     Classification counts present contract labels only: an alias or a
-    structural rule does not rescue a task here. A task labelled in this run
-    is left for the next run, and so is a task whose `label-triage` write failed,
-    because some labels may have landed. A task `label-triage` only proposed or
-    asked about is not excluded. Tracker status does not exclude a task; only
-    `taken` does.
+    structural rule does not rescue a task here. A task in `grill-me` without an
+    autonomy label is classified: its autonomy is deferred to the grill. A task
+    labelled in this run is left for the next run, and so is a task whose
+    `label-triage` write failed, because some labels may have landed. A task
+    `label-triage` only proposed or asked about is not excluded, and neither is
+    one whose label was skipped because its tracker lacks it. Tracker status does
+    not exclude a task; only `taken` does.
 
 4. Chooses among the candidates. A task of either scope is a candidate. With
    one candidate, it is selected without an LLM and the report says it was the
@@ -772,12 +1125,15 @@ In order, the step:
    machine-scope exception for that reason. With two or more, an LLM compares
    them.
 
-The next stage of a task is `grill-me` when it carries `grill-me`, and
-`proposal` otherwise. Only `grill-me` is supported for now, so a task with
-`AFK` or `HITL` and no `grill-me` is reported as waiting for an unsupported
-stage until stage labels land (DOT-110). `launch` keeps its own list: a stage
-runs only when an implementation is registered for it, and only the test stage
-is.
+The next stage of a task is the stage label it carries, `grill-me` or
+`proposal`. A task without one has no next stage and is excluded under
+classification. Only `grill-me` is supported, so a task in `proposal` is
+reported as waiting for an unsupported stage. `launch` keeps its own list: a
+stage runs only when an implementation is registered for it, and only the test
+stage is.
+
+The autonomy of a selected unit is `AFK`, `HITL` or, for a task in `grill-me`
+without one, none: `none` in the text report and `null` in the JSON data.
 
 Blockers, the tasks a task blocks, its open children and its tracker priority
 are read for Beads and Linear. A blocker or child is open unless it is closed:
@@ -811,8 +1167,8 @@ with the reason.
 The text report shows:
 
 - the machine scope;
-- the selected work unit: source, id, title, next stage, autonomy, scope and
-  the explanation;
+- the selected work unit: source, id, title, next stage, autonomy (`none` for a
+  task in `grill-me` without one), scope and the explanation;
 - the machine-scope exception reason, when there is one;
 - the candidates compared;
 - the excluded tasks, grouped by reason, each with its source, id and title;
@@ -1018,9 +1374,9 @@ reason, the cleanup error, the adopted session id, or `null`.
 Last in the run, after `select`. It takes the selected work unit, or the task
 given with `--task` (see [The supplied task](#the-supplied-task)), reads the
 task again through its source and applies the exclusions of the `select` step,
-so a task that carries `taken`, lacks a scope or entry label, is blocked or is
-split is reported as excluded. With `--stage`, the unsupported-stage exclusion
-is skipped. It then checks, in this order, and a failed check makes the step
+so a task that carries `taken`, lacks a scope, autonomy or stage label, is
+blocked or is split is reported as excluded. With `--stage`, the
+unsupported-stage exclusion is skipped. It then checks, in this order, and a failed check makes the step
 `wait` with that reason:
 
 1. The stage has an implementation registered. Only `test` is, so a selected
@@ -1136,7 +1492,7 @@ bun plugins/autonomous/src/run.ts --account <key> --apply --task <source>:<id> -
 A run holds `<state>/run.lock` for its whole duration. The file holds the
 process id and the start time. It is held even without `--apply`, because
 `reconcile` reads records that `--apply` runs rewrite, and discard mode holds it
-too. `--bootstrap-labels` and answer mode do not take it.
+too. `--bootstrap-labels`, answer mode and transition mode do not take it.
 
 A run that finds the lock held by a live process runs no step: it is
 `not-evaluable`, exits 3, and names the other run, as in
@@ -1343,17 +1699,18 @@ This buys determinism, reliability and a lower token cost. Every part of the
 quota gate, and every step's report rendering, is code. `label-triage`'s
 tiering:
 
-| Part                                            | Tier |
-| ----------------------------------------------- | ---- |
-| read and validate the three sources             | code |
-| detect missing groups and conflicts             | code |
-| scope and entry by rule (evidence)              | code |
-| entry (and scope without evidence) by judgement | llm  |
-| threshold, validity, ordering, cap              | code |
-| writes and read-back                            | code |
-| report                                          | code |
-| questions: selection, order, text, options      | code |
-| answers: validation, writes and read-back       | code |
+| Part                                               | Tier |
+| -------------------------------------------------- | ---- |
+| read and validate the three sources                | code |
+| detect missing groups and conflicts                | code |
+| scope and autonomy by rule (evidence)              | code |
+| the stage from the autonomy, by rule               | code |
+| autonomy (and scope without evidence) by judgement | llm  |
+| threshold, validity, ordering, cap                 | code |
+| writes, label check and read-back                  | code |
+| report                                             | code |
+| questions: selection, order, text, options         | code |
+| answers: validation, writes and read-back          | code |
 
 The judgement (`claude -p`) is the step's only LLM work, and the only part
 expected to move: it is meant to be replaced by Jev (TypeSafe AI) once that
@@ -1390,7 +1747,9 @@ The handoff's tiering:
 | parsing, routing, validating and writing answers      | code |
 
 The command's LLM work is relaying the script's output, asking the handoff's
-questions and mapping the chosen options back to their values.
+questions and mapping the chosen options back to their values. Transition mode
+is code throughout: reading the task, composing the question, and validating
+and writing the answer.
 
 ## Versioning
 
