@@ -31,7 +31,6 @@ const LINEAR_LABELS: TrackerLabel[] = CONTRACT.map((name) => ({
 
 type FakeOptions = NonNullable<NonNullable<Parameters<typeof trackers>[2]>["linear"]>;
 
-// Linear DOT-110 "Grill-me stage", whose labels are checked before any write.
 function linear(calls: string[], labels: string[], options: FakeOptions = {}): Trackers {
     const listing = [task("linear", "DOT-110", labels, { title: "Grill-me stage" })];
     return trackers(
@@ -70,7 +69,6 @@ async function labelsOf(given: Trackers, source: Source, id: string): Promise<st
     return read.ok ? read.value.labels : [];
 }
 
-// The fake removes every label; this one fails on `label` and does the rest as before.
 function failingRemoval(given: Trackers, source: Source, label: string, error: string): Trackers {
     const tracker = given[source];
     return {

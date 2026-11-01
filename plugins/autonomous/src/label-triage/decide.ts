@@ -58,7 +58,7 @@ export function selectForJudgement(
 }
 
 // Why a group's labels are invalid under the contract for a task with these labels. The
-// autonomy vocabulary includes `grill-me`, an autonomy decision (design D2).
+// autonomy vocabulary includes `grill-me`, an autonomy decision.
 export function violation(
     group: Group,
     labels: readonly string[],

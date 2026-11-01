@@ -1,7 +1,7 @@
 // The step's questions for the human (spec label-triage, "Questions for the
-// human"; handoff design D4): one per asked group, except on a source whose
-// writes stopped, composed entirely here so the command only relays them. The
-// options come from the same function that validates a decision (design D2).
+// human"): one per asked group, except on a source whose writes stopped, composed
+// entirely here so the command only relays them. The options come from the same
+// function that validates a decision.
 
 import {
     DECIDED_GROUPS,

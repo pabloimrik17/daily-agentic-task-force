@@ -78,7 +78,7 @@ export function buildPrompt(tasks: JudgementTask[]): string {
 }
 
 // The labels a judgement may name for a group, whatever the task's stage: the autonomy
-// decision includes `grill-me` (design D2), and `decide` checks it against the task.
+// decision includes `grill-me`, and `decide` checks it against the task.
 function vocabulary(group: DecidedGroup): readonly string[] {
     return optionsFor(group, []);
 }
@@ -97,7 +97,6 @@ function groupAnswerSchema(group: DecidedGroup) {
     };
 }
 
-// One answer object per decided group; the stage is never judged (design D3).
 function groupSchemas(): Record<DecidedGroup, ReturnType<typeof groupAnswerSchema>> {
     return Object.fromEntries(
         DECIDED_GROUPS.map((group) => [group, groupAnswerSchema(group)]),

@@ -1,5 +1,5 @@
-// The id of a triage question (handoff design D4): `label-triage:<source>:<taskId>:<group>`,
-// where the group is `scope` or `autonomy`: the stage is never asked (design D3).
+// The id of a triage question: `label-triage:<source>:<taskId>:<group>`, where the
+// group is `scope` or `autonomy`, since the stage is never asked.
 // Task ids contain no `:` (Beads `agentic-task-8v0`, Linear `DOT-104`, GitHub
 // `owner/name#12`), so the source and the group are split off at the first and
 // the last `:`, and the rest is the task id.

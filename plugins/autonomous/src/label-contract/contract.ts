@@ -14,7 +14,7 @@ export type StageLabel = (typeof STAGE_LABELS)[number];
 export type ContractLabel = Scope | AutonomyLabel | StageLabel | typeof TAKEN_LABEL;
 
 export type Group = "scope" | "autonomy" | "stage";
-// The groups a decision is made for; the stage follows the autonomy (design D2, D3).
+// The stage is left out: it follows the autonomy.
 export type DecidedGroup = "scope" | "autonomy";
 // `grill-me` as an autonomy decision means "decide the autonomy in a grill".
 export type AutonomyDecision = AutonomyLabel | "grill-me";
@@ -75,7 +75,6 @@ export function hasStageLabel(taskLabels: readonly string[]): boolean {
     return taskLabels.some(isStageLabel);
 }
 
-// Every group holds exactly one label on a task (spec "Three label groups").
 export function isValidGroup(group: Group, labels: readonly string[]): boolean {
     return (
         labels.length === 1 &&
@@ -83,8 +82,6 @@ export function isValidGroup(group: Group, labels: readonly string[]): boolean {
     );
 }
 
-// Design D2: the options of a decision for a task with these labels. `grill-me` is an
-// autonomy option only while the task has no stage label.
 export function optionsFor(
     group: DecidedGroup,
     taskLabels: readonly string[],

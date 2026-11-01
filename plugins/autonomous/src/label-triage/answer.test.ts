@@ -120,7 +120,6 @@ describe("answers to triage questions: Apply answers to triage questions", () =>
                 status: "skipped",
                 detail: "autonomy in conflict: AFK, HITL",
             },
-            // A deferred autonomy is no longer missing: the task is in grill-me.
             {
                 id: "label-triage:beads:X-14:autonomy",
                 labels: ["HITL"],

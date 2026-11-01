@@ -13,8 +13,8 @@ export interface Evidence {
     detail: string; // `alias nazaries` | `every linear task is personal`
 }
 
-// `deferred` (design D1): autonomy only, when the task has no autonomy label and its
-// only stage label is `grill-me`; the grill decides it.
+// `deferred` is for autonomy only, when the task has no autonomy label and its only
+// stage label is `grill-me`; the grill decides it.
 export type GroupState =
     | { status: "present"; labels: ContractLabel[] }
     | { status: "missing"; evidence: Evidence[] }
@@ -40,7 +40,6 @@ export function detect(task: TrackerTask, rules: SourceRules): Detection {
     };
 }
 
-// Consumers count a deferred autonomy as complete, with no special case (design D1).
 export function isComplete(state: GroupState): boolean {
     return state.status === "present" || state.status === "deferred";
 }
@@ -72,9 +71,8 @@ function groupState(
     return { status: "conflict", labels };
 }
 
-// The labels a group's evidence may name. An autonomy decision may be `grill-me` while
-// the task has no stage label (design D2), so an alias for `grill-me` is also evidence
-// for the autonomy decision; the stage then follows it (design D3).
+// An autonomy decision may be `grill-me` while the task has no stage label, so an alias
+// for `grill-me` is also evidence for the autonomy decision; the stage then follows it.
 function evidenceLabels(group: Group, task: TrackerTask): ContractLabel[] {
     return group === "autonomy"
         ? optionsFor(group, task.labels).filter(isContractLabel)

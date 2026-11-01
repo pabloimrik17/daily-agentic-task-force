@@ -1,8 +1,6 @@
-// Transition mode (spec autonomous-run, "Transition mode", "Transition
-// question", "Transition report"; design D5, D7): reads one task and, when it
-// is in `grill-me`, asks the human which autonomy it keeps. It never writes:
-// the answer comes back through answer mode (./answer.ts). The handoff is
-// rendered by the run report's own functions, so the command reads both alike.
+// Transition mode (spec autonomous-run, "Transition mode", "Transition question", "Transition
+// report") never writes: the answer comes back through answer mode (./answer.ts). The handoff
+// is rendered by the run report's own functions, so the command reads both alike.
 
 import { isSource, type TaskRef } from "../attempts/record.ts";
 import type { AutonomousConfig, Source } from "../config.ts";
@@ -25,7 +23,6 @@ export const TRANSITION_SCHEMA = "autonomous.transition.v1";
 export const FROM_STAGE: StageLabel = "grill-me";
 export const TO_STAGE: StageLabel = "proposal";
 
-// The autonomy a transition answer may name.
 export const AUTONOMY_OPTIONS: readonly AutonomyLabel[] = GROUPS.autonomy.filter(isAutonomyLabel);
 
 export interface TransitionTask {
@@ -38,7 +35,7 @@ export interface TransitionTask {
 export interface TransitionReport {
     schema: typeof TRANSITION_SCHEMA;
     startedAt: string;
-    outcome: "advance" | "not-evaluable"; // advance exactly when a handoff is emitted (design D7)
+    outcome: "advance" | "not-evaluable"; // advance exactly when a handoff is emitted
     task: TransitionTask | null; // null when the task was not read
     reasons: string[];
     handoff?: Handoff;
@@ -61,12 +58,11 @@ const LATER: HandoffOption = {
 
 const CURRENT = "current · ";
 
-// `transition:<source>:<task>`; task ids carry no `:` (design D5).
+// Task ids carry no `:`.
 export function transitionQuestionId(ref: TaskRef): string {
     return `${TRANSITION}:${ref.source}:${ref.id}`;
 }
 
-// The task is everything after the second `:`.
 export function parseTransitionId(
     id: string,
 ): { ok: true; ref: TaskRef } | { ok: false; error: string } {
@@ -157,7 +153,7 @@ export function renderTransitionJson(report: TransitionReport): string {
     return JSON.stringify(report, null, 2);
 }
 
-// The handoff line, when present, is the last line (design D7).
+// The handoff line, when present, is the last line.
 export function renderTransitionText(report: TransitionReport): string {
     const header = [
         `autonomous transition — started ${report.startedAt}`,

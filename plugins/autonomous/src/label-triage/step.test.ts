@@ -17,7 +17,6 @@ const EMPTY = {
 
 const ANSWERS: Record<DecidedGroup, string[]> = { scope: ["work"], autonomy: ["AFK"] };
 
-// Answers every requested group of every task: `work` for scope, `AFK` for autonomy.
 function judgeAll(confidence = 0.97, calls?: string[]) {
     return fakeJudgement((request: JudgementRequest) => {
         calls?.push("judgement");

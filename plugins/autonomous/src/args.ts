@@ -133,7 +133,6 @@ function readTransition(args: RunArgs, value: string | undefined): string | null
     return null;
 }
 
-// --task and --transition each take one <source>:<id>, given once.
 function readTaskRef(
     flag: string,
     current: TaskRef | undefined,

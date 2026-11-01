@@ -17,8 +17,7 @@ const recordOf = (given: Answer, status: AnswerStatus): AnswerRecord => ({
     detail: `${status} by the fake`,
 });
 
-// A handler that records each call and answers every answer with `status`,
-// in the reverse of the order it received them.
+// Records come back reversed, so applyAnswers must restore the answers' order.
 function handler(id: string, status: AnswerStatus = "applied") {
     const calls: Answer[][] = [];
     const made: AnswerHandler = {

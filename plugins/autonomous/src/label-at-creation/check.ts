@@ -24,8 +24,8 @@ export interface JudgedGroup {
 }
 
 // The helper reports every group, but only scope and autonomy are decided: the stage
-// follows the autonomy (design D10) and is never judged. A stage in conflict is the one
-// case where it is asked about.
+// follows the autonomy and is never judged. A stage in conflict is the one case where it
+// is asked about.
 const REPORTED_GROUPS: readonly Group[] = [...DECIDED_GROUPS, "stage"];
 
 function inspection(input: CheckInput, load: ConfigLoad) {
@@ -101,9 +101,6 @@ function describeMissing(group: Group, inspected: Inspection): string {
     return `judge (${optionsFor(group, detection.task.labels).join(", ")})`;
 }
 
-// A missing stage follows the autonomy: `proposal` once the autonomy is present or
-// derived, `grill-me` when the autonomy evidence says to decide it in a grill, and the
-// autonomy judgement otherwise (design D3).
 function describeStage({ detection, derivation }: Inspection): string {
     const autonomy = detection.groups.autonomy;
     if (autonomy.status === "present") {
@@ -189,8 +186,8 @@ function resolveGroup(
         : resolveJudgement(input, load, detection.task.labels, answer);
 }
 
-// Design D3: an applied autonomy brings the stage it implies, unless the task will
-// already carry a stage label: `proposal` with `AFK` or `HITL`, `grill-me` alone.
+// An applied autonomy brings the stage it implies, unless the task will already carry a
+// stage label: `proposal` with `AFK` or `HITL`, `grill-me` alone.
 function withStage(input: CheckInput, resolution: Resolution, taskLabels: string[]): Resolution {
     if ("reason" in resolution) {
         return resolution;

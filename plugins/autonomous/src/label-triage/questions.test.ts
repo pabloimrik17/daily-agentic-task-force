@@ -30,7 +30,6 @@ function asked(
 
 const LATER = { label: "Later", value: null, description: "Leave it for a later run" };
 
-// The questions for one asked autonomy group of each task, in the order given.
 function questionsOf(listed: TrackerTask[], descriptions = new Map<string, string>()) {
     const rules = config().sources;
     return questionsFor(
