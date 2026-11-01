@@ -59,7 +59,7 @@ jobs:
               run: bunx @anthropic-ai/claude-code@2.1.312 plugin validate .claude-plugin/marketplace.json --strict
 
             - name: 🔍 Validate OpenSpec change proposals
-              run: bunx @fission-ai/openspec@1.11.0 validate --changes --strict --no-interactive
+              run: bunx @fission-ai/openspec@1.14.3 validate --changes --strict --no-interactive
 
             # PRs are gated by fallow.yml (audit, new-only ratchet); this catches
             # dead code landing on main via direct pushes
