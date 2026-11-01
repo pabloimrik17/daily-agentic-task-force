@@ -105,11 +105,25 @@ records for this case and `beads-work-afk` before the change, independent of
 the label contract; the case was not re-run again because of the account's
 weekly quota (84 % used on the Team account at 10:38 UTC).
 
+## Re-run 3: after the verification, 2026-11-01 11:42 UTC
+
+The verification suggested a second run of the fixed graders, and the user
+authorised it in the Inbox. Same command and ceiling (1.5 USD), Claude Code
+2.1.316. Cost 0.6333 USD, three runs, every `error: null`. Score 0.67 / 1.00 /
+1.00; pass rate 0.67, the same as re-run 2. Runs 2 and 3 made the create call
+with `personal` and `grill-me` and no autonomy label. Run 1 ran the helper and
+the skill, but the tool grader found no matching `linear issue create` call.
+Its trace was not kept (the results directory holds only
+`aggregate-result.json`), so this run cannot tell whether the agent made no
+call or a call with other labels. Across the two re-runs, four of the six runs
+made the create call the contract expects, and none was failed for a wrong
+label set that a trace shows.
+
 ## Result
 
 Every case passes its result grader as it did before the change, except
-`linear-unclear-entry`, whose failure is classified as expectation drift and
-fixed in its graders; after the fix its two runs that attempt the create pass,
-and the one that does not is agent variance the sandbox already showed. Total
-spend: 3.8716 + 0.4539 + 0.4784 = 4.8039 USD, under the 10 USD ceiling the user
-set.
+`linear-unclear-entry`. Its failure is classified as expectation drift and
+fixed in its graders. After the fix, the runs that make the create call pass,
+and one run in three does not reach it: the agent variance that the sandbox
+showed before the change. Total spend: 3.8716 + 0.4539 + 0.4784 + 0.6333 =
+5.4372 USD, under the 10 USD ceiling the user set.

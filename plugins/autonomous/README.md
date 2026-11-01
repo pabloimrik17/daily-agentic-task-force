@@ -745,8 +745,8 @@ Beads or GitHub task is written. It reads `~/.config/autonomous/config.json`
 `judgement.threshold`, and prints the criteria from
 `src/label-triage/criteria.md`. It does not read or write a tracker. If the
 configuration is missing, it names the path and error, keeps valid labels
-already supplied, and asks about the other groups without applying a
-judgement.
+already supplied, and asks about the other scope and autonomy groups without
+applying a judgement; the stage follows the autonomy and is not asked about.
 
 ```text
 bun plugins/autonomous/src/label-at-creation/cli.ts prepare --source <linear|beads|github> [--repo <owner/name>] [--label <name>]...
