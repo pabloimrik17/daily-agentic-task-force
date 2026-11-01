@@ -266,5 +266,7 @@ describe("Missing configuration degrades to asking", () => {
             "ask autonomy: configuration unavailable; options AFK, HITL, grill-me",
         );
         expect(result[2]).toContain("configuration /missing/config.json:");
+        // The stage follows the autonomy and is never asked about on its own.
+        expect(result).toHaveLength(3);
     });
 });

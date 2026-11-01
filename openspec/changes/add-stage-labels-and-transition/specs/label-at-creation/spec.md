@@ -78,12 +78,12 @@ Each group SHALL be decided independently, except that the stage follows the aut
 
 ### Requirement: Missing configuration degrades to asking
 
-When the user configuration cannot be loaded, both helper modes SHALL still print the criteria text and a decision, and SHALL name the configuration path and the error. With no configuration, the helper SHALL derive no evidence, SHALL apply no judged label, and SHALL list every group that is not present and valid as a group to ask about.
+When the user configuration cannot be loaded, both helper modes SHALL still print the criteria text and a decision, and SHALL name the configuration path and the error. With no configuration, the helper SHALL derive no evidence, SHALL apply no judged label, and SHALL list as a group to ask about every scope or autonomy group that is not present and valid, and a stage group in conflict. A missing stage SHALL NOT be asked about on its own: it follows the autonomy.
 
 #### Scenario: No configuration file
 
 - **WHEN** no file exists at the configuration path and the user named `personal` for a new task
-- **THEN** `personal` is applied, autonomy is asked about, and the output names the missing path
+- **THEN** `personal` is applied, autonomy is asked about, the stage is not asked about, and the output names the missing path
 
 ### Requirement: Asking the user, or leaving groups to triage
 

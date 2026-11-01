@@ -124,13 +124,15 @@ function settledByTask(
         : { status: "skipped", detail: found(group, state) };
 }
 
-// Never called for a missing group. A deferred autonomy is the task's `grill-me` (design D1).
+// Never called for a missing group. A deferred autonomy waits for the task's grill (design D1).
 function found(group: Group, state: GroupState): string {
     if (state.status === "conflict") {
         return `${group} in conflict: ${state.labels.join(", ")}`;
     }
-    const labels = state.status === "present" ? state.labels : ["grill-me"];
-    return `${group} already present: ${labels.join(", ")}`;
+    if (state.status === "present") {
+        return `${group} already present: ${state.labels.join(", ")}`;
+    }
+    return `${group} deferred to the grill (grill-me)`;
 }
 
 function recordKey(derivation: Derivation): string {

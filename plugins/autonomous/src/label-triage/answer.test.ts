@@ -120,12 +120,12 @@ describe("answers to triage questions: Apply answers to triage questions", () =>
                 status: "skipped",
                 detail: "autonomy in conflict: AFK, HITL",
             },
-            // A deferred autonomy counts as present: the task is in grill-me.
+            // A deferred autonomy is no longer missing: the task is in grill-me.
             {
                 id: "label-triage:beads:X-14:autonomy",
                 labels: ["HITL"],
                 status: "skipped",
-                detail: "autonomy already present: grill-me",
+                detail: "autonomy deferred to the grill (grill-me)",
             },
         ]);
         expect(calls).toEqual([
