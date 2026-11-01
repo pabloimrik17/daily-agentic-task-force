@@ -58,6 +58,10 @@ function parseLabels(repo: string): (value: unknown) => TrackerLabel[] {
     };
 }
 
+function hexColour(colour: string): string {
+    return colour.startsWith("#") ? colour.slice(1) : colour;
+}
+
 function parseTaskId(id: string): { ok: true; repo: string; number: string } | { ok: false } {
     const hash = id.lastIndexOf("#");
     if (hash === -1) {
@@ -203,15 +207,28 @@ export function githubTracker(exec: Exec, config: GithubConfig): Tracker {
         },
 
         createLabel(scope: string, name: string, colour: string): Promise<TrackerResult<void>> {
-            const hexColour = colour.startsWith("#") ? colour.slice(1) : colour;
-            return run(exec, `gh label create ${name} --repo ${scope} --color ${hexColour}`, [
+            const hex = hexColour(colour);
+            return run(exec, `gh label create ${name} --repo ${scope} --color ${hex}`, [
                 "label",
                 "create",
                 name,
                 "--repo",
                 scope,
                 "--color",
-                hexColour,
+                hex,
+            ]);
+        },
+
+        recolourLabel(label: TrackerLabel, colour: string): Promise<TrackerResult<void>> {
+            const hex = hexColour(colour);
+            return run(exec, `gh label edit ${label.name} --repo ${label.scope} --color ${hex}`, [
+                "label",
+                "edit",
+                label.name,
+                "--repo",
+                label.scope,
+                "--color",
+                hex,
             ]);
         },
     };

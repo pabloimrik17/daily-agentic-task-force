@@ -181,7 +181,7 @@ describe("select: reading the tasks again", () => {
                         source: "linear",
                         taskId: "DOT-120",
                         title: "Task DOT-120",
-                        group: "entry",
+                        group: "stage",
                         labels: ["grill-me"],
                         confidence: 1,
                         reason: "rule",
@@ -218,7 +218,7 @@ describe("select: outcome", () => {
                     fakeReader(
                         "beads",
                         ["B-1", "B-2", "B-3"].map((id) =>
-                            workTask("beads", id, ["personal", "AFK"]),
+                            workTask("beads", id, ["personal", "AFK", "proposal"]),
                         ),
                         calls,
                     ),
@@ -384,7 +384,7 @@ describe("select: JSON data", () => {
                 id: "DOT-3",
                 title: "Task DOT-3",
                 stage: "grill-me",
-                autonomy: "grill-me",
+                autonomy: null,
                 scope: "personal",
                 explanation: "It was the only candidate.",
                 exception: null,
@@ -406,6 +406,27 @@ describe("select: JSON data", () => {
             notEvaluated: GITHUB_NOTE,
             comparison: null,
         });
+    });
+
+    it("carries a null autonomy for a selected task in grill-me without one", async () => {
+        const calls: string[] = [];
+        const result = await selectStep.run(
+            selectContext({
+                calls,
+                readers: [
+                    fakeReader(
+                        "linear",
+                        [workTask("linear", "DOT-1", ["personal", "grill-me"])],
+                        calls,
+                    ),
+                ],
+                args: { json: true },
+            }),
+        );
+        const data = JSON.parse(JSON.stringify(result.data)) as SelectData;
+        expect(result.outcome).toBe("advance");
+        expect(data.selected).toMatchObject({ id: "DOT-1", stage: "grill-me", autonomy: null });
+        expect(JSON.stringify(result.data)).toContain('"autonomy":null');
     });
 
     it("leaves the GitHub note out when GitHub is disabled", async () => {

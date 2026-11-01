@@ -14,6 +14,7 @@ export interface TrackerLabel {
     scope: string; // where the label lives: beads "beads"; github the repo "owner/name"; linear "workspace" or the team key
     name: string;
     colour: string | null; // normalised "#rrggbb" lower-case, or null when the tracker has no colours (beads)
+    id?: string; // linear: the label's id, which a recolour needs; absent on github and beads
 }
 
 export type TrackerResult<T> = { ok: true; value: T } | { ok: false; error: string };
@@ -27,11 +28,15 @@ export interface Tracker {
     listTasks(): Promise<TrackerResult<TrackerTask[]>>; // only open tasks (per source: see beads.ts, github.ts, linear.ts)
     readTask(id: string): Promise<TrackerResult<TrackerTask>>;
     addLabel(id: string, label: string): Promise<TrackerResult<void>>;
-    // Only the stage sessions' `taken`; triage never calls it. Removing a label the
-    // task does not carry is tracker-defined: read the task first.
+    // Two callers, neither of them triage: the stage sessions remove `taken`; the
+    // transition removes the stage it leaves and the autonomy it replaces. Removing a
+    // label the task does not carry is tracker-defined: read the task first.
     removeLabel(id: string, label: string): Promise<TrackerResult<void>>;
     listLabels(): Promise<TrackerResult<TrackerLabel[]>>; // all scopes at once
     createLabel(scope: string, name: string, colour: string): Promise<TrackerResult<void>>; // beads: { ok: false, error: "Beads needs no label creation: labels exist by use" }
+    // Bootstrap only. Linear needs `label.id`, and a response whose `success` is not true is a failure;
+    // beads: { ok: false, error: "Beads has no label colours" }
+    recolourLabel(label: TrackerLabel, colour: string): Promise<TrackerResult<void>>;
 }
 
 export interface Trackers {

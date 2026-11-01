@@ -4,9 +4,11 @@ The autonomous loop: it reads the work the user defined in Linear, Beads and
 GitHub, checks it against the label contract, and launches one managed session per
 attempt to advance a stage.
 
-The split of today's `entry` group (`AFK`, `HITL`, `grill-me`) into autonomy
-and stage labels, stage prompts and transitions are agreed but not implemented
-yet (DOT-110, [ADR 0001](docs/adr/0001-properties-persist-stages-replace.md)).
+Labels come in three groups: scope, autonomy and stage. Scope and autonomy are
+properties that persist, and each transition replaces the stage
+([ADR 0001](docs/adr/0001-properties-persist-stages-replace.md)). The stage
+prompts and the grill stage itself are not implemented yet: they are change 2
+of DOT-110.
 
 ## Language
 

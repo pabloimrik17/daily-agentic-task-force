@@ -3,6 +3,7 @@ import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 
 import type { Exec, ExecResult } from "../exec.ts";
+import { decide } from "./decide.ts";
 import {
     buildPrompt,
     claudeJudgement,
@@ -34,7 +35,7 @@ const REQUEST: JudgementRequest = {
             title: "Add the label contract",
             description: "Define the labels every task carries.",
             labels: ["feature"],
-            groups: ["scope", "entry"],
+            groups: ["scope", "autonomy"],
         },
         {
             id: "agentic-task-kc2.29",
@@ -42,7 +43,7 @@ const REQUEST: JudgementRequest = {
             title: "SECURITY: fix the thing",
             description: null,
             labels: ["work"],
-            groups: ["entry"],
+            groups: ["autonomy"],
         },
     ],
 };
@@ -51,11 +52,11 @@ const ANSWERS: JudgementAnswer[] = [
     {
         id: "DOT-82",
         scope: { labels: ["personal"], confidence: 0.9, reason: "It is a personal plugin." },
-        entry: { labels: ["AFK"], confidence: 0.97, reason: "The spec is complete." },
+        autonomy: { labels: ["AFK"], confidence: 0.97, reason: "The spec is complete." },
     },
     {
         id: "agentic-task-kc2.29",
-        entry: { labels: ["HITL"], confidence: 0.8, reason: "Security work needs review." },
+        autonomy: { labels: ["HITL"], confidence: 0.8, reason: "Security work needs review." },
     },
 ];
 
@@ -113,7 +114,7 @@ describe("JUDGEMENT_SCHEMA", () => {
                                 required: ["labels", "confidence", "reason"],
                                 additionalProperties: false,
                             },
-                            entry: {
+                            autonomy: {
                                 required: ["labels", "confidence", "reason"],
                                 additionalProperties: false,
                             },
@@ -124,6 +125,14 @@ describe("JUDGEMENT_SCHEMA", () => {
         });
     });
 
+    it("has an answer object for scope and autonomy only, never entry or stage", () => {
+        expect(Object.keys(JUDGEMENT_SCHEMA.properties.tasks.items.properties)).toEqual([
+            "id",
+            "scope",
+            "autonomy",
+        ]);
+    });
+
     it("limits each group's labels to its vocabulary and the confidence to [0, 1]", () => {
         const groups = JUDGEMENT_SCHEMA.properties.tasks.items.properties;
         const confidence = { type: "number", minimum: 0, maximum: 1 };
@@ -132,7 +141,7 @@ describe("JUDGEMENT_SCHEMA", () => {
             labels: { type: "array", items: { type: "string", enum: ["work", "personal"] } },
             confidence,
         });
-        expect(groups.entry.properties).toMatchObject({
+        expect(groups.autonomy.properties).toMatchObject({
             labels: { type: "array", items: { type: "string", enum: ["AFK", "HITL", "grill-me"] } },
             confidence,
         });
@@ -253,13 +262,13 @@ describe("claudeJudgement", () => {
 
     it("reports a group answer missing a field with its path", async () => {
         const exec = succeeding(
-            envelopeFor({ tasks: [{ id: "DOT-82", entry: { labels: ["AFK"], reason: "r" } }] }),
+            envelopeFor({ tasks: [{ id: "DOT-82", autonomy: { labels: ["AFK"], reason: "r" } }] }),
         );
         const result = await claudeJudgement(exec)(REQUEST);
 
         expect(result).toEqual({
             ok: false,
-            error: "claude judgement does not match the schema: $.tasks[0].entry.confidence must be a finite number",
+            error: "claude judgement does not match the schema: $.tasks[0].autonomy.confidence must be a finite number",
         });
     });
 
@@ -270,6 +279,22 @@ describe("claudeJudgement", () => {
         expect(result).toEqual({
             ok: false,
             error: "claude judgement does not match the schema: $.tasks[0].priority is not a recognised field",
+        });
+    });
+
+    it("rejects an answer for a stage group as an unrecognised field", async () => {
+        const exec = succeeding(
+            envelopeFor({
+                tasks: [
+                    { id: "DOT-82", stage: { labels: ["proposal"], confidence: 1, reason: "r" } },
+                ],
+            }),
+        );
+        const result = await claudeJudgement(exec)(REQUEST);
+
+        expect(result).toEqual({
+            ok: false,
+            error: "claude judgement does not match the schema: $.tasks[0].stage is not a recognised field",
         });
     });
 });
@@ -294,7 +319,7 @@ describe("interpretAnswers", () => {
                     source: "linear",
                     taskId: "DOT-82",
                     title: "Add the label contract",
-                    group: "entry",
+                    group: "autonomy",
                     labels: ["AFK"],
                     confidence: 0.97,
                     reason: "The spec is complete.",
@@ -304,7 +329,7 @@ describe("interpretAnswers", () => {
                     source: "beads",
                     taskId: "agentic-task-kc2.29",
                     title: "SECURITY: fix the thing",
-                    group: "entry",
+                    group: "autonomy",
                     labels: ["HITL"],
                     confidence: 0.8,
                     reason: "Security work needs review.",
@@ -326,7 +351,7 @@ describe("interpretAnswers", () => {
 
     it("reports a task whose requested group is unanswered as not judged", () => {
         const result = interpretAnswers(REQUEST, [
-            { id: "DOT-82", entry: ANSWERS[0]!.entry! },
+            { id: "DOT-82", autonomy: ANSWERS[0]!.autonomy! },
             ANSWERS[1]!,
         ]);
 
@@ -340,7 +365,7 @@ describe("interpretAnswers", () => {
         const result = interpretAnswers(REQUEST, [
             {
                 ...ANSWERS[0]!,
-                entry: { labels: ["AFK", "urgent"], confidence: 0.9, reason: "r" },
+                autonomy: { labels: ["AFK", "urgent"], confidence: 0.9, reason: "r" },
             },
             ANSWERS[1]!,
         ]);
@@ -350,7 +375,7 @@ describe("interpretAnswers", () => {
             {
                 id: "DOT-82",
                 source: "linear",
-                reason: 'label "urgent" is outside the entry vocabulary',
+                reason: 'label "urgent" is outside the autonomy vocabulary',
             },
         ]);
     });
@@ -360,7 +385,7 @@ describe("interpretAnswers", () => {
             ANSWERS[0]!,
             {
                 id: "agentic-task-kc2.29",
-                entry: { labels: ["work"], confidence: 0.9, reason: "r" },
+                autonomy: { labels: ["work"], confidence: 0.9, reason: "r" },
             },
         ]);
 
@@ -368,7 +393,7 @@ describe("interpretAnswers", () => {
             {
                 id: "agentic-task-kc2.29",
                 source: "beads",
-                reason: 'label "work" is outside the entry vocabulary',
+                reason: 'label "work" is outside the autonomy vocabulary',
             },
         ]);
     });
@@ -378,7 +403,7 @@ describe("interpretAnswers", () => {
             ANSWERS[0]!,
             {
                 id: "agentic-task-kc2.29",
-                entry: { labels: ["HITL"], confidence: 1.2, reason: "r" },
+                autonomy: { labels: ["HITL"], confidence: 1.2, reason: "r" },
             },
         ]);
 
@@ -387,9 +412,49 @@ describe("interpretAnswers", () => {
             {
                 id: "agentic-task-kc2.29",
                 source: "beads",
-                reason: "entry confidence 1.2 is outside [0, 1]",
+                reason: "autonomy confidence 1.2 is outside [0, 1]",
             },
         ]);
+    });
+
+    it("keeps grill-me judged for a task carrying proposal, for decide to ask about", () => {
+        const request: JudgementRequest = {
+            ...REQUEST,
+            tasks: [
+                {
+                    id: "DOT-90",
+                    source: "linear",
+                    title: "Prepare the proposal",
+                    description: null,
+                    labels: ["personal", "proposal"],
+                    groups: ["autonomy"],
+                },
+            ],
+        };
+        const result = interpretAnswers(request, [
+            {
+                id: "DOT-90",
+                autonomy: { labels: ["grill-me"], confidence: 0.99, reason: "Unclear." },
+            },
+        ]);
+
+        expect(result.notJudged).toEqual([]);
+        expect(result.judged).toEqual([
+            {
+                source: "linear",
+                taskId: "DOT-90",
+                title: "Prepare the proposal",
+                group: "autonomy",
+                labels: ["grill-me"],
+                confidence: 0.99,
+                reason: "Unclear.",
+                tier: "llm",
+            },
+        ]);
+        expect(decide(result.judged[0]!, 0.95, ["personal", "proposal"])).toEqual({
+            status: "asked",
+            reason: "invalid under the contract: grill-me with a stage label: proposal",
+        });
     });
 
     it("reports a task answered twice as not judged", () => {
@@ -413,7 +478,7 @@ describe("interpretAnswers", () => {
 
         expect(result.judged).toHaveLength(3);
         expect(result.judged.filter((item) => item.taskId === "agentic-task-kc2.29")).toEqual([
-            expect.objectContaining({ group: "entry" }),
+            expect.objectContaining({ group: "autonomy" }),
         ]);
         expect(result.notJudged).toEqual([]);
     });

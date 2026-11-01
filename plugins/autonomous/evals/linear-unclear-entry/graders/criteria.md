@@ -1,6 +1,5 @@
 ---
-type: llm
-focus: last_message
+type: tool_used
+tool: Bash
+input_match: '(?=.*linear issue create)(?=.*(?:--label|-l)[ =]\S*\bpersonal\b)(?=.*(?:--label|-l)[ =]\S*\bgrill-me\b)(?!.*(?:AFK|HITL|proposal))'
 ---
-
-PASS only if the reply explicitly names the entry group, or the entry labels, as left for later triage and gives a reason. FAIL if it claims an entry label was applied or does not say that entry was left out.

@@ -55,7 +55,7 @@ describe("run report lock", () => {
             ].join("\n\n"),
         );
         expect(JSON.parse(renderJson(report))).toEqual({
-            schema: "autonomous.run.v1",
+            schema: "autonomous.run.v2",
             startedAt: "2026-10-17T09:00:00.000Z",
             steps: [],
             outcome: "not-evaluable",
