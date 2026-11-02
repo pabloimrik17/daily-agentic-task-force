@@ -15,8 +15,6 @@ export default {
     ],
     // pinned per-invocation via `bunx --package renovate@<version>`, never installed
     ignoreDependencies: ["renovate"],
-    // external CLIs the autonomous and stonks plugins require on the consumer machine
-    ignoreBinaries: ["openusage", "bd", "gh", "linear", "claude", "gws"],
     ignoreExportsUsedInFile: {
         interface: true,
         type: true,
@@ -46,4 +44,6 @@ export default {
             ignoreDependencies: ["claude-code"],
         },
     },
+    // Only the cycles-only run (knip --cycles) reports circular imports; the default run leaves them out.
+    rules: { cycles: "error" },
 } satisfies KnipConfig;
