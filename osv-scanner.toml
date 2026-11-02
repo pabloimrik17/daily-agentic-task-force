@@ -1,0 +1,4 @@
+[[IgnoredVulns]]
+id = "GHSA-g3hv-75wg-m249"
+ignoreUntil = 2027-01-29
+reason = "minimatch 10.2.6 is a dev-only transitive dependency of eslint, typescript-eslint and markdownlint-cli. The only fix is minimatch 11.0.1, outside their ^10 ranges, so no upgrade exists within them. Remove once they accept minimatch 11. Owner: pfe"
