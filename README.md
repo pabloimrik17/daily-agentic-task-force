@@ -82,16 +82,16 @@ is a new path, so run `mise trust && mise install` once in each. To skip that,
 trust the parent folder of your checkouts once, for example
 `mise settings add trusted_config_paths ~/WebstormProjects`.
 
-| Command                    | What it checks                                         |
-| -------------------------- | ------------------------------------------------------ |
-| `bun run lint:oxfmt`       | Formatting (`:fix` to apply)                           |
-| `bun run lint:eslint`      | ESLint, including type-aware rules                     |
-| `bun run lint:markdown`    | Markdown                                               |
-| `bun run lint:knip`        | Unused files, exports and dependencies                 |
-| `bun run lint:fallow`      | Dead code, full repository                             |
-| `bun run lint:marketplace` | Marketplace consistency and version agreement          |
-| `bun run typecheck`        | TypeScript                                             |
-| `bun run test`             | Vitest, across repo scripts and every plugin workspace |
+| Command                    | What it checks                                                     |
+| -------------------------- | ------------------------------------------------------------------ |
+| `bun run lint:oxfmt`       | Formatting (`:fix` to apply)                                       |
+| `bun run lint:eslint`      | ESLint, including type-aware rules                                 |
+| `bun run lint:markdown`    | Markdown                                                           |
+| `bun run lint:knip`        | Unused files, exports and dependencies; more than one import cycle |
+| `bun run lint:fallow`      | Dead code, full repository                                         |
+| `bun run lint:marketplace` | Marketplace consistency and version agreement                      |
+| `bun run typecheck`        | TypeScript                                                         |
+| `bun run test`             | Vitest, across repo scripts and every plugin workspace             |
 
 Commits and pushes are gated by husky. Branches must match
 `main`, `develop`, or `<feature|fix|hotfix|chore|renovate>/<name>`.
