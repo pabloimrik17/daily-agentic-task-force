@@ -1,4 +1,4 @@
-export interface SyncArgs {
+interface SyncArgs {
     only: "sources" | "watchlist" | null;
 }
 

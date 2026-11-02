@@ -8,7 +8,7 @@ import type { Source } from "../config.ts";
 import type { Derivation } from "./rules.ts";
 import type { Tracker, TrackerTask, Trackers } from "./trackers/tracker.ts";
 
-export type RecordStatus = "applied" | "proposed" | "asked" | "failed";
+type RecordStatus = "applied" | "proposed" | "asked" | "failed";
 
 export interface TriageRecord extends Derivation {
     status: RecordStatus;

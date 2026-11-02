@@ -58,7 +58,7 @@ export interface ActiveOrder {
     trailPercent: number | null;
 }
 
-export type IbkrProvenance = "mcp" | "screenshots";
+type IbkrProvenance = "mcp" | "screenshots";
 
 export interface IbkrRead {
     provenance: IbkrProvenance;
@@ -162,7 +162,7 @@ export type CheckId =
 
 export type Severity = "alert" | "discrepancy" | "warning" | "informational" | "not-evaluable";
 
-export type Source = "ibkr" | "tracking-sheet" | "sws-portfolio" | "cartera-viva";
+type Source = "ibkr" | "tracking-sheet" | "sws-portfolio" | "cartera-viva";
 
 export type Mirror = Exclude<Source, "ibkr">;
 
@@ -187,7 +187,7 @@ export interface GateDecision {
 export const REPORT_SCHEMA = "stonks.report.v1";
 export const SNAPSHOT_SCHEMA = "stonks.snapshot.v1";
 
-export type MovementKind = "fill" | "triggered-sell" | "new-order" | "cancelled-order";
+type MovementKind = "fill" | "triggered-sell" | "new-order" | "cancelled-order";
 
 export interface Movement {
     kind: MovementKind;

@@ -8,7 +8,7 @@ import type { AutonomousConfig, ContractLabel, Source } from "../config.ts";
 import type { Tracker, TrackerLabel, Trackers } from "../label-triage/trackers/tracker.ts";
 import { COLOURS, LABELS } from "./contract.ts";
 
-export interface BootstrapLabel {
+interface BootstrapLabel {
     scope: string;
     label: ContractLabel;
     status: "created" | "present" | "failed";
@@ -17,7 +17,7 @@ export interface BootstrapLabel {
     note: string | null;
 }
 
-export interface BootstrapSource {
+interface BootstrapSource {
     source: Source;
     applicable: boolean;
     evaluable: boolean;

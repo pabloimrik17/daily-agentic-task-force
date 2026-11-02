@@ -63,7 +63,7 @@ export interface GithubConfig extends SourceRules {
     repos: string[];
 }
 
-export interface JudgementConfig {
+interface JudgementConfig {
     model: string;
     effort: string;
     threshold: number;
@@ -76,17 +76,17 @@ export interface SelectionConfig {
     effort: string;
 }
 
-export interface SessionsConfig {
+interface SessionsConfig {
     tool: SessionTool;
     profile: string | null; // the session manager's profile; null for its default
     binary: string | null; // the agent binary or wrapper; null for the tool's own
 }
 
-export interface WorkspaceConfig {
+interface WorkspaceConfig {
     root: string; // `~` already expanded with HOME at load
 }
 
-export type NamingConfig = SelectionConfig;
+type NamingConfig = SelectionConfig;
 
 export interface AutonomousConfig {
     schema: "autonomous.config.v1";
