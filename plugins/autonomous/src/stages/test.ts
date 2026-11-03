@@ -18,6 +18,7 @@ const AGENT_ARGS: Record<SessionTool, string[]> = {
 export const testStage: Stage = {
     id: "test",
     emoji: "🧪",
+    prerequisites: () => Promise.resolve({ ok: true, context: {} }),
     agentArgs: (tool) => [...AGENT_ARGS[tool]],
     prompt: (input) => renderPrompt(input, INSTRUCTIONS),
     completed: () => true,

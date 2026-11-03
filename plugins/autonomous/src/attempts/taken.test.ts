@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import type { Source } from "../config.ts";
+import { inertDocumentMethods } from "../label-triage/test-fixtures.ts";
 import type { Tracker, TrackerResult, TrackerTask } from "../label-triage/trackers/tracker.ts";
 import { addTaken, removeTaken, TAKEN } from "./taken.ts";
 
@@ -27,6 +28,7 @@ function tracker(script: Script, source: Source = "beads"): Tracker & { calls: s
         listLabels: refuse,
         createLabel: refuse,
         recolourLabel: refuse,
+        ...inertDocumentMethods,
         readTask: (id): Promise<TrackerResult<TrackerTask>> => {
             calls.push(`readTask:${id}`);
             if (script.readError !== undefined) {
@@ -42,6 +44,7 @@ function tracker(script: Script, source: Source = "beads"): Tracker & { calls: s
                     labels,
                     status: "open",
                     updatedAt: "",
+                    closed: false,
                 },
             });
         },

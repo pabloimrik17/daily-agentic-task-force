@@ -2,12 +2,12 @@
 // "Label bootstrap"): reads and writes through `linear` (schpet/linear-cli
 // v2.6.0), across the whole workspace. Completed, canceled and Duplicate issues
 // are dropped from the listing; a description is only available from
-// `issue view`.
+// `issue view`, and a viewed issue's state type from a read-only `linear api` query.
 
 import type { LinearConfig } from "../../config.ts";
 import type { Exec } from "../../exec.ts";
 import { array, boolean, type Json, object, optional, ParseError, string } from "../../validate.ts";
-import { run, runJson } from "./cli-json.ts";
+import { commentBodies, run, runJson } from "./cli-json.ts";
 import type { Tracker, TrackerLabel, TrackerResult, TrackerTask } from "./tracker.ts";
 
 function isUnauthenticated(text: string): boolean {
@@ -34,6 +34,8 @@ function labelNames(entry: Json, path: string): string[] {
 export function listedTask(entry: Json, path: string): { task: TrackerTask; type: string } {
     const statePath = `${path}.state`;
     const state = object(entry.state, statePath);
+    const status = string(state, "name", statePath);
+    const type = string(state, "type", statePath);
     return {
         task: {
             source: "linear",
@@ -41,10 +43,11 @@ export function listedTask(entry: Json, path: string): { task: TrackerTask; type
             title: string(entry, "title", path),
             description: null,
             labels: labelNames(entry, path),
-            status: string(state, "name", statePath),
+            status,
             updatedAt: string(entry, "updatedAt", path),
+            closed: isExcluded(type, status),
         },
-        type: string(state, "type", statePath),
+        type,
     };
 }
 
@@ -74,7 +77,9 @@ export function nullableDescription(entry: Json, path: string): string | null {
     return value;
 }
 
-function readTask(entry: Json, path: string): TrackerTask {
+// `linear issue view --json` prints the state's name and colour but not its type, which
+// `readTask` reads apart (STATE_TYPE_QUERY) to tell Done and Canceled.
+function viewedTask(entry: Json, path: string): Omit<TrackerTask, "closed"> {
     const statePath = `${path}.state`;
     const state = object(entry.state, statePath);
     return {
@@ -88,8 +93,72 @@ function readTask(entry: Json, path: string): TrackerTask {
     };
 }
 
-function parseReadTask(value: unknown): TrackerTask {
-    return readTask(object(value, "$"), "$");
+function parseViewedTask(value: unknown): Omit<TrackerTask, "closed"> {
+    return viewedTask(object(value, "$"), "$");
+}
+
+const STATE_TYPE_QUERY = "query($id: String!) { issue(id: $id) { state { type } } }";
+
+function parseStateType(value: unknown): string {
+    const dataPath = "$.data";
+    const issuePath = `${dataPath}.issue`;
+    const statePath = `${issuePath}.state`;
+    const data = object(object(value, "$").data, dataPath);
+    const issue = object(data.issue, issuePath);
+    return string(object(issue.state, statePath), "type", statePath);
+}
+
+async function readTask(exec: Exec, id: string): Promise<TrackerResult<TrackerTask>> {
+    const viewed = await runJson(
+        exec,
+        `linear issue view ${id}`,
+        ["issue", "view", id, "--no-comments", "--json"],
+        parseViewedTask,
+        mapExecError,
+    );
+    if (!viewed.ok) {
+        return viewed;
+    }
+    const type = await runJson(
+        exec,
+        `linear api issue --variable id=${id}`,
+        ["api", STATE_TYPE_QUERY, "--variable", `id=${id}`],
+        parseStateType,
+        mapExecError,
+    );
+    if (!type.ok) {
+        return type;
+    }
+    const closed = isExcluded(type.value, viewed.value.status);
+    return { ok: true, value: { ...viewed.value, closed } };
+}
+
+function parseComments(value: unknown): { bodies: string[]; more: boolean } {
+    const root = object(value, "$");
+    const more = boolean(object(root.pageInfo, "$.pageInfo"), "hasNextPage", "$.pageInfo");
+    const nodes = array(root.nodes, "$.nodes");
+    const bodies = commentBodies(nodes, "$.nodes", { body: "body", createdAt: "createdAt" });
+    return { bodies, more };
+}
+
+async function readComments(exec: Exec, id: string): Promise<TrackerResult<string[]>> {
+    const command = `linear issue comment list ${id}`;
+    const result = await runJson(
+        exec,
+        command,
+        ["issue", "comment", "list", id, "--json"],
+        parseComments,
+        mapExecError,
+    );
+    if (!result.ok) {
+        return result;
+    }
+    return result.value.more
+        ? {
+              ok: false,
+              error: `${command}: more than one page of comments; the listing would be incomplete`,
+          }
+        : { ok: true, value: result.value.bodies };
 }
 
 function labelEntry(entry: Json, path: string): TrackerLabel {
@@ -169,13 +238,7 @@ export function linearTracker(exec: Exec, _config: LinearConfig): Tracker {
         },
 
         readTask(id: string): Promise<TrackerResult<TrackerTask>> {
-            return runJson(
-                exec,
-                `linear issue view ${id}`,
-                ["issue", "view", id, "--no-comments", "--json"],
-                parseReadTask,
-                mapExecError,
-            );
+            return readTask(exec, id);
         },
 
         addLabel(id: string, label: string): Promise<TrackerResult<void>> {
@@ -195,6 +258,28 @@ export function linearTracker(exec: Exec, _config: LinearConfig): Tracker {
                 ["issue", "update", id, "--remove-label", label],
                 mapExecError,
             );
+        },
+
+        updateDescription(id: string, file: string): Promise<TrackerResult<void>> {
+            return run(
+                exec,
+                `linear issue update ${id} --description-file ${file}`,
+                ["issue", "update", id, "--description-file", file],
+                mapExecError,
+            );
+        },
+
+        addComment(id: string, file: string): Promise<TrackerResult<void>> {
+            return run(
+                exec,
+                `linear issue comment add ${id} --body-file ${file}`,
+                ["issue", "comment", "add", id, "--body-file", file],
+                mapExecError,
+            );
+        },
+
+        readComments(id: string): Promise<TrackerResult<string[]>> {
+            return readComments(exec, id);
         },
 
         listLabels(): Promise<TrackerResult<TrackerLabel[]>> {

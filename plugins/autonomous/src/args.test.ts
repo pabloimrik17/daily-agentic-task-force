@@ -15,6 +15,7 @@ const DEFAULTS: RunArgs = {
     noHandoff: false,
     answers: [],
     transition: undefined,
+    persist: undefined,
 };
 
 function accepted(overrides: Partial<RunArgs>) {
@@ -143,6 +144,20 @@ describe("parseArgs", () => {
         );
     });
 
+    it("reads --apply --persist", () => {
+        expect(parseArgs(["--apply", "--persist", "linear:DOT-121:grill-me:1"])).toEqual(
+            accepted({ apply: true, persist: "linear:DOT-121:grill-me:1" }),
+        );
+    });
+
+    it("reads --apply --persist with --json in any order", () => {
+        expect(
+            parseArgs(["--persist", "beads:agentic-task-x1:grill-me:2", "--json", "--apply"]),
+        ).toEqual(
+            accepted({ apply: true, json: true, persist: "beads:agentic-task-x1:grill-me:2" }),
+        );
+    });
+
     it("reads --apply --discard with an attempt id or a task reference", () => {
         expect(parseArgs(["--apply", "--discard", "linear:DOT-109:test:1"])).toEqual(
             accepted({ apply: true, discard: "linear:DOT-109:test:1" }),
@@ -237,8 +252,8 @@ describe("parseArgs", () => {
             "--stage given more than once",
         ],
         [
-            ["--task", "linear:A-1", "--stage", "grill-me"],
-            "--stage grill-me is not a registered stage (test)",
+            ["--task", "linear:A-1", "--stage", "proposal"],
+            "--stage proposal is not a registered stage (test, grill-me)",
         ],
         [["--stage", "test"], "--stage requires --task"],
         [
@@ -342,6 +357,83 @@ describe("parseArgs", () => {
         [
             ["--apply", "--transition", "linear:DOT-110", "--release-workspace"],
             "--transition can only be combined with --apply and --json",
+        ],
+        [["--apply", "--persist"], "--persist requires an attempt id <source>:<task>:<stage>:<n>"],
+        [
+            ["--apply", "--persist", "--json"],
+            "--persist requires an attempt id <source>:<task>:<stage>:<n>",
+        ],
+        [
+            ["--apply", "--persist", "linear:DOT-121"],
+            "--persist linear:DOT-121 must be an attempt id <source>:<task>:<stage>:<n>",
+        ],
+        [
+            ["--apply", "--persist", "linear:DOT-121:grill-me"],
+            "--persist linear:DOT-121:grill-me must be an attempt id <source>:<task>:<stage>:<n>",
+        ],
+        [
+            ["--apply", "--persist", "linear:DOT-121:grill-me:0"],
+            "--persist linear:DOT-121:grill-me:0 must be an attempt id <source>:<task>:<stage>:<n>",
+        ],
+        [
+            ["--apply", "--persist", "linear:DOT-121:grill-me:x"],
+            "--persist linear:DOT-121:grill-me:x must be an attempt id <source>:<task>:<stage>:<n>",
+        ],
+        [
+            ["--apply", "--persist", "jira:DOT-121:grill-me:1"],
+            "--persist jira:DOT-121:grill-me:1 must be an attempt id <source>:<task>:<stage>:<n>",
+        ],
+        [
+            ["--apply", "--persist", "linear:DOT-121:review:1"],
+            "--persist linear:DOT-121:review:1 must be an attempt id <source>:<task>:<stage>:<n>",
+        ],
+        [
+            [
+                "--apply",
+                "--persist",
+                "linear:DOT-121:grill-me:1",
+                "--persist",
+                "beads:X-1:grill-me:1",
+            ],
+            "--persist given more than once",
+        ],
+        [["--persist", "linear:DOT-121:grill-me:1"], "--persist requires --apply"],
+        [["--persist", "linear:DOT-121:grill-me:1", "--json"], "--persist requires --apply"],
+        [
+            ["--apply", "--persist", "linear:DOT-121:grill-me:1", "--account", "claude"],
+            "--persist can only be combined with --apply and --json",
+        ],
+        [
+            ["--apply", "--persist", "linear:DOT-121:grill-me:1", "--force"],
+            "--persist can only be combined with --apply and --json",
+        ],
+        [
+            ["--apply", "--persist", "linear:DOT-121:grill-me:1", "--no-handoff"],
+            "--persist can only be combined with --apply and --json",
+        ],
+        [
+            ["--apply", "--persist", "linear:DOT-121:grill-me:1", "--bootstrap-labels"],
+            "--bootstrap-labels can only be combined with --json",
+        ],
+        [
+            ["--apply", "--persist", "linear:DOT-121:grill-me:1", "--transition", "linear:DOT-121"],
+            "--persist can only be combined with --apply and --json",
+        ],
+        [
+            ["--apply", "--persist", "linear:DOT-121:grill-me:1", "--answer", "a:b=HITL"],
+            "--persist can only be combined with --apply and --json",
+        ],
+        [
+            ["--apply", "--persist", "linear:DOT-121:grill-me:1", "--task", "linear:DOT-121"],
+            "--persist can only be combined with --apply and --json",
+        ],
+        [
+            ["--apply", "--persist", "linear:DOT-121:grill-me:1", "--discard", "beads:X-1"],
+            "--persist can only be combined with --apply and --json",
+        ],
+        [
+            ["--apply", "--persist", "linear:DOT-121:grill-me:1", "--release-workspace"],
+            "--persist can only be combined with --apply and --json",
         ],
         [["--release-workspace"], "--release-workspace requires --discard"],
         [["--apply", "--release-workspace"], "--release-workspace requires --discard"],

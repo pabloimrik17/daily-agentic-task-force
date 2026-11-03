@@ -5,7 +5,7 @@ See proposal.md, "Why". This change builds on change 1 (`add-stage-labels-and-tr
 - **Stage contract.** `src/stages/stage.ts` declares `id`, `emoji`, `agentArgs(tool)`, a synchronous `prompt(input)` and `completed(task)`. `renderPrompt` writes the shared frame: attempt, task, instructions and result marker.
 - **Launch.** `attempts/launch.ts` checks its preconditions in the order of DOT-109's design D9: stage registered, no `taken`, no open attempt, repository inferred. Only then does it write.
 - **Reconcile.** It reads the tracker and calls `completed()` only after a valid result marker.
-- **Trackers.** They list, read, add, remove, list labels, create labels and, from change 1, recolour. `TrackerTask.status` is each tracker's own name; for Linear that is the state name, while the state type, which says completed or canceled, is parsed only to filter listings. No tracker updates a description or handles comments.
+- **Trackers.** They list, read, add, remove, list labels, create labels and, from change 1, recolour. `TrackerTask.status` is each tracker's own name; for Linear that is the state name, while the state type, which says completed or canceled, is parsed only to filter listings. `linear issue view --json` prints the state without its type, so Linear's `readTask` reads `state.type` with one read-only `linear api` GraphQL query (D6). No tracker updates a description or handles comments.
 - **The GitHub reader** sets `children` to null. gh 2.100 exposes `subIssues { nodes, totalCount }` in `gh issue view --json`.
 - **Claude Code** records installed plugins in `~/.claude/plugins/installed_plugins.json` (version 2): `plugins["<name>@<marketplace>"]` is a list of `{ scope, installPath, version, … }`. `mattpocock-skills` 1.3.2 is installed at user scope. Its skills live under `skills/<category>/<name>/SKILL.md`, and the categories have changed between versions (`in-progress`, `engineering`, `productivity`). `grill-with-docs` and `handoff` both carry `disable-model-invocation: true`.
 
@@ -50,11 +50,11 @@ A missing registry, a missing plugin entry or a missing skill each give a distin
 The stage's instructions, inside `renderPrompt`, contain four sections:
 
 1. **Grill.** The `grill-with-docs` body, with one line saying that every skill it names is invoked from the `mattpocock-skills` plugin.
-2. **Closing.** The seven steps in order, with the absolute paths of `definition.md` and `stage-summary.md` in the attempt directory, the exact persist and transition commands, the template of the definition (Problem, Solution, Acceptance criteria, Non-goals, Decisions, Autonomy as a reason, Artifacts), and the rule that the marker comes only after an applied transition.
-3. **Stage summary.** The `handoff` body, overridden to write `stage-summary.md`, and for a GitHub task the rule against absolute paths and machine details.
-4. **Constraints.** No proposal in this session. Commit and push only changed glossary and ADR files, with no PR, no force push and no `--no-verify`, and a failed push goes to the human. A split goes through `labelling-new-tasks` with the tracker's parent option.
+2. **Closing.** The seven steps in order, with the absolute paths of `definition.md` and `stage-summary.md` in the attempt directory, the exact persist and transition commands, the template of the definition (Problem, Solution, Acceptance criteria, Non-goals, Decisions, Autonomy as a reason, Artifacts), and the rule that the marker comes only after an applied transition, except when the human closes the task: then the agent skips persist and the transition and writes the marker, so that reconcile finalises the closed task.
+3. **Stage summary.** The `handoff` body, overridden to write `stage-summary.md`.
+4. **Constraints.** No proposal in this session. Commit and push only changed glossary and ADR files, with no PR, no force push and no `--no-verify`, and a failed push goes to the human. A split goes through `labelling-new-tasks` with the tracker's parent option. For a GitHub task, one more line forbids absolute paths and machine details in the definition and in the stage summary.
 
-The GitHub rule keys on `task.source === "github"`, not on repository visibility. It is conservative and needs no API call.
+The GitHub rule covers the definition too, because persist writes it into the issue description, and it keys on `task.source === "github"`, not on repository visibility. It is conservative and needs no API call.
 
 ### D4. Persist mode is idempotent, and reruns are safe
 
@@ -62,7 +62,7 @@ The GitHub rule keys on `task.source === "github"`, not on repository visibility
 
 1. Parse the id, read the attempt record, and check the preconditions: open, stage `grill-me`, both files present and non-empty.
 2. Read the task fresh.
-3. Compose the new description with a pure splice. If the description starts with `## Definition` and contains `\n---\n\n## Original description\n`, the part above the separator is replaced; otherwise the definition, the separator, the heading and the old description are concatenated.
+3. Compose the new description with a pure splice. If the description starts with `## Definition` and contains `\n---\n\n## Original description\n`, the part above the separator is replaced; otherwise the definition, the separator, the heading and the old description are concatenated. A definition that does not start with `## Definition` gets that heading and a blank line prepended first, because the detection of an earlier grill keys on the heading.
 4. Write the description through a file in the attempt directory, then read it back and compare it with trailing whitespace normalised.
 5. Read the comments. When none starts with this attempt's header line, post the comment from a file in the attempt directory. Then read the comments back and find the header.
 6. Write the receipt `persisted.json` (`autonomous.persisted.v1`: attempt, task, time, header) atomically.
@@ -89,7 +89,7 @@ Transition mode and the transition answer list the attempt records, read-only an
 
 - Beads: status `closed`;
 - GitHub: state `CLOSED`;
-- Linear: state type `completed` or `canceled`, or state name `duplicate`, reusing `isExcluded`.
+- Linear: state type `completed` or `canceled`, or state name `duplicate`, reusing `isExcluded`. `linear issue view --json` has no state type, so Linear's `readTask` reads it with one read-only `linear api` GraphQL query after the view (`query($id: String!) { issue(id: $id) { state { type } } }`, `--variable id=<id>`); a failed or malformed query fails `readTask`. `listTasks` already has the type from `issue query`.
 
 The grill-me `completed(task)` is `task.closed`, or the task carries `proposal`, no `grill-me`, and `AFK` or `HITL`. Nothing else reads `closed` in this change.
 

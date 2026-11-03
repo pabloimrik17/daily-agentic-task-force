@@ -337,7 +337,7 @@ describe("reconcile: completion needs two proofs", () => {
     });
 
     it("does not complete a stage without an implementation", async () => {
-        const unknown = record({ id: "linear:DOT-109:grill-me:1", stage: "grill-me" });
+        const unknown = record({ id: "linear:DOT-109:proposal:1", stage: "proposal" });
         await given(unknown);
         await marker(unknown.id);
         const sessions = fakeSessions({
@@ -350,7 +350,7 @@ describe("reconcile: completion needs two proofs", () => {
             action: "retained",
         });
         expect((await stored(unknown.id)).retained?.reason).toBe(
-            "session stopped; stage grill-me has no implementation",
+            "session stopped; stage proposal has no implementation",
         );
     });
 

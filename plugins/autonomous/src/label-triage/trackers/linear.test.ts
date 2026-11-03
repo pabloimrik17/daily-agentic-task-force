@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 
 import type { LinearConfig } from "../../config.ts";
 import type { Exec, ExecResult } from "../../exec.ts";
+import comments from "./fixtures/linear-comments.json";
 import { linearTracker } from "./linear.ts";
 
 const CONFIG: LinearConfig = { enabled: true };
@@ -57,6 +58,7 @@ describe("linearTracker", () => {
                         labels: ["bug"],
                         status: "Triage",
                         updatedAt: "2026-09-20T13:29:02Z",
+                        closed: false,
                     },
                 ],
             });
@@ -159,21 +161,39 @@ describe("linearTracker", () => {
     });
 
     describe("readTask", () => {
-        it("reads one issue with the exact argv, description and no guaranteed updatedAt", async () => {
-            const exec = fakeExec(() => ({
+        const VIEW = {
+            identifier: "DOT-82",
+            title: "some task",
+            description: "the body",
+            state: { name: "Triage", color: "#000" },
+            labels: { nodes: [{ name: "bug", color: "#eb5757" }] },
+        };
+
+        function typeReply(type: string): string {
+            return JSON.stringify({ data: { issue: { state: { type } } } });
+        }
+
+        function readExec(view: unknown, type: string) {
+            return fakeExec((args) => ({
                 ok: true,
-                stdout: JSON.stringify({
-                    identifier: "DOT-82",
-                    title: "some task",
-                    description: "the body",
-                    state: { name: "Triage", color: "#000" },
-                    labels: { nodes: [{ name: "bug", color: "#eb5757" }] },
-                }),
+                stdout: args[0] === "api" ? typeReply(type) : JSON.stringify(view),
             }));
+        }
+
+        it("reads one issue with the view, then the state type, with the exact argv", async () => {
+            const exec = readExec(VIEW, "triage");
             const tracker = linearTracker(exec, CONFIG);
             const result = await tracker.readTask("DOT-82");
 
-            expect(exec.calls).toEqual([["issue", "view", "DOT-82", "--no-comments", "--json"]]);
+            expect(exec.calls).toEqual([
+                ["issue", "view", "DOT-82", "--no-comments", "--json"],
+                [
+                    "api",
+                    "query($id: String!) { issue(id: $id) { state { type } } }",
+                    "--variable",
+                    "id=DOT-82",
+                ],
+            ]);
             expect(result).toEqual({
                 ok: true,
                 value: {
@@ -184,25 +204,105 @@ describe("linearTracker", () => {
                     labels: ["bug"],
                     status: "Triage",
                     updatedAt: "",
+                    closed: false,
                 },
             });
         });
 
+        it.each([
+            ["an open task", { name: "In Progress", color: "#000" }, "started", false],
+            ["a task in Done", { name: "Done", color: "#000" }, "completed", true],
+            ["a task in Canceled", { name: "Canceled", color: "#000" }, "canceled", true],
+            ["a task in Duplicate", { name: "Duplicate", color: "#000" }, "canceled", true],
+            [
+                "a task in Duplicate that is not canceled",
+                { name: "Duplicate", color: "#000" },
+                "unstarted",
+                true,
+            ],
+            ["a task in duplicate, whatever the case", { name: "duplicate" }, "backlog", true],
+            ["a task in Triage", { name: "Triage", color: "#000" }, "triage", false],
+        ])("reads %s: closed is %s", async (_label, state, type, closed) => {
+            const exec = readExec({ ...VIEW, state }, type);
+            const result = await linearTracker(exec, CONFIG).readTask("DOT-82");
+
+            expect(result.ok && result.value.closed).toBe(closed);
+        });
+
         it("allows a null description", async () => {
-            const exec = fakeExec(() => ({
-                ok: true,
-                stdout: JSON.stringify({
-                    identifier: "DOT-82",
-                    title: "some task",
-                    description: null,
-                    state: { name: "Triage", color: "#000" },
-                    labels: { nodes: [] },
-                }),
-            }));
+            const exec = readExec({ ...VIEW, description: null }, "triage");
             const tracker = linearTracker(exec, CONFIG);
             const result = await tracker.readTask("DOT-82");
 
             expect(result.ok && result.value.description).toBeNull();
+        });
+
+        it("fails naming the view command and skips the state type", async () => {
+            const exec = fakeExec(() => ({ ok: false, error: "linear failed: boom" }));
+            const result = await linearTracker(exec, CONFIG).readTask("DOT-82");
+
+            expect(exec.calls).toHaveLength(1);
+            expect(result).toEqual({
+                ok: false,
+                error: "linear issue view DOT-82: linear failed: boom",
+            });
+        });
+
+        it("fails naming the api command when the state type call exits non-zero", async () => {
+            const exec = fakeExec((args) =>
+                args[0] === "api"
+                    ? { ok: false, error: "linear failed: boom" }
+                    : { ok: true, stdout: JSON.stringify(VIEW) },
+            );
+            const result = await linearTracker(exec, CONFIG).readTask("DOT-82");
+
+            expect(result).toEqual({
+                ok: false,
+                error: "linear api issue --variable id=DOT-82: linear failed: boom",
+            });
+        });
+
+        it("reports the unauthenticated case from the api call", async () => {
+            const exec = fakeExec((args) =>
+                args[0] === "api"
+                    ? { ok: false, error: "linear failed: No API key configured." }
+                    : { ok: true, stdout: JSON.stringify(VIEW) },
+            );
+            const result = await linearTracker(exec, CONFIG).readTask("DOT-82");
+
+            expect(result).toEqual({
+                ok: false,
+                error: "linear api issue --variable id=DOT-82: Linear CLI is not authenticated, run `linear auth login`",
+            });
+        });
+
+        it.each([
+            ["output that is not JSON", "not json", /^output is not valid JSON: /],
+            [
+                "an issue that is null",
+                JSON.stringify({ data: { issue: null } }),
+                /^output does not match the expected shape: \$\.data\.issue must be an object/,
+            ],
+            [
+                "a state without a type",
+                JSON.stringify({ data: { issue: { state: {} } } }),
+                /^output does not match the expected shape: \$\.data\.issue\.state\.type/,
+            ],
+            [
+                "a type that is not a string",
+                JSON.stringify({ data: { issue: { state: { type: 3 } } } }),
+                /^output does not match the expected shape: \$\.data\.issue\.state\.type/,
+            ],
+        ])("fails naming the api command for %s", async (_label, stdout, message) => {
+            const exec = fakeExec((args) => ({
+                ok: true,
+                stdout: args[0] === "api" ? stdout : JSON.stringify(VIEW),
+            }));
+            const result = await linearTracker(exec, CONFIG).readTask("DOT-82");
+
+            const prefix = "linear api issue --variable id=DOT-82: ";
+            expect(!result.ok && result.error.startsWith(prefix)).toBe(true);
+            expect(!result.ok && result.error.slice(prefix.length)).toMatch(message);
         });
     });
 
@@ -252,6 +352,146 @@ describe("linearTracker", () => {
             expect(result).toEqual({
                 ok: false,
                 error: "linear issue update DOT-82 --remove-label taken: Linear CLI is not authenticated, run `linear auth login`",
+            });
+        });
+    });
+
+    describe("updateDescription", () => {
+        it("replaces the description from a file with the exact argv", async () => {
+            const exec = fakeExec(() => ({ ok: true, stdout: "" }));
+            const tracker = linearTracker(exec, CONFIG);
+            const result = await tracker.updateDescription("DOT-82", "/state/a/d.md");
+
+            expect(exec.calls).toEqual([
+                ["issue", "update", "DOT-82", "--description-file", "/state/a/d.md"],
+            ]);
+            expect(result).toEqual({ ok: true, value: undefined });
+        });
+
+        it("maps the unauthenticated case naming linear auth login", async () => {
+            const exec = fakeExec(() => ({
+                ok: false,
+                error: "linear failed: Run `linear auth login` to authenticate.",
+            }));
+            const result = await linearTracker(exec, CONFIG).updateDescription("DOT-82", "/s/d.md");
+
+            expect(result).toEqual({
+                ok: false,
+                error: "linear issue update DOT-82 --description-file /s/d.md: Linear CLI is not authenticated, run `linear auth login`",
+            });
+        });
+
+        it("reports a CLI error naming the command", async () => {
+            const exec = fakeExec(() => ({ ok: false, error: "linear failed: boom" }));
+            const result = await linearTracker(exec, CONFIG).updateDescription("DOT-82", "/s/d.md");
+
+            expect(result).toEqual({
+                ok: false,
+                error: "linear issue update DOT-82 --description-file /s/d.md: linear failed: boom",
+            });
+        });
+    });
+
+    describe("addComment", () => {
+        it("posts the comment from a file with the exact argv", async () => {
+            const exec = fakeExec(() => ({ ok: true, stdout: "" }));
+            const tracker = linearTracker(exec, CONFIG);
+            const result = await tracker.addComment("DOT-82", "/state/a/c.md");
+
+            expect(exec.calls).toEqual([
+                ["issue", "comment", "add", "DOT-82", "--body-file", "/state/a/c.md"],
+            ]);
+            expect(result).toEqual({ ok: true, value: undefined });
+        });
+
+        it("reports a CLI error naming the command", async () => {
+            const exec = fakeExec(() => ({ ok: false, error: "linear failed: boom" }));
+            const result = await linearTracker(exec, CONFIG).addComment("DOT-82", "/s/c.md");
+
+            expect(result).toEqual({
+                ok: false,
+                error: "linear issue comment add DOT-82 --body-file /s/c.md: linear failed: boom",
+            });
+        });
+    });
+
+    describe("readComments", () => {
+        it("reads a recorded comment listing into bodies with the exact argv", async () => {
+            const exec = fakeExec(() => ({ ok: true, stdout: JSON.stringify(comments) }));
+            const result = await linearTracker(exec, CONFIG).readComments("DOT-82");
+
+            expect(exec.calls).toEqual([["issue", "comment", "list", "DOT-82", "--json"]]);
+            expect(result).toEqual({
+                ok: true,
+                value: ["First comment body.", "Second comment body.\n\nWith a second paragraph."],
+            });
+        });
+
+        it("returns the bodies oldest first whatever order the CLI prints them in", async () => {
+            const exec = fakeExec(() => ({
+                ok: true,
+                stdout: JSON.stringify({ ...comments, nodes: [...comments.nodes].reverse() }),
+            }));
+            const result = await linearTracker(exec, CONFIG).readComments("DOT-82");
+
+            expect(result.ok && result.value[0]).toBe("First comment body.");
+        });
+
+        it("reads an issue without comments as an empty list", async () => {
+            const exec = fakeExec(() => ({
+                ok: true,
+                stdout: JSON.stringify({
+                    nodes: [],
+                    pageInfo: { hasNextPage: false, endCursor: null },
+                }),
+            }));
+            const result = await linearTracker(exec, CONFIG).readComments("DOT-82");
+
+            expect(result).toEqual({ ok: true, value: [] });
+        });
+
+        it("fails rather than return a partial listing when another page exists", async () => {
+            const exec = fakeExec(() => ({
+                ok: true,
+                stdout: JSON.stringify({
+                    ...comments,
+                    pageInfo: { hasNextPage: true, endCursor: "next" },
+                }),
+            }));
+            const result = await linearTracker(exec, CONFIG).readComments("DOT-82");
+
+            expect(result).toEqual({
+                ok: false,
+                error: "linear issue comment list DOT-82: more than one page of comments; the listing would be incomplete",
+            });
+        });
+
+        it("maps the unauthenticated case naming linear auth login", async () => {
+            const exec = fakeExec(() => ({
+                ok: false,
+                error: "linear failed: Run `linear auth login` to authenticate.",
+            }));
+            const result = await linearTracker(exec, CONFIG).readComments("DOT-82");
+
+            expect(result).toEqual({
+                ok: false,
+                error: "linear issue comment list DOT-82: Linear CLI is not authenticated, run `linear auth login`",
+            });
+        });
+
+        it("reports the wrong shape naming the command and the JSON path", async () => {
+            const exec = fakeExec(() => ({
+                ok: true,
+                stdout: JSON.stringify({
+                    nodes: [{ createdAt: "x" }],
+                    pageInfo: { hasNextPage: false },
+                }),
+            }));
+            const result = await linearTracker(exec, CONFIG).readComments("DOT-82");
+
+            expect(result).toEqual({
+                ok: false,
+                error: "linear issue comment list DOT-82: output does not match the expected shape: $.nodes[0].body must be a string",
             });
         });
     });

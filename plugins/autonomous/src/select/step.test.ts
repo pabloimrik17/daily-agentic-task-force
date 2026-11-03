@@ -24,7 +24,7 @@ const EMPTY: SelectData = {
     comparison: null,
 };
 
-const GITHUB_NOTE = ["github: dependencies and children"];
+const GITHUB_NOTE = ["github: dependencies"];
 
 const withoutGithub = (): AutonomousConfig => {
     const settings = config();

@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 
 import type { GithubConfig } from "../../config.ts";
 import type { Exec, ExecResult } from "../../exec.ts";
+import comments from "./fixtures/github-comments.json";
 import { githubTracker } from "./github.ts";
 
 const CONFIG: GithubConfig = { enabled: true, repos: ["pabloimrik17/monolab"] };
@@ -60,6 +61,7 @@ describe("githubTracker", () => {
                         labels: ["bug"],
                         status: "OPEN",
                         updatedAt: "2026-09-20T13:29:02Z",
+                        closed: false,
                     },
                 ],
             });
@@ -192,8 +194,22 @@ describe("githubTracker", () => {
                     labels: ["bug"],
                     status: "OPEN",
                     updatedAt: "2026-09-20T13:29:02Z",
+                    closed: false,
                 },
             });
+        });
+
+        it("reads an issue whose state is CLOSED as closed", async () => {
+            const exec = fakeExec(() => ({
+                ok: true,
+                stdout: JSON.stringify({ ...ISSUE_FIXTURE, state: "CLOSED" }),
+            }));
+            const result = await githubTracker(exec, CONFIG).readTask("pabloimrik17/monolab#296");
+
+            expect(result.ok && [result.value.status, result.value.closed]).toEqual([
+                "CLOSED",
+                true,
+            ]);
         });
 
         it("errors on a malformed id", async () => {
@@ -286,6 +302,156 @@ describe("githubTracker", () => {
                 ok: false,
                 error: "no-hash-here is not a valid GitHub task id",
             });
+        });
+    });
+
+    describe("updateDescription", () => {
+        it("replaces the body from a file with the exact argv", async () => {
+            const exec = fakeExec(() => ({ ok: true, stdout: "" }));
+            const tracker = githubTracker(exec, CONFIG);
+            const result = await tracker.updateDescription(
+                "pabloimrik17/monolab#296",
+                "/state/a/d.md",
+            );
+
+            expect(exec.calls).toEqual([
+                [
+                    "issue",
+                    "edit",
+                    "296",
+                    "--repo",
+                    "pabloimrik17/monolab",
+                    "--body-file",
+                    "/state/a/d.md",
+                ],
+            ]);
+            expect(result).toEqual({ ok: true, value: undefined });
+        });
+
+        it("reports a CLI error naming the command", async () => {
+            const exec = fakeExec(() => ({ ok: false, error: "gh failed: boom" }));
+            const tracker = githubTracker(exec, CONFIG);
+            const result = await tracker.updateDescription("pabloimrik17/monolab#296", "/s/d.md");
+
+            expect(result).toEqual({
+                ok: false,
+                error: "gh issue edit 296 --repo pabloimrik17/monolab --body-file /s/d.md: gh failed: boom",
+            });
+        });
+
+        it("errors on a malformed id", async () => {
+            const exec = fakeExec(() => ({ ok: true, stdout: "" }));
+            const result = await githubTracker(exec, CONFIG).updateDescription(
+                "no-hash",
+                "/s/d.md",
+            );
+
+            expect(exec.calls).toEqual([]);
+            expect(result).toEqual({ ok: false, error: "no-hash is not a valid GitHub task id" });
+        });
+    });
+
+    describe("addComment", () => {
+        it("posts the comment from a file with the exact argv", async () => {
+            const exec = fakeExec(() => ({ ok: true, stdout: "" }));
+            const tracker = githubTracker(exec, CONFIG);
+            const result = await tracker.addComment("pabloimrik17/monolab#296", "/state/a/c.md");
+
+            expect(exec.calls).toEqual([
+                [
+                    "issue",
+                    "comment",
+                    "296",
+                    "--repo",
+                    "pabloimrik17/monolab",
+                    "--body-file",
+                    "/state/a/c.md",
+                ],
+            ]);
+            expect(result).toEqual({ ok: true, value: undefined });
+        });
+
+        it("reports a CLI error naming the command", async () => {
+            const exec = fakeExec(() => ({ ok: false, error: "gh failed: boom" }));
+            const tracker = githubTracker(exec, CONFIG);
+            const result = await tracker.addComment("pabloimrik17/monolab#296", "/s/c.md");
+
+            expect(result).toEqual({
+                ok: false,
+                error: "gh issue comment 296 --repo pabloimrik17/monolab --body-file /s/c.md: gh failed: boom",
+            });
+        });
+
+        it("errors on a malformed id", async () => {
+            const exec = fakeExec(() => ({ ok: true, stdout: "" }));
+            const result = await githubTracker(exec, CONFIG).addComment("no-hash", "/s/c.md");
+
+            expect(exec.calls).toEqual([]);
+            expect(result).toEqual({ ok: false, error: "no-hash is not a valid GitHub task id" });
+        });
+    });
+
+    describe("readComments", () => {
+        it("reads a recorded comment listing into bodies with the exact argv", async () => {
+            const exec = fakeExec(() => ({ ok: true, stdout: JSON.stringify(comments) }));
+            const tracker = githubTracker(exec, CONFIG);
+            const result = await tracker.readComments("pabloimrik17/monolab#296");
+
+            expect(exec.calls).toEqual([
+                ["issue", "view", "296", "--repo", "pabloimrik17/monolab", "--json", "comments"],
+            ]);
+            expect(result).toEqual({
+                ok: true,
+                value: ["First comment body.", "Second comment body.\n\nWith a second paragraph."],
+            });
+        });
+
+        it("returns the bodies oldest first whatever order the CLI prints them in", async () => {
+            const exec = fakeExec(() => ({
+                ok: true,
+                stdout: JSON.stringify({ comments: [...comments.comments].reverse() }),
+            }));
+            const result = await githubTracker(exec, CONFIG).readComments("pabloimrik17/monolab#1");
+
+            expect(result.ok && result.value[0]).toBe("First comment body.");
+        });
+
+        it("reads an issue without comments as an empty list", async () => {
+            const exec = fakeExec(() => ({ ok: true, stdout: '{"comments":[]}' }));
+            const result = await githubTracker(exec, CONFIG).readComments("pabloimrik17/monolab#1");
+
+            expect(result).toEqual({ ok: true, value: [] });
+        });
+
+        it("reports a CLI error naming the command", async () => {
+            const exec = fakeExec(() => ({ ok: false, error: "gh failed: boom" }));
+            const result = await githubTracker(exec, CONFIG).readComments("pabloimrik17/monolab#1");
+
+            expect(result).toEqual({
+                ok: false,
+                error: "gh issue view 1 --repo pabloimrik17/monolab --json comments: gh failed: boom",
+            });
+        });
+
+        it("reports the wrong shape naming the command and the JSON path", async () => {
+            const exec = fakeExec(() => ({
+                ok: true,
+                stdout: JSON.stringify({ comments: [{ createdAt: "2026-01-01T10:00:00Z" }] }),
+            }));
+            const result = await githubTracker(exec, CONFIG).readComments("pabloimrik17/monolab#1");
+
+            expect(result).toEqual({
+                ok: false,
+                error: "gh issue view 1 --repo pabloimrik17/monolab --json comments: output does not match the expected shape: $.comments[0].body must be a string",
+            });
+        });
+
+        it("errors on a malformed id", async () => {
+            const exec = fakeExec(() => ({ ok: true, stdout: "" }));
+            const result = await githubTracker(exec, CONFIG).readComments("no-hash");
+
+            expect(exec.calls).toEqual([]);
+            expect(result).toEqual({ ok: false, error: "no-hash is not a valid GitHub task id" });
         });
     });
 

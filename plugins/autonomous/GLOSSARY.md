@@ -6,9 +6,9 @@ attempt to advance a stage.
 
 Labels come in three groups: scope, autonomy and stage. Scope and autonomy are
 properties that persist, and each transition replaces the stage
-([ADR 0001](docs/adr/0001-properties-persist-stages-replace.md)). The stage
-prompts and the grill stage itself are not implemented yet: they are change 2
-of DOT-110.
+([ADR 0001](docs/adr/0001-properties-persist-stages-replace.md)). The grill
+stage is implemented (see [the README](README.md#the-grill-me-stage)); the
+prompts of the stages after it are not.
 
 ## Language
 
@@ -95,9 +95,10 @@ acts only on managed sessions; a session made by hand is never touched, even
 when it shares a workspace path with an attempt.
 
 **Stage contract**:
-What a stage declares: its id, its emoji, its prompt for a task, its agent
-arguments and its completion check against the task's tracker. A stage can be
-launched only when an implementation is registered for its id.
+What a stage declares: its id, its emoji, its prerequisites, its prompt for a
+task, its agent arguments and its completion check against the task's tracker.
+A stage can be launched only when an implementation is registered for its id
+and its prerequisites hold; what they read at launch is passed to its prompt.
 
 **Workspace**:
 The git worktree of a task's repository, on the branch

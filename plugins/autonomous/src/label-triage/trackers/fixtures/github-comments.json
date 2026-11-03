@@ -1,0 +1,30 @@
+{
+    "comments": [
+        {
+            "id": "IC_exampleFirst",
+            "author": { "login": "example-user" },
+            "authorAssociation": "CONTRIBUTOR",
+            "body": "First comment body.",
+            "createdAt": "2026-01-01T10:00:00Z",
+            "includesCreatedEdit": false,
+            "isMinimized": false,
+            "minimizedReason": "",
+            "reactionGroups": [],
+            "url": "https://github.com/example-owner/example-repo/issues/1#issuecomment-1",
+            "viewerDidAuthor": false
+        },
+        {
+            "id": "IC_exampleSecond",
+            "author": { "login": "example-user" },
+            "authorAssociation": "CONTRIBUTOR",
+            "body": "Second comment body.\n\nWith a second paragraph.",
+            "createdAt": "2026-01-01T11:00:00Z",
+            "includesCreatedEdit": false,
+            "isMinimized": false,
+            "minimizedReason": "",
+            "reactionGroups": [],
+            "url": "https://github.com/example-owner/example-repo/issues/1#issuecomment-2",
+            "viewerDidAuthor": false
+        }
+    ]
+}

@@ -19,8 +19,9 @@ Selection already picks `grill-me` work units, but launch waits on them with "st
         5. show the ticket;
         6. run the transition;
         7. write the result marker.
+    - When the human closes the task instead of defining it, the session skips steps 2 to 6 and writes the result marker, so reconcile finalises the attempt.
     - The prompt forbids proposal preparation in the same session.
-    - For a GitHub task, the prompt forbids absolute paths and other machine details in the stage summary.
+    - For a GitHub task, the prompt forbids absolute paths and other machine details in the definition and in the stage summary.
 - **Persist mode.**
     - `--apply --persist <attempt-id>` runs no step. It writes the definition at the top of the task's description, above `---` and `## Original description` followed by the original text; a new grill replaces only the part above the separator.
     - It posts the stage summary as a comment whose first line is `autonomous · grill-me · <attempt-id> · definition saved`.

@@ -14,6 +14,7 @@ import {
 import type { Trackers } from "../label-triage/trackers/tracker.ts";
 import { buildHandoff, type Handoff, renderHandoffLine } from "../report.ts";
 import type { HandoffOption, HandoffQuestion } from "../runner.ts";
+import { awaitedDetail, awaitedReceipt } from "./receipt.ts";
 
 export const TRANSITION = "transition";
 
@@ -46,6 +47,7 @@ export interface TransitionReport {
 export interface TransitionDeps {
     config: AutonomousConfig;
     trackers: Trackers;
+    state: string; // where the attempts are read, without the run lock
 }
 
 const MAX_HEADER = 12;
@@ -114,6 +116,13 @@ export async function runTransition(
     if (!labels.includes(FROM_STAGE)) {
         const reason = `${source} ${id} is not in ${FROM_STAGE} (labels [${labels.join(", ")}])`;
         return { ...report, task, reasons: [reason] };
+    }
+    const awaited = await awaitedReceipt(deps.state, ref);
+    if (!awaited.ok) {
+        return { ...report, task, reasons: [awaited.error] };
+    }
+    if (awaited.value !== null) {
+        return { ...report, task, reasons: [awaitedDetail(awaited.value)] };
     }
     const handoff = buildHandoff([transitionQuestion(ref, task)]);
     return { ...report, outcome: "advance", task, handoff };

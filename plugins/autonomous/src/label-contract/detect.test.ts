@@ -17,6 +17,7 @@ const task = (labels: string[], overrides: Partial<TrackerTask> = {}): TrackerTa
     labels,
     status: "open",
     updatedAt: "",
+    closed: false,
     ...overrides,
 });
 

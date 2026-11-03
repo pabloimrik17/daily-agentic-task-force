@@ -1,11 +1,14 @@
 import { describe, expect, it, vi } from "vitest";
 
+import type { Exec } from "../exec.ts";
 import { LABEL_TRIAGE } from "../label-triage/question-id.ts";
 import type { LabelTriageData } from "../label-triage/step.ts";
 import { config } from "../label-triage/test-fixtures.ts";
 import { taskKey, type TriageRecord } from "../label-triage/write.ts";
 import type { StepResult } from "../runner.ts";
 import { labelledThisRun, selectCandidates } from "./candidates.ts";
+import subIssues from "./readers/fixtures/github-subissues.json";
+import { githubWorkReader } from "./readers/github.ts";
 import { workTask } from "./test-fixtures.ts";
 import type { WorkTask } from "./types.ts";
 
@@ -19,6 +22,27 @@ function evaluate(
         detail: (task) => Promise.resolve({ ok: true, value: task }),
         ...overrides,
     });
+}
+
+// `output` is what `gh issue view --json subIssues` prints for the issue.
+async function githubIssue(output: unknown) {
+    const issue = {
+        number: 1,
+        title: "Synthetic issue",
+        body: "",
+        labels: [{ name: "personal" }, { name: "grill-me" }],
+        updatedAt: "2026-01-01T00:00:00Z",
+        state: "OPEN",
+    };
+    const exec: Exec = (args) =>
+        Promise.resolve({
+            ok: true,
+            stdout: JSON.stringify(args[1] === "list" ? [issue] : output),
+        });
+    const reader = githubWorkReader(exec, { enabled: true, repos: ["owner/repo"] });
+    const listed = await reader.list();
+    if (!listed.ok) throw new Error(listed.error);
+    return { tasks: listed.value, detail: (task: WorkTask) => reader.detail(task) };
 }
 
 function triageResult(records: TriageRecord[]): StepResult<LabelTriageData> {
@@ -229,16 +253,32 @@ describe("selectCandidates", () => {
         });
     });
 
-    it("does not exclude GitHub's unevaluated dependencies and children", async () => {
-        const task = workTask("github", "owner/repo#1", undefined, {
-            priority: null,
-            blockedBy: null,
-            children: null,
-        });
+    it("does not exclude a GitHub task as blocked, its dependencies being unevaluated", async () => {
+        const { tasks, detail } = await githubIssue({ subIssues: { nodes: [], totalCount: 0 } });
 
-        expect(await evaluate([task])).toMatchObject({
+        expect(tasks[0]).toMatchObject({ blockedBy: null });
+        expect(await evaluate(tasks, { detail })).toMatchObject({
             ok: true,
-            value: { candidates: [{ task }], excluded: [] },
+            value: { candidates: [{ task: { id: "owner/repo#1", children: [] } }], excluded: [] },
+        });
+    });
+
+    it("excludes a GitHub issue with an open sub-issue as split", async () => {
+        const { tasks, detail } = await githubIssue(subIssues);
+
+        expect(await evaluate(tasks, { detail })).toEqual({
+            ok: true,
+            value: {
+                candidates: [],
+                excluded: [
+                    {
+                        source: "github",
+                        id: "owner/repo#1",
+                        title: "Synthetic issue",
+                        reason: "split",
+                    },
+                ],
+            },
         });
     });
 

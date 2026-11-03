@@ -74,6 +74,20 @@ export function capturePath(dir: string): string {
     return join(dir, "capture.txt");
 }
 
+// The grill-me stage's files: the agent writes the definition and the stage summary,
+// persist mode writes the receipt once both are in the tracker and read back.
+export function definitionPath(dir: string): string {
+    return join(dir, "definition.md");
+}
+
+export function stageSummaryPath(dir: string): string {
+    return join(dir, "stage-summary.md");
+}
+
+export function receiptPath(dir: string): string {
+    return join(dir, "persisted.json");
+}
+
 // A temporary file and a rename, so a reader never sees a partial file.
 export async function writeJsonAtomic(file: string, value: unknown): Promise<void> {
     await mkdir(dirname(file), { recursive: true });
