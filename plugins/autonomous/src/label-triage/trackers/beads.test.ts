@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest";
 import type { BeadsConfig } from "../../config.ts";
 import type { Exec, ExecResult } from "../../exec.ts";
 import { beadsTracker } from "./beads.ts";
+import comments from "./fixtures/beads-comments.json";
 
 const CONFIG: BeadsConfig = { enabled: true, directory: "/repo/.beads" };
 
@@ -65,6 +66,7 @@ describe("beadsTracker", () => {
                         labels: ["human", "security", "validation", "zod"],
                         status: "in_progress",
                         updatedAt: "2026-09-24T13:53:15Z",
+                        closed: false,
                     },
                     {
                         source: "beads",
@@ -74,6 +76,7 @@ describe("beadsTracker", () => {
                         labels: [],
                         status: "open",
                         updatedAt: "2026-09-20T10:00:00Z",
+                        closed: false,
                     },
                 ],
             });
@@ -166,6 +169,27 @@ describe("beadsTracker", () => {
             expect(result.ok && result.value.id).toBe("agentic-task-kc2.29");
         });
 
+        it("reads an in-progress task as not closed", async () => {
+            const exec = fakeExec(() => ({ ok: true, stdout: JSON.stringify([LIST_FIXTURE[0]]) }));
+            const result = await beadsTracker(exec, CONFIG).readTask("agentic-task-kc2.29");
+
+            expect(result.ok && [result.value.status, result.value.closed]).toEqual([
+                "in_progress",
+                false,
+            ]);
+        });
+
+        it("reads a task whose status is closed as closed", async () => {
+            const closedTask = { id: "x", title: "done", status: "closed", updated_at: "" };
+            const exec = fakeExec(() => ({ ok: true, stdout: JSON.stringify([closedTask]) }));
+            const result = await beadsTracker(exec, CONFIG).readTask("x");
+
+            expect(result.ok && [result.value.status, result.value.closed]).toEqual([
+                "closed",
+                true,
+            ]);
+        });
+
         it("errors when the array does not hold exactly one element", async () => {
             const exec = fakeExec(() => ({ ok: true, stdout: JSON.stringify(LIST_FIXTURE) }));
             const tracker = beadsTracker(exec, CONFIG);
@@ -217,6 +241,119 @@ describe("beadsTracker", () => {
             expect(result).toEqual({
                 ok: false,
                 error: "bd label remove x taken: bd failed: boom",
+            });
+        });
+    });
+
+    describe("updateDescription", () => {
+        it("replaces the description from a file with the exact argv", async () => {
+            const exec = fakeExec(() => ({ ok: true, stdout: "" }));
+            const tracker = beadsTracker(exec, CONFIG);
+            const result = await tracker.updateDescription("agentic-task-kc2.29", "/state/a/d.md");
+
+            expect(exec.calls).toEqual([
+                [
+                    "-C",
+                    "/repo/.beads",
+                    "update",
+                    "agentic-task-kc2.29",
+                    "--body-file",
+                    "/state/a/d.md",
+                ],
+            ]);
+            expect(result).toEqual({ ok: true, value: undefined });
+        });
+
+        it("reports a CLI error naming the command", async () => {
+            const exec = fakeExec(() => ({ ok: false, error: "bd failed: boom" }));
+            const result = await beadsTracker(exec, CONFIG).updateDescription("x", "/s/d.md");
+
+            expect(result).toEqual({
+                ok: false,
+                error: "bd update x --body-file /s/d.md: bd failed: boom",
+            });
+        });
+    });
+
+    describe("addComment", () => {
+        it("posts the comment from a file with the exact argv", async () => {
+            const exec = fakeExec(() => ({ ok: true, stdout: "" }));
+            const tracker = beadsTracker(exec, CONFIG);
+            const result = await tracker.addComment("agentic-task-kc2.29", "/state/a/c.md");
+
+            expect(exec.calls).toEqual([
+                [
+                    "-C",
+                    "/repo/.beads",
+                    "comments",
+                    "add",
+                    "agentic-task-kc2.29",
+                    "-f",
+                    "/state/a/c.md",
+                ],
+            ]);
+            expect(result).toEqual({ ok: true, value: undefined });
+        });
+
+        it("reports a CLI error naming the command", async () => {
+            const exec = fakeExec(() => ({ ok: false, error: "bd failed: boom" }));
+            const result = await beadsTracker(exec, CONFIG).addComment("x", "/s/c.md");
+
+            expect(result).toEqual({
+                ok: false,
+                error: "bd comments add x -f /s/c.md: bd failed: boom",
+            });
+        });
+    });
+
+    describe("readComments", () => {
+        it("reads a recorded comment listing into bodies with the exact argv", async () => {
+            const exec = fakeExec(() => ({ ok: true, stdout: JSON.stringify(comments) }));
+            const result = await beadsTracker(exec, CONFIG).readComments("agentic-task-kc2.29");
+
+            expect(exec.calls).toEqual([
+                ["-C", "/repo/.beads", "comments", "agentic-task-kc2.29", "--json"],
+            ]);
+            expect(result).toEqual({
+                ok: true,
+                value: ["First comment body.", "Second comment body.\n\nWith a second paragraph."],
+            });
+        });
+
+        it("returns the bodies oldest first whatever order the CLI prints them in", async () => {
+            const exec = fakeExec(() => ({
+                ok: true,
+                stdout: JSON.stringify([...comments].reverse()),
+            }));
+            const result = await beadsTracker(exec, CONFIG).readComments("x");
+
+            expect(result.ok && result.value[0]).toBe("First comment body.");
+        });
+
+        it("reads a task without comments as an empty list", async () => {
+            const exec = fakeExec(() => ({ ok: true, stdout: "[]" }));
+            const result = await beadsTracker(exec, CONFIG).readComments("x");
+
+            expect(result).toEqual({ ok: true, value: [] });
+        });
+
+        it("reports a CLI error naming the command", async () => {
+            const exec = fakeExec(() => ({ ok: false, error: "bd failed: boom" }));
+            const result = await beadsTracker(exec, CONFIG).readComments("x");
+
+            expect(result).toEqual({ ok: false, error: "bd comments x --json: bd failed: boom" });
+        });
+
+        it("reports the wrong shape naming the command and the JSON path", async () => {
+            const exec = fakeExec(() => ({
+                ok: true,
+                stdout: JSON.stringify([{ created_at: "2026-01-01T10:00:00Z" }]),
+            }));
+            const result = await beadsTracker(exec, CONFIG).readComments("x");
+
+            expect(result).toEqual({
+                ok: false,
+                error: "bd comments x --json: output does not match the expected shape: $[0].text must be a string",
             });
         });
     });

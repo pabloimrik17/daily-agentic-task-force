@@ -3,7 +3,7 @@ import { readdir, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
-import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import type { RunArgs } from "../args.ts";
 import type { ConfigLoad } from "../config.ts";
@@ -14,6 +14,8 @@ import type { RunContext, StepResult } from "../runner.ts";
 import { fakeReader, selectContext, workTask } from "../select/test-fixtures.ts";
 import type { SelectData, SelectedUnit, WorkTask } from "../select/types.ts";
 import type { SessionManager, SessionSpec } from "../sessions/manager.ts";
+import type { StagePrerequisites } from "../stages/stage.ts";
+import { testStage } from "../stages/test.ts";
 import type { WorkspaceManager } from "../workspace/manager.ts";
 import { launchStep } from "./launch.ts";
 import { renderLaunch } from "./launch-render.ts";
@@ -262,18 +264,16 @@ describe("launch: the unit", () => {
 });
 
 describe("launch: preconditions", () => {
+    // parseArgs refuses `--stage proposal` and selection supports grill-me only, so the args are set here.
     it("waits naming a stage without implementation, before any workspace", async () => {
-        const { ctx, workspace, sessions } = setup({
-            ...SELECTED_PATH,
-            results: [selectResult()],
-        });
+        const { ctx, workspace, sessions } = setup({ args: { stage: "proposal" } });
 
         expect(await launchStep.run(ctx)).toMatchObject({
             step: "launch",
             tier: "code",
             outcome: "wait",
-            reasons: ["stage grill-me has no implementation"],
-            data: { stage: "grill-me", repository: null },
+            reasons: ["stage proposal has no implementation"],
+            data: { stage: "proposal", repository: null },
         });
         expect(workspace.calls).toEqual([]);
         expect(sessionCalls(sessions.calls)).toEqual([]);
@@ -336,6 +336,96 @@ describe("launch: preconditions", () => {
             reasons: ["aoe group list --json: exit 1"],
         });
         expect(workspace.calls).toEqual([]);
+    });
+});
+
+describe("launch: stage prerequisites", () => {
+    const REASON = "skill grill-with-docs is not installed";
+
+    afterEach(() => {
+        vi.restoreAllMocks();
+    });
+
+    const prerequisites = (result: StagePrerequisites) =>
+        vi.spyOn(testStage, "prerequisites").mockResolvedValue(result);
+
+    const unmet = () => prerequisites({ ok: false, reason: REASON });
+
+    it("waits with the prerequisite's reason and writes nothing", async () => {
+        unmet();
+        const { ctx, calls, workspace, sessions } = setup();
+
+        expect(await launchStep.run(ctx)).toMatchObject({
+            step: "launch",
+            outcome: "wait",
+            reasons: [REASON],
+            data: { stage: "test", repository: null, workspace: null, attempt: null },
+        });
+        expect(await readdir(state)).toEqual([]);
+        expect(existsSync(promptPath(attemptDir(state, ATTEMPT)))).toBe(false);
+        expect(calls.filter((call) => /addLabel/.test(call))).toEqual([]);
+        expect(sessionCalls(sessions.calls)).toEqual([]);
+        expect(workspace.calls).toEqual([]);
+    });
+
+    it("is checked before the open-attempt and repository checks", async () => {
+        unmet();
+        await writeRecord(state, record());
+        const { ctx } = setup({ details: {} });
+
+        expect((await launchStep.run(ctx)).reasons).toEqual([REASON]);
+    });
+
+    it("is checked in a dry run too", async () => {
+        unmet();
+        const { ctx } = setup({ args: { apply: false } });
+
+        expect(await launchStep.run(ctx)).toMatchObject({ outcome: "wait", reasons: [REASON] });
+    });
+
+    it("lets a dry run advance when the prerequisites hold", async () => {
+        const spy = prerequisites({ ok: true, context: { skill: "BODY" } });
+        const { ctx, workspace } = setup({ args: { apply: false } });
+
+        const result = await launchStep.run(ctx);
+
+        expect(result.outcome).toBe("advance");
+        expect(spy).toHaveBeenCalledOnce();
+        expect(await readdir(state)).toEqual([]);
+        expect(workspace.calls).toEqual([]);
+    });
+
+    it("is given the configured tool and the home directory", async () => {
+        const spy = prerequisites({ ok: true, context: {} });
+        const { ctx } = setup({
+            config: {
+                ok: true,
+                path: "/c.json",
+                defaulted: [],
+                config: {
+                    ...config(),
+                    workspace: { root },
+                    sessions: { tool: "codex", profile: null, binary: null },
+                },
+            },
+        });
+
+        await launchStep.run(ctx);
+
+        expect(spy).toHaveBeenCalledWith({ tool: "codex", home: "/unused/home" });
+    });
+
+    it("hands the context to the prompt, which the prompt file then follows", async () => {
+        prerequisites({ ok: true, context: { skill: "BODY" } });
+        const prompt = vi.spyOn(testStage, "prompt").mockReturnValue("THE PROMPT");
+        const { ctx } = setup();
+
+        await launchStep.run(ctx);
+
+        expect(prompt).toHaveBeenCalledWith(
+            expect.objectContaining({ context: { skill: "BODY" } }),
+        );
+        expect(readFileSync(promptPath(attemptDir(state, ATTEMPT)), "utf8")).toBe("THE PROMPT");
     });
 });
 

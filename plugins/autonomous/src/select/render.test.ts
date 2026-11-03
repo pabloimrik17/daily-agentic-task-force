@@ -59,7 +59,7 @@ const OTHER_SECTIONS = [
     "      linear → DOT-4 → Being worked on",
     "    unsupported stage: 1",
     "      linear → DOT-5 → Write the proposal",
-    "  not evaluated: github: dependencies and children",
+    "  not evaluated: github: dependencies",
     "  comparison: sonnet (high)",
 ];
 
@@ -87,6 +87,22 @@ describe("renderSelect", () => {
         );
     });
 
+    it("says that dependencies were not evaluated for GitHub, and keeps its task out of the blocked", async () => {
+        const calls: string[] = [];
+        const result = await selectStep.run(
+            selectContext({
+                calls,
+                readers: [fakeReader("github", [workTask("github", "owner/repo#1")], calls)],
+            }),
+        );
+        const lines = selectStep.render(result).split("\n");
+        expect(lines).toContain("  not evaluated: github: dependencies");
+        expect(lines).toContain(
+            "    github → owner/repo#1 → Task owner/repo#1 (personal, grill-me)",
+        );
+        expect(lines.join("\n")).not.toMatch(/blocked|children/);
+    });
+
     it("gives the autonomy of a selected grill task without one as none", async () => {
         const calls: string[] = [];
         const result = await selectStep.run(
@@ -112,7 +128,7 @@ describe("renderSelect", () => {
                 "    explanation  It was the only candidate.",
                 "  candidates: 1 task",
                 "    linear → DOT-1 → Task DOT-1 (personal, grill-me)",
-                "  not evaluated: github: dependencies and children",
+                "  not evaluated: github: dependencies",
                 "  reasons:",
                 "    - selected linear → DOT-1 for grill-me, from 1 candidate",
             ].join("\n"),
@@ -175,7 +191,7 @@ describe("renderSelect", () => {
                 "      beads → B-1 → Task B-1",
                 "      beads → B-2 → Task B-2",
                 "      beads → B-3 → Task B-3",
-                "  not evaluated: github: dependencies and children",
+                "  not evaluated: github: dependencies",
                 "  reasons:",
                 "    - 1 taken",
                 "    - 3 unsupported stage",

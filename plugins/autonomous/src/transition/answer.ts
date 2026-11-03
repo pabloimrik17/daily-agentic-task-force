@@ -10,6 +10,7 @@ import type { Tracker, TrackerResult } from "../label-triage/trackers/tracker.ts
 import { labelCheckFor, missingLabelDetail, READ_BACK_MISMATCH } from "../label-triage/write.ts";
 import type { AnswerContext, AnswerRecord, AnswerStatus } from "../runner.ts";
 import { AUTONOMY_OPTIONS, FROM_STAGE, parseTransitionId, TO_STAGE, TRANSITION } from "./mode.ts";
+import { awaitedDetail, awaitedReceipt } from "./receipt.ts";
 
 interface Moving {
     tracker: Tracker;
@@ -33,19 +34,21 @@ const ANSWER_AGAIN = `; ${FROM_STAGE} may remain beside ${TO_STAGE}, answering a
 
 const list = (labels: readonly string[]) => `[${labels.join(", ")}]`;
 
-export const transitionHandler: AnswerHandler = {
-    id: TRANSITION,
-    async answer(answers: readonly Answer[], ctx: AnswerContext): Promise<AnswerRecord[]> {
-        const records: AnswerRecord[] = [];
-        for (const answer of answers) {
-            const { status, detail } = await settle(answer, ctx);
-            records.push({ id: answer.id, labels: [...answer.values], status, detail });
-        }
-        return records;
-    },
-};
+export function transitionHandler(state: string): AnswerHandler {
+    return {
+        id: TRANSITION,
+        async answer(answers: readonly Answer[], ctx: AnswerContext): Promise<AnswerRecord[]> {
+            const records: AnswerRecord[] = [];
+            for (const answer of answers) {
+                const { status, detail } = await settle(answer, ctx, state);
+                records.push({ id: answer.id, labels: [...answer.values], status, detail });
+            }
+            return records;
+        },
+    };
+}
 
-async function settle(answer: Answer, ctx: AnswerContext): Promise<Settlement> {
+async function settle(answer: Answer, ctx: AnswerContext, state: string): Promise<Settlement> {
     const parsed = parseTransitionId(answer.id);
     if (!parsed.ok) {
         return { status: "rejected", detail: parsed.error };
@@ -66,6 +69,13 @@ async function settle(answer: Answer, ctx: AnswerContext): Promise<Settlement> {
     const before = [...read.value.labels];
     if (!before.includes(FROM_STAGE)) {
         return { status: "skipped", detail: `already moved on: stage ${list(stageOf(before))}` };
+    }
+    const awaited = await awaitedReceipt(state, ref);
+    if (!awaited.ok) {
+        return { status: "failed", detail: awaited.error };
+    }
+    if (awaited.value !== null) {
+        return { status: "rejected", detail: awaitedDetail(awaited.value) };
     }
     return move(plan(tracker, ref, autonomy, before));
 }

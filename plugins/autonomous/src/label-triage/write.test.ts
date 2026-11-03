@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import type { Derivation } from "./rules.ts";
+import { inertDocumentMethods } from "./test-fixtures.ts";
 import type {
     Tracker,
     TrackerLabel,
@@ -61,6 +62,7 @@ function fakeTracker(
                     labels: state?.labels ?? [],
                     status: "open",
                     updatedAt: "",
+                    closed: false,
                 },
             });
         },
@@ -74,6 +76,7 @@ function fakeTracker(
         },
         createLabel: () => Promise.reject(new Error("triage never creates a label")),
         recolourLabel: () => Promise.resolve({ ok: false, error: "Beads has no label colours" }),
+        ...inertDocumentMethods,
     };
 }
 
@@ -90,6 +93,7 @@ function task(source: Tracker["source"], id: string, labels: string[]): TrackerT
         labels,
         status: "open",
         updatedAt: "",
+        closed: false,
     };
 }
 

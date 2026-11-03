@@ -1,0 +1,511 @@
+import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { join } from "node:path";
+
+import { afterAll, describe, expect, it } from "vitest";
+
+import { OPEN_STATES } from "../attempts/record.ts";
+import { attemptDir, receiptPath, recordPath } from "../attempts/state.ts";
+import { tempState } from "../attempts/test-fixtures.ts";
+import { config } from "../label-triage/test-fixtures.ts";
+import { exitCodeFor } from "../report.ts";
+import { headerOf, RECEIPT_SCHEMA, runPersist } from "./persist.ts";
+import {
+    PERSIST_SCHEMA,
+    renderPersistJson,
+    renderPersistText,
+    unconfiguredPersist,
+} from "./report.ts";
+import { spliceDefinition } from "./splice.ts";
+import {
+    type AttemptOptions,
+    DEFINITION,
+    type DocumentScript,
+    fakeDocuments,
+    startAttempt,
+    SUMMARY,
+    trackersWith,
+} from "./test-fixtures.ts";
+
+const STARTED = new Date("2026-11-03T10:00:00.000Z");
+
+const STATES: string[] = [];
+afterAll(() => {
+    for (const dir of STATES) {
+        rmSync(dir, { recursive: true, force: true });
+    }
+});
+
+async function arrange(options: AttemptOptions = {}, script: DocumentScript = {}) {
+    const state = tempState();
+    STATES.push(state);
+    const { id, dir } = await startAttempt(state, options);
+    const fake = fakeDocuments(options.source ?? "linear", script);
+    const deps = { config: config(), trackers: trackersWith(fake), state };
+    return { id, dir, state, fake, deps, run: () => runPersist(id, deps, STARTED) };
+}
+
+const ORIGINAL_BLOCK = "\n---\n\n## Original description\n\n";
+
+const readJson = (file: string) => JSON.parse(readFileSync(file, "utf8")) as unknown;
+
+describe("persist: Definition layout", () => {
+    it("First grill: the description is the definition, the separator, the heading and the original", async () => {
+        const { run, fake, dir } = await arrange({}, { description: "Fix the login" });
+        const report = await run();
+        expect(report.outcome).toBe("advance");
+        const stored = fake.description() ?? "";
+        expect(stored).toBe(spliceDefinition("Fix the login", DEFINITION));
+        expect(stored.startsWith("## Definition")).toBe(true);
+        expect(stored).toContain(`The login loops.\n${ORIGINAL_BLOCK}Fix the login`);
+        expect(stored.endsWith(`${ORIGINAL_BLOCK}Fix the login`)).toBe(true);
+        expect(readFileSync(join(dir, "description.md"), "utf8")).toBe(stored);
+    });
+
+    it("Second grill: the old definition is replaced and the original below the separator is unchanged", async () => {
+        const original = "Fix the login\n\nSteps:\n1. open the page\n\n---\n\nnot a heading";
+        const earlier = spliceDefinition(original, "## Definition\n\nOLD-DEFINITION\n");
+        const { run, fake } = await arrange({}, { description: earlier });
+        expect((await run()).outcome).toBe("advance");
+        const stored = fake.description() ?? "";
+        expect(stored).not.toContain("OLD-DEFINITION");
+        expect(stored).toBe(spliceDefinition(original, DEFINITION));
+        expect(stored.endsWith(`${ORIGINAL_BLOCK}${original}`)).toBe(true);
+    });
+
+    it("a task without a description gets the definition and an empty original", async () => {
+        const { run, fake } = await arrange({}, { description: null });
+        expect((await run()).outcome).toBe("advance");
+        expect(fake.description()).toBe(spliceDefinition(null, DEFINITION));
+    });
+});
+
+describe("persist: Stage summary comment", () => {
+    it("Comment header: the new comment's first line is the header and the summary follows a blank line", async () => {
+        const { run, fake } = await arrange({ source: "beads", taskId: "agentic-task-x1" });
+        const report = await run();
+        expect(report.attempt).toBe("beads:agentic-task-x1:grill-me:1");
+        const header =
+            "autonomous · grill-me · beads:agentic-task-x1:grill-me:1 · definition saved";
+        expect(headerOf(report.attempt)).toBe(header);
+        expect(fake.comments()).toEqual([`${header}\n\n${SUMMARY}`]);
+    });
+
+    it("the comment goes through a file in the attempt directory", async () => {
+        const { run, dir } = await arrange();
+        await run();
+        expect(readFileSync(join(dir, "comment.md"), "utf8")).toBe(
+            `${headerOf("linear:DOT-121:grill-me:1")}\n\n${SUMMARY}`,
+        );
+    });
+});
+
+describe("persist: Persistence is read back and leaves a receipt", () => {
+    it("Persisted: the writes are read back, the receipt is written and the exit code is 0", async () => {
+        const { run, fake, dir, id } = await arrange();
+        const report = await run();
+        expect(report).toMatchObject({
+            schema: PERSIST_SCHEMA,
+            startedAt: STARTED.toISOString(),
+            outcome: "advance",
+            attempt: id,
+            task: { source: "linear", id: "DOT-121", title: "Fix the login" },
+            written: { description: true, comment: "posted" },
+            readBack: { description: true, comment: true },
+            reasons: [],
+            receipt: receiptPath(dir),
+        });
+        expect(exitCodeFor(report.outcome)).toBe(0);
+        expect(readJson(receiptPath(dir))).toEqual({
+            schema: RECEIPT_SCHEMA,
+            attempt: id,
+            task: { source: "linear", id: "DOT-121" },
+            at: STARTED.toISOString(),
+            header: headerOf(id),
+        });
+        expect(fake.calls).toEqual([
+            "readTask DOT-121",
+            "updateDescription DOT-121",
+            "readTask DOT-121",
+            "readComments DOT-121",
+            "addComment DOT-121",
+            "readComments DOT-121",
+        ]);
+    });
+
+    it("Comment write fails: the description stays written, no receipt is left and the exit code is 3 naming the command", async () => {
+        const error = "linear issue comment add DOT-121 --body-file comment.md: boom";
+        const { run, dir } = await arrange({}, { failures: [{ method: "addComment", error }] });
+        const report = await run();
+        expect(report.outcome).toBe("not-evaluable");
+        expect(exitCodeFor(report.outcome)).toBe(3);
+        expect(report.reasons).toEqual([error]);
+        expect(report.written).toEqual({ description: true, comment: "none" });
+        expect(report.readBack).toEqual({ description: true, comment: false });
+        expect(report.receipt).toBeNull();
+        expect(existsSync(receiptPath(dir))).toBe(false);
+    });
+
+    it("a rerun after a failed comment read-back posts no second comment and writes the receipt", async () => {
+        const error = "linear issue comment list DOT-121: boom";
+        const { run, fake, dir } = await arrange(
+            {},
+            { failures: [{ method: "readComments", call: 2, error }] },
+        );
+        const first = await run();
+        expect(first.outcome).toBe("not-evaluable");
+        expect(first.reasons).toEqual([error]);
+        expect(first.written.comment).toBe("posted");
+        expect(existsSync(receiptPath(dir))).toBe(false);
+        const afterFirst = fake.description();
+
+        const second = await run();
+        expect(second.outcome).toBe("advance");
+        expect(second.written.comment).toBe("existing");
+        expect(second.readBack.comment).toBe(true);
+        expect(fake.calls.filter((call) => call.startsWith("addComment"))).toHaveLength(1);
+        expect(fake.comments()).toHaveLength(1);
+        expect(fake.description()).toBe(afterFirst);
+        expect(existsSync(receiptPath(dir))).toBe(true);
+    });
+
+    it("a second full run changes nothing: the same description, no second comment", async () => {
+        const { run, fake } = await arrange({}, { description: "Fix the login" });
+        await run();
+        const description = fake.description();
+        const comments = [...fake.comments()];
+        const again = await run();
+        expect(again.outcome).toBe("advance");
+        expect(again.written.comment).toBe("existing");
+        expect(fake.description()).toBe(description);
+        expect(fake.comments()).toEqual(comments);
+    });
+
+    it("a description read back that differs writes no receipt and posts no comment", async () => {
+        const { run, fake, dir } = await arrange({}, { store: (text) => text.slice(0, 20) });
+        const report = await run();
+        expect(report.outcome).toBe("not-evaluable");
+        expect(report.reasons).toEqual([
+            "linear DOT-121: the description read back differs from the one written",
+        ]);
+        expect(report.written).toEqual({ description: true, comment: "none" });
+        expect(report.readBack).toEqual({ description: false, comment: false });
+        expect(existsSync(receiptPath(dir))).toBe(false);
+        expect(fake.calls.filter((call) => call.startsWith("addComment"))).toEqual([]);
+    });
+
+    it("trailing whitespace is normalised in the read-back", async () => {
+        const { run } = await arrange({}, { store: (text) => text.trimEnd() });
+        expect((await run()).outcome).toBe("advance");
+        const padded = await arrange({}, { store: (text) => `${text}\n\n  \n` });
+        expect((await padded.run()).outcome).toBe("advance");
+    });
+
+    it("a description write that fails stops before the comment and leaves no receipt", async () => {
+        const error = "linear issue update DOT-121 --description-file description.md: boom";
+        const { run, fake, dir } = await arrange(
+            {},
+            { failures: [{ method: "updateDescription", error }] },
+        );
+        const report = await run();
+        expect(report.reasons).toEqual([error]);
+        expect(report.written).toEqual({ description: false, comment: "none" });
+        expect(fake.calls).toEqual(["readTask DOT-121", "updateDescription DOT-121"]);
+        expect(existsSync(receiptPath(dir))).toBe(false);
+    });
+
+    it("a description read-back that fails to read is a reason and leaves no receipt", async () => {
+        const error = "linear issue view DOT-121: boom";
+        const { run, dir } = await arrange(
+            {},
+            { failures: [{ method: "readTask", call: 2, error }] },
+        );
+        const report = await run();
+        expect(report.reasons).toEqual([error]);
+        expect(report.written.description).toBe(true);
+        expect(report.readBack.description).toBe(false);
+        expect(existsSync(receiptPath(dir))).toBe(false);
+    });
+
+    it("a comment the tracker accepts but does not list fails the read-back", async () => {
+        const { run, dir } = await arrange({}, { forgetsComments: true });
+        const report = await run();
+        expect(report.outcome).toBe("not-evaluable");
+        expect(report.reasons).toEqual([
+            `linear DOT-121: the comment headed "${headerOf("linear:DOT-121:grill-me:1")}" was not found when read back`,
+        ]);
+        expect(report.written.comment).toBe("posted");
+        expect(report.readBack.comment).toBe(false);
+        expect(existsSync(receiptPath(dir))).toBe(false);
+    });
+
+    it("a comment that cannot be listed before posting stops before the post", async () => {
+        const error = "linear issue comment list DOT-121: boom";
+        const { run, fake } = await arrange({}, { failures: [{ method: "readComments", error }] });
+        const report = await run();
+        expect(report.reasons).toEqual([error]);
+        expect(fake.calls).not.toContain("addComment DOT-121");
+    });
+
+    it("another attempt's comment does not stand in for this one's", async () => {
+        const other =
+            "autonomous · grill-me · linear:DOT-121:grill-me:10 · definition saved\n\nold";
+        const { run, fake } = await arrange({}, { comments: [other, "a human wrote this"] });
+        const report = await run();
+        expect(report.written.comment).toBe("posted");
+        expect(fake.comments()).toHaveLength(3);
+    });
+
+    it("an earlier comment of this attempt is found among others and not posted again", async () => {
+        const header = headerOf("linear:DOT-121:grill-me:1");
+        const { run, fake } = await arrange(
+            {},
+            { comments: ["first", `${header}\n\nearlier summary`, "last"] },
+        );
+        const report = await run();
+        expect(report.outcome).toBe("advance");
+        expect(report.written.comment).toBe("existing");
+        expect(fake.comments()).toHaveLength(3);
+    });
+
+    it("a receipt that cannot be written is a reason", async () => {
+        const { run, dir } = await arrange();
+        mkdirSync(receiptPath(dir));
+        const report = await run();
+        expect(report.outcome).toBe("not-evaluable");
+        expect(report.reasons[0]).toContain(`cannot write the receipt ${receiptPath(dir)}`);
+        expect(report.receipt).toBeNull();
+    });
+
+    it("never writes the attempt record", async () => {
+        const { run, dir } = await arrange();
+        const before = readFileSync(recordPath(dir), "utf8");
+        await run();
+        expect(readFileSync(recordPath(dir), "utf8")).toBe(before);
+    });
+});
+
+describe("persist: Persist preconditions", () => {
+    function expectNothingWritten(
+        report: Awaited<ReturnType<typeof runPersist>>,
+        fake: { calls: string[] },
+        dir: string,
+    ) {
+        expect(report.outcome).toBe("not-evaluable");
+        expect(exitCodeFor(report.outcome)).toBe(3);
+        expect(report.written).toEqual({ description: false, comment: "none" });
+        expect(report.receipt).toBeNull();
+        expect(report.task).toBeNull();
+        expect(fake.calls).toEqual([]);
+        expect(existsSync(receiptPath(dir))).toBe(false);
+        expect(existsSync(join(dir, "description.md"))).toBe(false);
+        expect(existsSync(join(dir, "comment.md"))).toBe(false);
+    }
+
+    it("Missing stage summary: nothing is written and the report names the file", async () => {
+        const { run, fake, dir } = await arrange({ summary: null });
+        const report = await run();
+        expectNothingWritten(report, fake, dir);
+        expect(report.reasons).toEqual([`${join(dir, "stage-summary.md")} is missing`]);
+    });
+
+    it("a missing definition is named too", async () => {
+        const { run, fake, dir } = await arrange({ definition: null });
+        const report = await run();
+        expectNothingWritten(report, fake, dir);
+        expect(report.reasons).toEqual([`${join(dir, "definition.md")} is missing`]);
+    });
+
+    it("both missing files are named", async () => {
+        const { run, fake, dir } = await arrange({ definition: null, summary: null });
+        const report = await run();
+        expectNothingWritten(report, fake, dir);
+        expect(report.reasons).toEqual([
+            `${join(dir, "definition.md")} is missing`,
+            `${join(dir, "stage-summary.md")} is missing`,
+        ]);
+    });
+
+    it.each([
+        ["definition.md", "definition"],
+        ["stage-summary.md", "summary"],
+    ] as const)("an empty %s is refused, and so is one of whitespace only", async (name, key) => {
+        for (const text of ["", "  \n\t \n"]) {
+            const { run, fake, dir } = await arrange({ [key]: text });
+            const report = await run();
+            expectNothingWritten(report, fake, dir);
+            expect(report.reasons).toEqual([`${join(dir, name)} is empty`]);
+        }
+    });
+
+    it("Attempt already completed: nothing is written", async () => {
+        const { run, fake, dir, id } = await arrange({ status: "completed" });
+        const report = await run();
+        expectNothingWritten(report, fake, dir);
+        expect(report.reasons).toEqual([`attempt ${id} is completed, not open`]);
+    });
+
+    it.each(["discarded", "aborted"] as const)(
+        "an attempt that is %s is refused",
+        async (status) => {
+            const { run, fake, dir, id } = await arrange({ status });
+            const report = await run();
+            expectNothingWritten(report, fake, dir);
+            expect(report.reasons).toEqual([`attempt ${id} is ${status}, not open`]);
+        },
+    );
+
+    it.each(OPEN_STATES)("an attempt that is %s is persisted", async (status) => {
+        const { run } = await arrange({ status });
+        expect((await run()).outcome).toBe("advance");
+    });
+
+    it("an unknown attempt is refused naming it", async () => {
+        const { deps, state, fake } = await arrange();
+        const report = await runPersist("linear:DOT-999:grill-me:1", deps, STARTED);
+        expect(report.outcome).toBe("not-evaluable");
+        const file = recordPath(attemptDir(state, "linear:DOT-999:grill-me:1"));
+        expect(report.reasons).toEqual([
+            `unknown attempt linear:DOT-999:grill-me:1: no record at ${file}`,
+        ]);
+        expect(fake.calls).toEqual([]);
+    });
+
+    it("an attempt of another stage is refused", async () => {
+        const { run, fake, dir, id } = await arrange({ stage: "test" });
+        const report = await run();
+        expectNothingWritten(report, fake, dir);
+        expect(report.reasons).toEqual([
+            `attempt ${id} is a test attempt: persist mode takes only grill-me attempts`,
+        ]);
+    });
+
+    it("a source that is not enabled is refused", async () => {
+        const { fake, dir, state, id } = await arrange();
+        const given = config();
+        const sources = { ...given.sources, linear: { ...given.sources.linear, enabled: false } };
+        const report = await runPersist(
+            id,
+            { config: { ...given, sources }, trackers: trackersWith(fake), state },
+            STARTED,
+        );
+        expectNothingWritten(report, fake, dir);
+        expect(report.reasons).toEqual(["linear is not enabled"]);
+    });
+
+    it("an attempt record that does not parse is a reason, not a crash", async () => {
+        const { run, fake, dir } = await arrange();
+        const file = recordPath(dir);
+        writeFileSync(file, "{ not json");
+        const report = await run();
+        expectNothingWritten(report, fake, dir);
+        expect(report.reasons).toEqual([
+            expect.stringContaining(`attempt record ${file} is not valid JSON`),
+        ]);
+    });
+
+    it("a task that cannot be read is a reason and nothing is written", async () => {
+        const error = "linear issue view DOT-121: Linear CLI is not authenticated";
+        const { run, fake, dir } = await arrange({}, { failures: [{ method: "readTask", error }] });
+        const report = await run();
+        expect(report.reasons).toEqual([error]);
+        expect(report.task).toBeNull();
+        expect(fake.calls).toEqual(["readTask DOT-121"]);
+        expect(existsSync(receiptPath(dir))).toBe(false);
+    });
+});
+
+describe("persist: Persist report", () => {
+    it("Persist JSON report: one document with the schema, the sections and the receipt's path", async () => {
+        const { run, dir, id } = await arrange();
+        const report = await run();
+        expect(JSON.parse(renderPersistJson(report))).toEqual({
+            schema: "autonomous.persist.v1",
+            startedAt: STARTED.toISOString(),
+            outcome: "advance",
+            attempt: id,
+            task: { source: "linear", id: "DOT-121", title: "Fix the login" },
+            written: { description: true, comment: "posted" },
+            readBack: { description: true, comment: true },
+            reasons: [],
+            receipt: receiptPath(dir),
+        });
+    });
+
+    it("the JSON report of a refusal has a null task and receipt", async () => {
+        const { run, id } = await arrange({ status: "completed" });
+        expect(JSON.parse(renderPersistJson(await run()))).toEqual({
+            schema: "autonomous.persist.v1",
+            startedAt: STARTED.toISOString(),
+            outcome: "not-evaluable",
+            attempt: id,
+            task: null,
+            written: { description: false, comment: "none" },
+            readBack: { description: false, comment: false },
+            reasons: [`attempt ${id} is completed, not open`],
+            receipt: null,
+        });
+    });
+
+    it("the text report says what was written, read back and where the receipt is", async () => {
+        const { run, dir, id } = await arrange();
+        expect(renderPersistText(await run())).toBe(
+            [
+                `autonomous persist — started ${STARTED.toISOString()}`,
+                "outcome: advance",
+                `attempt: ${id}`,
+                'task: linear DOT-121 → "Fix the login"',
+                "description: written, read back",
+                "comment: posted, found",
+                `receipt: ${receiptPath(dir)}`,
+            ].join("\n"),
+        );
+    });
+
+    it("the text report lists the reasons of a failure and marks a comment of an earlier run", async () => {
+        const error = "linear issue comment add DOT-121 --body-file comment.md: boom";
+        const failed = await arrange({}, { failures: [{ method: "addComment", error }] });
+        expect(renderPersistText(await failed.run())).toBe(
+            [
+                `autonomous persist — started ${STARTED.toISOString()}`,
+                "outcome: not-evaluable",
+                `attempt: ${failed.id}`,
+                'task: linear DOT-121 → "Fix the login"',
+                "description: written, read back",
+                "comment: not posted",
+                "receipt: none",
+                "reasons:",
+                `  - ${error}`,
+            ].join("\n"),
+        );
+        const header = headerOf("linear:DOT-121:grill-me:1");
+        const rerun = await arrange({}, { comments: [header] });
+        expect(renderPersistText(await rerun.run())).toContain("comment: already posted, found");
+    });
+
+    it("an unread task is shown as such", async () => {
+        const { run } = await arrange({ summary: null });
+        expect(renderPersistText(await run())).toContain("task: unread");
+    });
+
+    it("a configuration that cannot be loaded is one document with the path and the error", () => {
+        const report = unconfiguredPersist(
+            "linear:DOT-121:grill-me:1",
+            "/home/me/config.json",
+            "configuration file not found",
+            STARTED,
+        );
+        expect(JSON.parse(renderPersistJson(report))).toEqual({
+            schema: "autonomous.persist.v1",
+            startedAt: STARTED.toISOString(),
+            outcome: "not-evaluable",
+            attempt: "linear:DOT-121:grill-me:1",
+            task: null,
+            written: { description: false, comment: "none" },
+            readBack: { description: false, comment: false },
+            reasons: [],
+            receipt: null,
+            config: { path: "/home/me/config.json", error: "configuration file not found" },
+        });
+        expect(exitCodeFor(report.outcome)).toBe(3);
+    });
+});

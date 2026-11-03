@@ -1,4 +1,4 @@
-import { parseTaskRef, type TaskRef } from "./attempts/record.ts";
+import { parseAttemptId, parseTaskRef, type AttemptId, type TaskRef } from "./attempts/record.ts";
 import type { Source } from "./config.ts";
 import { STAGES } from "./stages/registry.ts";
 import { isStageId, type StageId } from "./stages/stage.ts";
@@ -23,6 +23,7 @@ export interface RunArgs {
     noHandoff: boolean;
     answers: Answer[];
     transition: { source: Source; id: string } | undefined;
+    persist: AttemptId | undefined;
 }
 
 export type ParseArgsResult = { ok: true; args: RunArgs } | { ok: false; error: string };
@@ -34,9 +35,11 @@ export const USAGE = [
     "       /autonomous:run --task <source>:<id> [--stage <stage>] [--account <provider-key>] [--force] [--json] [--apply] [--no-handoff]",
     "       /autonomous:run --apply --discard <attempt-id|source:id> [--release-workspace] [--json]",
     "       /autonomous:run --apply --transition <source>:<task> [--json]",
+    "       /autonomous:run --apply --persist <attempt-id> [--json]",
 ].join("\n");
 
 const ANSWER_SHAPE = "--answer requires <id>=<value>[,<value>]";
+const ATTEMPT_ID_SHAPE = "<source>:<task>:<stage>:<n>";
 
 // Flags that take no value.
 const SWITCHES = new Map<string, (args: RunArgs) => void>([
@@ -56,6 +59,7 @@ const VALUED = new Map<string, (args: RunArgs, value: string | undefined) => str
     ["--stage", readStage],
     ["--discard", readDiscard],
     ["--transition", readTransition],
+    ["--persist", readPersist],
 ]);
 
 export function parseArgs(argv: readonly string[]): ParseArgsResult {
@@ -72,6 +76,7 @@ export function parseArgs(argv: readonly string[]): ParseArgsResult {
         noHandoff: false,
         answers: [],
         transition: undefined,
+        persist: undefined,
     };
     for (let i = 0; i < argv.length; i++) {
         const arg = argv[i] ?? "";
@@ -133,6 +138,21 @@ function readTransition(args: RunArgs, value: string | undefined): string | null
     return null;
 }
 
+function readPersist(args: RunArgs, value: string | undefined): string | null {
+    if (value === undefined || value.startsWith("--")) {
+        return `--persist requires an attempt id ${ATTEMPT_ID_SHAPE}`;
+    }
+    if (args.persist !== undefined) {
+        return "--persist given more than once";
+    }
+    const parsed = parseAttemptId(value);
+    if (parsed === null) {
+        return `--persist ${value} must be an attempt id ${ATTEMPT_ID_SHAPE}`;
+    }
+    args.persist = parsed.id;
+    return null;
+}
+
 function readTaskRef(
     flag: string,
     current: TaskRef | undefined,
@@ -183,6 +203,7 @@ function readDiscard(args: RunArgs, value: string | undefined): string | null {
 
 const answering = (args: RunArgs) => args.answers.length > 0;
 const transitioning = (args: RunArgs) => args.transition !== undefined;
+const persisting = (args: RunArgs) => args.persist !== undefined;
 const accountOrForce = (args: RunArgs) => args.account !== undefined || args.force;
 
 // Every flag other than --apply and --json, for the modes that accept only those.
@@ -235,6 +256,11 @@ const COMBINATIONS: readonly (readonly [(args: RunArgs) => boolean, string])[] =
     [
         (args) => transitioning(args) && otherFlags(args),
         "--transition can only be combined with --apply and --json",
+    ],
+    [(args) => persisting(args) && !args.apply, "--persist requires --apply"],
+    [
+        (args) => persisting(args) && (otherFlags(args) || transitioning(args)),
+        "--persist can only be combined with --apply and --json",
     ],
     [
         (args) => args.releaseWorkspace && args.discard === undefined,

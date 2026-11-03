@@ -13,7 +13,7 @@ import type { Excluded, SelectData, WorkReader, WorkTask } from "../select/types
 import type { SessionManager } from "../sessions/manager.ts";
 import { type Naming, nameSession } from "../sessions/naming.ts";
 import { STAGES } from "../stages/registry.ts";
-import type { Stage, StageId } from "../stages/stage.ts";
+import type { Stage, StageContext, StageId } from "../stages/stage.ts";
 import { branchFor, groupFor, inferRepository, listRepositories } from "../workspace/infer.ts";
 import { exclusionName, renderLaunch } from "./launch-render.ts";
 import {
@@ -89,6 +89,7 @@ interface Unit {
 interface Plan {
     task: WorkTask; // read again and detailed
     stage: Stage;
+    context: StageContext;
     records: AttemptRecord[];
     repository: { path: string; inferredFrom: string };
     branch: string;
@@ -159,7 +160,7 @@ async function plan(
     if (!read.ok) {
         return read;
     }
-    const checked = await preconditions(ctx.io.state, config.workspace.root, read.value);
+    const checked = await preconditions(ctx, config, read.value);
     if (!checked.ok) {
         return checked;
     }
@@ -246,23 +247,28 @@ async function readTask(
         : pass({ task, reader });
 }
 
-// Design D9's order: the stage is registered, the task carries no `taken`, no
-// attempt of the task is open, and a repository is inferred.
+// Design D9's order, with D1's prerequisites: the stage is registered, its
+// prerequisites hold, the task carries no `taken`, no attempt of the task is
+// open, and a repository is inferred.
 async function preconditions(
-    state: string,
-    root: string,
+    ctx: RunContext,
+    config: AutonomousConfig,
     read: { task: WorkTask; stage: StageId },
-): Promise<Gate<Pick<Plan, "task" | "stage" | "records" | "repository">>> {
+): Promise<Gate<Pick<Plan, "task" | "stage" | "context" | "records" | "repository">>> {
     const { task } = read;
     const stage = STAGES.get(read.stage);
     if (stage === undefined) {
         return wait(`stage ${read.stage} has no implementation`);
     }
+    const ready = await stage.prerequisites({ tool: config.sessions.tool, home: ctx.io.home });
+    if (!ready.ok) {
+        return wait(ready.reason);
+    }
     // Already an exclusion of readUnit; kept so the order of D9 reads here.
     if (task.labels.includes(TAKEN)) {
         return wait(`${task.source}:${task.id} carries taken`);
     }
-    const records = await readRecords(state);
+    const records = await readRecords(ctx.io.state);
     if (!records.ok) {
         return records;
     }
@@ -270,9 +276,15 @@ async function preconditions(
     if (open !== null) {
         return wait(open);
     }
-    const repository = await inferFor(root, task);
+    const repository = await inferFor(config.workspace.root, task);
     return repository.ok
-        ? pass({ task, stage, records: records.value, repository: repository.value })
+        ? pass({
+              task,
+              stage,
+              context: ready.context,
+              records: records.value,
+              repository: repository.value,
+          })
         : repository;
 }
 
@@ -458,6 +470,7 @@ async function writePrompt(launching: Launching): Promise<Result<void>> {
         attempt: record,
         task: plan.task,
         resultPath: resultPath(dir),
+        context: plan.context,
     });
     await writeFile(promptPath(dir), prompt);
     return { ok: true, value: undefined };

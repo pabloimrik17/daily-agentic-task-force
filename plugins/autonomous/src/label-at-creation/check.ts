@@ -37,6 +37,7 @@ function inspection(input: CheckInput, load: ConfigLoad) {
         labels: [...new Set(input.labels)],
         status: "",
         updatedAt: "",
+        closed: false,
     };
     const repo = input.repo?.toLowerCase() ?? "";
     const configured =

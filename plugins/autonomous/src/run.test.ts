@@ -13,16 +13,29 @@ import { afterAll, describe, expect, it } from "vitest";
 
 import type { Answer } from "./args.ts";
 import { fakeSessions, fakeWorkspace, record, tempState } from "./attempts/test-fixtures.ts";
-import { attemptDir, recordPath, writeRecord } from "./attempts/state.ts";
+import { attemptDir, receiptPath, recordPath, writeRecord } from "./attempts/state.ts";
 import { type AutonomousConfig, CONFIG_SCHEMA, EXAMPLE_PATH } from "./config.ts";
 import { COLOURS, LABELS } from "./label-contract/contract.ts";
-import { config, fakeJudgement, task, trackers } from "./label-triage/test-fixtures.ts";
+import {
+    config,
+    fakeJudgement,
+    inertDocumentMethods,
+    task,
+    trackers,
+} from "./label-triage/test-fixtures.ts";
 import type {
     Tracker,
     TrackerLabel,
     TrackerResult,
     Trackers,
 } from "./label-triage/trackers/tracker.ts";
+import {
+    type AttemptOptions,
+    type DocumentScript,
+    fakeDocuments,
+    startAttempt,
+    trackersWith,
+} from "./persist/test-fixtures.ts";
 import { fakeExec, limits, NOW, provider, session, weekly } from "./quota-gate/test-fixtures.ts";
 import { main, type MainDeps } from "./run.ts";
 import type {
@@ -77,10 +90,12 @@ function heldLock(): { dir: string; error: string } {
 }
 
 const ABSENT_CONFIG = join(tmpdir(), "autonomous-run-absent", "config.json");
+const ABSENT_HOME = join(tmpdir(), "autonomous-run-absent", "home");
 
 // `steps` undefined runs the real STEPS. Unless the override names them, the
-// env points AUTONOMOUS_CONFIG at a missing file and AUTONOMOUS_STATE at a
-// temporary directory, so no test reads the user's own configuration or state.
+// env points AUTONOMOUS_CONFIG at a missing file, AUTONOMOUS_STATE at a
+// temporary directory and HOME at a missing directory, so no test reads the
+// user's own configuration, state or installed plugins.
 function deps(steps: readonly Step[] | undefined, overrides: Partial<MainDeps> = {}) {
     const out: string[] = [];
     const err: string[] = [];
@@ -109,7 +124,12 @@ function deps(steps: readonly Step[] | undefined, overrides: Partial<MainDeps> =
         ...(steps === undefined ? {} : { steps }),
         ...overrides,
     };
-    d.env = { AUTONOMOUS_CONFIG: ABSENT_CONFIG, AUTONOMOUS_STATE: STATE, ...d.env };
+    d.env = {
+        AUTONOMOUS_CONFIG: ABSENT_CONFIG,
+        AUTONOMOUS_STATE: STATE,
+        HOME: ABSENT_HOME,
+        ...d.env,
+    };
     return { d, out, err };
 }
 
@@ -287,6 +307,7 @@ describe("main --bootstrap-labels", () => {
             readTask: unused,
             addLabel: unused,
             removeLabel: unused,
+            ...inertDocumentMethods,
             listLabels: () =>
                 Promise.resolve(
                     typeof labels === "string"
@@ -477,6 +498,7 @@ describe("main with the real steps", () => {
             readTask: unused,
             addLabel: unused,
             removeLabel: unused,
+            ...inertDocumentMethods,
             listLabels: unused,
             createLabel: unused,
             recolourLabel: unused,
@@ -534,12 +556,12 @@ describe("main with the real steps", () => {
         linear: empty("linear"),
     });
 
-    // No stage but `test` has an implementation, so launch waits on the selected grill-me task.
+    // A home without Claude Code's plugin registry, so launch waits on the grill-me prerequisites.
     it("runs the five steps with the example configuration, launch waiting on the stage", async () => {
         let judged = 0;
         const calls: string[] = [];
         const { d, out, err } = deps(undefined, {
-            env: { AUTONOMOUS_CONFIG: configPath },
+            env: { AUTONOMOUS_CONFIG: configPath, HOME: dir },
             openUsage: capacity(),
             trackers: emptyTrackers,
             judgement: () => {
@@ -558,7 +580,9 @@ describe("main with the real steps", () => {
         expect(text).toContain("[label-triage] advance (code)");
         expect(text).toContain("[select] advance (llm)");
         expect(text).toContain("[launch] wait (code)");
-        expect(text).toContain("stage grill-me has no implementation");
+        expect(text).toContain(
+            `cannot read the plugin registry ${join(dir, ".claude", "plugins", "installed_plugins.json")}`,
+        );
     });
 
     it("does not run the select step when label-triage is not evaluable because bd cannot be executed", async () => {
@@ -642,7 +666,7 @@ describe("main with the real steps", () => {
                 },
             ],
             excluded: [],
-            notEvaluated: ["github: dependencies and children"],
+            notEvaluated: ["github: dependencies"],
             comparison: { model: "sonnet", effort: "high" },
         } satisfies SelectData);
     });
@@ -970,7 +994,7 @@ describe("main --answer", () => {
         }));
         const openUsage = capacity();
         const shared = {
-            env: { AUTONOMOUS_CONFIG: configPath },
+            env: { AUTONOMOUS_CONFIG: configPath, HOME: dir },
             openUsage,
             trackers: () => fake,
             judgement,
@@ -979,7 +1003,7 @@ describe("main --answer", () => {
             work: () => [fakeReader("beads", [workTask("beads", "B-2", ["work", "grill-me"])], [])],
         };
 
-        // launch waits: no stage but `test` has an implementation.
+        // launch waits: the home holds no plugin registry for the grill-me prerequisites.
         const run = deps(undefined, shared);
         expect(await main(["--apply", "--json"], run.d)).toBe(2);
         const { handoff } = JSON.parse(run.out[0] as string) as {
@@ -1215,6 +1239,207 @@ describe("main --transition", () => {
                 "added HITL, proposal, removed grill-me on beads B-1, read back",
             ],
         ]);
+    });
+});
+
+describe("main --persist", () => {
+    const dir = mkdtempSync(join(tmpdir(), "autonomous-persist-"));
+    const configPath = join(dir, "config.json");
+    writeFileSync(configPath, JSON.stringify(config()));
+    afterAll(() => rmSync(dir, { recursive: true, force: true }));
+
+    const ATTEMPT = "linear:DOT-121:grill-me:1";
+
+    const missing = join(dir, "absent.json");
+    const missingError = `configuration file not found at ${missing}; create it from the example at ${EXAMPLE_PATH}`;
+
+    // An attempt in a state directory of its own (or `stateDir`), a fake Linear tracker and a
+    // step that fails if the mode runs it.
+    async function persistDeps(
+        options: AttemptOptions = {},
+        script: DocumentScript = {},
+        env: Record<string, string> = {},
+        stateDir: string = state(),
+    ) {
+        await startAttempt(stateDir, options);
+        const fake = fakeDocuments("linear", script);
+        const log: string[] = [];
+        const step: Step = {
+            id: "fake",
+            run: () => {
+                log.push("fake:run");
+                return Promise.reject(new Error("fake ran"));
+            },
+            render: () => "",
+        };
+        const result = deps([step], {
+            env: { AUTONOMOUS_CONFIG: configPath, AUTONOMOUS_STATE: stateDir, ...env },
+            openUsage: () => {
+                log.push("openUsage");
+                return Promise.resolve({ ok: false, error: "unused" });
+            },
+            trackers: () => {
+                log.push("trackers");
+                return trackersWith(fake);
+            },
+        });
+        return { ...result, fake, log, stateDir };
+    }
+
+    const persistArgs = (...extra: string[]) => ["--apply", "--persist", ATTEMPT, ...extra];
+
+    interface PersistDocument {
+        schema: string;
+        outcome: string;
+        attempt: string;
+        task: { source: string; id: string } | null;
+        written: { description: boolean; comment: string };
+        readBack: { description: boolean; comment: boolean };
+        reasons: string[];
+        receipt: string | null;
+        config?: { path: string; error: string };
+    }
+
+    const documentOf = (out: string[]) => JSON.parse(out[0] as string) as PersistDocument;
+
+    const receiptOf = (stateDir: string) => receiptPath(attemptDir(stateDir, ATTEMPT));
+
+    it("Persisted: runs no step, writes the definition and the comment, writes the receipt and exits 0", async () => {
+        const { d, out, err, log, fake, stateDir } = await persistDeps();
+        expect(await main(persistArgs(), d)).toBe(0);
+        expect(err).toEqual([]);
+        expect(log).toEqual(["trackers"]);
+        expect(out).toHaveLength(1);
+        const lines = (out[0] as string).split("\n");
+        expect(lines[0]).toBe(`autonomous persist — started ${NOW.toISOString()}`);
+        expect(lines[1]).toBe("outcome: advance");
+        expect(fake.description()).toContain("\n---\n\n## Original description\n");
+        expect(fake.comments()).toHaveLength(1);
+        expect(existsSync(receiptOf(stateDir))).toBe(true);
+        expect(existsSync(join(stateDir, "run.lock"))).toBe(false);
+    });
+
+    it("takes no run lock: a lock another run holds does not stop it and is left as it was", async () => {
+        const { dir: held } = heldLock();
+        const lock = join(held, "run.lock");
+        const before = readFileSync(lock, "utf8");
+        const { d, log, stateDir } = await persistDeps({}, {}, {}, held);
+        expect(await main(persistArgs(), d)).toBe(0);
+        expect(readFileSync(lock, "utf8")).toBe(before);
+        expect(log).toEqual(["trackers"]);
+        expect(existsSync(receiptOf(stateDir))).toBe(true);
+    });
+
+    it("Persist JSON report: stdout holds exactly one autonomous.persist.v1 document", async () => {
+        const { d, out, err, stateDir } = await persistDeps();
+        expect(await main(persistArgs("--json"), d)).toBe(0);
+        expect(err).toEqual([]);
+        expect(out).toHaveLength(1);
+        expect(documentOf(out)).toEqual({
+            schema: "autonomous.persist.v1",
+            startedAt: NOW.toISOString(),
+            outcome: "advance",
+            attempt: ATTEMPT,
+            task: { source: "linear", id: "DOT-121", title: "Fix the login" },
+            written: { description: true, comment: "posted" },
+            readBack: { description: true, comment: true },
+            reasons: [],
+            receipt: receiptOf(stateDir),
+        });
+    });
+
+    it("Missing stage summary: writes nothing to the tracker, names the file and exits 3", async () => {
+        const { d, out, fake, stateDir } = await persistDeps({ summary: null });
+        expect(await main(persistArgs("--json"), d)).toBe(3);
+        const report = documentOf(out);
+        expect(report.outcome).toBe("not-evaluable");
+        expect(report.reasons).toEqual([
+            `${join(attemptDir(stateDir, ATTEMPT), "stage-summary.md")} is missing`,
+        ]);
+        expect(report.receipt).toBeNull();
+        expect(fake.calls).toEqual([]);
+        expect(existsSync(receiptOf(stateDir))).toBe(false);
+    });
+
+    it("Attempt already completed: writes nothing and exits 3", async () => {
+        const { d, out, fake } = await persistDeps({ status: "completed" });
+        expect(await main(persistArgs("--json"), d)).toBe(3);
+        expect(documentOf(out).reasons).toEqual([`attempt ${ATTEMPT} is completed, not open`]);
+        expect(fake.calls).toEqual([]);
+    });
+
+    it("an unknown attempt exits 3 and writes nothing", async () => {
+        const { d, out, fake } = await persistDeps();
+        expect(await main(["--apply", "--persist", "linear:DOT-999:grill-me:1", "--json"], d)).toBe(
+            3,
+        );
+        expect(documentOf(out).reasons[0]).toContain("unknown attempt linear:DOT-999:grill-me:1");
+        expect(fake.calls).toEqual([]);
+    });
+
+    it("Comment write fails: exits 3 naming the command and leaves no receipt", async () => {
+        const error = "linear issue comment add DOT-121 --body-file comment.md: boom";
+        const { d, out, stateDir } = await persistDeps(
+            {},
+            { failures: [{ method: "addComment", error }] },
+        );
+        expect(await main(persistArgs(), d)).toBe(3);
+        expect(out).toHaveLength(1);
+        expect(out[0]).toContain(`  - ${error}`);
+        expect(existsSync(receiptOf(stateDir))).toBe(false);
+    });
+
+    it("Persist without apply: prints usage and exits 1", async () => {
+        const { d, out, err, log } = await persistDeps();
+        expect(await main(["--persist", ATTEMPT], d)).toBe(1);
+        expect(out).toEqual([]);
+        expect(err.join("\n")).toContain("--persist requires --apply");
+        expect(err.join("\n")).toContain("Usage: /autonomous:run");
+        expect(log).toEqual([]);
+    });
+
+    it("exits 3 naming the path when the configuration file is missing", async () => {
+        const { d, out, err, log } = await persistDeps({}, {}, { AUTONOMOUS_CONFIG: missing });
+        expect(await main(persistArgs(), d)).toBe(3);
+        expect(out).toEqual([]);
+        expect(err).toEqual([missingError]);
+        expect(log).toEqual([]);
+    });
+
+    it("prints the missing configuration as one autonomous.persist.v1 document with --json", async () => {
+        const { d, out, err, log } = await persistDeps({}, {}, { AUTONOMOUS_CONFIG: missing });
+        expect(await main(persistArgs("--json"), d)).toBe(3);
+        expect(err).toEqual([missingError]);
+        expect(out).toHaveLength(1);
+        expect(documentOf(out)).toEqual({
+            schema: "autonomous.persist.v1",
+            startedAt: NOW.toISOString(),
+            outcome: "not-evaluable",
+            attempt: ATTEMPT,
+            task: null,
+            written: { description: false, comment: "none" },
+            readBack: { description: false, comment: false },
+            reasons: [],
+            receipt: null,
+            config: { path: missing, error: missingError },
+        });
+        expect(log).toEqual([]);
+    });
+
+    it("the transition that waited for the receipt asks its question once persist has run", async () => {
+        const { d, stateDir, fake } = await persistDeps();
+        const waiting = deps([], {
+            env: { AUTONOMOUS_CONFIG: configPath, AUTONOMOUS_STATE: stateDir },
+            trackers: () => trackersWith(fake),
+        });
+        const transition = ["--apply", "--transition", "linear:DOT-121", "--json"];
+        expect(await main(transition, waiting.d)).toBe(3);
+        expect(await main(persistArgs(), d)).toBe(0);
+        const again = deps([], {
+            env: { AUTONOMOUS_CONFIG: configPath, AUTONOMOUS_STATE: stateDir },
+            trackers: () => trackersWith(fake),
+        });
+        expect(await main(transition, again.d)).toBe(0);
     });
 });
 

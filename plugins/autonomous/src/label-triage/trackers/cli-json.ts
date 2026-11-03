@@ -5,7 +5,7 @@
 // them through `runJson`/`run` instead).
 
 import type { Exec } from "../../exec.ts";
-import { ParseError } from "../../validate.ts";
+import { object, ParseError, string } from "../../validate.ts";
 import type { TrackerResult } from "./tracker.ts";
 
 export function parseError(command: string, error: unknown): string {
@@ -24,6 +24,28 @@ export function parseJson(
     } catch (error) {
         return { ok: false, error: parseError(command, error) };
     }
+}
+
+export function commentBodies(
+    items: unknown[],
+    path: string,
+    keys: { body: string; createdAt: string },
+): string[] {
+    const comments = items.map((item, index) => {
+        const entryPath = `${path}[${index}]`;
+        const entry = object(item, entryPath);
+        return {
+            body: string(entry, keys.body, entryPath),
+            createdAt: string(entry, keys.createdAt, entryPath),
+        };
+    });
+    comments.sort((a, b) => {
+        if (a.createdAt === b.createdAt) {
+            return 0;
+        }
+        return a.createdAt < b.createdAt ? -1 : 1;
+    });
+    return comments.map((comment) => comment.body);
 }
 
 export type MapExecError = (command: string, error: string) => string;

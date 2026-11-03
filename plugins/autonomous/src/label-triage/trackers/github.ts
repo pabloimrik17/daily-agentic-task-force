@@ -6,7 +6,7 @@
 import type { GithubConfig } from "../../config.ts";
 import type { Exec } from "../../exec.ts";
 import { array, type Json, object, ParseError, string } from "../../validate.ts";
-import { run, runJson } from "./cli-json.ts";
+import { commentBodies, run, runJson } from "./cli-json.ts";
 import type { Tracker, TrackerLabel, TrackerResult, TrackerTask } from "./tracker.ts";
 
 function labelNames(entry: Json, path: string): string[] {
@@ -22,14 +22,16 @@ function task(repo: string, entry: Json, path: string): TrackerTask {
     if (typeof number !== "number" || !Number.isFinite(number)) {
         throw new ParseError(`${path}.number must be a finite number`);
     }
+    const status = string(entry, "state", path);
     return {
         source: "github",
         id: `${repo}#${number}`,
         title: string(entry, "title", path),
         description: string(entry, "body", path),
         labels: labelNames(entry, path),
-        status: string(entry, "state", path),
+        status,
         updatedAt: string(entry, "updatedAt", path),
+        closed: status === "CLOSED",
     };
 }
 
@@ -42,6 +44,11 @@ function parseTasks(repo: string): (value: unknown) => TrackerTask[] {
 
 function parseTask(repo: string): (value: unknown) => TrackerTask {
     return (value) => task(repo, object(value, "$"), "$");
+}
+
+function parseComments(value: unknown): string[] {
+    const items = array(object(value, "$").comments, "$.comments");
+    return commentBodies(items, "$.comments", { body: "body", createdAt: "createdAt" });
 }
 
 function labelEntry(repo: string, entry: Json, path: string): TrackerLabel {
@@ -95,6 +102,17 @@ function editLabel(
         flag,
         label,
     ]);
+}
+
+function onIssue<T>(
+    id: string,
+    act: (repo: string, number: string) => Promise<TrackerResult<T>>,
+): Promise<TrackerResult<T>> {
+    const parsedId = parseTaskId(id);
+    if (!parsedId.ok) {
+        return Promise.resolve({ ok: false, error: `${id} is not a valid GitHub task id` });
+    }
+    return act(parsedId.repo, parsedId.number);
 }
 
 const LIST_FIELDS = "number,title,body,labels,updatedAt,state";
@@ -174,6 +192,45 @@ export function githubTracker(exec: Exec, config: GithubConfig): Tracker {
 
         removeLabel(id: string, label: string): Promise<TrackerResult<void>> {
             return editLabel(exec, id, "--remove-label", label);
+        },
+
+        updateDescription(id: string, file: string): Promise<TrackerResult<void>> {
+            return onIssue(id, (repo, number) =>
+                run(exec, `gh issue edit ${number} --repo ${repo} --body-file ${file}`, [
+                    "issue",
+                    "edit",
+                    number,
+                    "--repo",
+                    repo,
+                    "--body-file",
+                    file,
+                ]),
+            );
+        },
+
+        addComment(id: string, file: string): Promise<TrackerResult<void>> {
+            return onIssue(id, (repo, number) =>
+                run(exec, `gh issue comment ${number} --repo ${repo} --body-file ${file}`, [
+                    "issue",
+                    "comment",
+                    number,
+                    "--repo",
+                    repo,
+                    "--body-file",
+                    file,
+                ]),
+            );
+        },
+
+        readComments(id: string): Promise<TrackerResult<string[]>> {
+            return onIssue(id, (repo, number) =>
+                runJson(
+                    exec,
+                    `gh issue view ${number} --repo ${repo} --json comments`,
+                    ["issue", "view", number, "--repo", repo, "--json", "comments"],
+                    parseComments,
+                ),
+            );
         },
 
         async listLabels(): Promise<TrackerResult<TrackerLabel[]>> {

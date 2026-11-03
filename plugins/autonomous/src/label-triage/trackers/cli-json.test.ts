@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 
 import type { Exec, ExecResult } from "../../exec.ts";
 import { ParseError } from "../../validate.ts";
-import { parseError, parseJson, run, runJson } from "./cli-json.ts";
+import { commentBodies, parseError, parseJson, run, runJson } from "./cli-json.ts";
 
 function fakeExec(handler: (args: string[]) => ExecResult): Exec & { calls: string[][] } {
     const calls: string[][] = [];
@@ -113,5 +113,40 @@ describe("run", () => {
         const result = await run(exec, "cmd", [], () => "cmd: mapped");
 
         expect(result).toEqual({ ok: false, error: "cmd: mapped" });
+    });
+});
+
+describe("commentBodies", () => {
+    const keys = { body: "text", createdAt: "at" };
+
+    it("orders bodies by creation time and keeps the order of simultaneous ones", () => {
+        expect(
+            commentBodies(
+                [
+                    { text: "third", at: "2026-01-01T12:00:00Z" },
+                    { text: "first", at: "2026-01-01T10:00:00Z" },
+                    { text: "second a", at: "2026-01-01T11:00:00Z" },
+                    { text: "second b", at: "2026-01-01T11:00:00Z" },
+                ],
+                "$",
+                keys,
+            ),
+        ).toEqual(["first", "second a", "second b", "third"]);
+    });
+
+    it("does not reorder the list it is given", () => {
+        const items = [
+            { text: "later", at: "2026-01-02T00:00:00Z" },
+            { text: "earlier", at: "2026-01-01T00:00:00Z" },
+        ];
+        commentBodies(items, "$", keys);
+
+        expect(items.map((item) => item.text)).toEqual(["later", "earlier"]);
+    });
+
+    it("names the path of an entry whose field is missing", () => {
+        expect(() => commentBodies([{ at: "x" }], "$.comments", keys)).toThrow(
+            "$.comments[0].text must be a string",
+        );
     });
 });

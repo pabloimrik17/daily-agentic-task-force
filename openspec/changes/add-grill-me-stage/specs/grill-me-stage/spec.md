@@ -64,7 +64,7 @@ The prompt SHALL tell the agent to end the stage in this order:
 2. commit and push documentation;
 3. write `definition.md` and `stage-summary.md`, and create subtasks;
 4. run persist mode;
-5. show the ticket's URL;
+5. show the ticket's URL, or its id for a Beads task;
 6. run the transition;
 7. write the result marker.
 
@@ -79,6 +79,15 @@ It SHALL forbid preparing a proposal in the same session.
 
 - **WHEN** the human answers "Later" to the transition question
 - **THEN** the prompt's order leaves the result marker unwritten and the session open
+
+### Requirement: A closed task ends the grill
+
+When the human decides to close the task instead of defining it, the prompt SHALL tell the agent to skip persist mode and the transition, write the result marker with a summary saying the task was closed, and stop.
+
+#### Scenario: Task closed in the grill
+
+- **WHEN** a grill-me prompt is written
+- **THEN** it tells the agent, when the human closes the task, to skip persist mode and the transition and write the result marker
 
 ### Requirement: A grill's commits and pushes
 
@@ -105,12 +114,12 @@ When the human confirms a split, the prompt SHALL have the agent create each sub
 
 ### Requirement: Public GitHub summaries
 
-For a GitHub task, the prompt SHALL forbid absolute paths and other details of the machine in the stage summary, because an issue in a public repository is public.
+For a GitHub task, the prompt SHALL forbid absolute paths and other details of the machine in the definition and in the stage summary, because an issue in a public repository is public, and the definition becomes its description.
 
 #### Scenario: GitHub task
 
 - **WHEN** a grill-me prompt is written for a GitHub task
-- **THEN** it forbids absolute paths and machine details in `stage-summary.md`
+- **THEN** it forbids absolute paths and machine details in `definition.md` and in `stage-summary.md`
 
 #### Scenario: Linear task
 
@@ -119,7 +128,7 @@ For a GitHub task, the prompt SHALL forbid absolute paths and other details of t
 
 ### Requirement: Definition layout
 
-Persist mode SHALL write the content of `definition.md` at the top of the task's description. A line `---`, the heading `## Original description` and the original description SHALL follow it. When the description already starts with a definition in that layout, only the part above the separator SHALL be replaced.
+Persist mode SHALL write the content of `definition.md` at the top of the task's description. A line `---`, the heading `## Original description` and the original description SHALL follow it. When the description already starts with a definition in that layout, only the part above the separator SHALL be replaced. When the content of `definition.md` does not start with the heading `## Definition`, persist mode SHALL prepend that heading and a blank line to it.
 
 #### Scenario: First grill
 
@@ -130,6 +139,11 @@ Persist mode SHALL write the content of `definition.md` at the top of the task's
 
 - **WHEN** a task already carries a definition above `## Original description` and a new definition is persisted
 - **THEN** the old definition is replaced and the original description below the separator is unchanged
+
+#### Scenario: Definition without the heading
+
+- **WHEN** `definition.md` does not start with `## Definition`, is persisted, and a new definition is then persisted over the result
+- **THEN** the description starts with `## Definition` and a blank line, and the second persist replaces only the part above the separator, leaving one `## Original description`
 
 ### Requirement: Stage summary comment
 

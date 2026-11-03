@@ -47,9 +47,19 @@ export function task(
         labels,
         status: "open",
         updatedAt: "2026-09-20T10:00:00Z",
+        closed: false,
         ...overrides,
     };
 }
+
+export const inertDocumentMethods: Pick<
+    Tracker,
+    "updateDescription" | "addComment" | "readComments"
+> = {
+    updateDescription: () => Promise.resolve({ ok: true, value: undefined }),
+    addComment: () => Promise.resolve({ ok: true, value: undefined }),
+    readComments: () => Promise.resolve({ ok: true, value: [] }),
+};
 
 interface FakeOptions {
     descriptions?: Record<string, string>; // what readTask fills in for a task listed without one
@@ -129,6 +139,7 @@ function fakeTracker(
         createLabel: (): Promise<TrackerResult<void>> =>
             Promise.reject(new Error("the triage never creates labels")),
         recolourLabel: () => Promise.resolve({ ok: false, error: "Beads has no label colours" }),
+        ...inertDocumentMethods,
     };
 }
 
@@ -185,6 +196,7 @@ export function triageContext(options: {
             noHandoff: false,
             answers: [],
             transition: undefined,
+            persist: undefined,
             ...options.args,
         },
         now: NOW,
@@ -207,6 +219,7 @@ export function triageContext(options: {
             },
             naming: () => Promise.reject(new Error("the triage never names sessions")),
             state: "/unused/state",
+            home: "/unused/home",
         },
     };
 }
