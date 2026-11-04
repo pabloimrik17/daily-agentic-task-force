@@ -63,11 +63,13 @@ The GitHub rule covers the definition too, because persist writes it into the is
 1. Parse the id, read the attempt record, and check the preconditions: open, stage `grill-me`, both files present and non-empty.
 2. Read the task fresh.
 3. Compose the new description with a pure splice. If the description starts with `## Definition` and contains `\n---\n\n## Original description\n`, the part above the separator is replaced; otherwise the definition, the separator, the heading and the old description are concatenated. A definition that does not start with `## Definition` gets that heading and a blank line prepended first, because the detection of an earlier grill keys on the heading.
-4. Write the description through a file in the attempt directory, then read it back and compare it with trailing whitespace normalised.
+4. Write the description through a file in the attempt directory, then read it back and compare the text. Two descriptions are the same text when their Unicode letters and digits (`/[\p{L}\p{N}]/gu`) are equal, in order. Whitespace, Markdown punctuation and `<>` are ignored, and a null description counts as empty. There are three outcomes. Equal apart from trailing whitespace: nothing more. Same text but not the same bytes: write what the tracker returned to `description.read.md`, add one note to the report and go on. Different text: write `description.read.md` too, fail and write no receipt.
 5. Read the comments. When none starts with this attempt's header line, post the comment from a file in the attempt directory. Then read the comments back and find the header.
 6. Write the receipt `persisted.json` (`autonomous.persisted.v1`: attempt, task, time, header) atomically.
 
 Because the splice replaces the definition and the comment is skipped once its header exists, a rerun after a partial failure converges without duplicating anything.
+
+The read-back compares text, not bytes, because trackers re-serialise Markdown. The DOT-122 round trip (2026-11-03) showed Linear rewriting `- ` list markers to `* ` and wrapping external link destinations in `<>`. A byte comparison failed every Linear persist. That failure lands at the end of a grill, when the definition is already agreed, and recovering from it needs a release. A real failure, such as a lost or truncated write or an edit by another person, still changes the letters or digits, so the text comparison still catches it.
 
 Persist takes no run lock. It writes a new file in the attempt directory, never the record, and a periodic run holding the lock must not make a waiting human's session fail.
 

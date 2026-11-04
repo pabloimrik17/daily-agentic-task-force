@@ -156,12 +156,22 @@ Persist mode SHALL post the content of `stage-summary.md` as a comment on the ta
 
 ### Requirement: Persistence is read back and leaves a receipt
 
-After writing, persist mode SHALL read the task's description and comments back. It SHALL write a receipt in the attempt directory only when the description matches what was written and the comment is found. A failed write or read-back SHALL leave no receipt.
+After writing, persist mode SHALL read the task's description and comments back. It SHALL write a receipt in the attempt directory only when the comment is found and the description read back holds the same text as the one written: the same Unicode letters and digits, in order. Whitespace and Markdown syntax SHALL be ignored, because trackers re-serialise Markdown. A failed write or read-back SHALL leave no receipt.
 
 #### Scenario: Persisted
 
-- **WHEN** the description and the comment are written and read back as expected
-- **THEN** the attempt directory holds a receipt and persist mode exits 0
+- **WHEN** the description and the comment are written and read back as expected, the description identical to the one written apart from trailing whitespace
+- **THEN** the attempt directory holds a receipt and persist mode exits 0, no `description.read.md` is written and the report carries no note
+
+#### Scenario: Tracker re-serialises the Markdown
+
+- **WHEN** the tracker returns the description with its `-` list markers changed to `*` and its link destinations wrapped in `<>`, and the comment is found
+- **THEN** the receipt is written, persist mode exits 0, `description.read.md` holds what the tracker returned, and the report carries the note `<source> <id>: the tracker re-serialised the description; its text matches what was written, and what it returned is at <path to description.read.md>`
+
+#### Scenario: Text read back differs
+
+- **WHEN** the tracker returns a description whose letters or digits differ from the one written, or returns no description
+- **THEN** no receipt is written and no comment is posted, `description.read.md` holds what the tracker returned, persist mode exits 3, and the reason is `<source> <id>: the description read back differs from the one written; what the tracker returned is at <path to description.read.md>`
 
 #### Scenario: Comment write fails
 

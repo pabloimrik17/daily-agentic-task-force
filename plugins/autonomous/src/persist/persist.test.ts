@@ -8,6 +8,7 @@ import { attemptDir, receiptPath, recordPath } from "../attempts/state.ts";
 import { tempState } from "../attempts/test-fixtures.ts";
 import { config } from "../label-triage/test-fixtures.ts";
 import { exitCodeFor } from "../report.ts";
+import rewrite from "./fixtures/linear-rewrite.json";
 import { headerOf, RECEIPT_SCHEMA, runPersist } from "./persist.ts";
 import {
     PERSIST_SCHEMA,
@@ -45,6 +46,29 @@ async function arrange(options: AttemptOptions = {}, script: DocumentScript = {}
 }
 
 const ORIGINAL_BLOCK = "\n---\n\n## Original description\n\n";
+
+// The task Linear re-serialised on 2026-11-03 (DOT-122): it holds the original below the
+// definition, and returns the recorded `read` text for the `written` one.
+async function arrangeRewrite(script: DocumentScript = {}) {
+    const at = rewrite.written.indexOf(ORIGINAL_BLOCK);
+    const definition = rewrite.written.slice(0, at);
+    const original = rewrite.written.slice(at + ORIGINAL_BLOCK.length);
+    expect(spliceDefinition(original, definition)).toBe(rewrite.written);
+    return arrange(
+        { definition },
+        {
+            description: original,
+            store: (given) => (given === rewrite.written ? rewrite.read : given),
+            ...script,
+        },
+    );
+}
+
+const READ_FILE = "description.read.md";
+const reserialised = (file: string) =>
+    `linear DOT-121: the tracker re-serialised the description; its text matches what was written, and what it returned is at ${file}`;
+const differs = (file: string) =>
+    `linear DOT-121: the description read back differs from the one written; what the tracker returned is at ${file}`;
 
 const readJson = (file: string) => JSON.parse(readFileSync(file, "utf8")) as unknown;
 
@@ -111,9 +135,11 @@ describe("persist: Persistence is read back and leaves a receipt", () => {
             task: { source: "linear", id: "DOT-121", title: "Fix the login" },
             written: { description: true, comment: "posted" },
             readBack: { description: true, comment: true },
+            notes: [],
             reasons: [],
             receipt: receiptPath(dir),
         });
+        expect(existsSync(join(dir, READ_FILE))).toBe(false);
         expect(exitCodeFor(report.outcome)).toBe(0);
         expect(readJson(receiptPath(dir))).toEqual({
             schema: RECEIPT_SCHEMA,
@@ -184,20 +210,96 @@ describe("persist: Persistence is read back and leaves a receipt", () => {
         const { run, fake, dir } = await arrange({}, { store: (text) => text.slice(0, 20) });
         const report = await run();
         expect(report.outcome).toBe("not-evaluable");
-        expect(report.reasons).toEqual([
-            "linear DOT-121: the description read back differs from the one written",
-        ]);
+        expect(report.reasons).toEqual([differs(join(dir, READ_FILE))]);
+        expect(report.notes).toEqual([]);
         expect(report.written).toEqual({ description: true, comment: "none" });
         expect(report.readBack).toEqual({ description: false, comment: false });
         expect(existsSync(receiptPath(dir))).toBe(false);
         expect(fake.calls.filter((call) => call.startsWith("addComment"))).toEqual([]);
+        expect(readFileSync(join(dir, READ_FILE), "utf8")).toBe(fake.description());
     });
 
-    it("trailing whitespace is normalised in the read-back", async () => {
-        const { run } = await arrange({}, { store: (text) => text.trimEnd() });
-        expect((await run()).outcome).toBe("advance");
-        const padded = await arrange({}, { store: (text) => `${text}\n\n  \n` });
-        expect((await padded.run()).outcome).toBe("advance");
+    it("a tracker that drops a word fails the read-back and keeps what it returned", async () => {
+        const { run, fake, dir } = await arrange(
+            {},
+            { store: (text) => text.replace("loops", "") },
+        );
+        const report = await run();
+        const file = join(dir, READ_FILE);
+        expect(report.outcome).toBe("not-evaluable");
+        expect(exitCodeFor(report.outcome)).toBe(3);
+        expect(report.reasons).toEqual([differs(file)]);
+        expect(report.notes).toEqual([]);
+        expect(report.readBack.description).toBe(false);
+        expect(report.receipt).toBeNull();
+        expect(existsSync(receiptPath(dir))).toBe(false);
+        expect(fake.calls.filter((call) => call.startsWith("addComment"))).toEqual([]);
+        expect(fake.comments()).toEqual([]);
+        expect(readFileSync(file, "utf8")).toBe(fake.description());
+        expect(readFileSync(file, "utf8")).not.toContain("loops");
+        expect(readFileSync(join(dir, "description.md"), "utf8")).toContain("loops");
+    });
+
+    it("a tracker that returns nothing fails the read-back", async () => {
+        const { run, dir } = await arrange({}, { store: () => "" });
+        const report = await run();
+        expect(report.reasons).toEqual([differs(join(dir, READ_FILE))]);
+        expect(readFileSync(join(dir, READ_FILE), "utf8")).toBe("");
+    });
+
+    it("trailing whitespace is normalised in the read-back, with no note and no file", async () => {
+        const stores = [(text: string) => text.trimEnd(), (text: string) => `${text}\n\n  \n`];
+        for (const store of stores) {
+            const { run, dir } = await arrange({}, { store });
+            const report = await run();
+            expect(report.outcome).toBe("advance");
+            expect(report.notes).toEqual([]);
+            expect(existsSync(join(dir, READ_FILE))).toBe(false);
+        }
+    });
+
+    it("a description Linear re-serialised passes on its text, with one note and the returned text kept", async () => {
+        const { run, fake, dir, id } = await arrangeRewrite();
+        const report = await run();
+        const file = join(dir, READ_FILE);
+        expect(report).toMatchObject({
+            outcome: "advance",
+            written: { description: true, comment: "posted" },
+            readBack: { description: true, comment: true },
+            notes: [reserialised(file)],
+            reasons: [],
+            receipt: receiptPath(dir),
+        });
+        expect(exitCodeFor(report.outcome)).toBe(0);
+        expect(readFileSync(file, "utf8")).toBe(rewrite.read);
+        expect(readFileSync(join(dir, "description.md"), "utf8")).toBe(rewrite.written);
+        expect(fake.description()).toBe(rewrite.read);
+        expect(fake.comments()).toHaveLength(1);
+        expect(readJson(receiptPath(dir))).toMatchObject({ attempt: id, header: headerOf(id) });
+    });
+
+    it("a second run over the re-serialised description passes the same way", async () => {
+        const { run, fake, dir } = await arrangeRewrite();
+        await run();
+        const again = await run();
+        expect(again).toMatchObject({
+            outcome: "advance",
+            notes: [reserialised(join(dir, READ_FILE))],
+        });
+        expect(again.written.comment).toBe("existing");
+        expect(fake.comments()).toHaveLength(1);
+    });
+
+    it("a returned text that cannot be kept is a reason and leaves no receipt", async () => {
+        const { run, dir } = await arrangeRewrite();
+        const file = join(dir, READ_FILE);
+        mkdirSync(file);
+        const report = await run();
+        expect(report.outcome).toBe("not-evaluable");
+        expect(report.reasons[0]).toContain(`cannot write ${file}`);
+        expect(report.readBack.description).toBe(false);
+        expect(report.notes).toEqual([]);
+        expect(existsSync(receiptPath(dir))).toBe(false);
     });
 
     it("a description write that fails stops before the comment and leaves no receipt", async () => {
@@ -426,9 +528,16 @@ describe("persist: Persist report", () => {
             task: { source: "linear", id: "DOT-121", title: "Fix the login" },
             written: { description: true, comment: "posted" },
             readBack: { description: true, comment: true },
+            notes: [],
             reasons: [],
             receipt: receiptPath(dir),
         });
+    });
+
+    it("the JSON report carries the notes of a re-serialised description", async () => {
+        const { run, dir } = await arrangeRewrite();
+        const document = JSON.parse(renderPersistJson(await run())) as { notes: string[] };
+        expect(document.notes).toEqual([reserialised(join(dir, READ_FILE))]);
     });
 
     it("the JSON report of a refusal has a null task and receipt", async () => {
@@ -441,6 +550,7 @@ describe("persist: Persist report", () => {
             task: null,
             written: { description: false, comment: "none" },
             readBack: { description: false, comment: false },
+            notes: [],
             reasons: [`attempt ${id} is completed, not open`],
             receipt: null,
         });
@@ -482,6 +592,37 @@ describe("persist: Persist report", () => {
         expect(renderPersistText(await rerun.run())).toContain("comment: already posted, found");
     });
 
+    it("the text report lists the notes after the receipt", async () => {
+        const { run, dir, id } = await arrangeRewrite();
+        expect(renderPersistText(await run())).toBe(
+            [
+                `autonomous persist — started ${STARTED.toISOString()}`,
+                "outcome: advance",
+                `attempt: ${id}`,
+                'task: linear DOT-121 → "Fix the login"',
+                "description: written, read back",
+                "comment: posted, found",
+                `receipt: ${receiptPath(dir)}`,
+                "notes:",
+                `  - ${reserialised(join(dir, READ_FILE))}`,
+            ].join("\n"),
+        );
+    });
+
+    it("the text report puts the notes before the reasons", async () => {
+        const error = "linear issue comment add DOT-121 --body-file comment.md: boom";
+        const { run, dir } = await arrangeRewrite({ failures: [{ method: "addComment", error }] });
+        expect(renderPersistText(await run())).toContain(
+            [
+                "receipt: none",
+                "notes:",
+                `  - ${reserialised(join(dir, READ_FILE))}`,
+                "reasons:",
+                `  - ${error}`,
+            ].join("\n"),
+        );
+    });
+
     it("an unread task is shown as such", async () => {
         const { run } = await arrange({ summary: null });
         expect(renderPersistText(await run())).toContain("task: unread");
@@ -502,6 +643,7 @@ describe("persist: Persist report", () => {
             task: null,
             written: { description: false, comment: "none" },
             readBack: { description: false, comment: false },
+            notes: [],
             reasons: [],
             receipt: null,
             config: { path: "/home/me/config.json", error: "configuration file not found" },

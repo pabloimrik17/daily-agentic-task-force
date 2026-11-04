@@ -632,8 +632,19 @@ In this order, stopping at the first failure:
    description, in the layout of
    [The description layout](#the-description-layout). It is written to
    `description.md` in the attempt's directory and handed to the tracker as a
-   file. The task is then read back, and its description must equal the one
-   written, ignoring trailing whitespace.
+   file. The task is then read back, and its description must hold the same
+   text as the one written. Two descriptions hold the same text when their
+   Unicode letters and digits are equal, in order. Whitespace and Markdown
+   syntax are ignored, because trackers re-serialise Markdown: Linear changes
+   the `-` list marker to `*` and wraps link destinations in `<>`. A missing
+   description counts as empty. The read-back has three outcomes:
+    - Identical apart from trailing whitespace: nothing more happens.
+    - Not identical, but the same text: what the tracker returned is written to
+      `description.read.md` in the attempt's directory, the report gets a
+      [note](#the-persist-report), and persist mode goes on.
+    - Different text: `description.read.md` is written too, and persist mode
+      fails with the reason
+      `<source> <id>: the description read back differs from the one written; what the tracker returned is at <path>`.
 3. **The comment.** The task's comments are read. When one of them has the
    header as its first line, nothing is posted. Otherwise the comment is the
    header, a blank line and the stage summary. It is written to `comment.md`
@@ -706,6 +717,27 @@ The `description:` line reads `not written`, `written, read back` or `written,
 not read back`. The `comment:` line reads `not posted`, `posted, found`,
 `posted, not found` or `already posted, found`.
 
+When the tracker re-serialised the description and its text matches, the
+receipt is written and the report adds a `notes:` block after `receipt:`, in
+the shape of `reasons:`. The block is printed only when there is a note:
+
+```text
+autonomous persist — started 2026-11-03T10:00:00.000Z
+outcome: advance
+attempt: linear:DOT-121:grill-me:1
+task: linear DOT-121 → "Fix the login"
+description: written, read back
+comment: posted, found
+receipt: /home/me/.local/state/autonomous/attempts/linear/DOT-121/grill-me/1/persisted.json
+notes:
+  - linear DOT-121: the tracker re-serialised the description; its text matches what was written, and what it returned is at /home/me/.local/state/autonomous/attempts/linear/DOT-121/grill-me/1/description.read.md
+```
+
+When the text read back differs, the outcome is `not-evaluable`, the
+`description:` line reads `written, not read back`, the receipt is `none` and
+the reason is
+`linear DOT-121: the description read back differs from the one written; what the tracker returned is at /home/me/.local/state/autonomous/attempts/linear/DOT-121/grill-me/1/description.read.md`.
+
 With `--json` the report is one document identified by
 `schema: "autonomous.persist.v1"`:
 
@@ -718,30 +750,32 @@ With `--json` the report is one document identified by
     "task": { "source": "linear", "id": "DOT-121", "title": "Fix the login" },
     "written": { "description": true, "comment": "posted" },
     "readBack": { "description": true, "comment": true },
+    "notes": [],
     "reasons": [],
     "receipt": "/home/me/.local/state/autonomous/attempts/linear/DOT-121/grill-me/1/persisted.json"
 }
 ```
 
-| Field       | Content                                                                                                            |
-| ----------- | ------------------------------------------------------------------------------------------------------------------ |
-| `schema`    | `autonomous.persist.v1`                                                                                            |
-| `startedAt` | The start time of the run                                                                                          |
-| `outcome`   | `advance` exactly when the receipt was written, `not-evaluable` otherwise                                          |
-| `attempt`   | The attempt id that was given                                                                                      |
-| `task`      | `{ source, id, title }`, or `null` when the task was not read                                                      |
-| `written`   | `{ description, comment }`: whether the description was written, and the comment as `posted`, `existing` or `none` |
-| `readBack`  | `{ description, comment }`: whether each was read back as written                                                  |
-| `reasons`   | Why it stopped, in order; empty when the receipt was written                                                       |
-| `receipt`   | The path of `persisted.json` once written, otherwise `null`                                                        |
-| `config`    | `{ path, error }`, only when the configuration could not be loaded                                                 |
+| Field       | Content                                                                                                                              |
+| ----------- | ------------------------------------------------------------------------------------------------------------------------------------ |
+| `schema`    | `autonomous.persist.v1`                                                                                                              |
+| `startedAt` | The start time of the run                                                                                                            |
+| `outcome`   | `advance` exactly when the receipt was written, `not-evaluable` otherwise                                                            |
+| `attempt`   | The attempt id that was given                                                                                                        |
+| `task`      | `{ source, id, title }`, or `null` when the task was not read                                                                        |
+| `written`   | `{ description, comment }`: whether the description was written, and the comment as `posted`, `existing` or `none`                   |
+| `readBack`  | `{ description, comment }`: whether each was read back as written; for the description, the text must match                          |
+| `notes`     | Always present, `[]` by default. What happened without stopping the persist; one note when the tracker re-serialised the description |
+| `reasons`   | Why it stopped, in order; empty when the receipt was written                                                                         |
+| `receipt`   | The path of `persisted.json` once written, otherwise `null`                                                                          |
+| `config`    | `{ path, error }`, only when the configuration could not be loaded                                                                   |
 
 `existing` means an earlier run posted the comment, so this one posted none and
 `readBack.comment` is true. When the configuration cannot be loaded, the error
 is printed on stderr and, with `--json`, the document holds `config`, a null
-task and no reasons; without `--json`, the error is on stderr only, as in
-answer mode. The persist report never carries a handoff. The exit codes are in
-[Exit codes](#exit-codes).
+task, no reasons and no notes; without `--json`, the error is on stderr only,
+as in answer mode. The persist report never carries a handoff. The exit codes
+are in [Exit codes](#exit-codes).
 
 ## Configuration
 
@@ -1463,8 +1497,10 @@ directory, nested by source, task, stage and attempt number:
 ```
 
 A grill-me attempt's directory also holds `definition.md` and
-`stage-summary.md`, which the agent writes, and `description.md`, `comment.md`
-and `persisted.json`, which [persist mode](#persist-mode) writes.
+`stage-summary.md`, which the agent writes, and `description.md`, `comment.md`,
+`description.read.md` and `persisted.json`, which [persist mode](#persist-mode)
+writes. `description.read.md` exists only when the description read back was not
+identical to the one written.
 
 A GitHub id contains a `/`, so its directory nests one level deeper:
 `<state>/attempts/github/owner/name#12/test/1/`. Writes go through a temporary

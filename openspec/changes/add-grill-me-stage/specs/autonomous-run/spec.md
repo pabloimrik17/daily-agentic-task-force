@@ -30,12 +30,22 @@ Persist mode SHALL write nothing when the attempt is unknown, is not open, belon
 
 ### Requirement: Persist report
 
-With `--json`, persist mode SHALL print one JSON document identified by `schema: "autonomous.persist.v1"`. It holds the start time, the outcome, the attempt id, the task, what was written and read back, the reasons, and the receipt's path when one was written. Without `--json`, it is a text report of the same information. A configuration that cannot be loaded is reported as in answer mode.
+With `--json`, persist mode SHALL print one JSON document identified by `schema: "autonomous.persist.v1"`. It holds the start time, the outcome, the attempt id, the task, what was written and read back, the reasons, the notes, and the receipt's path when one was written. `notes` SHALL always be present, empty by default, and list what did not stop the persistence. Without `--json`, it is a text report of the same information. A configuration that cannot be loaded is reported as in answer mode.
 
 #### Scenario: Persist JSON report
 
 - **WHEN** the run is invoked with `--apply --persist <attempt-id> --json`
-- **THEN** stdout contains exactly one JSON document with `schema` equal to `autonomous.persist.v1`
+- **THEN** stdout contains exactly one JSON document with `schema` equal to `autonomous.persist.v1` and `notes` equal to an empty array when nothing was noted
+
+#### Scenario: Note in the report
+
+- **WHEN** the tracker returns the description re-serialised, with the same text as the one written
+- **THEN** the JSON report lists one note in `notes`, and the text report prints it in a `notes:` block after the `receipt:` line
+
+#### Scenario: No note in the text report
+
+- **WHEN** persist mode writes the receipt and has no note
+- **THEN** the text report has no `notes:` line
 
 ### Requirement: The transition waits for the persistence receipt
 
