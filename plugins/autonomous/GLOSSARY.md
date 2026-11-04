@@ -80,6 +80,12 @@ candidates; it never chooses anything else.
 A task whose tracker records another task as its parent. While any subtask is
 open, its parent is never a candidate.
 
+**Open blocker**:
+A task that blocks another and has not been closed in its tracker, whatever
+the reason for closing it and wherever it lives. A task with an open blocker
+is never a candidate.
+_Avoid_: dependency, blocking issue
+
 ### Sessions
 
 **Attempt**:
