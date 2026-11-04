@@ -22,6 +22,8 @@ export interface PersistReport {
     task: PersistTask | null; // null when the task was not read
     written: { description: boolean; comment: CommentWrite };
     readBack: { description: boolean; comment: boolean };
+    // What the operator should know although the persist went through, e.g. a re-serialised description.
+    notes: string[];
     reasons: string[];
     receipt: string | null; // the receipt's path, once written
     // Present only when the configuration failed to load, leaving nothing to read.
@@ -37,6 +39,7 @@ export function blank(attempt: AttemptId, startedAt: Date): PersistReport {
         task: null,
         written: { description: false, comment: "none" },
         readBack: { description: false, comment: false },
+        notes: [],
         reasons: [],
         receipt: null,
     };
@@ -72,10 +75,13 @@ export function renderPersistText(report: PersistReport): string {
         `description: ${descriptionLine(report)}`,
         `comment: ${commentLine(report)}`,
         `receipt: ${report.receipt ?? "none"}`,
-        ...(report.reasons.length === 0
-            ? []
-            : ["reasons:", ...report.reasons.map((reason) => `  - ${reason}`)]),
+        ...listing("notes", report.notes),
+        ...listing("reasons", report.reasons),
     ].join("\n");
+}
+
+function listing(title: string, items: readonly string[]): string[] {
+    return items.length === 0 ? [] : [`${title}:`, ...items.map((item) => `  - ${item}`)];
 }
 
 function taskLine(task: PersistTask | null): string {

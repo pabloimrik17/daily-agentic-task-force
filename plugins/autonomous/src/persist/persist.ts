@@ -20,6 +20,7 @@ import type { AutonomousConfig } from "../config.ts";
 import type { Tracker, Trackers } from "../label-triage/trackers/tracker.ts";
 import type { Result } from "../result.ts";
 import type { StageId } from "../stages/stage.ts";
+import { sameBytes, sameText } from "./compare.ts";
 import { blank, type PersistReport } from "./report.ts";
 import { spliceDefinition } from "./splice.ts";
 
@@ -28,6 +29,7 @@ export const RECEIPT_SCHEMA = "autonomous.persisted.v1";
 const GRILL_ME: StageId = "grill-me";
 
 const DESCRIPTION_FILE = "description.md";
+const DESCRIPTION_READ_FILE = "description.read.md"; // what the tracker returned, when it differs
 const COMMENT_FILE = "comment.md";
 
 export interface PersistDeps {
@@ -180,8 +182,6 @@ async function readTask(persisting: Persisting): Promise<string | null> {
     return null;
 }
 
-const normalised = (description: string | null) => (description ?? "").trimEnd();
-
 async function saveDescription(persisting: Persisting): Promise<string | null> {
     const { tracker, record, dir, report } = persisting;
     const next = spliceDefinition(persisting.current, persisting.definition);
@@ -199,10 +199,33 @@ async function saveDescription(persisting: Persisting): Promise<string | null> {
     if (!back.ok) {
         return back.error;
     }
-    if (normalised(back.value.description) !== normalised(next)) {
-        return `${record.task.source} ${record.task.id}: the description read back differs from the one written`;
+    return checkReadBack(persisting, next, back.value.description);
+}
+
+// The read-back confirms the text landed, not that the Markdown is byte-identical (design D4).
+async function checkReadBack(
+    persisting: Persisting,
+    written: string,
+    read: string | null,
+): Promise<string | null> {
+    const { record, dir, report } = persisting;
+    if (sameBytes(written, read)) {
+        report.readBack.description = true;
+        return null;
+    }
+    const file = join(dir, DESCRIPTION_READ_FILE);
+    const failed = await writeText(file, read ?? "");
+    if (failed !== null) {
+        return failed;
+    }
+    const task = `${record.task.source} ${record.task.id}`;
+    if (!sameText(written, read)) {
+        return `${task}: the description read back differs from the one written; what the tracker returned is at ${file}`;
     }
     report.readBack.description = true;
+    report.notes.push(
+        `${task}: the tracker re-serialised the description; its text matches what was written, and what it returned is at ${file}`,
+    );
     return null;
 }
 

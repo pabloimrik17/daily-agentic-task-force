@@ -1295,6 +1295,7 @@ describe("main --persist", () => {
         task: { source: string; id: string } | null;
         written: { description: boolean; comment: string };
         readBack: { description: boolean; comment: boolean };
+        notes: string[];
         reasons: string[];
         receipt: string | null;
         config?: { path: string; error: string };
@@ -1343,6 +1344,7 @@ describe("main --persist", () => {
             task: { source: "linear", id: "DOT-121", title: "Fix the login" },
             written: { description: true, comment: "posted" },
             readBack: { description: true, comment: true },
+            notes: [],
             reasons: [],
             receipt: receiptOf(stateDir),
         });
@@ -1419,6 +1421,7 @@ describe("main --persist", () => {
             task: null,
             written: { description: false, comment: "none" },
             readBack: { description: false, comment: false },
+            notes: [],
             reasons: [],
             receipt: null,
             config: { path: missing, error: missingError },
