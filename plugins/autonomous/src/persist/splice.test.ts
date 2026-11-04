@@ -51,6 +51,44 @@ describe("spliceDefinition", () => {
         expect(spliceDefinition(once, SECOND)).toBe(`${SECOND}\n---\n\n${ORIGINAL_HEADING}\n`);
     });
 
+    it("replaces the definition above an empty original description whose trailing newline a tracker stripped", () => {
+        const stripped = spliceDefinition(null, FIRST).trimEnd();
+        const twice = spliceDefinition(stripped, SECOND);
+
+        expect(twice.trimEnd()).toBe(`${SECOND}\n---\n\n${ORIGINAL_HEADING}`);
+        expect(twice.match(/## Original description/g)).toHaveLength(1);
+        expect(twice).not.toContain("Login fails.");
+    });
+
+    it("keeps trailing whitespace after the heading when the original description is empty", () => {
+        const stripped = `${spliceDefinition(null, FIRST).trimEnd()}  `;
+
+        expect(spliceDefinition(stripped, SECOND)).toBe(`${SECOND}\n---\n\n${ORIGINAL_HEADING}  `);
+    });
+
+    it("gives the same description through a tracker that trims it, with an empty original", () => {
+        const first = spliceDefinition(null, FIRST);
+        const second = spliceDefinition(first.trimEnd(), FIRST);
+
+        expect(second.trimEnd()).toBe(first.trimEnd());
+    });
+
+    it("gives the same description through a tracker that trims it, with a non-empty original", () => {
+        const first = spliceDefinition("Fix the login", FIRST);
+        const second = spliceDefinition(first.trimEnd(), FIRST);
+
+        expect(second).toBe(first);
+        expect(second.trimEnd()).toBe(first.trimEnd());
+    });
+
+    it("does not match a heading that continues on the same line", () => {
+        const description = `${DEFINITION_HEADING}\n\nOld\n\n---\n\n${ORIGINAL_HEADING} of the task`;
+
+        expect(spliceDefinition(description, FIRST)).toBe(
+            `${FIRST}\n---\n\n${ORIGINAL_HEADING}\n\n${description}`,
+        );
+    });
+
     it("treats a description that contains --- but not the layout as original text", () => {
         const description = "Intro\n\n---\n\nMore detail";
         expect(spliceDefinition(description, FIRST)).toBe(
