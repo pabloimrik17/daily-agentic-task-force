@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 
 import type { Answer } from "../args.ts";
 import type { AutonomousConfig } from "../config.ts";
@@ -26,6 +26,10 @@ async function labelsOf(
 }
 
 describe("answers to triage questions: Apply answers to triage questions", () => {
+    afterEach(() => {
+        vi.useRealTimers();
+    });
+
     it("Answer applied: HITL and proposal are added, the other labels remain, and the task is read back", async () => {
         const calls: string[] = [];
         const given = trackers(calls, { beads: [task("beads", "X-12", ["work", "bug"])] });
@@ -182,6 +186,7 @@ describe("answers to triage questions: Apply answers to triage questions", () =>
     });
 
     it("Read-back mismatch: failed with both label sets, and no further Linear answer is written", async () => {
+        vi.useFakeTimers();
         const calls: string[] = [];
         const given = trackers(
             calls,
@@ -194,7 +199,7 @@ describe("answers to triage questions: Apply answers to triage questions", () =>
             },
             { linear: { dropsOnAdd: "bug" } },
         );
-        const records = await answerLabelTriage(
+        const pending = answerLabelTriage(
             [
                 answer("label-triage:linear:DOT-1:autonomy", "HITL"),
                 answer("label-triage:linear:DOT-2:autonomy", "AFK"),
@@ -202,12 +207,14 @@ describe("answers to triage questions: Apply answers to triage questions", () =>
             ],
             context(given),
         );
+        await vi.runAllTimersAsync();
+        const records = await pending;
         expect(records).toEqual([
             {
                 id: "label-triage:linear:DOT-1:autonomy",
                 labels: ["HITL"],
                 status: "failed",
-                detail: "read-back mismatch: before [personal, bug] + [HITL] → after [personal, HITL]",
+                detail: "read-back mismatch: before [personal, bug] + [HITL] → after [personal, HITL] (read 6 times over 30 s)",
             },
             {
                 id: "label-triage:linear:DOT-2:autonomy",
@@ -231,7 +238,7 @@ describe("answers to triage questions: Apply answers to triage questions", () =>
             "beads:addLabel:X-12:proposal",
             "beads:readTask:X-12",
             "linear:addLabel:DOT-1:HITL",
-            "linear:readTask:DOT-1",
+            ...Array<string>(6).fill("linear:readTask:DOT-1"),
         ]);
     });
 });

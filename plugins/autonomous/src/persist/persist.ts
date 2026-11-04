@@ -18,6 +18,7 @@ import {
 } from "../attempts/state.ts";
 import type { AutonomousConfig } from "../config.ts";
 import type { Tracker, Trackers } from "../label-triage/trackers/tracker.ts";
+import { READ_BACK_TRIES, readUntil } from "../read-back.ts";
 import type { Result } from "../result.ts";
 import type { StageId } from "../stages/stage.ts";
 import { sameBytes, sameText } from "./compare.ts";
@@ -195,7 +196,10 @@ async function saveDescription(persisting: Persisting): Promise<string | null> {
         return updated.error;
     }
     report.written.description = true;
-    const back = await tracker.readTask(record.task.id);
+    const back = await readUntil(
+        () => tracker.readTask(record.task.id),
+        (read) => sameText(next, read.description),
+    );
     if (!back.ok) {
         return back.error;
     }
@@ -220,7 +224,7 @@ async function checkReadBack(
     }
     const task = `${record.task.source} ${record.task.id}`;
     if (!sameText(written, read)) {
-        return `${task}: the description read back differs from the one written; what the tracker returned is at ${file}`;
+        return `${task}: the description read back differs from the one written (${READ_BACK_TRIES}); what the tracker returned is at ${file}`;
     }
     report.readBack.description = true;
     report.notes.push(
@@ -264,12 +268,15 @@ async function postComment(persisting: Persisting): Promise<string | null> {
 
 async function confirmComment(persisting: Persisting): Promise<string | null> {
     const { tracker, record, header, report } = persisting;
-    const back = await tracker.readComments(record.task.id);
+    const back = await readUntil(
+        () => tracker.readComments(record.task.id),
+        (comments) => hasHeader(comments, header),
+    );
     if (!back.ok) {
         return back.error;
     }
     if (!hasHeader(back.value, header)) {
-        return `${record.task.source} ${record.task.id}: the comment headed "${header}" was not found when read back`;
+        return `${record.task.source} ${record.task.id}: the comment headed "${header}" was not found when read back (${READ_BACK_TRIES})`;
     }
     report.readBack.comment = true;
     return null;

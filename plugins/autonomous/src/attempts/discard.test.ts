@@ -1,7 +1,7 @@
 import { existsSync, readFileSync, rmSync } from "node:fs";
 import { writeFile } from "node:fs/promises";
 
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 
 import type { RunArgs } from "../args.ts";
 import { task, trackers } from "../label-triage/test-fixtures.ts";
@@ -32,10 +32,25 @@ const OPEN: Observed = {
 const states: string[] = [];
 
 afterEach(() => {
+    vi.useRealTimers();
     for (const state of states.splice(0)) {
         rmSync(state, { recursive: true, force: true });
     }
 });
+
+// The discard reads the state from disk before the read-back waits, so the fake clock advances
+// until it settles instead of once.
+async function withoutSleeping<T>(pending: Promise<T>): Promise<T> {
+    let settled = false;
+    const done = () => {
+        settled = true;
+    };
+    void pending.then(done, done);
+    while (!settled) {
+        await vi.advanceTimersByTimeAsync(1000);
+    }
+    return pending;
+}
 
 function args(discard: string, releaseWorkspace = false): RunArgs {
     return {
@@ -300,6 +315,7 @@ describe("discardAttempt by attempt id", () => {
     });
 
     it("stops at a taken that stays, naming the labels found and the removed session", async () => {
+        vi.useFakeTimers();
         const original = record();
         const { state, deps } = await setup({ records: [original] });
         const stubborn = {
@@ -312,16 +328,18 @@ describe("discardAttempt by attempt id", () => {
                 }),
         };
 
-        const report = await discardAttempt(
-            args("linear:DOT-109:test:1"),
-            { ...deps, trackers: { ...deps.trackers, linear: stubborn } },
-            STARTED,
+        const report = await withoutSleeping(
+            discardAttempt(
+                args("linear:DOT-109:test:1"),
+                { ...deps, trackers: { ...deps.trackers, linear: stubborn } },
+                STARTED,
+            ),
         );
 
         expect(report.outcome).toBe("not-evaluable");
         expect(report.removed).toEqual({ session: true, taken: false, workspace: false });
         expect(report.reasons.at(-1)).toBe(
-            "removing taken from linear:DOT-109 failed: taken still on linear:DOT-109 after removal: [AFK, taken]; the session was already removed",
+            "removing taken from linear:DOT-109 failed: taken still on linear:DOT-109 after removal: [AFK, taken] (read 6 times over 30 s); the session was already removed",
         );
         expect(await read(state)).toEqual(original);
     });

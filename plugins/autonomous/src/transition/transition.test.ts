@@ -19,6 +19,7 @@ import type { AutonomousConfig, Source } from "../config.ts";
 import { MEANINGS } from "../label-contract/contract.ts";
 import { config, task, trackers } from "../label-triage/test-fixtures.ts";
 import type { TrackerLabel, Trackers } from "../label-triage/trackers/tracker.ts";
+import { READ_BACK_DELAYS_MS } from "../read-back.ts";
 import { exitCodeFor } from "../report.ts";
 import type { AnswerContext, AnswerRecord } from "../runner.ts";
 import { transitionHandler } from "./answer.ts";
@@ -82,8 +83,21 @@ function answer(id: string, ...values: string[]): Answer {
     return { id, values };
 }
 
-async function transition(given: Trackers, id: string, ...values: string[]): Promise<AnswerRecord> {
-    const [record] = await transitionHandler(NO_STATE).answer(
+// Records each read-back delay instead of sleeping it.
+function waiting(waits: number[]): (ms: number) => Promise<void> {
+    return (ms) => {
+        waits.push(ms);
+        return Promise.resolve();
+    };
+}
+
+async function transitionWaiting(
+    given: Trackers,
+    waits: number[],
+    id: string,
+    ...values: string[]
+): Promise<AnswerRecord> {
+    const [record] = await transitionHandler(NO_STATE, waiting(waits)).answer(
         [answer(id, ...values)],
         context(given),
     );
@@ -91,6 +105,10 @@ async function transition(given: Trackers, id: string, ...values: string[]): Pro
         throw new Error(`no record for ${id}`);
     }
     return record;
+}
+
+function transition(given: Trackers, id: string, ...values: string[]): Promise<AnswerRecord> {
+    return transitionWaiting(given, [], id, ...values);
 }
 
 async function labelsOf(given: Trackers, source: Source, id: string): Promise<string[]> {
@@ -108,6 +126,71 @@ function failingRemoval(given: Trackers, source: Source, label: string, error: s
                 name === label
                     ? Promise.resolve({ ok: false, error })
                     : tracker.removeLabel(id, name),
+        },
+    };
+}
+
+// After each label write, the next `reads` reads still return the labels from before it, as
+// Linear's reads lagged DOT-121's last write on 2026-11-04.
+function lagging(given: Trackers, source: Source, reads: number): Trackers {
+    const tracker = given[source];
+    let stale: string[] = [];
+    let left = 0;
+    const before = async (id: string) => {
+        stale = await labelsOf(given, source, id);
+        left = reads;
+    };
+    return {
+        ...given,
+        [source]: {
+            ...tracker,
+            readTask: async (id: string) => {
+                const read = await tracker.readTask(id);
+                if (!read.ok || left === 0) {
+                    return read;
+                }
+                left -= 1;
+                return { ok: true, value: { ...read.value, labels: stale } };
+            },
+            addLabel: async (id: string, label: string) => {
+                await before(id);
+                return tracker.addLabel(id, label);
+            },
+            removeLabel: async (id: string, label: string) => {
+                await before(id);
+                return tracker.removeLabel(id, label);
+            },
+        },
+    };
+}
+
+// The tracker accepts every removal and keeps the label.
+function keepingOnRemoval(given: Trackers, source: Source): Trackers {
+    return {
+        ...given,
+        [source]: {
+            ...given[source],
+            removeLabel: () => Promise.resolve({ ok: true, value: undefined }),
+        },
+    };
+}
+
+// Every read after the first label write fails.
+function unreadableAfterWrite(given: Trackers, source: Source, error: string): Trackers {
+    const tracker = given[source];
+    let wrote = false;
+    return {
+        ...given,
+        [source]: {
+            ...tracker,
+            readTask: async (id: string) => {
+                const read = await tracker.readTask(id);
+                return wrote ? { ok: false, error } : read;
+            },
+            addLabel: (id: string, label: string) => {
+                wrote = true;
+                return tracker.addLabel(id, label);
+            },
         },
     };
 }
@@ -740,15 +823,122 @@ describe("transition answers: A transition replaces the stage", () => {
 
     it("a read-back that loses a label after the adds fails before any removal", async () => {
         const calls: string[] = [];
+        const waits: number[] = [];
         const given = linear(calls, ["work", "grill-me"], { dropsOnAdd: "grill-me" });
 
-        const record = await transition(given, "transition:linear:DOT-110", "AFK");
+        const record = await transitionWaiting(given, waits, "transition:linear:DOT-110", "AFK");
 
         expect(record).toMatchObject({
             status: "failed",
-            detail: "read-back mismatch: before [work, grill-me] + [AFK, proposal] → after [work, AFK, proposal]; nothing was removed",
+            detail: "read-back mismatch: before [work, grill-me] + [AFK, proposal] → after [work, AFK, proposal] (read 6 times over 30 s); nothing was removed",
         });
+        expect(waits).toEqual([...READ_BACK_DELAYS_MS]);
         expect(removals(calls)).toEqual([]);
+    });
+
+    it("a read-back that never shows the removal fails with the hint after the tries", async () => {
+        const calls: string[] = [];
+        const waits: number[] = [];
+        const given = linear(calls, ["work", "grill-me", "AFK", "proposal"]);
+
+        const record = await transitionWaiting(
+            keepingOnRemoval(given, "linear"),
+            waits,
+            "transition:linear:DOT-110",
+            "AFK",
+        );
+
+        expect(record).toMatchObject({
+            status: "failed",
+            detail:
+                "read-back mismatch: before [work, grill-me, AFK, proposal] + [] - [grill-me] → after [work, grill-me, AFK, proposal] (read 6 times over 30 s); " +
+                "grill-me may remain beside proposal, answering again completes the transition",
+        });
+        expect(waits).toEqual([...READ_BACK_DELAYS_MS]);
+    });
+
+    it("a read-back that fails is not read again", async () => {
+        const calls: string[] = [];
+        const waits: number[] = [];
+        const given = linear(calls, ["work", "grill-me"]);
+        const error = "linear issue view DOT-110: boom";
+
+        const record = await transitionWaiting(
+            unreadableAfterWrite(given, "linear", error),
+            waits,
+            "transition:linear:DOT-110",
+            "AFK",
+        );
+
+        expect(record).toMatchObject({
+            status: "failed",
+            detail: `${error} (before [work, grill-me]); nothing was removed`,
+        });
+        expect(waits).toEqual([]);
+        expect(calls.filter((call) => call.includes(":readTask:"))).toHaveLength(2);
+    });
+
+    it("a read-back that matches at once never waits: the task is read three times in all", async () => {
+        const calls: string[] = [];
+        const waits: number[] = [];
+        const given = linear(calls, ["work", "grill-me"]);
+
+        const record = await transitionWaiting(given, waits, "transition:linear:DOT-110", "AFK");
+
+        expect(record.status).toBe("applied");
+        expect(waits).toEqual([]);
+        expect(calls.filter((call) => call.includes(":readTask:"))).toHaveLength(3);
+    });
+
+    it("a read-back that lags the last write is read again until it shows, and the transition completes", async () => {
+        const calls: string[] = [];
+        const waits: number[] = [];
+        const given = linear(calls, ["personal", "grill-me", "taken"]);
+
+        const record = await transitionWaiting(
+            lagging(given, "linear", 2),
+            waits,
+            "transition:linear:DOT-110",
+            "AFK",
+        );
+
+        expect(record).toMatchObject({
+            status: "applied",
+            detail: "added AFK, proposal, removed grill-me on linear DOT-110, read back",
+        });
+        expect(waits).toEqual([1000, 2000, 1000, 2000]);
+        expect(await labelsOf(given, "linear", "DOT-110")).toEqual([
+            "personal",
+            "taken",
+            "AFK",
+            "proposal",
+        ]);
+    });
+
+    it("answering again after a lagging read-back only removes grill-me", async () => {
+        const calls: string[] = [];
+        const waits: number[] = [];
+        const given = linear(calls, ["personal", "grill-me", "taken", "AFK", "proposal"]);
+
+        const record = await transitionWaiting(
+            lagging(given, "linear", 2),
+            waits,
+            "transition:linear:DOT-110",
+            "AFK",
+        );
+
+        expect(record).toMatchObject({
+            status: "applied",
+            detail: "removed grill-me on linear DOT-110, read back",
+        });
+        expect(writes(calls)).toEqual(["linear:removeLabel:DOT-110:grill-me"]);
+        expect(waits).toEqual([1000, 2000]);
+        expect(await labelsOf(given, "linear", "DOT-110")).toEqual([
+            "personal",
+            "taken",
+            "AFK",
+            "proposal",
+        ]);
     });
 });
 

@@ -1,0 +1,4 @@
+{
+    "written": "## Definition\n\n### Problem\n\nThe login loops after the redirect that DOT-110 introduced, and DOT-121 is the grill that found it.\n\n### Solution\n\nStop the redirect from clearing the session, as described in https://example.com/docs.\n\n---\n\n## Original description\n\nFix the login\n\nSee DOT-110 for the redirect change.\n",
+    "read": "## Definition\n\n### Problem\n\nThe login loops after the redirect that [DOT-110](https://linear.app/monolab/issue/DOT-110/redirect-after-login) introduced, and [DOT-121](https://linear.app/monolab/issue/DOT-121/fix-the-login) is the grill that found it.\n\n### Solution\n\nStop the redirect from clearing the session, as described in <https://example.com/docs>.\n\n---\n\n## Original description\n\nFix the login\n\nSee [DOT-110](https://linear.app/monolab/issue/DOT-110/redirect-after-login) for the redirect change.\n"
+}

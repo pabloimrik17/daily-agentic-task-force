@@ -156,7 +156,7 @@ Persist mode SHALL post the content of `stage-summary.md` as a comment on the ta
 
 ### Requirement: Persistence is read back and leaves a receipt
 
-After writing, persist mode SHALL read the task's description and comments back. It SHALL write a receipt in the attempt directory only when the comment is found and the description read back holds the same text as the one written: the same Unicode letters and digits, in order. Whitespace and Markdown syntax SHALL be ignored, because trackers re-serialise Markdown. A failed write or read-back SHALL leave no receipt.
+After writing, persist mode SHALL read the description and comments back, waiting out read lag as the autonomous-run spec defines. It SHALL write a receipt only when the comment is found and the description read back holds the same text as the one written: the same Unicode letters and digits, in order. Whitespace and Markdown syntax SHALL be ignored and a link SHALL count as its text, because trackers re-serialise Markdown. A failed write or read-back SHALL leave no receipt.
 
 #### Scenario: Persisted
 
@@ -168,10 +168,20 @@ After writing, persist mode SHALL read the task's description and comments back.
 - **WHEN** the tracker returns the description with its `-` list markers changed to `*` and its link destinations wrapped in `<>`, and the comment is found
 - **THEN** the receipt is written, persist mode exits 0, `description.read.md` holds what the tracker returned, and the report carries the note `<source> <id>: the tracker re-serialised the description; its text matches what was written, and what it returned is at <path to description.read.md>`
 
+#### Scenario: Tracker links an identifier
+
+- **WHEN** the definition names `DOT-110` and the tracker returns it as `[DOT-110](https://linear.app/monolab/issue/DOT-110/a-slug)`, with the rest of the text unchanged
+- **THEN** the texts match, the receipt is written, persist mode exits 0, `description.read.md` holds what the tracker returned, and the report carries the re-serialised note
+
+#### Scenario: Description read lags
+
+- **WHEN** the first read after the description write returns the description as it was before, and a later read returns the one written
+- **THEN** persist mode reads again, compares the later read, writes the receipt, and writes neither `description.read.md` nor a note
+
 #### Scenario: Text read back differs
 
-- **WHEN** the tracker returns a description whose letters or digits differ from the one written, or returns no description
-- **THEN** no receipt is written and no comment is posted, `description.read.md` holds what the tracker returned, persist mode exits 3, and the reason is `<source> <id>: the description read back differs from the one written; what the tracker returned is at <path to description.read.md>`
+- **WHEN** the tracker returns a description whose letters or digits differ from the one written, or returns no description, on all six reads
+- **THEN** no receipt is written and no comment is posted, `description.read.md` holds what the tracker returned, persist mode exits 3, and the reason is `<source> <id>: the description read back differs from the one written (read 6 times over 30 s); what the tracker returned is at <path to description.read.md>`
 
 #### Scenario: Comment write fails
 

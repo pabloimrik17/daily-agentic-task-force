@@ -1,13 +1,15 @@
 import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 
-import { afterAll, describe, expect, it } from "vitest";
+import { afterAll, afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { OPEN_STATES } from "../attempts/record.ts";
 import { attemptDir, receiptPath, recordPath } from "../attempts/state.ts";
 import { tempState } from "../attempts/test-fixtures.ts";
 import { config } from "../label-triage/test-fixtures.ts";
+import { READ_BACK_TRIES } from "../read-back.ts";
 import { exitCodeFor } from "../report.ts";
+import autolink from "./fixtures/linear-autolink.json";
 import rewrite from "./fixtures/linear-rewrite.json";
 import { headerOf, RECEIPT_SCHEMA, runPersist } from "./persist.ts";
 import {
@@ -36,29 +38,60 @@ afterAll(() => {
     }
 });
 
+// The read-back waits on setTimeout between reads. The clock is fake, so nothing sleeps for real:
+// each wait is fired as it is scheduled and `Date.now()` tells how long the run would have waited.
+beforeEach(() => {
+    vi.useFakeTimers({ toFake: ["setTimeout", "Date"] });
+});
+afterEach(() => {
+    vi.useRealTimers();
+});
+
+async function lagged<T>(pending: Promise<T>): Promise<T> {
+    let done = false;
+    const finish = () => {
+        done = true;
+    };
+    pending.then(finish, finish);
+    while (!done) {
+        await vi.advanceTimersToNextTimerAsync();
+        await new Promise((resolve) => setImmediate(resolve)); // real file I/O between the waits
+    }
+    return pending;
+}
+
 async function arrange(options: AttemptOptions = {}, script: DocumentScript = {}) {
     const state = tempState();
     STATES.push(state);
     const { id, dir } = await startAttempt(state, options);
     const fake = fakeDocuments(options.source ?? "linear", script);
     const deps = { config: config(), trackers: trackersWith(fake), state };
-    return { id, dir, state, fake, deps, run: () => runPersist(id, deps, STARTED) };
+    const began = Date.now();
+    return {
+        id,
+        dir,
+        state,
+        fake,
+        deps,
+        run: () => lagged(runPersist(id, deps, STARTED)),
+        waited: () => Date.now() - began,
+    };
 }
 
 const ORIGINAL_BLOCK = "\n---\n\n## Original description\n\n";
 
 // The task Linear re-serialised on 2026-11-03 (DOT-122): it holds the original below the
 // definition, and returns the recorded `read` text for the `written` one.
-async function arrangeRewrite(script: DocumentScript = {}) {
-    const at = rewrite.written.indexOf(ORIGINAL_BLOCK);
-    const definition = rewrite.written.slice(0, at);
-    const original = rewrite.written.slice(at + ORIGINAL_BLOCK.length);
-    expect(spliceDefinition(original, definition)).toBe(rewrite.written);
+async function arrangeRewrite(script: DocumentScript = {}, fixture = rewrite) {
+    const at = fixture.written.indexOf(ORIGINAL_BLOCK);
+    const definition = fixture.written.slice(0, at);
+    const original = fixture.written.slice(at + ORIGINAL_BLOCK.length);
+    expect(spliceDefinition(original, definition)).toBe(fixture.written);
     return arrange(
         { definition },
         {
             description: original,
-            store: (given) => (given === rewrite.written ? rewrite.read : given),
+            store: (given) => (given === fixture.written ? fixture.read : given),
             ...script,
         },
     );
@@ -68,7 +101,11 @@ const READ_FILE = "description.read.md";
 const reserialised = (file: string) =>
     `linear DOT-121: the tracker re-serialised the description; its text matches what was written, and what it returned is at ${file}`;
 const differs = (file: string) =>
-    `linear DOT-121: the description read back differs from the one written; what the tracker returned is at ${file}`;
+    `linear DOT-121: the description read back differs from the one written (${READ_BACK_TRIES}); what the tracker returned is at ${file}`;
+const NOT_FOUND = (header: string) =>
+    `linear DOT-121: the comment headed "${header}" was not found when read back (${READ_BACK_TRIES})`;
+
+const ALL_WAITS_MS = 30_000; // the delays of READ_BACK_TRIES, added up
 
 const readJson = (file: string) => JSON.parse(readFileSync(file, "utf8")) as unknown;
 
@@ -332,9 +369,7 @@ describe("persist: Persistence is read back and leaves a receipt", () => {
         const { run, dir } = await arrange({}, { forgetsComments: true });
         const report = await run();
         expect(report.outcome).toBe("not-evaluable");
-        expect(report.reasons).toEqual([
-            `linear DOT-121: the comment headed "${headerOf("linear:DOT-121:grill-me:1")}" was not found when read back`,
-        ]);
+        expect(report.reasons).toEqual([NOT_FOUND(headerOf("linear:DOT-121:grill-me:1"))]);
         expect(report.written.comment).toBe("posted");
         expect(report.readBack.comment).toBe(false);
         expect(existsSync(receiptPath(dir))).toBe(false);
@@ -383,6 +418,124 @@ describe("persist: Persistence is read back and leaves a receipt", () => {
         const before = readFileSync(recordPath(dir), "utf8");
         await run();
         expect(readFileSync(recordPath(dir), "utf8")).toBe(before);
+    });
+});
+
+describe("persist: Persistence is read back through the tracker's read lag", () => {
+    const callsTo = (fake: { calls: string[] }, method: string) =>
+        fake.calls.filter((call) => call.startsWith(method)).length;
+
+    it("a description that still reads as the old one is read again until it shows the new", async () => {
+        const { run, fake, dir, waited } = await arrange({}, { lag: { description: 2 } });
+        const report = await run();
+        expect(report).toMatchObject({
+            outcome: "advance",
+            readBack: { description: true, comment: true },
+            notes: [],
+            reasons: [],
+        });
+        expect(callsTo(fake, "readTask")).toBe(1 + 3);
+        expect(waited()).toBe(1000 + 2000);
+        expect(existsSync(join(dir, READ_FILE))).toBe(false);
+        expect(existsSync(receiptPath(dir))).toBe(true);
+    });
+
+    it("a description that never shows the new one fails after every read, and keeps the last read", async () => {
+        const { run, fake, dir, waited } = await arrange(
+            {},
+            { description: "Fix the login", lag: { description: Infinity } },
+        );
+        const report = await run();
+        const file = join(dir, READ_FILE);
+        expect(report.outcome).toBe("not-evaluable");
+        expect(report.reasons).toEqual([differs(file)]);
+        expect(report.reasons[0]).toContain("(read 6 times over 30 s)");
+        expect(report.written.description).toBe(true);
+        expect(report.readBack).toEqual({ description: false, comment: false });
+        expect(callsTo(fake, "readTask")).toBe(1 + 6);
+        expect(waited()).toBe(ALL_WAITS_MS);
+        expect(readFileSync(file, "utf8")).toBe("Fix the login");
+        expect(callsTo(fake, "addComment")).toBe(0);
+        expect(existsSync(receiptPath(dir))).toBe(false);
+    });
+
+    it("a description read that fails after a stale one is not read again", async () => {
+        const error = "linear issue view DOT-121: boom";
+        const { run, fake, dir, waited } = await arrange(
+            {},
+            { lag: { description: Infinity }, failures: [{ method: "readTask", call: 3, error }] },
+        );
+        const report = await run();
+        expect(report.outcome).toBe("not-evaluable");
+        expect(report.reasons).toEqual([error]);
+        expect(callsTo(fake, "readTask")).toBe(3);
+        expect(waited()).toBe(1000);
+        expect(existsSync(receiptPath(dir))).toBe(false);
+    });
+
+    it("a description Linear linked the identifiers of passes on its text, with one note", async () => {
+        const { run, fake, dir, waited } = await arrangeRewrite(
+            { lag: { description: 1 } },
+            autolink,
+        );
+        const report = await run();
+        const file = join(dir, READ_FILE);
+        expect(report).toMatchObject({
+            outcome: "advance",
+            readBack: { description: true, comment: true },
+            notes: [reserialised(file)],
+            reasons: [],
+        });
+        expect(readFileSync(file, "utf8")).toBe(autolink.read);
+        expect(fake.description()).toBe(autolink.read);
+        expect(callsTo(fake, "readTask")).toBe(1 + 2);
+        expect(waited()).toBe(1000);
+    });
+
+    it("a comment that is not listed yet is read again until it is", async () => {
+        const { run, fake, dir, waited } = await arrange({}, { lag: { comments: 2 } });
+        const report = await run();
+        expect(report).toMatchObject({
+            outcome: "advance",
+            written: { description: true, comment: "posted" },
+            readBack: { description: true, comment: true },
+            reasons: [],
+        });
+        expect(callsTo(fake, "readComments")).toBe(1 + 3);
+        expect(callsTo(fake, "addComment")).toBe(1);
+        expect(waited()).toBe(1000 + 2000);
+        expect(existsSync(receiptPath(dir))).toBe(true);
+    });
+
+    it("a comment that is never listed fails after every read", async () => {
+        const { run, fake, dir, waited } = await arrange({}, { lag: { comments: Infinity } });
+        const report = await run();
+        expect(report.outcome).toBe("not-evaluable");
+        expect(report.reasons).toEqual([NOT_FOUND(headerOf("linear:DOT-121:grill-me:1"))]);
+        expect(report.written.comment).toBe("posted");
+        expect(report.readBack).toEqual({ description: true, comment: false });
+        expect(callsTo(fake, "readComments")).toBe(1 + 6);
+        expect(waited()).toBe(ALL_WAITS_MS);
+        expect(existsSync(receiptPath(dir))).toBe(false);
+    });
+
+    it("a comment read that fails after a stale one is not read again", async () => {
+        const error = "linear issue comment list DOT-121: boom";
+        const { run, fake, dir, waited } = await arrange(
+            {},
+            { lag: { comments: Infinity }, failures: [{ method: "readComments", call: 3, error }] },
+        );
+        const report = await run();
+        expect(report.reasons).toEqual([error]);
+        expect(callsTo(fake, "readComments")).toBe(3);
+        expect(waited()).toBe(1000);
+        expect(existsSync(receiptPath(dir))).toBe(false);
+    });
+
+    it("a first read that already settles waits for nothing", async () => {
+        const { run, waited } = await arrange();
+        expect((await run()).outcome).toBe("advance");
+        expect(waited()).toBe(0);
     });
 });
 

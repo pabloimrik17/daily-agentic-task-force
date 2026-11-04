@@ -511,6 +511,12 @@ The transition runs in phases, and reads the task back after each write phase:
 4. **Verify.** The final labels must equal the earlier labels, plus the added
    ones, minus the removed ones.
 
+Each read-back waits out the tracker's read lag: a read that does not hold the
+expected labels yet is read again after 1, 2, 4, 8 and 15 s, and the first read
+that holds them settles it (see
+[Read-backs and tracker lag](#read-backs-and-tracker-lag)). Linear has served
+reads without `proposal` for at least 8 s after it acknowledged the write.
+
 Labels are added before any is removed. The transition removes only the stage it
 leaves, `grill-me`, and the autonomy labels the answer replaces. It never
 removes scope, `taken`, an alias or any other label: a Beads task that carries
@@ -518,12 +524,18 @@ removes scope, `taken`, an alias or any other label: a Beads task that carries
 autonomy and `proposal`. This is the first exception to the rule that the loop
 never removes a label; the second is `taken`.
 
-A transition cut short reports `failed` with the label sets. A failure while
-adding removes nothing. `grill-me` is removed last, so a failure while removing
-always leaves it on the task, possibly beside `proposal`, which the contract
-reports as a stage conflict. Answering the transition again completes it: the
-task still carries `grill-me`, so only the labels not yet added or removed are
-written. An applied answer lists only what it did:
+A transition cut short reports `failed` with the label sets. A read-back that
+never holds them reads 6 times over 30 s and fails with
+`read-back mismatch: before [...] + [...] → after [...] (read 6 times over 30 s)`.
+In the add phase the detail ends with `; nothing was removed`. In the remove
+phase it ends with
+`; grill-me may remain beside proposal, answering again completes the transition`
+when the last read still carries `grill-me`. A failure while adding removes
+nothing. `grill-me` is removed last, so a failure while removing always leaves
+it on the task, possibly beside `proposal`, which the contract reports as a
+stage conflict. Answering the transition again completes it: the task still
+carries `grill-me`, so only the labels not yet added or removed are written. An
+applied answer lists only what it did:
 
 ```text
 autonomous answers — started 2026-11-01T09:00:00.000Z
@@ -633,24 +645,32 @@ In this order, stopping at the first failure:
    [The description layout](#the-description-layout). It is written to
    `description.md` in the attempt's directory and handed to the tracker as a
    file. The task is then read back, and its description must hold the same
-   text as the one written. Two descriptions hold the same text when their
-   Unicode letters and digits are equal, in order. Whitespace and Markdown
-   syntax are ignored, because trackers re-serialise Markdown: Linear changes
-   the `-` list marker to `*` and wraps link destinations in `<>`. A missing
-   description counts as empty. The read-back has three outcomes:
+   text as the one written. A read that still shows the old description is read
+   again (see [Read-backs and tracker lag](#read-backs-and-tracker-lag)), and
+   the last read is the one compared. Two descriptions hold the same text when
+   their Unicode letters and digits are equal, in order, after every Markdown
+   link or image `[text](destination)` is replaced by its text. Whitespace and
+   Markdown syntax are ignored, because trackers re-serialise Markdown: Linear
+   changes the `-` list marker to `*`, wraps link destinations in `<>` and,
+   some seconds after the save, turns an issue identifier such as `DOT-110`
+   into a link to its issue. A link counts as its text, whatever its
+   destination, so none of these changes the text. A missing description counts
+   as empty. The read-back has three outcomes:
     - Identical apart from trailing whitespace: nothing more happens.
     - Not identical, but the same text: what the tracker returned is written to
       `description.read.md` in the attempt's directory, the report gets a
       [note](#the-persist-report), and persist mode goes on.
     - Different text: `description.read.md` is written too, and persist mode
       fails with the reason
-      `<source> <id>: the description read back differs from the one written; what the tracker returned is at <path>`.
+      `<source> <id>: the description read back differs from the one written (read 6 times over 30 s); what the tracker returned is at <path>`.
 3. **The comment.** The task's comments are read. When one of them has the
    header as its first line, nothing is posted. Otherwise the comment is the
    header, a blank line and the stage summary. It is written to `comment.md`
    and handed to the tracker as a file, and the comments are read back and must
-   hold the header. The header is
-   `autonomous · grill-me · <attempt-id> · definition saved`.
+   hold the header. A listing without it is read again, as for the description.
+   When none holds it after the last read, persist mode fails with the reason
+   `<source> <id>: the comment headed "<header>" was not found when read back (read 6 times over 30 s)`.
+   The header is `autonomous · grill-me · <attempt-id> · definition saved`.
 4. **The receipt.** `persisted.json` is written in the attempt's directory,
    through a temporary file and a rename:
 
@@ -719,7 +739,8 @@ not read back`. The `comment:` line reads `not posted`, `posted, found`,
 
 When the tracker re-serialised the description and its text matches, the
 receipt is written and the report adds a `notes:` block after `receipt:`, in
-the shape of `reasons:`. The block is printed only when there is a note:
+the shape of `reasons:`. A description in which the tracker linked an issue
+identifier is such a case. The block is printed only when there is a note:
 
 ```text
 autonomous persist — started 2026-11-03T10:00:00.000Z
@@ -736,7 +757,7 @@ notes:
 When the text read back differs, the outcome is `not-evaluable`, the
 `description:` line reads `written, not read back`, the receipt is `none` and
 the reason is
-`linear DOT-121: the description read back differs from the one written; what the tracker returned is at /home/me/.local/state/autonomous/attempts/linear/DOT-121/grill-me/1/description.read.md`.
+`linear DOT-121: the description read back differs from the one written (read 6 times over 30 s); what the tracker returned is at /home/me/.local/state/autonomous/attempts/linear/DOT-121/grill-me/1/description.read.md`.
 
 With `--json` the report is one document identified by
 `schema: "autonomous.persist.v1"`:
@@ -1105,7 +1126,9 @@ and scope on a source without a structural rule — is derived by an LLM
 judgement, batched and capped, ordered with `work` evidence first and then by
 most recently updated. Only a group at or above the
 configured `threshold`, and valid under the contract, is written, and only
-with `--apply`: writes are additive, read back to confirm, and a source stops
+with `--apply`: writes are additive, read back to confirm (a read that does not
+show the write yet is read again, see
+[Read-backs and tracker lag](#read-backs-and-tracker-lag)), and a source stops
 writing on the first mismatch — nothing is ever removed. An unreadable source
 makes the whole run `not-evaluable`; a failed judgement only drops the LLM's
 contribution, and the step itself never blocks the run (`advance`) —
@@ -1311,13 +1334,15 @@ labels found, and nothing is written; so is a `grill-me` answer once the task
 carries a stage label, naming it. One whose task cannot be read is `failed`,
 naming the command that failed.
 
-The remaining answers go through the same additive write, read-back and
-per-source stop as the step's own writes, with the same check that the tracker
-has each label (see [Labels the tracker lacks](#labels-the-tracker-lacks)).
+The remaining answers go through the same additive write, read-back (which
+waits out read lag in the same way) and per-source stop as the step's own
+writes, with the same check that the tracker has each label (see
+[Labels the tracker lacks](#labels-the-tracker-lacks)).
 Nothing is removed. A label the tracker lacks makes that answer `failed`, naming
 the label and `--bootstrap-labels`, without stopping the source. A
-write error or a read-back mismatch makes that answer `failed`, with the label
-sets, and stops further answers to that source in the same invocation. The
+write error or a read-back mismatch, which ends with `(read 6 times over 30 s)`,
+makes that answer `failed`, with the label sets, and stops further answers to
+that source in the same invocation. The
 answer takes precedence over the evidence and the judgement the run had for
 that group: answering `work` to a scope question that arose from the alias
 `nazaries` against the structural rule `personal` adds `work`, and `nazaries`
@@ -1567,7 +1592,8 @@ as `completing`. Finalising, in this order:
    (200 lines) in the attempt's directory.
 2. Remove the session.
 3. Mark the attempt `completed`.
-4. Remove `taken` from the task, read back to confirm.
+4. Remove `taken` from the task, read back to confirm (see
+   [The `taken` label](#the-taken-label)).
 
 The attempt's directory and the workspace are kept. A session that is already
 `gone` needs neither the capture nor the removal.
@@ -1683,7 +1709,8 @@ With `--apply` it then does, in this order:
 
 1. Prepare the workspace.
 2. Write the attempt record as `pending`, with the workspace path.
-3. Add `taken` to the task, read back to confirm.
+3. Add `taken` to the task, read back to confirm (see
+   [The `taken` label](#the-taken-label)).
 4. Write `prompt.md` in the attempt's directory.
 5. Create the session and record its id: the attempt becomes `created`.
 6. Start the session: the attempt becomes `started`.
@@ -1806,6 +1833,13 @@ The runner writes `taken` for the attempts it launches:
 - It removes `taken` when the attempt is finalised, after its session is gone;
   when it is discarded; and when a `pending` attempt is aborted because no
   session was ever created. The removal is read back too.
+
+Both read-backs wait out the tracker's read lag (see
+[Read-backs and tracker lag](#read-backs-and-tracker-lag)). One that never
+shows the write ends its message with `(read 6 times over 30 s)`, as in
+`taken missing from linear:DOT-121 after add: [...] (read 6 times over 30 s)` or
+`taken still on linear:DOT-121 after removal: [...] (read 6 times over 30 s)`.
+
 - It keeps `taken` while the attempt is `retained`, and while a completed
   attempt's cleanup is pending.
 
@@ -2011,7 +2045,8 @@ later attempt holds.
 It does these, in this order, and stops at the first failure:
 
 1. Removes the attempt's session, when it has one and it still exists.
-2. Removes `taken` from the task, read back to confirm.
+2. Removes `taken` from the task, read back to confirm (see
+   [The `taken` label](#the-taken-label)).
 3. Marks the attempt `discarded`, keeping its directory.
 4. With `--release-workspace`, releases the worktree. The branch is kept.
 
@@ -2156,6 +2191,43 @@ The decision, in order of precedence:
 
 Projection is reported but never blocks. Missing or stale data is never read as
 available capacity.
+
+## Read-backs and tracker lag
+
+The runner trusts a tracker write only after it reads the task again. A tracker
+can serve a read that lags a write it has acknowledged: in the DOT-121 grill,
+Linear acknowledged the `proposal` label and its reads still lacked it 8.4 s
+later. A read-back therefore does not fail on the first read that lacks the
+write.
+
+A read-back that does not show the write yet is read again after 1, 2, 4, 8 and
+15 s: six reads over 30 s. Only a read that shows the write counts. A read-back
+that settles at once never waits. A read whose tracker command fails is not
+repeated, and its failure is reported as before. The 30 s is a bound chosen at
+about 3.5 times the longest lag seen, not a limit the tracker states.
+
+Each read-back says what shows the write:
+
+| Read-back                                        | It shows the write when                     |
+| ------------------------------------------------ | ------------------------------------------- |
+| The transition, after its additions and removals | The task's labels equal the expected set    |
+| `taken`, added or removed                        | The labels do not contradict the write      |
+| Label triage's writes, in the step and answers   | Every expected label is present             |
+| Persist mode's description                       | Its text equals the text written            |
+| Persist mode's comment                           | The first line of one comment is the header |
+
+A read-back that still does not show the write after the sixth read fails as a
+mismatch always did, and its message adds `(read 6 times over 30 s)`, before
+any trailing hint. The messages are in
+[The transition answer](#the-transition-answer),
+[The `taken` label](#the-taken-label),
+[Applying an answer](#applying-an-answer) and
+[What it writes](#what-it-writes).
+
+Three reads stay single, because they confirm nothing the runner wrote: the
+read before `taken` is removed, which decides whether there is anything to
+remove; the listing in persist mode that decides whether its comment is posted;
+and the reads that only report the task's labels after a failed write.
 
 ## Tiering: code → Jev → LLM
 

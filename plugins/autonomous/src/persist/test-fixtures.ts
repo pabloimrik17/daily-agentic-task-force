@@ -69,6 +69,22 @@ export interface DocumentScript {
     failures?: readonly { method: DocumentMethod; call?: number; error: string }[];
     store?: (description: string) => string; // what the tracker keeps of a description it is given
     forgetsComments?: boolean; // addComment succeeds but nothing is kept
+    // Reads after a write that still show what was there before it, as Linear does for seconds
+    // (DOT-121); Infinity never catches up.
+    lag?: { description?: number; comments?: number };
+}
+
+interface Lag<T> {
+    reads: number;
+    shows: T;
+}
+
+function through<T>(lag: Lag<T>, current: T): T {
+    if (lag.reads <= 0) {
+        return current;
+    }
+    lag.reads -= 1;
+    return lag.shows;
 }
 
 export interface FakeDocuments {
@@ -85,6 +101,10 @@ export function fakeDocuments(source: Source, script: DocumentScript = {}): Fake
     const stored = {
         description: script.description === undefined ? "Fix the login" : script.description,
         comments: [...(script.comments ?? [])],
+    };
+    const lags: { description: Lag<string | null>; comments: Lag<readonly string[]> } = {
+        description: { reads: 0, shows: stored.description },
+        comments: { reads: 0, shows: [] },
     };
     const act = <T>(method: DocumentMethod, id: string, work: () => T): TrackerResult<T> => {
         calls.push(`${method} ${id}`);
@@ -106,7 +126,7 @@ export function fakeDocuments(source: Source, script: DocumentScript = {}): Fake
                 act("readTask", id, () =>
                     task(source, id, ["grill-me"], {
                         title: "Fix the login",
-                        description: stored.description,
+                        description: through(lags.description, stored.description),
                     }),
                 ),
             ),
@@ -114,6 +134,10 @@ export function fakeDocuments(source: Source, script: DocumentScript = {}): Fake
             Promise.resolve(
                 act("updateDescription", id, () => {
                     const given = readFileSync(file, "utf8");
+                    lags.description = {
+                        reads: script.lag?.description ?? 0,
+                        shows: stored.description,
+                    };
                     stored.description = script.store === undefined ? given : script.store(given);
                 }),
             ),
@@ -121,12 +145,19 @@ export function fakeDocuments(source: Source, script: DocumentScript = {}): Fake
             Promise.resolve(
                 act("addComment", id, () => {
                     const body = readFileSync(file, "utf8");
+                    lags.comments = {
+                        reads: script.lag?.comments ?? 0,
+                        shows: [...stored.comments],
+                    };
                     if (script.forgetsComments !== true) {
                         stored.comments.push(body);
                     }
                 }),
             ),
-        readComments: (id) => Promise.resolve(act("readComments", id, () => [...stored.comments])),
+        readComments: (id) =>
+            Promise.resolve(
+                act("readComments", id, () => [...through(lags.comments, stored.comments)]),
+            ),
     };
     return {
         tracker,

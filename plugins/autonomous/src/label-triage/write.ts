@@ -10,6 +10,7 @@
 
 import type { Source } from "../config.ts";
 import type { Group } from "../label-contract/contract.ts";
+import { READ_BACK_TRIES, readUntil } from "../read-back.ts";
 import type { Derivation } from "./rules.ts";
 import type { Tracker, TrackerResult, TrackerTask, Trackers } from "./trackers/tracker.ts";
 
@@ -244,19 +245,26 @@ async function writeOne(
             return { ok: false, error: result.error, after: read.ok ? read.value.labels : null };
         }
     }
-    const read = await tracker.readTask(derivation.taskId);
+    const expected = [...before, ...derivation.labels];
+    const read = await readUntil(
+        () => tracker.readTask(derivation.taskId),
+        (task) => hasAll(task.labels, expected),
+    );
     if (!read.ok) {
         return { ok: false, error: read.error, after: null };
     }
     const after = read.value.labels;
-    const afterSet = new Set(after);
-    const expected = [...before, ...derivation.labels];
-    if (!expected.every((label) => afterSet.has(label))) {
+    if (!hasAll(after, expected)) {
         return {
             ok: false,
-            error: `${READ_BACK_MISMATCH}: before [${before.join(", ")}] + [${derivation.labels.join(", ")}] → after [${after.join(", ")}]`,
+            error: `${READ_BACK_MISMATCH}: before [${before.join(", ")}] + [${derivation.labels.join(", ")}] → after [${after.join(", ")}] (${READ_BACK_TRIES})`,
             after,
         };
     }
     return { ok: true };
+}
+
+function hasAll(labels: readonly string[], expected: readonly string[]): boolean {
+    const found = new Set(labels);
+    return expected.every((label) => found.has(label));
 }

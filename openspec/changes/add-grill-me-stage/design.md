@@ -63,13 +63,15 @@ The GitHub rule covers the definition too, because persist writes it into the is
 1. Parse the id, read the attempt record, and check the preconditions: open, stage `grill-me`, both files present and non-empty.
 2. Read the task fresh.
 3. Compose the new description with a pure splice. If the description starts with `## Definition` and contains `\n---\n\n## Original description\n`, the part above the separator is replaced; otherwise the definition, the separator, the heading and the old description are concatenated. A definition that does not start with `## Definition` gets that heading and a blank line prepended first, because the detection of an earlier grill keys on the heading.
-4. Write the description through a file in the attempt directory, then read it back and compare the text. Two descriptions are the same text when their Unicode letters and digits (`/[\p{L}\p{N}]/gu`) are equal, in order. Whitespace, Markdown punctuation and `<>` are ignored, and a null description counts as empty. There are three outcomes. Equal apart from trailing whitespace: nothing more. Same text but not the same bytes: write what the tracker returned to `description.read.md`, add one note to the report and go on. Different text: write `description.read.md` too, fail and write no receipt.
-5. Read the comments. When none starts with this attempt's header line, post the comment from a file in the attempt directory. Then read the comments back and find the header.
+4. Write the description through a file in the attempt directory, then read it back, waiting out read lag (D9), and compare the text. Before the comparison, every Markdown link or image `[text](dest)` becomes its text, whatever its destination. Two descriptions are the same text when their Unicode letters and digits (`/[\p{L}\p{N}]/gu`) are then equal, in order. Whitespace, Markdown punctuation and `<>` are ignored, and a null description counts as empty. There are three outcomes. Equal apart from trailing whitespace: nothing more. Same text but not the same bytes: write what the tracker returned to `description.read.md`, add one note to the report and go on. Different text: write `description.read.md` too, fail and write no receipt.
+5. Read the comments. When none starts with this attempt's header line, post the comment from a file in the attempt directory. Then read the comments back, waiting out read lag (D9), and find the header.
 6. Write the receipt `persisted.json` (`autonomous.persisted.v1`: attempt, task, time, header) atomically.
 
 Because the splice replaces the definition and the comment is skipped once its header exists, a rerun after a partial failure converges without duplicating anything.
 
 The read-back compares text, not bytes, because trackers re-serialise Markdown. The DOT-122 round trip (2026-11-03) showed Linear rewriting `- ` list markers to `* ` and wrapping external link destinations in `<>`. A byte comparison failed every Linear persist. That failure lands at the end of a grill, when the definition is already agreed, and recovering from it needs a release. A real failure, such as a lost or truncated write or an edit by another person, still changes the letters or digits, so the text comparison still catches it.
+
+The comparison counts a link as its text, because a tracker can also add links of its own. Linear rewrites issue identifiers in a description into links some seconds after the save, so that `DOT-110` becomes `[DOT-110](https://linear.app/monolab/issue/DOT-110/<slug>)` (DOT-121, 2026-11-04). The letters of that destination would fail a comparison of letters and digits, and a read taken before the rewrite would pass while a later one failed. Replacing each link by its text makes the plain identifier, the linked one and a destination wrapped in `<>` equal, without naming a tracker. The destination itself is not compared.
 
 Persist takes no run lock. It writes a new file in the attempt directory, never the record, and a periodic run holding the lock must not make a waiting human's session fail.
 
@@ -103,12 +105,37 @@ The GitHub reader's `detail` runs `gh issue view <n> --repo <r> --json subIssues
 
 The id is `grill-me` and the emoji is 🔥. `agentArgs("claude")` is `--model opus --effort high`. `agentArgs("codex")` returns no flags, because the prerequisites never let a codex session start. DOT-119 replaces the fixed model later.
 
+### D9. Read-backs wait out the tracker's read lag
+
+Every read-back follows a tracker write, and Linear can serve a read that lags a write it has acknowledged. In the DOT-121 grill (2026-11-04) the transition added `AFK` and then `proposal`. Linear acknowledged both, and its history files `proposal` at 21:01:22. The read-back right after, and a read 8.4 s after the write, still lacked `proposal`, so the transition failed with a read-back mismatch before it removed anything. The `linear` CLI sends each label change as one `issueUpdate` with the ids to add or remove, does no read-modify-write and keeps no cache, so the lag is Linear's.
+
+One shared helper, `readUntil(read, settled)` in `src/read-back.ts`, handles it. It reads once and returns at once when the read fails or `settled` holds for it. Otherwise it waits 1, 2, 4, 8 and 15 s, reading again after each wait, and returns the last read: six reads over 30 s. Each call site says what settled means:
+
+| Read-back | Settled when |
+| --- | --- |
+| The transition's labels (`transition/answer.ts`) | The label set equals the expected set |
+| `taken`, added or removed (`attempts/taken.ts`) | The labels do not contradict the write |
+| Label triage's writes (`label-triage/write.ts`) | Every expected label is present |
+| Persist's description | The text equals the text written, so a read of the old description is read again |
+| Persist's comment | The first line of some comment is the header |
+
+A mismatch after the last read keeps its message and gains `(read 6 times over 30 s)`, placed before any trailing hint, such as "answering again completes the transition" or the path of `description.read.md`. A failed read keeps its message. Some reads stay single because they are not read-backs: the read before the removal of `taken`, the listing that decides whether persist posts its comment, and the reads that only report the labels after a failed write.
+
+*Why one helper:* five call sites carry the same risk, and the schedule must not drift between them. Tests drive the helper with fake timers, so no test sleeps.
+
+*Why 30 s:* a guess. The lag was seen to last at least 8.4 s, and its true bound is unknown (the labels were present when read about 8 minutes later). 30 s is about 3.5 times the observed lag. Beyond it, each call site fails as it did before. The transition has removed nothing, or says that answering again completes it. Persist writes no receipt, and a rerun converges (D4). A `taken` add that is not confirmed creates no session and leaves the attempt `pending`. Label triage stops writing to that source, and nothing was ever removed. The cost is time on the mismatch path only: a read-back that settles at once never waits, and label triage stops a source at its first mismatch.
+
+*Alternative:* one `issueUpdate` carrying the added and removed ids, which makes the move atomic. Rejected: its single read-back would still meet a stale read, and it needs a new tracker method in all three trackers.
+
+*Alternative:* trust the label list in the write's response. Rejected: it changes `addLabel`'s contract in three trackers, it cannot be checked without a Linear write, and the `taken` design (stage-sessions D14) trusts only a read.
+
 ## Risks / Trade-offs
 
 - **[The agent skips or reorders the closing steps]** → The transition refuses without a receipt. A marker written before the transition fails `completed()`, so reconcile keeps the session (`observe`, then `retain`) instead of removing it.
 - **[The upstream skill text changes]** → The stage inlines what is installed, and the prompt file records it per attempt. A prerequisite failure is loud, while a content change is reviewed when the plugin updates.
 - **[Claude Code changes `installed_plugins.json`]** → The lookup fails with a reason naming the file and the key it expected, so launch waits instead of running a session without the skills.
 - **[A person edits the description while the grill runs]** → Persist reads the task right before writing, and the read-back catches a lost write. No receipt is written then, and the agent tells the human.
+- **[A tracker's read lag outlasts 30 s]** → The read-back fails as a mismatch always did, now saying it read 6 times over 30 s. Nothing is lost: see D9 for what each call site leaves behind.
 - **[`gh` older than 2.100]** → `detail` fails on `subIssues`, and selection reports the GitHub read as not evaluable. The README states the minimum version.
 - **[Subtasks consume Linear's free-plan limit]** → The human confirms every split, and the prompt tells the agent to say how many Linear issues a split creates.
 - **[The verification needs a sandbox repository]** → Creating it is part of the verification task, done only with the user's go-ahead.
