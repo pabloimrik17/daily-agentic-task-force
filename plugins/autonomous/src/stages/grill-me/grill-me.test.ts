@@ -494,8 +494,9 @@ describe("launch: a grill-me unit", () => {
         },
     };
 
-    // The selected unit DOT-121, under `--apply`, over a workspace root holding `dotfiles`.
-    function setup(tool: SessionTool) {
+    // DOT-121 under `--apply`, over a workspace root holding `dotfiles`: the selected unit, or
+    // with `supplied` the unit `--task linear:DOT-121 --stage grill-me` names, select not run.
+    function setup(tool: SessionTool, supplied = false) {
         const calls: string[] = [];
         const specs: SessionSpec[] = [];
         const sessions = fakeSessions({
@@ -523,8 +524,10 @@ describe("launch: a grill-me unit", () => {
                 workspace: { root },
                 sessions: { tool, profile: null, binary: null },
             },
-            results: [selected],
-            args: { apply: true },
+            results: supplied ? [] : [selected],
+            args: supplied
+                ? { apply: true, task: { source: "linear", id: "DOT-121" }, stage: "grill-me" }
+                : { apply: true },
         });
         const ctx: RunContext = {
             ...base,
@@ -581,5 +584,28 @@ describe("launch: a grill-me unit", () => {
         expect(prompt).not.toContain("name: grill-with-docs");
         expect(prompt).not.toContain("description: handoff skill");
         expect(prompt).toContain(stageSummaryPath(dir));
+    });
+
+    it("launches a supplied unit at --stage grill-me the same way", async () => {
+        install();
+        const { ctx, specs } = setup("claude", true);
+
+        expect(await launchStep.run(ctx)).toMatchObject({
+            outcome: "advance",
+            data: {
+                input: "supplied",
+                stage: "grill-me",
+                attempt: { id: "linear:DOT-121:grill-me:1" },
+            },
+        });
+        expect(specs).toMatchObject([
+            { tool: "claude", args: ["--model", "opus", "--effort", "high"] },
+        ]);
+        const prompt = readFileSync(
+            promptPath(attemptDir(state, "linear:DOT-121:grill-me:1")),
+            "utf8",
+        );
+        expect(prompt).toContain(GRILL_BODY);
+        expect(prompt).toContain(HANDOFF_BODY);
     });
 });
