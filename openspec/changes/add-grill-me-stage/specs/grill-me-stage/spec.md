@@ -204,7 +204,7 @@ After writing, persist mode SHALL read the description and comments back, waitin
 
 ### Requirement: Grill-me completion
 
-The stage's completion check SHALL hold when the task carries `proposal`, no `grill-me` and an autonomy label. It SHALL also hold when the task is closed in its tracker: Beads `closed`, GitHub closed, or a Linear completed or canceled state.
+The stage's completion check SHALL hold when the task carries `proposal`, no `grill-me` and an autonomy label. It SHALL also hold when the task is closed in its tracker: Beads `closed`, GitHub closed, or a Linear state of type completed or canceled, or named `Duplicate`.
 
 #### Scenario: Transitioned
 
