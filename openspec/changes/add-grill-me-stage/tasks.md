@@ -106,7 +106,7 @@ The stage is verified with real sessions and the user grilled in each. Results g
     - the persisted definition and stage summary;
     - the labels after the transition;
     - the reconcile run that removed the session and `taken`.
-- [ ] 9.3 Sandbox cases, each recorded with its tracker state and the reconcile result:
+- [x] 9.3 Sandbox cases, each recorded with its tracker state and the reconcile result:
     1. the other autonomy outcome (HITL or AFK);
     2. a confirmed split into two Beads subtasks, with the parent excluded as `split` by a dry run with `--task beads:<parent> --stage grill-me` (a plain selection excludes it earlier as an unsupported stage);
     3. a GitHub split creating sub-issues, with the parent excluded as `split` by the same kind of dry run;

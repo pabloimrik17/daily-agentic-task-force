@@ -4,7 +4,7 @@ Task 9 of `add-grill-me-stage`, run from this worktree (branch
 `feature/DOT-110-grill-me-session`) with the user's configuration
 (`~/.config/autonomous/config.json`, left unedited). Sessions run through
 `AUTONOMOUS_CONFIG=$KIT/config.json`, a copy that adds `sessions.binary` and the
-sandbox repository. Step 1 ran on 2026-11-03 at commit `8ffcadf`. The Linear
+sandbox repository. Step 1 ran on 2026-11-03 at commit `8ffcadf`. Step 3 ran on 2026-11-05 at `a6a5276`. The Linear
 round trips behind the findings ran on 2026-11-03 and 2026-11-04. The writes
 were authorised by the user in the Plannotator Inbox thread "DOT-110 change 2
 apply".
@@ -325,7 +325,214 @@ removed the session and `taken`.
 
 ## Step 3 (9.3): sandbox cases
 
-Pending.
+The five cases ran on 2026-11-05 with the code at `a6a5276`. Times are UTC. Every
+launch and every `--apply` run was typed by the user with the `!` prefix. Every
+launch used `--account claude@63ff2ad7`, the account Claude Code was logged into,
+and `--stage grill-me`. Every reconcile used `--task <ref>` without `--stage`. The
+sessions ran in the aoe group `Grill sandbox`, which the first launch created.
+
+| Case | Task                              | Launch   | Grill ended                         | Reconcile                          |
+| ---- | --------------------------------- | -------- | ----------------------------------- | ---------------------------------- |
+| 1    | T1 `agentic-task-b49m`            | 18:22:52 | persisted 18:26:23, AFK             | 18:29:04 `finalised`, exit 2       |
+| 2    | T2 `agentic-task-ealq`            | 18:29:08 | persisted 18:32:29, split into four | 18:34:59 `finalised`, exit 2       |
+| 3    | G1 `pabloimrik17/grill-sandbox#1` | 18:35:19 | persisted 18:43:45, two sub-issues  | 18:48:54 `finalised`, exit 3 (F11) |
+| 4    | T3 `agentic-task-0p5i`            | 19:41:58 | session stopped 22:40, no persist   | 22:46:48 `retained`, exit 2        |
+| 5    | T4 `agentic-task-leoz`            | 22:48:43 | task closed 22:51:04                | 22:53:02 `finalised`, exit 2       |
+
+### Case 1: the other autonomy outcome (T1)
+
+DOT-121 ended HITL (step 2), so T1's grill answered AFK: a small change, no split.
+
+- The definition persisted at 18:26:23 and the comment was posted at 18:26:25.
+  Beads returned the description byte for byte, so the report carried no note.
+- The description holds one `## Definition`, with the same headings as DOT-121,
+  `### Proposed autonomy` included, then `---` and `## Original description`.
+- One comment. Its first line is
+  `autonomous · grill-me · beads:agentic-task-b49m:grill-me:1 · definition saved`.
+- After the transition the labels were `AFK`, `grill-sandbox`, `personal`,
+  `proposal` and `taken`, with no `grill-me`.
+- The grill added `GLOSSARY.md` and pushed it as `a7cbda5` to
+  `origin/feature/agentic-task-b49m-sandbox-greeter-prints-its-version`, without a
+  pull request. This exercised the docs commit and push of closing step 2 on a
+  repository of no consequence.
+- `persisted.json` and `result.json` (outcome `completed`) were written.
+
+Reconcile at 18:29:04: `1 attempt observed`, `1 finalised`. `launch` waited with
+`excluded: unsupported stage`. The attempt is `completed` and `taken.removed` is
+18:29:04. The session is gone, and `capture.txt` (53 lines) was saved. Labels
+after: `AFK`, `grill-sandbox`, `personal`, `proposal`.
+
+### Case 2: a confirmed split into Beads subtasks (T2)
+
+The grill confirmed a split. It settled on four subtasks rather than the two the
+runbook suggested: a base greeter and scaffold, and three features on top of it.
+Each one was created through `labelling-new-tasks` as a child of T2:
+
+| Id                    | Title                                         | Depends on            |
+| --------------------- | --------------------------------------------- | --------------------- |
+| `agentic-task-ealq.1` | Greeter: base greeter and project scaffold    | none                  |
+| `agentic-task-ealq.2` | Greeter: greet a given name                   | `agentic-task-ealq.1` |
+| `agentic-task-ealq.3` | Greeter: greet in English, Spanish and French | `agentic-task-ealq.1` |
+| `agentic-task-ealq.4` | Greeter: shout mode                           | `agentic-task-ealq.1` |
+
+Each child is open, with parent `agentic-task-ealq`, labels `AFK`, `grill-sandbox`,
+`personal` and `proposal` (no `grill-me`), and a description that starts with
+`## Definition`. Four subtasks cover the criterion as well as two.
+
+- The parent's definition persisted at 18:32:29 and the comment was posted at
+  18:32:30, its first line the persist header. Under `### Artifacts` the
+  description names the four ids and that `.1` blocks the other three.
+- The glossary went to `bf53369` on
+  `origin/feature/agentic-task-ealq-sandbox-greeter-learns-names-languages-a`.
+- The marker was written at 18:34:17 with outcome `completed`.
+
+Reconcile at 18:34:59: `1 finalised`, `launch` `wait` with
+`beads:agentic-task-ealq is excluded: unsupported stage`, the plain-selection
+behaviour. The parent's labels are `AFK`, `grill-sandbox`, `personal`, `proposal`.
+
+The dry run with the stage supplied, after the reconcile:
+
+```text
+$ run.ts --account claude@63ff2ad7 --task beads:agentic-task-ealq --stage grill-me --json
+exit 2
+launch: wait, "beads:agentic-task-ealq is excluded: split"
+excluded: {source: beads, id: agentic-task-ealq, reason: split}
+```
+
+Half a minute after this reconcile, the open aoe TUI started the removed session
+again (F9).
+
+### Case 3: a GitHub split creating sub-issues (G1)
+
+The launch at 18:35:19 returned `launched` and the attempt `started`, but the
+session's first Claude process died while it started (F10). aoe restarted it at
+18:37:16 with `--resume`, and the prompt was sent again by hand at 18:41. The grill
+then confirmed a split into two independent sub-issues.
+
+Read from GitHub after the transition:
+
+- #1 is open with labels `personal`, `AFK`, `proposal` and `taken`. Its
+  description starts with `## Definition`, lists #2 and #3 under `### Artifacts`,
+  and ends with `## Original description`.
+- One comment, posted at 18:43:50. Its first line is
+  `autonomous · grill-me · github:pabloimrik17/grill-sandbox#1:grill-me:1 · definition saved`.
+- Two native sub-issues, `subIssues.totalCount` 2: #2 "Sandbox: greeter reads a
+  config file" and #3 "Sandbox: greeter writes a log". Both are open, parent #1,
+  labels `personal`, `AFK` and `proposal`, each with its own `## Definition`.
+- No absolute path or machine detail: a search for `/Users/`, `/home/`, `/private/`
+  and the user name in #1's description and comment, and in both sub-issues, finds
+  nothing.
+- No glossary entry or ADR was written, so the branch has no commit.
+
+The reconcile at 18:48:54 gave `1 attempt observed` and `1 finalised`. It exited 3
+because the quota gate was `not-evaluable` (F11), and the gate runs after
+reconcile. The attempt is `completed`, `taken.removed` is 18:48:54, the session and
+its tmux are gone, and `capture.txt` holds 253 lines. #1's labels are `personal`,
+`AFK` and `proposal`.
+
+The split dry run needs the gate to pass, because `launch` runs after it. With
+`claude@63ff2ad7` it exited 3 (F11), and with `claude@12101920` it also exited 3,
+because that account's session window had no `resetsAt`. With `--account claude`,
+whose windows were complete, it gave the evidence. The account only selects the
+numbers the gate reads, and a dry run launches nothing.
+
+```text
+$ run.ts --account claude --task 'github:pabloimrik17/grill-sandbox#1' --stage grill-me --json
+exit 2
+quota-gate: advance (3/100 and 98/100 percent)
+launch: wait, "github:pabloimrik17/grill-sandbox#1 is excluded: split"
+```
+
+### Case 4: interruption before persistence (T3)
+
+The launch waited for F11 to clear and ran at 19:41:58. The command was pasted
+twice. The second run observed the new attempt and refused it with
+`beads:agentic-task-0p5i is excluded: taken`, exit 2, and changed nothing.
+
+In the session the user told the agent: "This is an interruption test. Do the
+grill, write definition.md and stage-summary.md, then stop and wait. Do not run
+persist." The agent wrote both files at 22:39 and waited. Its input box offered
+"go ahead, run persist" as a dimmed Claude Code suggestion, which was not
+accepted. The user stopped the session at 22:40 with
+`aoe session stop e6e55de7f24e4fd0`. The CLI reported `stopped`. The open aoe TUI
+changed the status to `error` 30 s later, and the plugin reads both as `exited`.
+
+Before the reconcile:
+
+- The attempt directory holds `definition.md`, `prompt.md`, `record.json` and
+  `stage-summary.md`, with no `persisted.json` and no `result.json`.
+- The description equals the one read before the stop. No comments. Labels
+  `grill-me`, `grill-sandbox`, `personal`, `taken`.
+
+The refused transition, then the reconcile, then the transition again:
+
+| Run                                                         | Exit | Result                                                                                                                                                                                                                                      |
+| ----------------------------------------------------------- | ---- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `--apply --transition beads:agentic-task-0p5i`              | 3    | `not-evaluable`, no handoff: "grill-me attempt beads:agentic-task-0p5i:grill-me:1 has no persistence receipt at …/persisted.json; persist its definition with --apply --persist beads:agentic-task-0p5i:grill-me:1, or discard the attempt" |
+| `--apply --answer 'transition:beads:agentic-task-0p5i=AFK'` | 3    | Answer `rejected`, with the same detail                                                                                                                                                                                                     |
+| `--apply --task beads:agentic-task-0p5i` (reconcile)        | 2    | `1 attempt observed`, `1 newly retained`, `1 retained`. Session `exited`/`stopped`, marker "no result marker", action `retained`. `launch` `wait`, excluded: `taken`                                                                        |
+| `--apply --transition beads:agentic-task-0p5i`              | 3    | The same refusal                                                                                                                                                                                                                            |
+
+After the reconcile the record is `retained` (at 22:46:48, reason
+"session stopped; no result marker"), `taken.removed` is null and the session id is
+kept. `taken` is still on the task, and `aoe session show` reports `stopped`.
+`capture.txt` is empty. While this command ran, the user selected the session's row
+in aoe, and the stopped session started again for 2 s (F12).
+
+Case cleanup at 22:48:42: `--apply --discard beads:agentic-task-0p5i
+--release-workspace` gave `session e6e55de7f24e4fd0 removed`,
+`taken removed from beads:agentic-task-0p5i`, `attempt … discarded` and
+`worktree … released`. The task is back to `grill-me`, `grill-sandbox`,
+`personal`. The worktree is gone, and the branch
+`feature/agentic-task-0p5i-sandbox-greeter-logs-every-greeting` remains.
+
+### Case 5: a grill that ends with the task closed (T4)
+
+The launch at 22:48:43 lost its first Claude process the same way as G1 (F10). aoe
+restarted it at 22:50:12 with `--resume`, and this time the agent ran the prompt.
+The user said the task was a duplicate and asked the agent to close it. The
+prompt's closing path (closing, "The one exception") applied:
+
+- The agent closed T4 in Beads at 22:51:04 with the reason "Duplicate in spirit of
+  agentic-task-ealq.4 (shout mode), whose definition rules out other style modes;
+  closed during the grill at the user's request." It then ran the Dolt pull and
+  push of its session end.
+- It skipped steps 2 to 6: no `persisted.json`, the description unchanged, no
+  comments, no commit.
+- It wrote the marker: outcome `completed`, artifacts empty, summary "The task was
+  closed in Beads during the grill as a duplicate in spirit of agentic-task-ealq.4
+  (shout mode); no definition, persist or transition was run."
+- The labels stayed `grill-me`, `grill-sandbox`, `personal`, `taken`, because
+  closing removes none.
+
+The runbook's question Q5, whether the agent would refuse to write the marker
+without a transition, does not arise: the prompt now has the closing path.
+
+The dry run reported marker ok and action `finalised`. The reconcile at 22:53:02
+gave `1 finalised`, and `launch` waited with
+`beads:agentic-task-leoz is not an open task`, exit 2. The record is `completed`
+and `taken.removed` is 22:53:02. `aoe session show` reports "Session not found",
+there is no tmux session, and `capture.txt` holds 121 lines. The task is `closed`
+with labels `grill-me`, `grill-sandbox`, `personal`.
+
+### Worktrees left
+
+The completed attempts keep their worktrees, as the README says. The worktrees for
+T1, T2, T4 and G1 are under `$WS/grill-sandbox-worktrees`. T3's was released by
+the discard.
+
+The 9.3 criterion holds:
+
+- Case 1 recorded the AFK outcome.
+- Case 2 split into Beads subtasks, and the parent was excluded as `split` by the
+  dry run with `--stage grill-me`, after the plain selection excluded it as an
+  unsupported stage.
+- Case 3 created GitHub sub-issues and was excluded as `split` by the same kind of
+  dry run.
+- Case 4 had no receipt, the transition was refused before and after the
+  reconcile, and the attempt was retained with its session and `taken`.
+- In case 5 the task was closed, and the reconcile removed the session and
+  `taken`.
 
 ## Findings
 
@@ -339,6 +546,10 @@ Pending.
 | F6  | About a minute after a persist, Linear replaced issue identifiers in the description with Markdown links, so a letters-and-digits comparison fails on the URL (2026-11-04, DOT-121).                               | Fixed in `288214b`: a link compares by its text. Confirmed by the 2026-11-05 persist on DOT-121.                     |
 | F7  | Persist runs before the transition asks for the autonomy, so the definition said AFK while the human chose HITL and the labels said HITL (2026-11-04, DOT-121).                                                    | Fixed in `67ffd23` `fix(autonomous): record the grill's autonomy as a proposal`. Section below.                      |
 | F8  | Repository inference reads the Linear project `Dotfiles`, so the session started in a dotfiles worktree while the code and the glossary live in this repository (DOT-121).                                         | Not fixed in this change. Follow-up.                                                                                 |
+| F9  | After the case 2 reconcile removed T2's session, the open aoe TUI still held it; selecting its row started it again with `--resume` and its prompt (2026-11-05).                                                   | Outside the plugin. Recorded only, by the user's decision.                                                           |
+| F10 | The first Claude process of the G1 and T4 sessions died at start, so `launched` was followed by `stopped`; Claude Code reported its fullscreen renderer failing to start (2026-11-05).                             | Outside the plugin. The launch does not check the process afterwards. Not addressed in this change.                  |
+| F11 | The usage endpoint answered 429 for `claude@63ff2ad7` for an hour; OpenUsage returned the account with no windows and no error, so the gate was `not-evaluable` (2026-11-05).                                      | As designed (D6). The reasons do not name the cause. Recorded.                                                       |
+| F12 | During the case 4 checks, T3's stopped session was started for 2 s and received its prompt again; nothing was written (2026-11-05).                                                                                | Outside the plugin: the user selected the row, as in F9. Recorded only.                                              |
 
 ### F1: the first Linear round trip (2026-11-03)
 
@@ -472,6 +683,100 @@ stacked on `8755bc8` and pushed. The dotfiles worktree has no commit beyond `mai
 The definition's decisions and the stage summary say where the work lives. This
 change does not fix the inference. It is a follow-up.
 
+### F9: the open aoe TUI starts a removed session (2026-11-05)
+
+The case 2 reconcile removed T2's session (`aoe remove --purge`) at 18:34:59. The
+aoe TUI that was open kept the session in memory, marked `Error` at 18:35:01. Its log
+then reads `Finalize persist found no instance row for bb96e25a64e44f50` at 18:35:30
+and `Error -> Starting` at 18:35:33. The user confirmed they had selected the
+session's row. aoe ran `claude … --resume <T2 conversation>` with T2's prompt.
+
+The agent answered that the attempt was already finished, ran one read-only
+command and wrote nothing. The session was not in aoe's store, and its tmux session
+stayed alive until the user killed it at 18:41. The plugin cannot prevent this: the
+removal worked, and the TUI started the session afterwards. By the user's decision
+it is recorded here only, with no README note and no aoe issue.
+
+### F10: a new session's first Claude process dies at start (2026-11-05)
+
+The launches of G1 (18:35:19) and T4 (22:48:43) reported `launched` with the attempt
+`started`, but within a minute `aoe session show` read `stopped` and no tmux session
+existed. The aoe log shows a tmux pane armed at 80×24 for each new session and,
+within two seconds, `process.reap: pid survived SIGTERM after 100ms; sending SIGKILL`.
+When each session started again, with `--resume`, Claude Code printed:
+
+- G1: "Claude Code's fullscreen renderer didn't finish starting last time on this
+  machine, so this launch is using the classic renderer."
+- T4: "Claude Code's fullscreen renderer has repeatedly failed to start on this
+  machine, so it has been turned off here."
+
+In G1's resumed conversation the prompt got no answer, and it was sent again by
+hand. In T4's the agent ran it. T1, T2 and T3 started normally. Whether the reap
+caused the failed start, or followed it, is not confirmed. Claude Code has now
+turned the fullscreen renderer off on this machine. The launch result does not
+check that the agent process is still running after `aoe session start`. This
+change does not address it.
+
+### F11: the quota gate without usage data (2026-11-05)
+
+From 18:39:39 the usage endpoint answered `http-429` for `claude@63ff2ad7`. The
+cswap log reads "retry-after 3600s (usage-endpoint budget reached; backing off)".
+OpenUsage still listed the account, with a fresh `fetchedAt`, `stale` false and no
+error, but with `resources: {}`. The gate reported `session window missing` and
+`weekly window missing`, outcome `not-evaluable`, even with `--force`. Its reasons
+do not name the cause.
+
+The endpoint answered again at 19:41:00 (63/100 and 54/100 percent). Two related
+readings:
+
+- An unused 5-hour window has no `resetsAt`, so `claude@12101920` (2026-11-05
+  18:48) and `claude` (19:13) read `session window incomplete (no resetsAt)`.
+- At 22:45 one dry run failed with
+  "openusage failed: openusage: warning: claude@12101920: Claude Swap login is
+  stale". The warning was about another account, and the next run at 22:46
+  advanced.
+
+The gate behaves as design D6 says: data it cannot evaluate launches nothing. The
+reconciles do not depend on it, because reconcile runs first. Case 4's launch
+waited the hour. Case 3's split dry run used `--account claude`. Recorded, not
+changed.
+
+### F12: a stopped session started during the case 4 checks (2026-11-05)
+
+The user's case 4 command (the refused transition, the refused answer, the
+reconcile) ran from about 22:46, with T3's session stopped since 22:40. The aoe log
+reads `e6e55de7f24e4fd0 [claude] Starting -> Running` at 22:46:17. T3's
+conversation received its prompt again at 22:46:18 ("Read …/prompt.md and follow
+it."), and a process was killed at 22:46:19 (`process.reap`). The agent did not
+answer and wrote nothing. Afterwards there was no `persisted.json`, the task was
+unchanged, and the reconcile observed the session as `stopped`.
+
+The user confirmed they had selected T3's row in the open aoe TUI at that time. It
+is the mechanism of F9, here on a stopped session: selecting the row starts it
+again with its prompt. The plugin played no part. The transition code makes no aoe
+call, and the reconcile starts a session only for an attempt in state `created`.
+Recorded only, like F9.
+
 ## Cleanup
 
-Pending.
+Done on 2026-11-05 between 22:55 and 23:00 UTC, with the user's answers in the Inbox
+thread. The user ran the tracker writes with the `!` prefix.
+
+- Beads: `bd close` with the reason "DOT-110 task 9.3 sandbox case; nothing to
+  implement." closed `agentic-task-ealq.1` to `.4`, `agentic-task-ealq`,
+  `agentic-task-b49m` and `agentic-task-0p5i`. `agentic-task-leoz` was already closed
+  by case 5. The rows stay in the database, as with `agentic-task-uylg`. A
+  `bd dolt pull` and `bd dolt push` followed. Read back: all eight `closed`, and no
+  open task carries `grill-sandbox`.
+- GitHub: #3, #2 and #1 closed as `not planned`, each with a comment. Read back:
+  `CLOSED`, `NOT_PLANNED`.
+- Worktrees: the four left by the completed attempts (T1, T2, T4 and G1) were
+  removed with `wt remove --no-delete-branch`, each clean and with nothing unpushed.
+  T3's was released by its discard. The five `feature/…` branches stay in the clone,
+  and those of T1 and T2 stay on GitHub.
+- Kit: `$KIT` (the wrapper and the configuration copy) was removed once no aoe
+  session used it. `chezmoi status` on the user's configuration is empty.
+- Kept: the repository `pabloimrik17/grill-sandbox` and its clone at
+  `$WS/grill-sandbox`, at the user's request, for later tests. The attempt
+  directories under `$STATE/attempts` stay as evidence.
+- DOT-121's dotfiles worktree and branch are the user's (step 2).
