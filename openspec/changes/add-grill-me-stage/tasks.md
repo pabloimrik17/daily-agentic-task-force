@@ -96,13 +96,13 @@
 
 The stage is verified with real sessions and the user grilled in each. Results go to `openspec/changes/add-grill-me-stage/evidence/grill-verification.md`.
 
-- [ ] 9.1 Prepare the sandbox, with the user's go-ahead before any creation:
+- [x] 9.1 Prepare the sandbox, with the user's go-ahead before any creation:
     - a private repository for throwaway grills under the workspace root, cloned so that repository inference finds it;
     - Beads tasks for it, created through `labelling-new-tasks` with `personal`, `grill-me` and the repository's name as a label;
     - a GitHub issue there for the GitHub split.
 
     Verify with a dry run, `/autonomous:run --task beads:<id> --stage grill-me` without `--apply`, which reports the sandbox repository and branch.
-- [ ] 9.2 Real task: run the stage on one real `grill-me` task the user picks (for example DOT-121), through to an AFK or HITL outcome. Record:
+- [x] 9.2 Real task: run the stage on one real `grill-me` task the user picks (for example DOT-121), through to an AFK or HITL outcome. Record:
     - the persisted definition and stage summary;
     - the labels after the transition;
     - the reconcile run that removed the session and `taken`.
