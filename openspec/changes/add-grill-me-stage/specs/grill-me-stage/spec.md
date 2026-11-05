@@ -80,6 +80,20 @@ It SHALL forbid preparing a proposal in the same session.
 - **WHEN** the human answers "Later" to the transition question
 - **THEN** the prompt's order leaves the result marker unwritten and the session open
 
+### Requirement: The definition proposes the autonomy
+
+The definition template SHALL carry the autonomy in a section `### Proposed autonomy`, holding the autonomy the grill proposes and its reason. The prompt SHALL say that the task's autonomy label, set by the transition, is the decision, and that the agent does not persist again when the human answers another autonomy.
+
+#### Scenario: Template section
+
+- **WHEN** a grill-me prompt is written
+- **THEN** its definition template has the section `### Proposed autonomy`, with the placeholder `<AFK or HITL, as the grill proposes it>: <the reason>`, and no section `### Autonomy`
+
+#### Scenario: Human answers another autonomy
+
+- **WHEN** the definition proposes `AFK` and the human answers `HITL` to the transition question
+- **THEN** the persisted description keeps `AFK` as the proposed autonomy, the labels carry `HITL`, and persist mode is not run again
+
 ### Requirement: A closed task ends the grill
 
 When the human decides to close the task instead of defining it, the prompt SHALL tell the agent to skip persist mode and the transition, write the result marker with a summary saying the task was closed, and stop.

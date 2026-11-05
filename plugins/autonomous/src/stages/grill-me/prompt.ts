@@ -64,9 +64,9 @@ const TEMPLATE = [
     "",
     "- <a decision taken in the grill, and its reason>",
     "",
-    "### Autonomy",
+    "### Proposed autonomy",
     "",
-    "<AFK or HITL, as agreed with the human>: <the reason>",
+    "<AFK or HITL, as the grill proposes it>: <the reason>",
     "",
     "### Artifacts",
     "",
@@ -93,6 +93,8 @@ function closing({ attempt, task, definition, summary }: Closing): string[] {
         `Definition template. Its first line is \`${DEFINITION_HEADING}\`, exactly:`,
         "",
         ...TEMPLATE,
+        "",
+        "The Proposed autonomy section only records what the grill proposes. The task's autonomy label, set by the transition in step 6, is the decision: if the human answers another autonomy, leave the definition as it is and do not run persist again.",
     ];
 }
 

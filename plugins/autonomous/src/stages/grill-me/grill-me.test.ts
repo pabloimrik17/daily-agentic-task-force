@@ -319,11 +319,23 @@ describe("the grill-me prompt", () => {
             "### Acceptance criteria",
             "### Non-goals",
             "### Decisions",
-            "### Autonomy",
+            "### Proposed autonomy",
             "### Artifacts",
         ]);
         expect(headings, String(headings)).toSatisfy(ascending);
-        expect(prompt).toContain("<AFK or HITL, as agreed with the human>: <the reason>");
+        expect(prompt).toContain("<AFK or HITL, as the grill proposes it>: <the reason>");
+        expect(prompt).not.toContain("### Autonomy");
+    });
+
+    it("says the autonomy label decides, so a different answer is not persisted again", () => {
+        const prompt = grillMeStage.prompt(linearInput());
+
+        const rule =
+            "The task's autonomy label, set by the transition in step 6, is the decision: if the human answers another autonomy, leave the definition as it is and do not run persist again.";
+        expect(prompt).toContain(rule);
+        expect(positions(prompt, ["### Artifacts", rule, "### 3. Stage summary"])).toSatisfy(
+            ascending,
+        );
     });
 
     it("puts the four sections after the frame's instructions heading, in order", () => {

@@ -1929,9 +1929,15 @@ stage's completion check, and `reconcile` does not remove the session.
 
 The prompt gives the agent the template of `definition.md`. Its first line is
 `## Definition`, followed by the sections Problem, Solution, Acceptance
-criteria, Non-goals, Decisions, Autonomy (`AFK` or `HITL` as agreed with the
-human, and the reason) and Artifacts (the repository-relative paths of the
+criteria, Non-goals, Decisions, Proposed autonomy (`AFK` or `HITL` as the grill
+proposes it, and the reason) and Artifacts (the repository-relative paths of the
 glossary and ADR files changed, and the ids of any subtasks, or `none`).
+
+The Proposed autonomy section only records what the grill proposes: persist
+runs before the transition asks the human. The task's autonomy label, set by
+the transition, is the decision. When the human answers another autonomy, the
+description keeps the proposed one, the labels carry the answer, and the agent
+does not persist again.
 
 ### A confirmed split
 
