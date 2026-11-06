@@ -8,6 +8,7 @@
 // the same lookup runs read-only to preview what --apply would skip: a listing
 // that fails there is a note, not a failure.
 
+import { type TaskKey, taskKey } from "../attempts/record.ts";
 import type { Source } from "../config.ts";
 import type { Group } from "../label-contract/contract.ts";
 import { READ_BACK_TRIES, readUntil } from "../read-back.ts";
@@ -54,10 +55,6 @@ export function missingLabelDetail(label: string, source: Source): string {
     return `${label} is missing on ${source}; ${BOOTSTRAP_HINT}`;
 }
 
-export function taskKey(source: Source, id: string): string {
-    return `${source}:${id}`;
-}
-
 // Beads creates labels by use and is never checked. Linear has a label in any scope,
 // workspace or team; GitHub only in the task's own repository, whatever its letter case.
 export async function labelCheckFor(tracker: Tracker): Promise<TrackerResult<LabelCheck>> {
@@ -90,7 +87,7 @@ function repositoryOf(taskId: string): string {
 
 export async function applyDerivations(
     eligible: Derivation[],
-    tasks: Map<string, TrackerTask>,
+    tasks: Map<TaskKey, TrackerTask>,
     trackers: Trackers,
     apply: boolean,
 ): Promise<{ records: TriageRecord[]; failures: WriteFailure[]; missing: string[] }> {
@@ -101,7 +98,7 @@ export async function applyDerivations(
     const written: Written = { records: [], failures: [], missing: [] };
     // The listing's labels plus those this run has added, so a task's second derivation
     // expects the first one's labels in its read-back.
-    const known = new Map<string, string[]>();
+    const known = new Map<TaskKey, string[]>();
     const labelsBefore = (derivation: Derivation): string[] => {
         const key = taskKey(derivation.source, derivation.taskId);
         return known.get(key) ?? tasks.get(key)?.labels ?? [];
@@ -131,7 +128,7 @@ async function writeSource(
     tracker: Tracker,
     derivations: readonly Derivation[],
     labelsBefore: (derivation: Derivation) => string[],
-    known: Map<string, string[]>,
+    known: Map<TaskKey, string[]>,
     written: Written,
 ): Promise<void> {
     const check = await labelCheckFor(tracker);

@@ -1,10 +1,11 @@
 import { describe, expect, it, vi } from "vitest";
 
+import { taskKey } from "../attempts/record.ts";
 import type { Exec } from "../exec.ts";
 import { LABEL_TRIAGE } from "../label-triage/question-id.ts";
 import type { LabelTriageData } from "../label-triage/step.ts";
 import { config } from "../label-triage/test-fixtures.ts";
-import { taskKey, type TriageRecord } from "../label-triage/write.ts";
+import type { TriageRecord } from "../label-triage/write.ts";
 import type { StepResult } from "../runner.ts";
 import { labelledThisRun, selectCandidates } from "./candidates.ts";
 import subIssues from "./readers/fixtures/github-subissues.json";

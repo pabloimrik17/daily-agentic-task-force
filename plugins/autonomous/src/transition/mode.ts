@@ -2,7 +2,7 @@
 // report") never writes: the answer comes back through answer mode (./answer.ts). The handoff
 // is rendered by the run report's own functions, so the command reads both alike.
 
-import { isSource, type TaskRef } from "../attempts/record.ts";
+import { isSource, taskKey, type TaskRef } from "../attempts/record.ts";
 import type { AutonomousConfig, Source } from "../config.ts";
 import {
     type AutonomyLabel,
@@ -62,7 +62,7 @@ const CURRENT = "current · ";
 
 // Task ids carry no `:`.
 export function transitionQuestionId(ref: TaskRef): string {
-    return `${TRANSITION}:${ref.source}:${ref.id}`;
+    return `${TRANSITION}:${taskKey(ref.source, ref.id)}`;
 }
 
 export function parseTransitionId(

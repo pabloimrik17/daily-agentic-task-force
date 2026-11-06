@@ -4,6 +4,7 @@
 
 import { dirname } from "node:path";
 
+import { type TaskKey, taskKey } from "../../attempts/record.ts";
 import { definitionPath, stageSummaryPath } from "../../attempts/state.ts";
 import { DEFINITION_HEADING } from "../../persist/splice.ts";
 import { renderPrompt } from "../prompt.ts";
@@ -17,7 +18,7 @@ export const GRILL_ME_SKILLS: readonly string[] = [GRILL_SKILL, HANDOFF_SKILL];
 
 interface Closing {
     attempt: string;
-    task: string; // `<source>:<task id>`
+    task: TaskKey;
     definition: string;
     summary: string;
 }
@@ -132,7 +133,7 @@ export function grillMePrompt(input: StagePromptInput): string {
         "",
         ...closing({
             attempt: attempt.id,
-            task: `${attempt.task.source}:${attempt.task.id}`,
+            task: taskKey(attempt.task.source, attempt.task.id),
             definition: definitionPath(dir),
             summary,
         }),

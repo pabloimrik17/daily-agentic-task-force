@@ -1,12 +1,12 @@
 // Ordered exclusions (work-selection, design D3): the first check that
 // applies wins. Only tasks surviving the inexpensive checks need detail.
 
+import { type TaskKey, taskKey } from "../attempts/record.ts";
 import type { AutonomousConfig } from "../config.ts";
 import { detect, isComplete } from "../label-contract/detect.ts";
 import { LABEL_TRIAGE } from "../label-triage/question-id.ts";
 import type { LabelTriageData } from "../label-triage/step.ts";
 import type { TrackerResult } from "../label-triage/trackers/tracker.ts";
-import { taskKey } from "../label-triage/write.ts";
 import type { StepResult } from "../runner.ts";
 import type { StageId } from "../stages/stage.ts";
 import { isSupported, nextStage } from "./stage.ts";
@@ -14,13 +14,13 @@ import type { Candidate, Excluded, Exclusion, WorkTask } from "./types.ts";
 
 interface CandidateDeps {
     config: AutonomousConfig;
-    labelledThisRun: ReadonlySet<string>;
+    labelledThisRun: ReadonlySet<TaskKey>;
     detail: (task: WorkTask) => Promise<TrackerResult<WorkTask>>;
     stage?: StageId; // supplied by `--stage`: the next stage's support is not checked
 }
 
-export function labelledThisRun(results: readonly StepResult[]): Set<string> {
-    const keys = new Set<string>();
+export function labelledThisRun(results: readonly StepResult[]): Set<TaskKey> {
+    const keys = new Set<TaskKey>();
     for (const result of results) {
         if (result.step !== LABEL_TRIAGE) {
             continue;

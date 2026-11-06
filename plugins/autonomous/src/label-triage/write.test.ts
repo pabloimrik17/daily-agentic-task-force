@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
+import { taskKey } from "../attempts/record.ts";
 import type { Derivation } from "./rules.ts";
 import { inertDocumentMethods } from "./test-fixtures.ts";
 import type {
@@ -9,13 +10,7 @@ import type {
     TrackerTask,
     Trackers,
 } from "./trackers/tracker.ts";
-import {
-    applyDerivations,
-    BOOTSTRAP_HINT,
-    labelCheckFor,
-    missingLabelDetail,
-    taskKey,
-} from "./write.ts";
+import { applyDerivations, BOOTSTRAP_HINT, labelCheckFor, missingLabelDetail } from "./write.ts";
 
 interface FakeState {
     labels: string[];
