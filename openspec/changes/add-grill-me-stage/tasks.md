@@ -30,7 +30,7 @@
 
 ## 4. The grill-me stage
 
-- [x] 4.1 Implement the skill lookup in `stages/grill-me/skills.ts` (design D2): read the registry, take the `mattpocock-skills@*` entry with scope `user` first, search `skills/` at most two levels deep, and strip the frontmatter. Verify with `skills.test.ts` in a temporary home:
+- [x] 4.1 Implement the skill lookup in `stages/skills.ts` (design D2): read the registry, take the `mattpocock-skills@*` entry with scope `user` first, search `skills/` at most two levels deep, and strip the frontmatter. Verify with `skills.test.ts` in a temporary home:
     - a registry and plugin laid out like 1.3.2;
     - the same skills under another category and version directory;
     - a missing registry, a missing plugin entry and a missing skill, each with its own reason;

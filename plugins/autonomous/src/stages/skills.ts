@@ -1,14 +1,12 @@
-// The skills the grill-me stage inlines into its prompt (design D2). A skill is the directory of
-// that exact name holding a SKILL.md, whatever the plugin's version or category directory, so an
-// update that moves skills does not break the lookup.
+// The skills a stage inlines into its prompt, from a plugin Claude Code installed (design D2). A
+// skill is the directory of that exact name holding a SKILL.md, whatever the plugin's version or
+// category directory, so an update that moves skills does not break the lookup.
 
 import { readdir, readFile } from "node:fs/promises";
 import { join } from "node:path";
 
-import type { Result } from "../../result.ts";
-import { array, object, optional, string } from "../../validate.ts";
-
-export const SKILLS_PLUGIN = "mattpocock-skills";
+import type { Result } from "../result.ts";
+import { array, object, optional, string } from "../validate.ts";
 
 const SKILL_FILE = "SKILL.md";
 
@@ -38,10 +36,10 @@ function parseInstallation(value: unknown, path: string): Installation {
     };
 }
 
-function parseInstallations(json: unknown): Installation[] {
+function parseInstallations(json: unknown, plugin: string): Installation[] {
     const plugins = object(object(json, "$").plugins, "$.plugins");
     return Object.entries(plugins)
-        .filter(([key]) => key.startsWith(`${SKILLS_PLUGIN}@`))
+        .filter(([key]) => key.startsWith(`${plugin}@`))
         .flatMap(([key, entries]) => {
             const path = `$.plugins["${key}"]`;
             return array(entries, path).map((entry, index) =>
@@ -50,7 +48,7 @@ function parseInstallations(json: unknown): Installation[] {
         });
 }
 
-async function readInstallations(file: string): Promise<Result<Installation[]>> {
+async function readInstallations(file: string, plugin: string): Promise<Result<Installation[]>> {
     let text: string;
     try {
         text = await readFile(file, "utf8");
@@ -67,7 +65,7 @@ async function readInstallations(file: string): Promise<Result<Installation[]>> 
         };
     }
     try {
-        return { ok: true, value: parseInstallations(json) };
+        return { ok: true, value: parseInstallations(json, plugin) };
     } catch (error) {
         return {
             ok: false,
@@ -76,9 +74,9 @@ async function readInstallations(file: string): Promise<Result<Installation[]>> 
     }
 }
 
-async function findInstallPath(home: string): Promise<Result<string>> {
+async function findInstallPath(home: string, plugin: string): Promise<Result<string>> {
     const file = registryPath(home);
-    const installations = await readInstallations(file);
+    const installations = await readInstallations(file, plugin);
     if (!installations.ok) {
         return installations;
     }
@@ -87,7 +85,7 @@ async function findInstallPath(home: string): Promise<Result<string>> {
     if (chosen === undefined) {
         return {
             ok: false,
-            error: `the plugin ${SKILLS_PLUGIN} is not installed: ${file} has no "${SKILLS_PLUGIN}@..." entry`,
+            error: `the plugin ${plugin} is not installed: ${file} has no "${plugin}@..." entry`,
         };
     }
     return { ok: true, value: chosen.installPath };
@@ -155,9 +153,10 @@ async function loadSkill(skillsDir: string, name: string): Promise<Result<string
 // Skill name → SKILL.md body without its frontmatter; the first failure, in `names` order, is the error.
 export async function loadSkills(
     home: string,
+    plugin: string,
     names: readonly string[],
 ): Promise<Result<Record<string, string>>> {
-    const installPath = await findInstallPath(home);
+    const installPath = await findInstallPath(home, plugin);
     if (!installPath.ok) {
         return installPath;
     }

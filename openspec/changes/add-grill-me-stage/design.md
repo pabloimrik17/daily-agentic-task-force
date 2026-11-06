@@ -21,7 +21,7 @@ See proposal.md, "Why". This change builds on change 1 (`add-stage-labels-and-tr
 
 - Driving or watching the grill conversation from the runner. The session is the agent's, and the runner only reconciles it.
 - Reading comments outside persist mode, or making reconcile read comments.
-- A generic skill-inlining framework. One lookup function serves the two skills this stage needs.
+- A generic skill-inlining framework. One lookup function, given a plugin and the skill names, serves this stage.
 
 ## Decisions
 
@@ -37,7 +37,7 @@ The context is how the skill bodies, read once at launch, reach the synchronous 
 
 ### D2. Skills are found through Claude Code's plugin registry, by name
 
-The lookup reads `installed_plugins.json` and takes the entries whose key starts with `mattpocock-skills@`, preferring scope `user`. It then searches `skills/` under `installPath`, at most two levels deep, for a directory named after the skill that holds a `SKILL.md`. The YAML frontmatter, between the leading `---` lines, is stripped.
+The lookup, in `stages/skills.ts`, takes the plugin as a parameter, so a later stage can inline skills from its own plugin; grill-me passes `mattpocock-skills`. It reads `installed_plugins.json` and takes the entries whose key starts with `<plugin>@`, preferring scope `user`. It then searches `skills/` under `installPath`, at most two levels deep, for a directory named after the skill that holds a `SKILL.md`. The YAML frontmatter, between the leading `---` lines, is stripped.
 
 A missing registry, a missing plugin entry or a missing skill each give a distinct reason. The prompt file keeps exactly the text the agent received, so an attempt can be audited even after the plugin updates.
 

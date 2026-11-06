@@ -4,9 +4,10 @@ import { dirname, join } from "node:path";
 
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 
-import { loadSkills, SKILLS_PLUGIN } from "./skills.ts";
+import { loadSkills } from "./skills.ts";
 
-const REGISTRY_KEY = `${SKILLS_PLUGIN}@mattpocock`;
+const PLUGIN = "example-skills";
+const REGISTRY_KEY = `${PLUGIN}@example`;
 
 let home: string;
 
@@ -46,15 +47,7 @@ function skillText(name: string, body: string): string {
 }
 
 function installPlugin(version: string, skills: Record<string, string>): string {
-    const installPath = join(
-        home,
-        ".claude",
-        "plugins",
-        "cache",
-        "mattpocock",
-        SKILLS_PLUGIN,
-        version,
-    );
+    const installPath = join(home, ".claude", "plugins", "cache", "example", PLUGIN, version);
     for (const [dir, content] of Object.entries(skills)) {
         writeFileAt(join(installPath, "skills", dir, "SKILL.md"), content);
     }
@@ -75,7 +68,7 @@ describe("loadSkills", () => {
             }),
         );
 
-        const result = await loadSkills(home, ["grill-with-docs", "handoff"]);
+        const result = await loadSkills(home, PLUGIN, ["grill-with-docs", "handoff"]);
 
         expect(result).toEqual({
             ok: true,
@@ -91,7 +84,7 @@ describe("loadSkills", () => {
             }),
         );
 
-        const result = await loadSkills(home, ["grill-with-docs", "handoff"]);
+        const result = await loadSkills(home, PLUGIN, ["grill-with-docs", "handoff"]);
 
         expect(result).toEqual({
             ok: true,
@@ -102,7 +95,7 @@ describe("loadSkills", () => {
     it("finds a skill directly under skills/", async () => {
         register(installPlugin("2.0.0", { handoff: skillText("handoff", "Flat handoff.\n") }));
 
-        expect(await loadSkills(home, ["handoff"])).toEqual({
+        expect(await loadSkills(home, PLUGIN, ["handoff"])).toEqual({
             ok: true,
             value: { handoff: "Flat handoff.\n" },
         });
@@ -114,7 +107,7 @@ describe("loadSkills", () => {
         });
         register(installPath);
 
-        const result = await loadSkills(home, ["handoff"]);
+        const result = await loadSkills(home, PLUGIN, ["handoff"]);
 
         expect(result).toEqual({
             ok: false,
@@ -128,7 +121,7 @@ describe("loadSkills", () => {
         });
         register(installPath);
 
-        const result = await loadSkills(home, ["handoff"]);
+        const result = await loadSkills(home, PLUGIN, ["handoff"]);
 
         expect(result.ok).toBe(false);
     });
@@ -140,7 +133,7 @@ describe("loadSkills", () => {
         mkdirSync(join(installPath, "skills", "engineering", "handoff"), { recursive: true });
         register(installPath);
 
-        expect(await loadSkills(home, ["handoff"])).toEqual({
+        expect(await loadSkills(home, PLUGIN, ["handoff"])).toEqual({
             ok: true,
             value: { handoff: "Real.\n" },
         });
@@ -149,7 +142,7 @@ describe("loadSkills", () => {
     it("returns an empty record for no names, once the plugin is found", async () => {
         register(installPlugin("1.3.2", {}));
 
-        expect(await loadSkills(home, [])).toEqual({ ok: true, value: {} });
+        expect(await loadSkills(home, PLUGIN, [])).toEqual({ ok: true, value: {} });
     });
 
     it("tolerates unknown fields and other plugins in the registry", async () => {
@@ -162,7 +155,7 @@ describe("loadSkills", () => {
             [REGISTRY_KEY]: [{ ...installation(installPath), futureField: { nested: true } }],
         });
 
-        expect(await loadSkills(home, ["handoff"])).toEqual({
+        expect(await loadSkills(home, PLUGIN, ["handoff"])).toEqual({
             ok: true,
             value: { handoff: "Body.\n" },
         });
@@ -181,7 +174,7 @@ describe("loadSkills — which installation", () => {
             [REGISTRY_KEY]: [installation(project, "project"), installation(user, "user")],
         });
 
-        expect(await loadSkills(home, ["handoff"])).toEqual({
+        expect(await loadSkills(home, PLUGIN, ["handoff"])).toEqual({
             ok: true,
             value: { handoff: "User handoff.\n" },
         });
@@ -198,7 +191,7 @@ describe("loadSkills — which installation", () => {
             [REGISTRY_KEY]: [installation(first, "project"), installation(second, "local")],
         });
 
-        expect(await loadSkills(home, ["handoff"])).toEqual({
+        expect(await loadSkills(home, PLUGIN, ["handoff"])).toEqual({
             ok: true,
             value: { handoff: "First handoff.\n" },
         });
@@ -212,11 +205,11 @@ describe("loadSkills — which installation", () => {
             "productivity/handoff": skillText("handoff", "User handoff.\n"),
         });
         writeRegistry({
-            [`${SKILLS_PLUGIN}@first`]: [installation(project, "project")],
-            [`${SKILLS_PLUGIN}@second`]: [installation(user, "user")],
+            [`${PLUGIN}@first`]: [installation(project, "project")],
+            [`${PLUGIN}@second`]: [installation(user, "user")],
         });
 
-        expect(await loadSkills(home, ["handoff"])).toEqual({
+        expect(await loadSkills(home, PLUGIN, ["handoff"])).toEqual({
             ok: true,
             value: { handoff: "User handoff.\n" },
         });
@@ -228,7 +221,7 @@ describe("loadSkills — frontmatter", () => {
         const body = "\n# Title\n\n---\n\nText between rules.\n\n---\nlast: line\n";
         register(installPlugin("1.3.2", { "productivity/handoff": skillText("handoff", body) }));
 
-        expect(await loadSkills(home, ["handoff"])).toEqual({
+        expect(await loadSkills(home, PLUGIN, ["handoff"])).toEqual({
             ok: true,
             value: { handoff: body },
         });
@@ -238,7 +231,7 @@ describe("loadSkills — frontmatter", () => {
         const text = "# No frontmatter\n\n---\n\nStill a body.\n";
         register(installPlugin("1.3.2", { "productivity/handoff": text }));
 
-        expect(await loadSkills(home, ["handoff"])).toEqual({
+        expect(await loadSkills(home, PLUGIN, ["handoff"])).toEqual({
             ok: true,
             value: { handoff: text },
         });
@@ -247,7 +240,7 @@ describe("loadSkills — frontmatter", () => {
     it("strips an empty frontmatter block", async () => {
         register(installPlugin("1.3.2", { "productivity/handoff": "---\n---\nBody.\n" }));
 
-        expect(await loadSkills(home, ["handoff"])).toEqual({
+        expect(await loadSkills(home, PLUGIN, ["handoff"])).toEqual({
             ok: true,
             value: { handoff: "Body.\n" },
         });
@@ -260,7 +253,7 @@ describe("loadSkills — frontmatter", () => {
             }),
         );
 
-        expect(await loadSkills(home, ["handoff"])).toEqual({
+        expect(await loadSkills(home, PLUGIN, ["handoff"])).toEqual({
             ok: true,
             value: { handoff: "Body.\r\n" },
         });
@@ -270,7 +263,7 @@ describe("loadSkills — frontmatter", () => {
         const text = "---\nname: handoff\nBody without a closing rule.\n";
         register(installPlugin("1.3.2", { "productivity/handoff": text }));
 
-        expect(await loadSkills(home, ["handoff"])).toEqual({
+        expect(await loadSkills(home, PLUGIN, ["handoff"])).toEqual({
             ok: true,
             value: { handoff: text },
         });
@@ -279,7 +272,7 @@ describe("loadSkills — frontmatter", () => {
 
 describe("loadSkills — reasons", () => {
     it("names the registry file when it is missing", async () => {
-        const result = await loadSkills(home, ["handoff"]);
+        const result = await loadSkills(home, PLUGIN, ["handoff"]);
 
         expect(result.ok).toBe(false);
         if (!result.ok) {
@@ -291,7 +284,7 @@ describe("loadSkills — reasons", () => {
     it("names the registry file when it is not JSON", async () => {
         writeFileAt(registryFile(), "{not json");
 
-        const result = await loadSkills(home, ["handoff"]);
+        const result = await loadSkills(home, PLUGIN, ["handoff"]);
 
         expect(result.ok).toBe(false);
         if (!result.ok) {
@@ -303,7 +296,7 @@ describe("loadSkills — reasons", () => {
     it("names the registry file and the field when the shape is wrong", async () => {
         writeFileAt(registryFile(), JSON.stringify({ version: 2 }));
 
-        const result = await loadSkills(home, ["handoff"]);
+        const result = await loadSkills(home, PLUGIN, ["handoff"]);
 
         expect(result.ok).toBe(false);
         if (!result.ok) {
@@ -316,7 +309,7 @@ describe("loadSkills — reasons", () => {
     it("names the field of an entry without an install path", async () => {
         writeRegistry({ [REGISTRY_KEY]: [{ scope: "user" }] });
 
-        const result = await loadSkills(home, ["handoff"]);
+        const result = await loadSkills(home, PLUGIN, ["handoff"]);
 
         expect(result.ok).toBe(false);
         if (!result.ok) {
@@ -328,11 +321,11 @@ describe("loadSkills — reasons", () => {
     it("names the plugin and the registry when the plugin has no entry", async () => {
         writeRegistry({ "other@market": [installation(join(home, "other"))] });
 
-        const result = await loadSkills(home, ["handoff"]);
+        const result = await loadSkills(home, PLUGIN, ["handoff"]);
 
         expect(result.ok).toBe(false);
         if (!result.ok) {
-            expect(result.error).toContain(SKILLS_PLUGIN);
+            expect(result.error).toContain(PLUGIN);
             expect(result.error).toContain(registryFile());
             expect(result.error).toContain("not installed");
         }
@@ -341,7 +334,7 @@ describe("loadSkills — reasons", () => {
     it("names the plugin when its entry list is empty", async () => {
         writeRegistry({ [REGISTRY_KEY]: [] });
 
-        const result = await loadSkills(home, ["handoff"]);
+        const result = await loadSkills(home, PLUGIN, ["handoff"]);
 
         expect(result.ok).toBe(false);
         if (!result.ok) {
@@ -355,7 +348,7 @@ describe("loadSkills — reasons", () => {
         });
         register(installPath);
 
-        const result = await loadSkills(home, ["grill-with-docs", "handoff"]);
+        const result = await loadSkills(home, PLUGIN, ["grill-with-docs", "handoff"]);
 
         expect(result).toEqual({
             ok: false,
@@ -367,7 +360,7 @@ describe("loadSkills — reasons", () => {
         const installPath = join(home, "gone");
         register(installPath);
 
-        const result = await loadSkills(home, ["handoff"]);
+        const result = await loadSkills(home, PLUGIN, ["handoff"]);
 
         expect(result).toEqual({
             ok: false,
@@ -378,7 +371,7 @@ describe("loadSkills — reasons", () => {
     it("reports the first missing skill in the order asked", async () => {
         register(installPlugin("1.3.2", {}));
 
-        const result = await loadSkills(home, ["handoff", "grill-with-docs"]);
+        const result = await loadSkills(home, PLUGIN, ["handoff", "grill-with-docs"]);
 
         expect(result.ok).toBe(false);
         if (!result.ok) {

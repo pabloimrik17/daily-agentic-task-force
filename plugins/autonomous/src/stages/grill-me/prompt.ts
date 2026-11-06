@@ -9,7 +9,8 @@ import { definitionPath, stageSummaryPath } from "../../attempts/state.ts";
 import { DEFINITION_HEADING } from "../../persist/splice.ts";
 import { renderPrompt } from "../prompt.ts";
 import type { StageContext, StagePromptInput } from "../stage.ts";
-import { SKILLS_PLUGIN } from "./skills.ts";
+
+export const SKILLS_PLUGIN = "mattpocock-skills";
 
 const GRILL_SKILL = "grill-with-docs";
 const HANDOFF_SKILL = "handoff";

@@ -23,7 +23,7 @@ import { fakeReader, selectContext, workTask } from "../../select/test-fixtures.
 import type { SelectData, WorkTask } from "../../select/types.ts";
 import type { SessionSpec, SessionTool } from "../../sessions/manager.ts";
 import type { StagePromptInput } from "../stage.ts";
-import { SKILLS_PLUGIN } from "./skills.ts";
+import { SKILLS_PLUGIN } from "./prompt.ts";
 import { grillMeStage } from "./stage.ts";
 
 const GRILL_BODY = 'Call the Skill tool twice, for "grilling" and "domain-modeling".';

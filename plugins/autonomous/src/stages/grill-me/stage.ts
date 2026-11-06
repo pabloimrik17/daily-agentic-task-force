@@ -7,8 +7,8 @@ import type { TrackerTask } from "../../label-triage/trackers/tracker.ts";
 import type { SessionTool } from "../../sessions/manager.ts";
 import { FROM_STAGE, TO_STAGE } from "../../transition/mode.ts";
 import type { Stage, StageEnv, StagePrerequisites } from "../stage.ts";
-import { GRILL_ME_SKILLS, grillMePrompt } from "./prompt.ts";
-import { loadSkills } from "./skills.ts";
+import { loadSkills } from "../skills.ts";
+import { GRILL_ME_SKILLS, grillMePrompt, SKILLS_PLUGIN } from "./prompt.ts";
 
 // DOT-119 replaces the fixed model. No codex flags: the prerequisites never let a codex session start.
 const AGENT_ARGS: Record<SessionTool, string[]> = {
@@ -20,7 +20,7 @@ async function prerequisites({ tool, home }: StageEnv): Promise<StagePrerequisit
     if (tool !== "claude") {
         return { ok: false, reason: `grill-me runs only with claude; sessions.tool is ${tool}` };
     }
-    const skills = await loadSkills(home, GRILL_ME_SKILLS);
+    const skills = await loadSkills(home, SKILLS_PLUGIN, GRILL_ME_SKILLS);
     return skills.ok ? { ok: true, context: skills.value } : { ok: false, reason: skills.error };
 }
 
