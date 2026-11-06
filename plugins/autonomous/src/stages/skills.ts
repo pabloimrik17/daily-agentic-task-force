@@ -1,4 +1,4 @@
-// The skills a stage inlines into its prompt, from a plugin Claude Code installed (design D2). A
+// The skills a stage inlines into its prompt, from a plugin Claude Code installed. A
 // skill is the directory of that exact name holding a SKILL.md, whatever the plugin's version or
 // category directory, so an update that moves skills does not break the lookup.
 
@@ -127,7 +127,6 @@ async function findSkill(skillsDir: string, name: string): Promise<string | null
     return null;
 }
 
-// The leading `---` line through the next `---` line; text without that block is kept whole.
 const FRONTMATTER = /^---[ \t]*\r?\n(?:[\s\S]*?\r?\n)?---[ \t]*(?:\r?\n|$)/;
 
 function stripFrontmatter(text: string): string {
@@ -150,7 +149,7 @@ async function loadSkill(skillsDir: string, name: string): Promise<Result<string
     return { ok: true, value: stripFrontmatter(text) };
 }
 
-// Skill name → SKILL.md body without its frontmatter; the first failure, in `names` order, is the error.
+// The first failure, in `names` order, is the error.
 export async function loadSkills(
     home: string,
     plugin: string,

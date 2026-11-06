@@ -1,7 +1,7 @@
 // Persist mode (spec grill-me-stage, "Definition layout", "Stage summary comment", "Persistence
-// is read back and leaves a receipt"; design D4). It writes a new file beside the attempt
-// record and never the record, so it takes no run lock. Every step is safe to repeat: the
-// splice replaces the definition and the comment is skipped once its header exists.
+// is read back and leaves a receipt"). It writes a new file beside the attempt record and never
+// the record, so it takes no run lock. Every step is safe to repeat: the splice replaces the
+// definition and the comment is skipped once its header exists.
 
 import { readFile, writeFile } from "node:fs/promises";
 import { join } from "node:path";
@@ -206,7 +206,7 @@ async function saveDescription(persisting: Persisting): Promise<string | null> {
     return checkReadBack(persisting, next, back.value.description);
 }
 
-// The read-back confirms the text landed, not that the Markdown is byte-identical (design D4).
+// The read-back confirms the text landed, not that the Markdown is byte-identical.
 async function checkReadBack(
     persisting: Persisting,
     written: string,

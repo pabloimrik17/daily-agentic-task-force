@@ -21,7 +21,7 @@ const task = (labels: string[], overrides: Partial<TrackerTask> = {}): TrackerTa
     ...overrides,
 });
 
-// Spec label-contract, "Three label groups": one test per scenario.
+// Spec label-contract, "Three label groups".
 describe("detect: three label groups", () => {
     it("Complete task: personal, AFK and proposal are complete for all three groups", () => {
         const detection = detect(task(["personal", "AFK", "proposal"]), rules());

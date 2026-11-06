@@ -77,8 +77,7 @@ export function buildPrompt(tasks: JudgementTask[]): string {
     return `${CRITERIA}\n${INSTRUCTIONS}\n\nTasks:\n\n${JSON.stringify(tasks, null, 2)}\n`;
 }
 
-// The labels a judgement may name for a group, whatever the task's stage: the autonomy
-// decision includes `grill-me`, and `decide` checks it against the task.
+// Independent of the task's stage: `decide` rejects `grill-me` for a task with a stage label.
 function vocabulary(group: DecidedGroup): readonly string[] {
     return optionsFor(group, []);
 }

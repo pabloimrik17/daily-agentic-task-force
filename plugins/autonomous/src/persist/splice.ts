@@ -4,7 +4,7 @@ export const ORIGINAL_HEADING = "## Original description";
 const SEPARATOR = `\n---\n\n${ORIGINAL_HEADING}\n`;
 
 // The original description stays below the separator byte for byte, so a second
-// grill replaces only the definition above it (design D4). A definition without the heading
+// grill replaces only the definition above it. A definition without the heading
 // gets it, because the detection of an earlier grill keys on it. Trackers strip trailing
 // whitespace, so with an empty original the heading can be the last line, without its newline.
 export function spliceDefinition(description: string | null, definition: string): string {

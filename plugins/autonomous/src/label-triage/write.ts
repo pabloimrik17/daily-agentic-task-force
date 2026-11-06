@@ -1,12 +1,9 @@
 // Additive writes with read-back (spec label-triage, "Write only with
 // --apply, additively, with read-back" and "Labels missing on a tracker are
-// not written"): every write adds labels, never replaces or removes them, and
-// is verified by reading the task back. A write error, a read-back mismatch or
-// a label listing that fails stops writes to that source for the rest of the
-// run; the other sources keep going. A label the tracker lacks is not written:
-// its derivation stays proposed and the source keeps writing. Without --apply
-// the same lookup runs read-only to preview what --apply would skip: a listing
-// that fails there is a note, not a failure.
+// not written"): a write error, a read-back mismatch or a label listing that
+// fails stops writes to that source for the rest of the run; the other sources
+// keep going. A label the tracker lacks leaves its derivation proposed and the
+// source keeps writing.
 
 import { type TaskKey, taskKey } from "../attempts/record.ts";
 import type { Source } from "../config.ts";
@@ -37,7 +34,7 @@ export type LabelCheck = (label: string, taskId: string) => boolean;
 interface Written {
     records: TriageRecord[];
     failures: WriteFailure[];
-    missing: string[]; // the label-availability notes, each distinct one once: a missingLabelDetail, or a dry run's failed listing
+    missing: string[]; // label-availability notes, each distinct one once
 }
 
 const SOURCE_ORDER: readonly Source[] = ["beads", "github", "linear"];

@@ -1,9 +1,5 @@
-// Label bootstrap (spec label-contract, "Label bootstrap"): makes every
-// contract label exist on every enabled source with the contract's colour. It
-// creates a missing label and recolours an existing one whose colour differs,
-// in each scope where it appears; a label outside the contract is never
-// touched or reported. Unlike the triage step, one failing source does not
-// stop the others.
+// Label bootstrap (spec label-contract, "Label bootstrap"). Unlike the triage
+// step, one failing source does not stop the others.
 
 import type { AutonomousConfig, ContractLabel, Source } from "../config.ts";
 import type { Tracker, TrackerLabel, Trackers } from "../label-triage/trackers/tracker.ts";

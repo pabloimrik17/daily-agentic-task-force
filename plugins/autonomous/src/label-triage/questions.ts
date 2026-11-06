@@ -27,7 +27,6 @@ const LATER: HandoffOption = {
     description: "Leave it for a later run",
 };
 
-// Only a scope or autonomy decision is asked; the stage follows it.
 type AskedRecord = TriageRecord & { group: DecidedGroup };
 
 interface Asked {

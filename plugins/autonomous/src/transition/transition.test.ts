@@ -83,7 +83,6 @@ function answer(id: string, ...values: string[]): Answer {
     return { id, values };
 }
 
-// Records each read-back delay instead of sleeping it.
 function waiting(waits: number[]): (ms: number) => Promise<void> {
     return (ms) => {
         waits.push(ms);
@@ -131,7 +130,7 @@ function failingRemoval(given: Trackers, source: Source, label: string, error: s
 }
 
 // After each label write, the next `reads` reads still return the labels from before it, as
-// Linear's reads lagged DOT-121's last write on 2026-11-04.
+// Linear's reads lagged a write (DOT-121).
 function lagging(given: Trackers, source: Source, reads: number): Trackers {
     const tracker = given[source];
     let stale: string[] = [];
@@ -175,7 +174,6 @@ function keepingOnRemoval(given: Trackers, source: Source): Trackers {
     };
 }
 
-// Every read after the first label write fails.
 function unreadableAfterWrite(given: Trackers, source: Source, error: string): Trackers {
     const tracker = given[source];
     let wrote = false;

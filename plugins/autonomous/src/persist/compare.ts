@@ -1,4 +1,4 @@
-// What persist's read-back confirms (design D4): that the text landed. A tracker may re-serialise
+// What persist's read-back confirms: that the text landed. A tracker may re-serialise
 // the Markdown on save (Linear turns `- ` bullets into `* ` and wraps link destinations in
 // `<>`) and links the task identifiers it finds, so a link counts as its text and only the
 // letters and digits are compared, in order.

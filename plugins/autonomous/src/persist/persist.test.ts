@@ -80,7 +80,7 @@ async function arrange(options: AttemptOptions = {}, script: DocumentScript = {}
 
 const ORIGINAL_BLOCK = "\n---\n\n## Original description\n\n";
 
-// The task Linear re-serialised on 2026-11-03 (DOT-122): it holds the original below the
+// The task Linear re-serialised (DOT-122): it holds the original below the
 // definition, and returns the recorded `read` text for the `written` one.
 async function arrangeRewrite(script: DocumentScript = {}, fixture = rewrite) {
     const at = fixture.written.indexOf(ORIGINAL_BLOCK);

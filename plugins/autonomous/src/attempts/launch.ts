@@ -247,9 +247,9 @@ async function readTask(
         : pass({ task, reader });
 }
 
-// Design D9's order, with D1's prerequisites: the stage is registered, its
-// prerequisites hold, the task carries no `taken`, no attempt of the task is
-// open, and a repository is inferred.
+// The checks run in this order: the stage is registered, its prerequisites hold,
+// the task carries no `taken`, no attempt of the task is open, and a repository
+// is inferred.
 async function preconditions(
     ctx: RunContext,
     config: AutonomousConfig,

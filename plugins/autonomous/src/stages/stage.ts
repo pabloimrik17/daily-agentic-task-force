@@ -1,6 +1,4 @@
-// The stage contract (spec stage-sessions, "Stage contract"; design D6, D1): what
-// `reconcile` and `launch` need from a stage, so registering one takes no
-// change to either step. `prerequisites` runs in `launch` before anything is
+// Spec stage-sessions, "Stage contract". `prerequisites` runs in `launch` before anything is
 // written, and what it reads reaches the synchronous `prompt` as `context`.
 
 import type { AttemptRecord } from "../attempts/record.ts";

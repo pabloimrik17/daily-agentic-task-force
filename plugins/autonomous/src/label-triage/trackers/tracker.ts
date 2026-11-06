@@ -38,8 +38,7 @@ export interface Tracker {
     readComments(id: string): Promise<TrackerResult<string[]>>; // comment bodies, oldest first
     listLabels(): Promise<TrackerResult<TrackerLabel[]>>; // all scopes at once
     createLabel(scope: string, name: string, colour: string): Promise<TrackerResult<void>>; // beads: { ok: false, error: "Beads needs no label creation: labels exist by use" }
-    // Bootstrap only. Linear needs `label.id`, and a response whose `success` is not true is a failure;
-    // beads: { ok: false, error: "Beads has no label colours" }
+    // Bootstrap only. Linear needs `label.id`; beads always refuses.
     recolourLabel(label: TrackerLabel, colour: string): Promise<TrackerResult<void>>;
 }
 

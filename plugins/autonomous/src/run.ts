@@ -276,7 +276,7 @@ async function runTransitionMode(ref: TaskRef, args: RunArgs, deps: MainDeps): P
     return exitCodeFor(report.outcome);
 }
 
-// Design D4: persist mode runs no step and takes no run lock. It writes a new file beside the
+// Persist mode runs no step and takes no run lock. It writes a new file beside the
 // attempt record, never the record, and a periodic run holding the lock must not fail the
 // session of the human waiting on it.
 async function runPersistMode(attempt: AttemptId, args: RunArgs, deps: MainDeps): Promise<number> {

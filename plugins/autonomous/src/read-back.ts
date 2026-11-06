@@ -1,7 +1,7 @@
 // A read that follows a tracker write. Linear can serve a read that lags a committed write by
-// seconds (DOT-121, 2026-11-04: a label added at 21:01:22 was missing from reads 1 s and 8 s
-// later), so a read that does not show the write yet is repeated after each delay. Only a read
-// that settles counts; a failed read is returned at once, and the last read when none settles.
+// seconds (DOT-121), so a read that does not show the write yet is repeated after each delay.
+// Only a read that settles counts; a failed read is returned at once, and the last read when
+// none settles.
 
 export const READ_BACK_DELAYS_MS: readonly number[] = [1000, 2000, 4000, 8000, 15000];
 

@@ -39,7 +39,7 @@ const derivation = (overrides: Partial<Derivation> = {}): Derivation => ({
     ...overrides,
 });
 
-// Spec label-triage, "Confidence threshold per group": one test per scenario.
+// Spec label-triage, "Confidence threshold per group".
 describe("decide: confidence threshold per group", () => {
     it("One group above, one below: scope by rule is eligible, autonomy judged at 0.8 is asked", () => {
         expect(decide(derivation({ confidence: 1 }), 0.95, [])).toEqual({

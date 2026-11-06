@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import { sameBytes, sameText } from "./compare.ts";
-// What Linear returned for DOT-122 (2026-11-03): `- ` bullets came back as `* ` and the link
+// What Linear returned for DOT-122: `- ` bullets came back as `* ` and the link
 // destination as `<https://…>`.
 import rewrite from "./fixtures/linear-rewrite.json";
 // Synthetic, after what Linear does a few seconds after a save: task identifiers in the

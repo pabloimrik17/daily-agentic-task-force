@@ -1,6 +1,5 @@
 // Transition mode (spec autonomous-run, "Transition mode", "Transition question", "Transition
-// report") never writes: the answer comes back through answer mode (./answer.ts). The handoff
-// is rendered by the run report's own functions, so the command reads both alike.
+// report") never writes: the answer comes back through answer mode (./answer.ts).
 
 import { isSource, taskKey, type TaskRef } from "../attempts/record.ts";
 import type { AutonomousConfig, Source } from "../config.ts";

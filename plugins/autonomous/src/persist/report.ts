@@ -1,5 +1,3 @@
-// The persist report (spec autonomous-run, "Persist report").
-
 import type { AttemptId } from "../attempts/record.ts";
 import type { Source } from "../config.ts";
 
@@ -25,7 +23,7 @@ export interface PersistReport {
     // What the operator should know although the persist went through, e.g. a re-serialised description.
     notes: string[];
     reasons: string[];
-    receipt: string | null; // the receipt's path, once written
+    receipt: string | null;
     // Present only when the configuration failed to load, leaving nothing to read.
     config?: { path: string; error: string };
 }

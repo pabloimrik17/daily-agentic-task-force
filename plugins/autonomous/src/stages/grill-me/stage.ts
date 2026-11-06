@@ -1,7 +1,3 @@
-// The grill-me stage (spec grill-me-stage; design D3, D6, D8): a claude session that
-// refines the task with the human, persists the definition, and ends with the
-// transition to `proposal`.
-
 import { isAutonomyLabel } from "../../label-contract/contract.ts";
 import type { TrackerTask } from "../../label-triage/trackers/tracker.ts";
 import type { SessionTool } from "../../sessions/manager.ts";

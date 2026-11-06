@@ -151,9 +151,7 @@ export const labelTriageStep: Step<LabelTriageData> = {
     answer: answerLabelTriage,
 };
 
-// A missing group with evidence is settled by rule (derived, or asked on conflicting
-// evidence); only a missing scope or autonomy without any goes to judgement. The stage
-// is never judged, and a deferred autonomy is complete.
+// A deferred autonomy is complete.
 function judgementCandidates(detections: Detection[]): Map<Detection, DecidedGroup[]> {
     const candidates = new Map<Detection, DecidedGroup[]>();
     for (const detection of detections) {

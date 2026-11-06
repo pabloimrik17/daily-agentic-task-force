@@ -1,4 +1,4 @@
-// The transition waits for the persistence receipt (spec autonomous-run; design D5). The attempts
+// The transition waits for the persistence receipt (spec autonomous-run). The attempts
 // are read without the run lock: the check only reads, and a receipt that appears while it runs
 // can only make it pass.
 

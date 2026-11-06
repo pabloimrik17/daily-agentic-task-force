@@ -1,6 +1,5 @@
-// The grill-me prompt (spec grill-me-stage; design D3): the shared frame around four
-// sections. The skill bodies come from the context the prerequisites read at launch, so
-// the prompt file keeps exactly the text this attempt's agent received.
+// The skill bodies come from the context the prerequisites read at launch, so the prompt
+// file keeps exactly the text this attempt's agent received.
 
 import { dirname } from "node:path";
 
