@@ -60,7 +60,7 @@ export async function startAttempt(
     return { id, dir };
 }
 
-export type DocumentMethod = "readTask" | "updateDescription" | "addComment" | "readComments";
+type DocumentMethod = "readTask" | "updateDescription" | "addComment" | "readComments";
 
 export interface DocumentScript {
     description?: string | null; // what the task holds before persist runs

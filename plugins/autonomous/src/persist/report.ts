@@ -5,14 +5,14 @@ import type { Source } from "../config.ts";
 
 export const PERSIST_SCHEMA = "autonomous.persist.v1";
 
-export interface PersistTask {
+interface PersistTask {
     source: Source;
     id: string;
     title: string;
 }
 
 // "existing": an earlier run posted the comment, so this one posted none.
-export type CommentWrite = "posted" | "existing" | "none";
+type CommentWrite = "posted" | "existing" | "none";
 
 export interface PersistReport {
     schema: typeof PERSIST_SCHEMA;
