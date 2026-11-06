@@ -6,7 +6,7 @@
 import { readFile, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 
-import { type AttemptId, type AttemptRecord, OPEN_STATES } from "../attempts/record.ts";
+import { type AttemptId, type AttemptRecord, holdsTask } from "../attempts/record.ts";
 import {
     attemptDir,
     definitionPath,
@@ -136,7 +136,7 @@ async function findRecord(attempt: AttemptId, dir: string): Promise<Result<Attem
 }
 
 function refuse(record: AttemptRecord, config: AutonomousConfig): string | null {
-    if (!OPEN_STATES.includes(record.state)) {
+    if (!holdsTask(record)) {
         return `attempt ${record.id} is ${record.state}, not open`;
     }
     if (record.stage !== GRILL_ME) {

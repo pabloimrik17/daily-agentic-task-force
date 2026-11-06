@@ -4,7 +4,7 @@ import { join } from "node:path";
 import { afterAll, afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { OPEN_STATES } from "../attempts/record.ts";
-import { attemptDir, receiptPath, recordPath } from "../attempts/state.ts";
+import { attemptDir, readRecord, receiptPath, recordPath, writeRecord } from "../attempts/state.ts";
 import { tempState } from "../attempts/test-fixtures.ts";
 import { config } from "../label-triage/test-fixtures.ts";
 import { READ_BACK_TRIES } from "../read-back.ts";
@@ -611,6 +611,14 @@ describe("persist: Persist preconditions", () => {
 
     it.each(OPEN_STATES)("an attempt that is %s is persisted", async (status) => {
         const { run } = await arrange({ status });
+        expect((await run()).outcome).toBe("advance");
+    });
+
+    it("an attempt that is completed with a cleanup owed is persisted", async () => {
+        const { run, state, dir } = await arrange({ status: "completed" });
+        const record = await readRecord(recordPath(dir));
+        const cleanup = { pending: true as const, error: "aoe remove failed" };
+        await writeRecord(state, { ...record, cleanup });
         expect((await run()).outcome).toBe("advance");
     });
 
