@@ -1,6 +1,8 @@
-import { describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
+import { taskKey } from "../attempts/record.ts";
 import type { Derivation } from "./rules.ts";
+import { inertDocumentMethods } from "./test-fixtures.ts";
 import type {
     Tracker,
     TrackerLabel,
@@ -8,13 +10,7 @@ import type {
     TrackerTask,
     Trackers,
 } from "./trackers/tracker.ts";
-import {
-    applyDerivations,
-    BOOTSTRAP_HINT,
-    labelCheckFor,
-    missingLabelDetail,
-    taskKey,
-} from "./write.ts";
+import { applyDerivations, BOOTSTRAP_HINT, labelCheckFor, missingLabelDetail } from "./write.ts";
 
 interface FakeState {
     labels: string[];
@@ -61,6 +57,7 @@ function fakeTracker(
                     labels: state?.labels ?? [],
                     status: "open",
                     updatedAt: "",
+                    closed: false,
                 },
             });
         },
@@ -74,6 +71,7 @@ function fakeTracker(
         },
         createLabel: () => Promise.reject(new Error("triage never creates a label")),
         recolourLabel: () => Promise.resolve({ ok: false, error: "Beads has no label colours" }),
+        ...inertDocumentMethods,
     };
 }
 
@@ -90,6 +88,7 @@ function task(source: Tracker["source"], id: string, labels: string[]): TrackerT
         labels,
         status: "open",
         updatedAt: "",
+        closed: false,
     };
 }
 
@@ -110,6 +109,15 @@ function derivation(overrides: Partial<Derivation> = {}): Derivation {
 function trackersOf(beads: Tracker, github: Tracker, linear: Tracker): Trackers {
     return { beads, github, linear };
 }
+
+// The read-back waits on the global timer: the fake one lets a test run its waits at once.
+beforeEach(() => {
+    vi.useFakeTimers();
+});
+
+afterEach(() => {
+    vi.useRealTimers();
+});
 
 describe("applyDerivations", () => {
     it("proposes every eligible derivation and issues no tracker call without --apply", async () => {
@@ -167,6 +175,71 @@ describe("applyDerivations", () => {
         );
         expect(records).toEqual([{ ...derivation(), status: "applied", detail: null }]);
         expect(failures).toEqual([]);
+        expect(calls).toEqual(["beads:addLabel:bd-1:work", "beads:readTask:bd-1"]);
+    });
+
+    it("reads the task again while the tracker lags, and reports applied once the label shows", async () => {
+        const calls: string[] = [];
+        let stale = 2;
+        const states = new Map<string, FakeState>([
+            [
+                "bd-1",
+                {
+                    labels: ["nazaries"],
+                    readTaskResult: () => ({
+                        ok: true,
+                        value: task(
+                            "beads",
+                            "bd-1",
+                            stale-- > 0 ? ["nazaries"] : ["nazaries", "work"],
+                        ),
+                    }),
+                },
+            ],
+        ]);
+        const beads = fakeTracker("beads", calls, states);
+        const tasks = new Map([[taskKey("beads", "bd-1"), task("beads", "bd-1", ["nazaries"])]]);
+        const pending = applyDerivations(
+            [derivation()],
+            tasks,
+            trackersOf(beads, beads, beads),
+            true,
+        );
+        await vi.runAllTimersAsync();
+        const { records, failures } = await pending;
+        expect(records).toEqual([{ ...derivation(), status: "applied", detail: null }]);
+        expect(failures).toEqual([]);
+        expect(calls).toEqual([
+            "beads:addLabel:bd-1:work",
+            "beads:readTask:bd-1",
+            "beads:readTask:bd-1",
+            "beads:readTask:bd-1",
+        ]);
+    });
+
+    it("does not read again after a read-back that fails", async () => {
+        const calls: string[] = [];
+        const states = new Map<string, FakeState>([
+            [
+                "bd-1",
+                {
+                    labels: [],
+                    readTaskResult: () => ({ ok: false, error: "bd show: bd failed: gone" }),
+                },
+            ],
+        ]);
+        const beads = fakeTracker("beads", calls, states);
+        const tasks = new Map([[taskKey("beads", "bd-1"), task("beads", "bd-1", [])]]);
+        const { records, failures } = await applyDerivations(
+            [derivation()],
+            tasks,
+            trackersOf(beads, beads, beads),
+            true,
+        );
+        expect(records).toEqual([
+            { ...derivation(), status: "failed", detail: "bd show: bd failed: gone" },
+        ]);
+        expect(failures).toMatchObject([{ after: null, error: "bd show: bd failed: gone" }]);
         expect(calls).toEqual(["beads:addLabel:bd-1:work", "beads:readTask:bd-1"]);
     });
 
@@ -299,7 +372,10 @@ describe("applyDerivations", () => {
                 "bd-1",
                 {
                     labels: ["nazaries"],
-                    readTaskResult: () => ({ ok: true, value: reads.shift()! }),
+                    readTaskResult: () => ({
+                        ok: true,
+                        value: reads.length > 1 ? reads.shift()! : reads[0]!,
+                    }),
                 },
             ],
         ]);
@@ -307,13 +383,16 @@ describe("applyDerivations", () => {
         const tasks = new Map([[taskKey("beads", "bd-1"), task("beads", "bd-1", ["nazaries"])]]);
         const scope = derivation();
         const autonomy = derivation({ group: "autonomy", labels: ["AFK"] });
-        const { records, failures } = await applyDerivations(
+        const pending = applyDerivations(
             [scope, autonomy],
             tasks,
             trackersOf(beads, beads, beads),
             true,
         );
-        const error = "read-back mismatch: before [nazaries, work] + [AFK] → after [nazaries, AFK]";
+        await vi.runAllTimersAsync();
+        const { records, failures } = await pending;
+        const error =
+            "read-back mismatch: before [nazaries, work] + [AFK] → after [nazaries, AFK] (read 6 times over 30 s)";
         expect(records).toEqual([
             { ...scope, status: "applied", detail: null },
             { ...autonomy, status: "failed", detail: error },
@@ -364,18 +443,22 @@ describe("applyDerivations", () => {
             labels: ["AFK"],
         });
         const other = derivation({ source: "beads" });
-        const { records, failures } = await applyDerivations(
+        const pending = applyDerivations(
             [first, second, other],
             tasks,
             trackersOf(beads, beads, linear),
             true,
         );
+        await vi.runAllTimersAsync();
+        const { records, failures } = await pending;
+        const error =
+            "read-back mismatch: before [work] + [personal] → after [work] (read 6 times over 30 s)";
         expect(records).toEqual([
             { ...other, status: "applied", detail: null },
             {
                 ...first,
                 status: "failed",
-                detail: "read-back mismatch: before [work] + [personal] → after [work]",
+                detail: error,
             },
             { ...second, status: "proposed", detail: "skipped after a write failure on linear" },
         ]);
@@ -386,14 +469,14 @@ describe("applyDerivations", () => {
                 labels: ["personal"],
                 before: ["work"],
                 after: ["work"],
-                error: "read-back mismatch: before [work] + [personal] → after [work]",
+                error,
             },
         ]);
         expect(calls).toEqual([
             "beads:addLabel:bd-1:work",
             "beads:readTask:bd-1",
             "linear:addLabel:lin-1:personal",
-            "linear:readTask:lin-1",
+            ...Array<string>(6).fill("linear:readTask:lin-1"),
         ]);
     });
 

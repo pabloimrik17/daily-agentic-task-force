@@ -8,8 +8,10 @@ import type { TaskRef } from "../attempts/record.ts";
 import { type AutonomyLabel, isAutonomyLabel, isStageLabel } from "../label-contract/contract.ts";
 import type { Tracker, TrackerResult } from "../label-triage/trackers/tracker.ts";
 import { labelCheckFor, missingLabelDetail, READ_BACK_MISMATCH } from "../label-triage/write.ts";
+import { READ_BACK_TRIES, readUntil, type Wait } from "../read-back.ts";
 import type { AnswerContext, AnswerRecord, AnswerStatus } from "../runner.ts";
 import { AUTONOMY_OPTIONS, FROM_STAGE, parseTransitionId, TO_STAGE, TRANSITION } from "./mode.ts";
+import { awaitedDetail, awaitedReceipt } from "./receipt.ts";
 
 interface Moving {
     tracker: Tracker;
@@ -18,6 +20,7 @@ interface Moving {
     before: string[];
     added: string[];
     removed: string[];
+    wait?: Wait;
 }
 
 type Settlement = { status: AnswerStatus; detail: string };
@@ -33,19 +36,26 @@ const ANSWER_AGAIN = `; ${FROM_STAGE} may remain beside ${TO_STAGE}, answering a
 
 const list = (labels: readonly string[]) => `[${labels.join(", ")}]`;
 
-export const transitionHandler: AnswerHandler = {
-    id: TRANSITION,
-    async answer(answers: readonly Answer[], ctx: AnswerContext): Promise<AnswerRecord[]> {
-        const records: AnswerRecord[] = [];
-        for (const answer of answers) {
-            const { status, detail } = await settle(answer, ctx);
-            records.push({ id: answer.id, labels: [...answer.values], status, detail });
-        }
-        return records;
-    },
-};
+export function transitionHandler(state: string, wait?: Wait): AnswerHandler {
+    return {
+        id: TRANSITION,
+        async answer(answers: readonly Answer[], ctx: AnswerContext): Promise<AnswerRecord[]> {
+            const records: AnswerRecord[] = [];
+            for (const answer of answers) {
+                const { status, detail } = await settle(answer, ctx, state, wait);
+                records.push({ id: answer.id, labels: [...answer.values], status, detail });
+            }
+            return records;
+        },
+    };
+}
 
-async function settle(answer: Answer, ctx: AnswerContext): Promise<Settlement> {
+async function settle(
+    answer: Answer,
+    ctx: AnswerContext,
+    state: string,
+    wait?: Wait,
+): Promise<Settlement> {
     const parsed = parseTransitionId(answer.id);
     if (!parsed.ok) {
         return { status: "rejected", detail: parsed.error };
@@ -67,7 +77,14 @@ async function settle(answer: Answer, ctx: AnswerContext): Promise<Settlement> {
     if (!before.includes(FROM_STAGE)) {
         return { status: "skipped", detail: `already moved on: stage ${list(stageOf(before))}` };
     }
-    return move(plan(tracker, ref, autonomy, before));
+    const awaited = await awaitedReceipt(state, ref);
+    if (!awaited.ok) {
+        return { status: "failed", detail: awaited.error };
+    }
+    if (awaited.value !== null) {
+        return { status: "rejected", detail: awaitedDetail(awaited.value) };
+    }
+    return move({ ...plan(tracker, ref, autonomy, before), wait });
 }
 
 function answeredAutonomy(values: readonly string[]): AutonomyLabel | null {
@@ -152,21 +169,30 @@ function stillInGrill(after: readonly string[] | null): string {
     return after === null || after.includes(FROM_STAGE) ? ANSWER_AGAIN : "";
 }
 
+// The read-back is read again while the labels differ: the tracker's reads can lag its writes.
 async function readBack(moving: Moving, removed: readonly string[]): Promise<string | null> {
-    const { before, added } = moving;
-    const read = await readLabels(moving);
+    const { before, added, wait } = moving;
+    const expected = new Set([...before, ...added].filter((label) => !removed.includes(label)));
+    const read = await readUntil(
+        () => readLabels(moving),
+        (labels) => sameLabels(labels, expected),
+        wait,
+    );
     const after = read.ok ? read.value : null;
     const tail = removed.length === 0 ? "" : stillInGrill(after);
     if (!read.ok) {
         return `${read.error} ${labelSets(before, null)}${tail}`;
     }
-    const expected = new Set([...before, ...added].filter((label) => !removed.includes(label)));
-    const found = new Set(read.value);
-    if (found.size === expected.size && [...expected].every((label) => found.has(label))) {
+    if (sameLabels(read.value, expected)) {
         return null;
     }
     const minus = removed.length === 0 ? "" : ` - ${list(removed)}`;
-    return `${READ_BACK_MISMATCH}: before ${list(before)} + ${list(added)}${minus} → after ${list(read.value)}${tail}`;
+    return `${READ_BACK_MISMATCH}: before ${list(before)} + ${list(added)}${minus} → after ${list(read.value)} (${READ_BACK_TRIES})${tail}`;
+}
+
+function sameLabels(labels: readonly string[], expected: ReadonlySet<string>): boolean {
+    const found = new Set(labels);
+    return found.size === expected.size && [...expected].every((label) => found.has(label));
 }
 
 function appliedDetail({ ref, added, removed }: Moving): string {

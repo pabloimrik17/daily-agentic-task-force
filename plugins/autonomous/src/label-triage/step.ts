@@ -7,6 +7,7 @@
 // it leaves for the human become its questions. The stage is never judged or
 // asked: it follows the autonomy decision.
 
+import { type TaskKey, taskKey } from "../attempts/record.ts";
 import type { AutonomousConfig, Source } from "../config.ts";
 import {
     DECIDED_GROUPS,
@@ -29,7 +30,7 @@ import { questionsFor } from "./questions.ts";
 import { plural, renderLabelTriage } from "./render.ts";
 import { type Derivation, deriveByRule, recordsForAutonomy } from "./rules.ts";
 import type { TrackerTask, Trackers } from "./trackers/tracker.ts";
-import { applyDerivations, taskKey, type TriageRecord, type WriteFailure } from "./write.ts";
+import { applyDerivations, type TriageRecord, type WriteFailure } from "./write.ts";
 
 export interface SourceCounts {
     source: Source;
@@ -150,9 +151,7 @@ export const labelTriageStep: Step<LabelTriageData> = {
     answer: answerLabelTriage,
 };
 
-// A missing group with evidence is settled by rule (derived, or asked on conflicting
-// evidence); only a missing scope or autonomy without any goes to judgement. The stage
-// is never judged, and a deferred autonomy is complete.
+// A deferred autonomy is complete.
 function judgementCandidates(detections: Detection[]): Map<Detection, DecidedGroup[]> {
     const candidates = new Map<Detection, DecidedGroup[]>();
     for (const detection of detections) {
@@ -169,7 +168,7 @@ function judgementCandidates(detections: Detection[]): Map<Detection, DecidedGro
 
 function decideAll(
     derivations: Derivation[],
-    tasks: ReadonlyMap<string, TrackerTask>,
+    tasks: ReadonlyMap<TaskKey, TrackerTask>,
     threshold: number,
 ): { eligible: Derivation[]; asked: TriageRecord[] } {
     const eligible: Derivation[] = [];
@@ -243,7 +242,7 @@ async function judge(
     derivations: Derivation[];
     notJudged: LabelTriageData["notJudged"];
     batches: number;
-    descriptions: Map<string, string>;
+    descriptions: Map<TaskKey, string>;
 }> {
     const { ready, notJudged, descriptions } = await readForJudgement(
         selected,
@@ -292,11 +291,11 @@ async function readForJudgement(
 ): Promise<{
     ready: JudgementTask[];
     notJudged: LabelTriageData["notJudged"];
-    descriptions: Map<string, string>;
+    descriptions: Map<TaskKey, string>;
 }> {
     const ready: JudgementTask[] = [];
     const notJudged: LabelTriageData["notJudged"] = [];
-    const descriptions = new Map<string, string>();
+    const descriptions = new Map<TaskKey, string>();
     for (const detection of selected) {
         const { task } = detection;
         let description = task.description;

@@ -21,7 +21,9 @@ export const ATTEMPT_STATES = [
 
 export type AttemptState = (typeof ATTEMPT_STATES)[number];
 
-export type AttemptId = `${Source}:${string}:${StageId}:${number}`;
+export type TaskKey = `${Source}:${string}`;
+
+export type AttemptId = `${TaskKey}:${StageId}:${number}`;
 
 // The states in which an attempt still holds its task (spec "The launch step").
 export const OPEN_STATES: readonly AttemptState[] = ["pending", "created", "started", "retained"];
@@ -94,8 +96,12 @@ export interface TaskRef {
     id: string;
 }
 
+export function taskKey(source: Source, id: string): TaskKey {
+    return `${source}:${id}`;
+}
+
 export function attemptId(task: TaskRef, stage: StageId, attempt: number): AttemptId {
-    return `${task.source}:${task.id}:${stage}:${attempt}`;
+    return `${taskKey(task.source, task.id)}:${stage}:${attempt}`;
 }
 
 // `<source>:<id>`, split at the first `:`; task ids carry no `:`.

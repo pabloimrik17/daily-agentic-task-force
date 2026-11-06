@@ -5,6 +5,7 @@
 // judgement the run had, and whether the task is still open is never checked.
 
 import type { Answer } from "../args.ts";
+import { type TaskKey, taskKey } from "../attempts/record.ts";
 import { type Group, isValidDecision } from "../label-contract/contract.ts";
 import { detect, type Detection, type GroupState } from "../label-contract/detect.ts";
 import type { AnswerContext, AnswerRecord, AnswerStatus } from "../runner.ts";
@@ -15,7 +16,6 @@ import type { TrackerTask } from "./trackers/tracker.ts";
 import {
     applyDerivations,
     READ_BACK_MISMATCH,
-    taskKey,
     type TriageRecord,
     type WriteFailure,
 } from "./write.ts";
@@ -40,7 +40,7 @@ export async function answerLabelTriage(
         checked.push(await check(answer, ctx));
     }
     const derivations: Derivation[] = [];
-    const tasks = new Map<string, TrackerTask>();
+    const tasks = new Map<TaskKey, TrackerTask>();
     for (const entry of checked) {
         if ("derivations" in entry) {
             derivations.push(...entry.derivations);

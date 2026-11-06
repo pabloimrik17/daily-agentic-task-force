@@ -1,0 +1,40 @@
+{
+    "nodes": [
+        {
+            "id": "00000000-0000-4000-8000-000000000001",
+            "body": "First comment body.",
+            "createdAt": "2026-01-01T10:00:00.000Z",
+            "updatedAt": "2026-01-01T10:00:00.000Z",
+            "editedAt": null,
+            "url": "https://linear.app/example-workspace/issue/EX-1/example-title#comment-00000001",
+            "user": {
+                "id": "00000000-0000-4000-8000-0000000000aa",
+                "name": "Example User",
+                "displayName": "example-user"
+            },
+            "externalUser": null,
+            "botActor": null,
+            "parent": null
+        },
+        {
+            "id": "00000000-0000-4000-8000-000000000002",
+            "body": "Second comment body.\n\nWith a second paragraph.",
+            "createdAt": "2026-01-01T11:00:00.000Z",
+            "updatedAt": "2026-01-01T11:00:00.000Z",
+            "editedAt": null,
+            "url": "https://linear.app/example-workspace/issue/EX-1/example-title#comment-00000002",
+            "user": {
+                "id": "00000000-0000-4000-8000-0000000000aa",
+                "name": "Example User",
+                "displayName": "example-user"
+            },
+            "externalUser": null,
+            "botActor": null,
+            "parent": null
+        }
+    ],
+    "pageInfo": {
+        "hasNextPage": false,
+        "endCursor": "00000000-0000-4000-8000-000000000002"
+    }
+}

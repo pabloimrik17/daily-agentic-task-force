@@ -20,7 +20,10 @@ With `--apply`, a run can also end with questions for the human, which
 [The handoff](#the-handoff)). `--apply` can now also create sessions and
 worktrees and write the `taken` label. A separate mode, `--transition`, runs no
 step: it reads a task in `grill-me` and hands off the question that moves it to
-`proposal` (see [Transition mode](#transition-mode)).
+`proposal` (see [Transition mode](#transition-mode)). Another, `--persist`,
+runs no step either: it saves a grill-me attempt's definition and stage summary
+to the task and writes the receipt the transition waits for (see
+[Persist mode](#persist-mode)).
 
 **The contracts are provisional.** The step contract, the run report and the
 runner shape are a first iteration and are expected to change as further steps
@@ -36,8 +39,8 @@ retained attempt, pending cleanup, run lock, handoff, question, round, answer
 mode) are defined in [`GLOSSARY.md`](GLOSSARY.md).
 [ADR 0001](docs/adr/0001-properties-persist-stages-replace.md) records the
 label model of DOT-110: properties persist, stages replace. The
-[label contract](#the-label-contract) implements it; the grill-me stage that
-uses it is change 2 of DOT-110 and is not implemented yet.
+[label contract](#the-label-contract) implements it, and the
+[grill-me stage](#the-grill-me-stage) is the first stage that uses it.
 [ADR 0002](docs/adr/0002-remove-taken-on-finalisation.md) records why the
 runner removes `taken` when an attempt is finalised or discarded.
 [ADR 0003](docs/adr/0003-optional-config-blocks-with-shipped-defaults.md)
@@ -62,8 +65,10 @@ records why the new configuration blocks are optional and the old ones are not.
   (`not-evaluable`).
 - [`bd`](https://github.com/steveyegge/beads) on `PATH`, verified against
   1.3.0.
-- [`gh`](https://cli.github.com) on `PATH`, verified against 2.100.0,
-  authenticated through its own keyring.
+- [`gh`](https://cli.github.com) on `PATH`, 2.100.0 or later, authenticated
+  through its own keyring. The `select` step reads a GitHub issue's sub-issues
+  with `gh issue view --json subIssues`, a field that 2.100.0 provides; with an
+  older `gh` that read fails and the step is `not-evaluable`.
 - [`linear`](https://github.com/schpet/linear-cli) (schpet/linear-cli) on
   `PATH`, verified against 2.6.0, authenticated with `linear auth login`
   (credentials in the macOS keychain, or `LINEAR_API_KEY`). No official
@@ -74,6 +79,8 @@ records why the new configuration blocks are optional and the old ones are not.
   `-p`, `--model`, `--effort`, `--output-format json`, `--json-schema`,
   `--safe-mode`, `--tools`, `--strict-mcp-config` and
   `--no-session-persistence`.
+- The `mattpocock-skills` plugin installed in Claude Code, only to launch the
+  grill-me stage (see [Prerequisites](#prerequisites)).
 - `aoe` (Agent of Empires) on `PATH`, verified against 1.14.0. It creates,
   observes and removes the managed sessions.
 - `wt` (worktrunk) on `PATH`, verified against 0.77.0. It prepares and
@@ -100,22 +107,24 @@ adding the Linear CLI there is tracked as DOT-82 sub-issue 7.
 /autonomous:run --apply --answer <id>=<value>[,<value>]... [--json]
 /autonomous:run --apply --discard <attempt-id|source:id> [--release-workspace] [--json]
 /autonomous:run --apply --transition <source>:<task> [--json]
+/autonomous:run --apply --persist <attempt-id> [--json]
 ```
 
-| Flag                                | Effect                                                                                                                                                                                                                                                                                                                                                                                                          |
-| ----------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `--account <provider-key>`          | Claude account to evaluate (`claude` or `claude@<id>`). Required when several Claude accounts are present                                                                                                                                                                                                                                                                                                       |
-| `--force`                           | Ask OpenUsage to bypass its shared cache                                                                                                                                                                                                                                                                                                                                                                        |
-| `--json`                            | Print one `autonomous.run.v2` JSON document instead of the text report; with `--bootstrap-labels`, one `autonomous.bootstrap.v1` document; with `--answer`, one `autonomous.answers.v1` document; with `--discard`, one `autonomous.discard.v1` document; with `--transition`, one `autonomous.transition.v1` document                                                                                          |
-| `--apply`                           | Let steps write. Without it a run has no side effects beyond the CLIs' own caches and the run lock. Required by `--answer`, `--discard` and `--transition`                                                                                                                                                                                                                                                      |
-| `--no-handoff`                      | Emit no handoff; the questions stay in the step's report. For runs with no human present, such as a `/loop`. Not combined with `--bootstrap-labels`, `--answer` or `--transition`                                                                                                                                                                                                                               |
-| `--answer <id>=<value>[,<value>]`   | [Answer mode](#answer-mode): apply the answer to the question `<id>` and exit, running no step. Repeat it once per question. Only combines with `--apply` and `--json`                                                                                                                                                                                                                                          |
-| `--bootstrap-labels`                | Run only the label bootstrap and exit. Only combines with `--json`                                                                                                                                                                                                                                                                                                                                              |
-| `--task <source>:<id>`              | Give that task to `launch` instead of running `label-triage` and `select`. `<source>` is `linear`, `beads` or `github`, split at the first `:`. Given once. Not combined with `--bootstrap-labels`, `--answer`, `--discard` or `--transition`. See [The supplied task](#the-supplied-task)                                                                                                                      |
-| `--stage <stage>`                   | The stage `launch` runs for the supplied task. Requires `--task`. Given once. Its name is checked when the arguments are parsed: a stage that is not registered is a usage error (exit 1) that names the registered stages                                                                                                                                                                                      |
-| `--discard <attempt-id\|source:id>` | [Discard mode](#discard-mode): discard that attempt, or the one open attempt of that task, and exit, running no step. Requires `--apply`. Only combines with `--apply`, `--json` and `--release-workspace`. Given once                                                                                                                                                                                          |
-| `--release-workspace`               | With `--discard`, also release the attempt's worktree. Requires `--discard`                                                                                                                                                                                                                                                                                                                                     |
-| `--transition <source>:<task>`      | [Transition mode](#transition-mode): read the task, which must carry `grill-me`, and hand off the question that moves it to `proposal`, running no step. `<source>` is `linear`, `beads` or `github`, split at the first `:`. Requires `--apply`. Only combines with `--apply` and `--json`. Given once. Not combined with `--no-handoff`, `--answer`, `--task`, `--stage`, `--discard` or `--bootstrap-labels` |
+| Flag                                | Effect                                                                                                                                                                                                                                                                                                                                                                                                                       |
+| ----------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `--account <provider-key>`          | Claude account to evaluate (`claude` or `claude@<id>`). Required when several Claude accounts are present                                                                                                                                                                                                                                                                                                                    |
+| `--force`                           | Ask OpenUsage to bypass its shared cache                                                                                                                                                                                                                                                                                                                                                                                     |
+| `--json`                            | Print one `autonomous.run.v2` JSON document instead of the text report; with `--bootstrap-labels`, one `autonomous.bootstrap.v1` document; with `--answer`, one `autonomous.answers.v1` document; with `--discard`, one `autonomous.discard.v1` document; with `--transition`, one `autonomous.transition.v1` document; with `--persist`, one `autonomous.persist.v1` document                                               |
+| `--apply`                           | Let steps write. Without it a run has no side effects beyond the CLIs' own caches and the run lock. Required by `--answer`, `--discard`, `--transition` and `--persist`                                                                                                                                                                                                                                                      |
+| `--no-handoff`                      | Emit no handoff; the questions stay in the step's report. For runs with no human present, such as a `/loop`. Not combined with `--bootstrap-labels`, `--answer`, `--transition` or `--persist`                                                                                                                                                                                                                               |
+| `--answer <id>=<value>[,<value>]`   | [Answer mode](#answer-mode): apply the answer to the question `<id>` and exit, running no step. Repeat it once per question. Only combines with `--apply` and `--json`                                                                                                                                                                                                                                                       |
+| `--bootstrap-labels`                | Run only the label bootstrap and exit. Only combines with `--json`                                                                                                                                                                                                                                                                                                                                                           |
+| `--task <source>:<id>`              | Give that task to `launch` instead of running `label-triage` and `select`. `<source>` is `linear`, `beads` or `github`, split at the first `:`. Given once. Not combined with `--bootstrap-labels`, `--answer`, `--discard`, `--transition` or `--persist`. See [The supplied task](#the-supplied-task)                                                                                                                      |
+| `--stage <stage>`                   | The stage `launch` runs for the supplied task. Requires `--task`. Given once. Its name is checked when the arguments are parsed: a stage that is not registered is a usage error (exit 1) that names the registered stages                                                                                                                                                                                                   |
+| `--discard <attempt-id\|source:id>` | [Discard mode](#discard-mode): discard that attempt, or the one open attempt of that task, and exit, running no step. Requires `--apply`. Only combines with `--apply`, `--json` and `--release-workspace`. Given once                                                                                                                                                                                                       |
+| `--release-workspace`               | With `--discard`, also release the attempt's worktree. Requires `--discard`                                                                                                                                                                                                                                                                                                                                                  |
+| `--transition <source>:<task>`      | [Transition mode](#transition-mode): read the task, which must carry `grill-me`, and hand off the question that moves it to `proposal`, running no step. `<source>` is `linear`, `beads` or `github`, split at the first `:`. Requires `--apply`. Only combines with `--apply` and `--json`. Given once. Not combined with `--no-handoff`, `--answer`, `--task`, `--stage`, `--discard`, `--persist` or `--bootstrap-labels` |
+| `--persist <attempt-id>`            | [Persist mode](#persist-mode): save the definition and the stage summary of that open grill-me attempt to its task and write the receipt, running no step. `<attempt-id>` is `<source>:<task>:<stage>:<n>`. Requires `--apply`. Only combines with `--apply` and `--json`. Given once                                                                                                                                        |
 
 The script can also be run directly, which is what a shell or `/loop` should
 branch on:
@@ -125,8 +134,8 @@ bun plugins/autonomous/src/run.ts --account claude --json --apply --no-handoff
 ```
 
 `--apply` and `--bootstrap-labels` are the only ways anything is written;
-answer mode, discard mode and transition mode require `--apply`. They are
-separate write paths that cannot be combined, and each must be typed
+answer mode, discard mode, transition mode and persist mode require `--apply`.
+They are separate write paths that cannot be combined, and each must be typed
 explicitly: nothing adds either on its own. With `--apply`, `reconcile` and
 `launch` write attempt records, sessions, worktrees and the `taken` label.
 The one exception is the answer invocation of `/autonomous:run`, which passes
@@ -170,11 +179,19 @@ For `/autonomous:run --apply --answer <id>=<value>[,<value>]... [--json]`:
 
 For `/autonomous:run --apply --transition <source>:<task> [--json]`:
 
-| Code | Outcome                                                                                                                                 |
-| ---- | --------------------------------------------------------------------------------------------------------------------------------------- |
-| 0    | `advance` — the task is in `grill-me` and a handoff was emitted                                                                         |
-| 3    | `not-evaluable` — the task is not in `grill-me`, its source is disabled, it could not be read, or the configuration could not be loaded |
-| 1    | Invalid arguments or a failure of the runner itself                                                                                     |
+| Code | Outcome                                                                                                                                                                                                    |
+| ---- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 0    | `advance` — the task is in `grill-me` and a handoff was emitted                                                                                                                                            |
+| 3    | `not-evaluable` — the task is not in `grill-me`, its source is disabled, it could not be read, an open `grill-me` attempt of the task has no persistence receipt, or the configuration could not be loaded |
+| 1    | Invalid arguments or a failure of the runner itself                                                                                                                                                        |
+
+For `/autonomous:run --apply --persist <attempt-id> [--json]`:
+
+| Code | Outcome                                                                                                                                  |
+| ---- | ---------------------------------------------------------------------------------------------------------------------------------------- |
+| 0    | `advance` — the definition and the comment were written and read back, and the receipt was written                                       |
+| 3    | `not-evaluable` — a precondition failed, a write or a read-back failed, or the configuration could not be loaded; no receipt was written |
+| 1    | Invalid arguments or a failure of the runner itself                                                                                      |
 
 For `/autonomous:run --apply --discard <attempt-id|source:id> [--release-workspace] [--json]`:
 
@@ -323,9 +340,12 @@ answer. Transition mode starts that move: it reads the task and hands off one
 question, the task's autonomy. It runs no step, so it needs no quota and no
 judgement, and it takes no [run lock](#the-run-lock): it writes labels, not
 attempts. The answer comes back through [answer mode](#answer-mode), which does
-the writing (see [The transition answer](#the-transition-answer)). The grill
-stage, change 2 of DOT-110, runs it at its end; it can also be run by hand. It
-reads labels only: it does not check that a grill took place.
+the writing (see [The transition answer](#the-transition-answer)). The
+[grill-me stage](#the-grill-me-stage) runs it at its end; it can also be run by
+hand. Beyond the task's labels it reads only the attempts in the state
+directory, to find a grill that has not persisted its definition yet (see
+[The persistence receipt](#the-persistence-receipt)); it does not check that a
+grill took place otherwise.
 
 `<source>` is `linear`, `beads` or `github`, split at the first `:`. These are
 usage errors (exit 1):
@@ -353,14 +373,19 @@ and labels, or null when it was not read), the reasons and the handoff. The
 outcome is `advance` exactly when a handoff is emitted, and `not-evaluable`
 otherwise, with the reason:
 
-| Reason                                                 | When                                      |
-| ------------------------------------------------------ | ----------------------------------------- |
-| `<source> is not enabled`                              | The source is disabled; no task is read   |
-| The tracker's error                                    | The task cannot be read; the task is null |
-| `<source> <id> is not in grill-me (labels [<labels>])` | The task does not carry `grill-me`        |
+| Reason                                                                                                                                                   | When                                                                  |
+| -------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------- |
+| `<source> is not enabled`                                                                                                                                | The source is disabled; no task is read                               |
+| The tracker's error                                                                                                                                      | The task cannot be read; the task is null                             |
+| `<source> <id> is not in grill-me (labels [<labels>])`                                                                                                   | The task does not carry `grill-me`                                    |
+| `grill-me attempt <attempt-id> has no persistence receipt at <path>; persist its definition with --apply --persist <attempt-id>, or discard the attempt` | The task has an open `grill-me` attempt without a receipt (see below) |
+| The error of reading the attempts                                                                                                                        | An attempt record in the state directory cannot be read or parsed     |
 
-A task in `grill-me` has no reasons and one question in its handoff. A task
-that is not in `grill-me`, from a disabled source or unreadable has no handoff.
+A task in `grill-me` with no attempt waiting for a receipt has no reasons and
+one question in its handoff. A task that is not in `grill-me`, from a disabled
+source, unreadable or waiting for a receipt has no handoff. The task is null for
+a disabled source and for an unreadable task, and filled in for the other
+reasons.
 The exit codes are in [Exit codes](#exit-codes). A configuration that cannot be
 loaded is reported as in answer mode: the error is printed on stderr and, with
 `--json`, the document holds `config: { path, error }`, a null task and no
@@ -462,12 +487,12 @@ The answer is a single `AFK` or `HITL`, passed to answer mode as
 `--apply --answer 'transition:<source>:<task>=<value>'`. The transition
 validates it and reports one status for it:
 
-| Status     | When                                                                                                                                                                        |
-| ---------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `applied`  | The transition was written and read back                                                                                                                                    |
-| `skipped`  | The task, read again, no longer carries `grill-me`. Nothing is written                                                                                                      |
-| `rejected` | The value is not a single `AFK` or `HITL`, the id is malformed, or the source is unknown or disabled                                                                        |
-| `failed`   | The task cannot be read, the tracker lacks `proposal` or the answered autonomy (the detail names `--bootstrap-labels`; nothing is written), or a write or a read-back fails |
+| Status     | When                                                                                                                                                                                        |
+| ---------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `applied`  | The transition was written and read back                                                                                                                                                    |
+| `skipped`  | The task, read again, no longer carries `grill-me`. Nothing is written                                                                                                                      |
+| `rejected` | The value is not a single `AFK` or `HITL`, the id is malformed, the source is unknown or disabled, or an open `grill-me` attempt of the task has no persistence receipt                     |
+| `failed`   | The task or the attempts cannot be read, the tracker lacks `proposal` or the answered autonomy (the detail names `--bootstrap-labels`; nothing is written), or a write or a read-back fails |
 
 `Later` has a null value, which the command never passes back, so it writes
 nothing and the task stays in `grill-me`.
@@ -486,6 +511,12 @@ The transition runs in phases, and reads the task back after each write phase:
 4. **Verify.** The final labels must equal the earlier labels, plus the added
    ones, minus the removed ones.
 
+Each read-back waits out the tracker's read lag: a read that does not hold the
+expected labels yet is read again after 1, 2, 4, 8 and 15 s, and the first read
+that holds them settles it (see
+[Read-backs and tracker lag](#read-backs-and-tracker-lag)). Linear has served
+reads without `proposal` for at least 8 s after it acknowledged the write.
+
 Labels are added before any is removed. The transition removes only the stage it
 leaves, `grill-me`, and the autonomy labels the answer replaces. It never
 removes scope, `taken`, an alias or any other label: a Beads task that carries
@@ -493,12 +524,18 @@ removes scope, `taken`, an alias or any other label: a Beads task that carries
 autonomy and `proposal`. This is the first exception to the rule that the loop
 never removes a label; the second is `taken`.
 
-A transition cut short reports `failed` with the label sets. A failure while
-adding removes nothing. `grill-me` is removed last, so a failure while removing
-always leaves it on the task, possibly beside `proposal`, which the contract
-reports as a stage conflict. Answering the transition again completes it: the
-task still carries `grill-me`, so only the labels not yet added or removed are
-written. An applied answer lists only what it did:
+A transition cut short reports `failed` with the label sets. A read-back that
+never holds them reads 6 times over 30 s and fails with
+`read-back mismatch: before [...] + [...] → after [...] (read 6 times over 30 s)`.
+In the add phase the detail ends with `; nothing was removed`. In the remove
+phase it ends with
+`; grill-me may remain beside proposal, answering again completes the transition`
+when the last read still carries `grill-me`. A failure while adding removes
+nothing. `grill-me` is removed last, so a failure while removing always leaves
+it on the task, possibly beside `proposal`, which the contract reports as a
+stage conflict. Answering the transition again completes it: the task still
+carries `grill-me`, so only the labels not yet added or removed are written. An
+applied answer lists only what it did:
 
 ```text
 autonomous answers — started 2026-11-01T09:00:00.000Z
@@ -510,6 +547,256 @@ Answering a task that has moved on is `skipped`, with the detail
 `already moved on: stage [proposal]`. A `grill-me` answer to the transition
 question is `rejected`, with `invalid for the transition: expected one of AFK,
 HITL`.
+
+### The persistence receipt
+
+A grill must persist its definition before it moves the task. When the task has
+an open `grill-me` attempt, transition mode and the transition answer both look
+for that attempt's persistence receipt, `persisted.json`, which
+[persist mode](#persist-mode) writes in the attempt's directory. They read the
+attempts in the state directory, take no run lock and write nothing for this
+check. An attempt is open when it is `pending`, `created`, `started` or
+`retained`, or `completed` with a cleanup pending. Only attempts of the task at
+the `grill-me` stage count.
+
+- Without the receipt, transition mode reports `not-evaluable`, exits 3 and
+  emits no handoff. Its reason names the attempt and the path where the receipt
+  is expected, as in the table of
+  [The transition report](#the-transition-report).
+- Without the receipt, the answer is `rejected`, with the same text as its
+  detail. This also covers an answer passed by hand without the question.
+- With the receipt, the question is emitted and the answer is applied as
+  before.
+- A task with no open `grill-me` attempt, such as one moved on by hand, is
+  transitioned as before. No receipt is checked.
+- When the task has several open attempts, the first by id without a receipt is
+  named; if each holds one, the transition proceeds.
+
+For a task whose attempt `linear:DOT-110:grill-me:1` has not persisted yet, the
+text report is:
+
+```text
+autonomous transition — started 2026-11-03T10:00:00.000Z
+outcome: not-evaluable
+task: linear DOT-110 → "Grill-me stage" → labels [personal, grill-me]
+reasons:
+  - grill-me attempt linear:DOT-110:grill-me:1 has no persistence receipt at /home/me/.local/state/autonomous/attempts/linear/DOT-110/grill-me/1/persisted.json; persist its definition with --apply --persist linear:DOT-110:grill-me:1, or discard the attempt
+```
+
+The check comes after the task is read and found in `grill-me`. A task that has
+moved on is reported as such, and invalid answer values, disabled sources and
+unreadable tasks are reported before it, whatever the attempts hold. In the
+[grill-me session](#what-the-session-does) the transition is step 6, after
+persist mode, which is step 4.
+
+## Persist mode
+
+```text
+/autonomous:run --apply --persist <attempt-id> [--json]
+```
+
+Persist mode saves what a grill-me attempt confirmed. It writes the attempt's
+definition at the top of the task's description, posts its stage summary as a
+comment on the task, reads both back and writes a receipt. It runs no step, so
+it needs no quota and no judgement: it loads the configuration and builds the
+trackers, nothing more. The [grill-me session](#what-the-session-does) runs it
+as step 4 of its closing; it can also be run from a shell, for instance to
+persist again after a failure. Quote a GitHub attempt id, because the task id
+contains `#`:
+
+```bash
+bun plugins/autonomous/src/run.ts --apply --persist linear:DOT-121:grill-me:1
+bun plugins/autonomous/src/run.ts --apply --persist 'github:owner/name#12:grill-me:1'
+```
+
+These are usage errors (exit 1):
+
+- `--persist` without `--apply`;
+- `--persist` with any flag other than `--apply` and `--json`;
+- a value that is not an attempt id, `<source>:<task>:<stage>:<n>`, or no value;
+- `--persist` given twice.
+
+Persist mode takes no [run lock](#the-run-lock). It writes new files beside the
+attempt's record and never the record, and a periodic run that holds the lock
+must not make the session of a waiting human fail.
+
+### What persist mode requires
+
+Persist mode writes nothing, reports the reasons and exits 3 unless all of these
+hold:
+
+- the attempt has a record, which can be read;
+- the attempt is open: `pending`, `created`, `started` or `retained`. A
+  `completed`, `aborted` or `discarded` attempt is refused;
+- the attempt's stage is `grill-me`;
+- the attempt's source is enabled;
+- the attempt's directory holds `definition.md` and `stage-summary.md`, and
+  neither is empty or only whitespace. The agent writes both; a reason names
+  each file that is missing or empty.
+
+### What it writes
+
+In this order, stopping at the first failure:
+
+1. **Read.** The task is read again, right before the write, so a description
+   edited while the grill ran is the one that is spliced.
+2. **The description.** The new description is the definition above the original
+   description, in the layout of
+   [The description layout](#the-description-layout). It is written to
+   `description.md` in the attempt's directory and handed to the tracker as a
+   file. The task is then read back, and its description must hold the same
+   text as the one written. A read that still shows the old description is read
+   again (see [Read-backs and tracker lag](#read-backs-and-tracker-lag)), and
+   the last read is the one compared. Two descriptions hold the same text when
+   their Unicode letters and digits are equal, in order, after every Markdown
+   link or image `[text](destination)` is replaced by its text. Whitespace and
+   Markdown syntax are ignored, because trackers re-serialise Markdown: Linear
+   changes the `-` list marker to `*`, wraps link destinations in `<>` and,
+   some seconds after the save, turns an issue identifier such as `DOT-110`
+   into a link to its issue. A link counts as its text, whatever its
+   destination, so none of these changes the text. A missing description counts
+   as empty. The read-back has three outcomes:
+    - Identical apart from trailing whitespace: nothing more happens.
+    - Not identical, but the same text: what the tracker returned is written to
+      `description.read.md` in the attempt's directory, the report gets a
+      [note](#the-persist-report), and persist mode goes on.
+    - Different text: `description.read.md` is written too, and persist mode
+      fails with the reason
+      `<source> <id>: the description read back differs from the one written (read 6 times over 30 s); what the tracker returned is at <path>`.
+3. **The comment.** The task's comments are read. When one of them has the
+   header as its first line, nothing is posted. Otherwise the comment is the
+   header, a blank line and the stage summary. It is written to `comment.md`
+   and handed to the tracker as a file, and the comments are read back and must
+   hold the header. A listing without it is read again, as for the description.
+   When none holds it after the last read, persist mode fails with the reason
+   `<source> <id>: the comment headed "<header>" was not found when read back (read 6 times over 30 s)`.
+   The header is `autonomous · grill-me · <attempt-id> · definition saved`.
+4. **The receipt.** `persisted.json` is written in the attempt's directory,
+   through a temporary file and a rename:
+
+    ```json
+    {
+        "schema": "autonomous.persisted.v1",
+        "attempt": "linear:DOT-121:grill-me:1",
+        "task": { "source": "linear", "id": "DOT-121" },
+        "at": "2026-11-03T10:00:00.000Z",
+        "header": "autonomous · grill-me · linear:DOT-121:grill-me:1 · definition saved"
+    }
+    ```
+
+    `at` is the start time of the run.
+
+A failed write or read-back leaves no receipt and names the command or the
+check that failed. What was written before the failure stays written. Each
+tracker is handed the files with these commands:
+
+| Method            | Linear                                   | GitHub                          | Beads                   |
+| ----------------- | ---------------------------------------- | ------------------------------- | ----------------------- |
+| Update the text   | `linear issue update --description-file` | `gh issue edit --body-file`     | `bd update --body-file` |
+| Post the comment  | `linear issue comment add --body-file`   | `gh issue comment --body-file`  | `bd comments add -f`    |
+| Read the comments | `linear issue comment list --json`       | `gh issue view --json comments` | `bd comments --json`    |
+
+Persist mode is safe to repeat. The splice replaces the definition above the
+separator and leaves the rest, and the comment is skipped once its header
+exists, so a rerun after a partial failure converges without a second comment.
+A rerun that succeeds writes the receipt again, with a new `at`; one that fails
+leaves an earlier receipt as it was. A Linear task with more than one page of
+comments cannot be persisted: the listing would be incomplete, so persist mode
+stops at reading the comments, after the description was written, and posts
+nothing.
+
+### The persist report
+
+Without `--json`, the report is text:
+
+```text
+autonomous persist — started 2026-11-03T10:00:00.000Z
+outcome: advance
+attempt: linear:DOT-121:grill-me:1
+task: linear DOT-121 → "Fix the login"
+description: written, read back
+comment: posted, found
+receipt: /home/me/.local/state/autonomous/attempts/linear/DOT-121/grill-me/1/persisted.json
+```
+
+A refusal names its reasons, writes nothing and leaves no receipt:
+
+```text
+autonomous persist — started 2026-11-03T10:00:00.000Z
+outcome: not-evaluable
+attempt: linear:DOT-121:grill-me:1
+task: unread
+description: not written
+comment: not posted
+receipt: none
+reasons:
+  - /home/me/.local/state/autonomous/attempts/linear/DOT-121/grill-me/1/stage-summary.md is missing
+```
+
+The `description:` line reads `not written`, `written, read back` or `written,
+not read back`. The `comment:` line reads `not posted`, `posted, found`,
+`posted, not found` or `already posted, found`.
+
+When the tracker re-serialised the description and its text matches, the
+receipt is written and the report adds a `notes:` block after `receipt:`, in
+the shape of `reasons:`. A description in which the tracker linked an issue
+identifier is such a case. The block is printed only when there is a note:
+
+```text
+autonomous persist — started 2026-11-03T10:00:00.000Z
+outcome: advance
+attempt: linear:DOT-121:grill-me:1
+task: linear DOT-121 → "Fix the login"
+description: written, read back
+comment: posted, found
+receipt: /home/me/.local/state/autonomous/attempts/linear/DOT-121/grill-me/1/persisted.json
+notes:
+  - linear DOT-121: the tracker re-serialised the description; its text matches what was written, and what it returned is at /home/me/.local/state/autonomous/attempts/linear/DOT-121/grill-me/1/description.read.md
+```
+
+When the text read back differs, the outcome is `not-evaluable`, the
+`description:` line reads `written, not read back`, the receipt is `none` and
+the reason is
+`linear DOT-121: the description read back differs from the one written (read 6 times over 30 s); what the tracker returned is at /home/me/.local/state/autonomous/attempts/linear/DOT-121/grill-me/1/description.read.md`.
+
+With `--json` the report is one document identified by
+`schema: "autonomous.persist.v1"`:
+
+```json
+{
+    "schema": "autonomous.persist.v1",
+    "startedAt": "2026-11-03T10:00:00.000Z",
+    "outcome": "advance",
+    "attempt": "linear:DOT-121:grill-me:1",
+    "task": { "source": "linear", "id": "DOT-121", "title": "Fix the login" },
+    "written": { "description": true, "comment": "posted" },
+    "readBack": { "description": true, "comment": true },
+    "notes": [],
+    "reasons": [],
+    "receipt": "/home/me/.local/state/autonomous/attempts/linear/DOT-121/grill-me/1/persisted.json"
+}
+```
+
+| Field       | Content                                                                                                                              |
+| ----------- | ------------------------------------------------------------------------------------------------------------------------------------ |
+| `schema`    | `autonomous.persist.v1`                                                                                                              |
+| `startedAt` | The start time of the run                                                                                                            |
+| `outcome`   | `advance` exactly when the receipt was written, `not-evaluable` otherwise                                                            |
+| `attempt`   | The attempt id that was given                                                                                                        |
+| `task`      | `{ source, id, title }`, or `null` when the task was not read                                                                        |
+| `written`   | `{ description, comment }`: whether the description was written, and the comment as `posted`, `existing` or `none`                   |
+| `readBack`  | `{ description, comment }`: whether each was read back as written; for the description, the text must match                          |
+| `notes`     | Always present, `[]` by default. What happened without stopping the persist; one note when the tracker re-serialised the description |
+| `reasons`   | Why it stopped, in order; empty when the receipt was written                                                                         |
+| `receipt`   | The path of `persisted.json` once written, otherwise `null`                                                                          |
+| `config`    | `{ path, error }`, only when the configuration could not be loaded                                                                   |
+
+`existing` means an earlier run posted the comment, so this one posted none and
+`readBack.comment` is true. When the configuration cannot be loaded, the error
+is printed on stderr and, with `--json`, the document holds `config`, a null
+task, no reasons and no notes; without `--json`, the error is on stderr only,
+as in answer mode. The persist report never carries a handoff. The exit codes
+are in [Exit codes](#exit-codes).
 
 ## Configuration
 
@@ -839,7 +1126,9 @@ and scope on a source without a structural rule — is derived by an LLM
 judgement, batched and capped, ordered with `work` evidence first and then by
 most recently updated. Only a group at or above the
 configured `threshold`, and valid under the contract, is written, and only
-with `--apply`: writes are additive, read back to confirm, and a source stops
+with `--apply`: writes are additive, read back to confirm (a read that does not
+show the write yet is read again, see
+[Read-backs and tracker lag](#read-backs-and-tracker-lag)), and a source stops
 writing on the first mismatch — nothing is ever removed. An unreadable source
 makes the whole run `not-evaluable`; a failed judgement only drops the LLM's
 contribution, and the step itself never blocks the run (`advance`) —
@@ -1045,13 +1334,15 @@ labels found, and nothing is written; so is a `grill-me` answer once the task
 carries a stage label, naming it. One whose task cannot be read is `failed`,
 naming the command that failed.
 
-The remaining answers go through the same additive write, read-back and
-per-source stop as the step's own writes, with the same check that the tracker
-has each label (see [Labels the tracker lacks](#labels-the-tracker-lacks)).
+The remaining answers go through the same additive write, read-back (which
+waits out read lag in the same way) and per-source stop as the step's own
+writes, with the same check that the tracker has each label (see
+[Labels the tracker lacks](#labels-the-tracker-lacks)).
 Nothing is removed. A label the tracker lacks makes that answer `failed`, naming
 the label and `--bootstrap-labels`, without stopping the source. A
-write error or a read-back mismatch makes that answer `failed`, with the label
-sets, and stops further answers to that source in the same invocation. The
+write error or a read-back mismatch, which ends with `(read 6 times over 30 s)`,
+makes that answer `failed`, with the label sets, and stops further answers to
+that source in the same invocation. The
 answer takes precedence over the evidence and the judgement the run had for
 that group: answering `work` to a scope question that arose from the alias
 `nazaries` against the structural rule `personal` adds `work`, and `nazaries`
@@ -1129,8 +1420,8 @@ The next stage of a task is the stage label it carries, `grill-me` or
 `proposal`. A task without one has no next stage and is excluded under
 classification. Only `grill-me` is supported, so a task in `proposal` is
 reported as waiting for an unsupported stage. `launch` keeps its own list: a
-stage runs only when an implementation is registered for it, and only the test
-stage is.
+stage runs only when an implementation is registered for it, and the test and
+grill-me stages are.
 
 The autonomy of a selected unit is `AFK`, `HITL` or, for a task in `grill-me`
 without one, none: `none` in the text report and `null` in the JSON data.
@@ -1139,9 +1430,17 @@ Blockers, the tasks a task blocks, its open children and its tracker priority
 are read for Beads and Linear. A blocker or child is open unless it is closed:
 in Beads, unless its status is `closed`; in Linear, unless its state is
 completed or canceled. Beads decides which tasks are blocked by its own
-dependency rules. GitHub tasks are treated as having no blockers and no
-children, and the report says that dependencies and children were not
-evaluated for GitHub.
+dependency rules.
+
+For GitHub, the step reads each task's sub-issues as its children, with
+`gh issue view <number> --repo <owner/name> --json subIssues`. A sub-issue is
+open unless its state is `CLOSED`, and each open one is a child with the id
+`<owner/name>#<number>`; a GitHub issue with an open sub-issue is excluded as
+split, like a Linear or Beads parent. The read runs only for a task that passes
+the earlier exclusions, so its cost is per candidate, and a failed read makes
+the step `not-evaluable` (see [Requirements](#requirements) for the minimum
+`gh`). GitHub tasks are treated as having no blockers and no tracker priority,
+and the report says that dependencies were not evaluated for GitHub.
 
 ### The comparison
 
@@ -1172,8 +1471,8 @@ The text report shows:
 - the machine-scope exception reason, when there is one;
 - the candidates compared;
 - the excluded tasks, grouped by reason, each with its source, id and title;
-- the note that GitHub dependencies and children were not evaluated, when
-  GitHub is enabled.
+- the note that GitHub dependencies were not evaluated, when GitHub is
+  enabled.
 
 With `--json`, the step's data carries the same information, plus the
 selection model and effort when the LLM was called.
@@ -1221,6 +1520,12 @@ directory, nested by source, task, stage and attempt number:
     result.json    the result marker, written by the agent
     capture.txt    the last lines of the session, when one was taken
 ```
+
+A grill-me attempt's directory also holds `definition.md` and
+`stage-summary.md`, which the agent writes, and `description.md`, `comment.md`,
+`description.read.md` and `persisted.json`, which [persist mode](#persist-mode)
+writes. `description.read.md` exists only when the description read back was not
+identical to the one written.
 
 A GitHub id contains a `/`, so its directory nests one level deeper:
 `<state>/attempts/github/owner/name#12/test/1/`. Writes go through a temporary
@@ -1287,7 +1592,8 @@ as `completing`. Finalising, in this order:
    (200 lines) in the attempt's directory.
 2. Remove the session.
 3. Mark the attempt `completed`.
-4. Remove `taken` from the task, read back to confirm.
+4. Remove `taken` from the task, read back to confirm (see
+   [The `taken` label](#the-taken-label)).
 
 The attempt's directory and the workspace are kept. A session that is already
 `gone` needs neither the capture nor the removal.
@@ -1376,15 +1682,18 @@ given with `--task` (see [The supplied task](#the-supplied-task)), reads the
 task again through its source and applies the exclusions of the `select` step,
 so a task that carries `taken`, lacks a scope, autonomy or stage label, is
 blocked or is split is reported as excluded. With `--stage`, the
-unsupported-stage exclusion is skipped. It then checks, in this order, and a failed check makes the step
-`wait` with that reason:
+unsupported-stage exclusion is skipped. It then checks, in this order, and a
+failed check makes the step `wait` with that reason:
 
-1. The stage has an implementation registered. Only `test` is, so a selected
-   `grill-me` unit waits until DOT-110 registers its stage.
-2. The task read again carries no `taken`.
-3. No attempt of the task, at any stage, is `pending`, `created`, `started` or
+1. The stage has an implementation registered. `test` and `grill-me` are. A
+   stage without one waits, and the reason names it.
+2. The stage's prerequisites hold (see **The stage contract**, below). An
+   unmet prerequisite waits with its own reason, before anything is written: no
+   record, label, prompt or session exists afterwards.
+3. The task read again carries no `taken`.
+4. No attempt of the task, at any stage, is `pending`, `created`, `started` or
    `retained`, or `completed` with a pending cleanup.
-4. A repository is inferred (see
+5. A repository is inferred (see
    [Sessions and workspaces](#sessions-and-workspaces)).
 
 A task that cannot be read, a workspace root that cannot be listed, a record
@@ -1400,7 +1709,8 @@ With `--apply` it then does, in this order:
 
 1. Prepare the workspace.
 2. Write the attempt record as `pending`, with the workspace path.
-3. Add `taken` to the task, read back to confirm.
+3. Add `taken` to the task, read back to confirm (see
+   [The `taken` label](#the-taken-label)).
 4. Write `prompt.md` in the attempt's directory.
 5. Create the session and record its id: the attempt becomes `created`.
 6. Start the session: the attempt becomes `started`.
@@ -1420,14 +1730,27 @@ no task text reaches the shell. The file carries the attempt id, the task
 path and exact content of the result marker. It is written before the session
 exists, beside the record and never in the workspace.
 
-**The stage contract.** A stage declares its id, its emoji, its prompt for a
-task, its agent arguments and its completion check against the task's tracker.
-Registering one needs no change to `reconcile` or `launch`. This change ships
-one, the test stage 🧪, whose prompt asks the agent only to write the result
-marker and stop, and whose tracker check always holds. It is never a task's
-next stage and runs only with `--task <source>:<id> --stage test`. Its agent
-arguments are `--model haiku --effort low` for `claude` and
-`-c model_reasoning_effort=low` for `codex`.
+**The stage contract.** A stage declares its id, its emoji, its prerequisites,
+its prompt for a task, its agent arguments and its completion check against the
+task's tracker. Registering one needs no change to `reconcile` or `launch`.
+Two are registered: the test stage 🧪 and the
+[grill-me stage](#the-grill-me-stage) 🔥.
+
+The prerequisites are `prerequisites(env)`, asynchronous. `env` carries the
+configured session tool and the home directory. It returns either a context or
+a reason. `launch` calls it after the registry check and before the `taken`,
+open-attempt and repository checks, and it does so in a dry run too. A reason
+makes the step `wait` with it; the step writes no attempt record, label,
+prompt file or session. A context is a record of strings, read once at launch
+and given to the stage's synchronous prompt, so a prompt never reads the
+filesystem itself. The grill-me stage uses it to carry the bodies of two skills.
+
+The test stage 🧪 has no prerequisites: it holds without any check, with an empty
+context. Its prompt asks the agent only to write the result marker and stop,
+and its tracker check always holds. It is never a task's next stage and runs
+only with `--task <source>:<id> --stage test`. Its agent arguments are
+`--model haiku --effort low` for `claude` and `-c model_reasoning_effort=low`
+for `codex`.
 
 The text report prints a header like the `select` step's, then the lines that
 apply:
@@ -1492,7 +1815,8 @@ bun plugins/autonomous/src/run.ts --account <key> --apply --task <source>:<id> -
 A run holds `<state>/run.lock` for its whole duration. The file holds the
 process id and the start time. It is held even without `--apply`, because
 `reconcile` reads records that `--apply` runs rewrite, and discard mode holds it
-too. `--bootstrap-labels`, answer mode and transition mode do not take it.
+too. `--bootstrap-labels`, answer mode, transition mode and persist mode do not
+take it.
 
 A run that finds the lock held by a live process runs no step: it is
 `not-evaluable`, exits 3, and names the other run, as in
@@ -1509,12 +1833,201 @@ The runner writes `taken` for the attempts it launches:
 - It removes `taken` when the attempt is finalised, after its session is gone;
   when it is discarded; and when a `pending` attempt is aborted because no
   session was ever created. The removal is read back too.
+
+Both read-backs wait out the tracker's read lag (see
+[Read-backs and tracker lag](#read-backs-and-tracker-lag)). One that never
+shows the write ends its message with `(read 6 times over 30 s)`, as in
+`taken missing from linear:DOT-121 after add: [...] (read 6 times over 30 s)` or
+`taken still on linear:DOT-121 after removal: [...] (read 6 times over 30 s)`.
+
 - It keeps `taken` while the attempt is `retained`, and while a completed
   attempt's cleanup is pending.
 
 A forgotten `taken` is removed by hand.
 [ADR 0002](docs/adr/0002-remove-taken-on-finalisation.md) records why the
 runner removes it.
+
+## The grill-me stage
+
+The grill-me stage 🔥 refines one task with the human. A managed `claude`
+session grills them, saves the confirmed definition and a stage summary in the
+task's own tracker, and moves the task from `grill-me` to `proposal`. It
+prepares no proposal: that is a later stage, and the prompt forbids it in the
+same session.
+
+Selected `grill-me` units launch like those of any registered stage, and
+`--task <source>:<id> --stage grill-me` supplies one by hand (see
+[The supplied task](#the-supplied-task)). The session is titled
+`auto 🔥 <name> (<task id>)` and runs with `--model opus --effort high`. The
+model and the effort are fixed for every task.
+
+### Prerequisites
+
+`launch` checks three things before it writes anything. A failed check makes
+the step `wait` with a reason that names what is missing:
+
+- `sessions.tool` is `claude`. `codex` is not supported: the reason is
+  `grill-me runs only with claude; sessions.tool is codex`, and no skill is
+  read.
+- Claude Code lists the `mattpocock-skills` plugin. The lookup reads
+  `~/.claude/plugins/installed_plugins.json`, takes the entries whose key
+  starts with `mattpocock-skills@` and prefers the one with the scope `user`.
+  A registry that cannot be read, one that is malformed and one with no entry
+  for the plugin each give their own reason, naming the file.
+- The plugin's `grill-with-docs` and `handoff` skills are found by name under
+  its install path, in `skills/<name>` or `skills/<category>/<name>` and with a
+  `SKILL.md`. Neither the plugin's version nor the skills' category directory
+  matters. A skill that is missing is named in the reason, with the path that
+  was searched.
+
+An agent cannot invoke either skill, because both are marked
+`disable-model-invocation`. So `launch` reads the installed `SKILL.md` of each,
+strips its frontmatter and writes the two bodies into `prompt.md`. The session
+follows whatever each skill says in its installed version, and the prompt file
+keeps the text this attempt received, so an attempt can be audited after the
+plugin updates. The prompt adds one line: every skill that the grill section
+names is a skill of the `mattpocock-skills` plugin, invoked with the Skill tool
+as `mattpocock-skills:<name>`. The prerequisites check only the two skills
+above, not the ones they name.
+
+### What the session does
+
+`prompt.md` holds the shared frame (the attempt, the task and the result
+marker) and four sections: the grill, which is the `grill-with-docs` body; the
+closing; the stage summary, which is the `handoff` body; and the constraints.
+The `handoff` body is overridden: the agent writes the stage summary to
+`stage-summary.md` in the attempt's directory, not to the temporary directory.
+The session closes the stage in this order, and the prompt says never to skip
+or reorder a step:
+
+1. Confirm the definition with the human, and whether to split the task.
+2. Commit and push the glossary and ADR files the grill changed, if any (see
+   [Documentation commits](#documentation-commits)).
+3. Write `definition.md` and `stage-summary.md` in the attempt's directory, and
+   create the subtasks of a confirmed split.
+4. Run `/autonomous:run --apply --persist <attempt-id>`, which is
+   [persist mode](#persist-mode). If it exits non-zero, tell the human what it
+   reported and do not run the transition.
+5. Show the human the task's URL, or its id when the task has no URL.
+6. Run `/autonomous:run --apply --transition <source>:<task>`, which is
+   [transition mode](#transition-mode): it asks the human for the task's
+   autonomy and applies the answer.
+7. Write the result marker, only once the transition is applied.
+
+The prompt names one exception. If the human decides to close the task instead
+of defining it, the human closes it in its tracker, or tells the agent to and
+the agent closes it there. The agent then skips steps 2 to 6 (no documentation
+commit, no definition, no persist, no transition), writes the result marker
+with a summary saying the task was closed, and stops. `reconcile` finalises
+the attempt because the task is closed (see [Completion](#completion)).
+
+Code enforces the order that matters. The transition refuses without the
+receipt that persist mode writes (see
+[The persistence receipt](#the-persistence-receipt)), so the labels alone prove
+the definition was saved. A marker written before the transition fails the
+stage's completion check, and `reconcile` does not remove the session.
+
+The prompt gives the agent the template of `definition.md`. Its first line is
+`## Definition`, followed by the sections Problem, Solution, Acceptance
+criteria, Non-goals, Decisions, Proposed autonomy (`AFK` or `HITL` as the grill
+proposes it, and the reason) and Artifacts (the repository-relative paths of the
+glossary and ADR files changed, and the ids of any subtasks, or `none`).
+
+The Proposed autonomy section only records what the grill proposes: persist
+runs before the transition asks the human. The task's autonomy label, set by
+the transition, is the decision. When the human answers another autonomy, the
+description keeps the proposed one, the labels carry the answer, and the agent
+does not persist again.
+
+### A confirmed split
+
+When the human confirms a split, the agent creates each subtask through the
+`labelling-new-tasks` skill, as a native subtask of the task in the same
+tracker, using that tracker's parent option. Each subtask carries its own
+definition in its description, in the same template, and its own autonomy. The
+parent keeps the overall definition and still goes through its own persist and
+transition, steps 4 to 6. Before a Linear split the agent tells the human how
+many Linear issues it creates, because each one counts against the free plan's
+issue limit.
+
+### A Later answer
+
+The transition question offers `AFK`, `HITL` and `Later` (see
+[The transition question](#the-transition-question)). When the human answers
+`Later`, or the answer is not applied, the agent writes no result marker and
+leaves the session open. The task keeps `grill-me` and the receipt stays in the
+attempt's directory.
+
+### Documentation commits
+
+The prompt lets the agent commit and push only the glossary and ADR files the
+grill changed, on the workspace's branch. It opens no pull request, never
+forces a push and never skips a hook (`--no-verify`). When the grill changed no
+such file, it commits and pushes nothing. A failed push, for instance one that
+a pre-push hook rejects, goes to the human, who decides whether the stage
+continues.
+
+### GitHub tasks
+
+An issue in a public repository is public, and both the definition (it becomes
+the issue's description) and the stage summary (it becomes a comment) land in
+it. For a GitHub task, the constraints section of the prompt adds a rule: no
+absolute path and no other detail of the machine, such as the user name, the
+home directory and the host name, in the definition or in the stage summary,
+and repository-relative paths and URLs instead. The rule keys on the task's
+source, not on the repository's visibility, so it needs no API call. A Linear
+or a Beads task carries no such restriction.
+
+### The description layout
+
+Persist mode writes the content of `definition.md` at the top of the task's
+description. A line `---`, the heading `## Original description` and the
+original description follow it. For a task whose description is `Fix the
+login`:
+
+```markdown
+## Definition
+
+### Problem
+
+…
+
+---
+
+## Original description
+
+Fix the login
+```
+
+A later grill replaces only the part above the separator. The description is
+read as a definition in this layout when it starts with `## Definition` and
+contains the separator: the line `---`, a blank line and the heading
+`## Original description`. Everything from the separator on is then kept byte
+for byte. A description that contains `---`
+without that layout is treated as original text, and an empty original
+description leaves the layout ending after its heading. When `definition.md`
+does not start with `## Definition`, persist mode prepends that heading and a
+blank line, because the detection of an earlier grill keys on it. The stage
+summary is not part of the description: it is posted as a comment (see
+[What it writes](#what-it-writes)).
+
+### Completion
+
+The stage's check against the task's tracker holds in either of two cases:
+
+- The task carries `proposal`, no `grill-me` and an autonomy label, `AFK` or
+  `HITL`.
+- The task is closed in its tracker: Beads status `closed`, GitHub state
+  `CLOSED`, or a Linear state of type `completed` or `canceled`, or named
+  `Duplicate`. `linear issue view --json` prints no state type, so reading a
+  Linear task makes one more read-only call, `linear api`, to get it.
+
+As for every stage, `reconcile` also needs a valid result marker (see
+[The two proofs](#what-it-does-to-each-attempt)). It then finalises the attempt
+and removes the session and `taken` as for any stage. A grill that ends with
+the task closed completes through the second case: the agent writes the marker
+without persisting or transitioning (see
+[What the session does](#what-the-session-does)).
 
 ## Discard mode
 
@@ -1538,7 +2051,8 @@ later attempt holds.
 It does these, in this order, and stops at the first failure:
 
 1. Removes the attempt's session, when it has one and it still exists.
-2. Removes `taken` from the task, read back to confirm.
+2. Removes `taken` from the task, read back to confirm (see
+   [The `taken` label](#the-taken-label)).
 3. Marks the attempt `discarded`, keeping its directory.
 4. With `--release-workspace`, releases the worktree. The branch is kept.
 
@@ -1684,6 +2198,43 @@ The decision, in order of precedence:
 Projection is reported but never blocks. Missing or stale data is never read as
 available capacity.
 
+## Read-backs and tracker lag
+
+The runner trusts a tracker write only after it reads the task again. A tracker
+can serve a read that lags a write it has acknowledged: in the DOT-121 grill,
+Linear acknowledged the `proposal` label and its reads still lacked it 8.4 s
+later. A read-back therefore does not fail on the first read that lacks the
+write.
+
+A read-back that does not show the write yet is read again after 1, 2, 4, 8 and
+15 s: six reads over 30 s. Only a read that shows the write counts. A read-back
+that settles at once never waits. A read whose tracker command fails is not
+repeated, and its failure is reported as before. The 30 s is a bound chosen at
+about 3.5 times the longest lag seen, not a limit the tracker states.
+
+Each read-back says what shows the write:
+
+| Read-back                                        | It shows the write when                     |
+| ------------------------------------------------ | ------------------------------------------- |
+| The transition, after its additions and removals | The task's labels equal the expected set    |
+| `taken`, added or removed                        | The labels do not contradict the write      |
+| Label triage's writes, in the step and answers   | Every expected label is present             |
+| Persist mode's description                       | Its text equals the text written            |
+| Persist mode's comment                           | The first line of one comment is the header |
+
+A read-back that still does not show the write after the sixth read fails as a
+mismatch always did, and its message adds `(read 6 times over 30 s)`, before
+any trailing hint. The messages are in
+[The transition answer](#the-transition-answer),
+[The `taken` label](#the-taken-label),
+[Applying an answer](#applying-an-answer) and
+[What it writes](#what-it-writes).
+
+Three reads stay single, because they confirm nothing the runner wrote: the
+read before `taken` is removed, which decides whether there is anything to
+remove; the listing in persist mode that decides whether its comment is posted;
+and the reads that only report the task's labels after a failed write.
+
 ## Tiering: code → Jev → LLM
 
 Every part of every step is placed in the earliest tier that can do it
@@ -1749,7 +2300,8 @@ The handoff's tiering:
 The command's LLM work is relaying the script's output, asking the handoff's
 questions and mapping the chosen options back to their values. Transition mode
 is code throughout: reading the task, composing the question, and validating
-and writing the answer.
+and writing the answer. So is persist mode: the checks, the splice, the writes,
+the read-backs and the receipt. The grill itself is the session's work.
 
 ## Versioning
 

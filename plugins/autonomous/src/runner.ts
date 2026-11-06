@@ -56,6 +56,7 @@ export interface RunContext {
         workspace: WorkspaceManagerFactory;
         naming: Exec; // claude, bounded to the naming time limit
         state: string; // the resolved state directory
+        home: string; // the home directory, where stage prerequisites look for installed tools
     };
 }
 

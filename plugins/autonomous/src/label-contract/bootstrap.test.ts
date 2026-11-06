@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import { type AutonomousConfig, CONFIG_SCHEMA, type Source } from "../config.ts";
+import { inertDocumentMethods } from "../label-triage/test-fixtures.ts";
 import type {
     Tracker,
     TrackerLabel,
@@ -44,6 +45,7 @@ function fake(
             readTask: unused,
             addLabel: unused,
             removeLabel: unused,
+            ...inertDocumentMethods,
             listLabels: () => {
                 result.listed++;
                 return Promise.resolve(options.labels ?? { ok: true, value: [] });

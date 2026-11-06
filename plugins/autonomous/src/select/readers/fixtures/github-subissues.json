@@ -1,0 +1,28 @@
+{
+    "subIssues": {
+        "nodes": [
+            {
+                "id": "I_kwDOVQf0Nc8AAAABYd71nA",
+                "number": 10,
+                "state": "OPEN",
+                "title": "Sub-issue A",
+                "url": "https://github.com/ghrecon-ec0359/sv-issues/issues/10"
+            },
+            {
+                "id": "I_kwDOVQf0Nc8AAAABYd8CrQ",
+                "number": 11,
+                "state": "OPEN",
+                "title": "Sub-issue B",
+                "url": "https://github.com/ghrecon-ec0359/sv-issues/issues/11"
+            },
+            {
+                "id": "I_kwDOVQf0Nc8AAAABYd7cBw",
+                "number": 8,
+                "state": "CLOSED",
+                "title": "Closed as not planned",
+                "url": "https://github.com/ghrecon-ec0359/sv-issues/issues/8"
+            }
+        ],
+        "totalCount": 3
+    }
+}

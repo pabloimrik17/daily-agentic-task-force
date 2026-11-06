@@ -1,11 +1,26 @@
-import { describe, expect, it } from "vitest";
+import { rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+
+import { afterEach, describe, expect, it } from "vitest";
 
 import { applyAnswers } from "../answer-mode.ts";
 import type { Answer } from "../args.ts";
+import { attemptId, type AttemptRecord } from "../attempts/record.ts";
+import {
+    attemptDir,
+    receiptPath,
+    recordPath,
+    writeJsonAtomic,
+    writeRecord,
+} from "../attempts/state.ts";
+import { record as startedAttempt, tempState } from "../attempts/test-fixtures.ts";
 import type { AutonomousConfig, Source } from "../config.ts";
 import { MEANINGS } from "../label-contract/contract.ts";
 import { config, task, trackers } from "../label-triage/test-fixtures.ts";
 import type { TrackerLabel, Trackers } from "../label-triage/trackers/tracker.ts";
+import { READ_BACK_DELAYS_MS } from "../read-back.ts";
+import { exitCodeFor } from "../report.ts";
 import type { AnswerContext, AnswerRecord } from "../runner.ts";
 import { transitionHandler } from "./answer.ts";
 import {
@@ -14,6 +29,7 @@ import {
     runTransition,
     TRANSITION,
     TRANSITION_SCHEMA,
+    type TransitionDeps,
     transitionQuestionId,
     unconfiguredTransition,
 } from "./mode.ts";
@@ -52,16 +68,46 @@ function context(given: Trackers, configured: AutonomousConfig = config()): Answ
     return { config: configured, trackers: given };
 }
 
+// A state directory that does not exist: no attempt, so nothing waits for a receipt.
+const NO_STATE = join(tmpdir(), "autonomous-transition-no-state");
+
+function modeDeps(
+    given: Trackers,
+    configured: AutonomousConfig = config(),
+    state: string = NO_STATE,
+): TransitionDeps {
+    return { config: configured, trackers: given, state };
+}
+
 function answer(id: string, ...values: string[]): Answer {
     return { id, values };
 }
 
-async function transition(given: Trackers, id: string, ...values: string[]): Promise<AnswerRecord> {
-    const [record] = await transitionHandler.answer([answer(id, ...values)], context(given));
+function waiting(waits: number[]): (ms: number) => Promise<void> {
+    return (ms) => {
+        waits.push(ms);
+        return Promise.resolve();
+    };
+}
+
+async function transitionWaiting(
+    given: Trackers,
+    waits: number[],
+    id: string,
+    ...values: string[]
+): Promise<AnswerRecord> {
+    const [record] = await transitionHandler(NO_STATE, waiting(waits)).answer(
+        [answer(id, ...values)],
+        context(given),
+    );
     if (record === undefined) {
         throw new Error(`no record for ${id}`);
     }
     return record;
+}
+
+function transition(given: Trackers, id: string, ...values: string[]): Promise<AnswerRecord> {
+    return transitionWaiting(given, [], id, ...values);
 }
 
 async function labelsOf(given: Trackers, source: Source, id: string): Promise<string[]> {
@@ -83,6 +129,70 @@ function failingRemoval(given: Trackers, source: Source, label: string, error: s
     };
 }
 
+// After each label write, the next `reads` reads still return the labels from before it, as
+// Linear's reads lagged a write (DOT-121).
+function lagging(given: Trackers, source: Source, reads: number): Trackers {
+    const tracker = given[source];
+    let stale: string[] = [];
+    let left = 0;
+    const before = async (id: string) => {
+        stale = await labelsOf(given, source, id);
+        left = reads;
+    };
+    return {
+        ...given,
+        [source]: {
+            ...tracker,
+            readTask: async (id: string) => {
+                const read = await tracker.readTask(id);
+                if (!read.ok || left === 0) {
+                    return read;
+                }
+                left -= 1;
+                return { ok: true, value: { ...read.value, labels: stale } };
+            },
+            addLabel: async (id: string, label: string) => {
+                await before(id);
+                return tracker.addLabel(id, label);
+            },
+            removeLabel: async (id: string, label: string) => {
+                await before(id);
+                return tracker.removeLabel(id, label);
+            },
+        },
+    };
+}
+
+// The tracker accepts every removal and keeps the label.
+function keepingOnRemoval(given: Trackers, source: Source): Trackers {
+    return {
+        ...given,
+        [source]: {
+            ...given[source],
+            removeLabel: () => Promise.resolve({ ok: true, value: undefined }),
+        },
+    };
+}
+
+function unreadableAfterWrite(given: Trackers, source: Source, error: string): Trackers {
+    const tracker = given[source];
+    let wrote = false;
+    return {
+        ...given,
+        [source]: {
+            ...tracker,
+            readTask: async (id: string) => {
+                const read = await tracker.readTask(id);
+                return wrote ? { ok: false, error } : read;
+            },
+            addLabel: (id: string, label: string) => {
+                wrote = true;
+                return tracker.addLabel(id, label);
+            },
+        },
+    };
+}
+
 const writes = (calls: readonly string[]) =>
     calls.filter((call) => call.includes(":addLabel:") || call.includes(":removeLabel:"));
 
@@ -91,7 +201,7 @@ const removals = (calls: readonly string[]) =>
 
 async function questionFor(source: Source, id: string, labels: string[]) {
     const given = trackers([], { [source]: [task(source, id, labels)] });
-    const report = await runTransition({ source, id }, context(given), STARTED);
+    const report = await runTransition({ source, id }, modeDeps(given), STARTED);
     const question = report.handoff?.questions[0];
     if (question === undefined) {
         throw new Error(`no question for ${source} ${id}`);
@@ -106,7 +216,7 @@ describe("transition mode: Transition mode", () => {
 
         const report = await runTransition(
             { source: "linear", id: "DOT-110" },
-            context(given),
+            modeDeps(given),
             STARTED,
         );
 
@@ -155,7 +265,7 @@ describe("transition mode: Transition mode", () => {
 
         const report = await runTransition(
             { source: "linear", id: "DOT-110" },
-            context(given),
+            modeDeps(given),
             STARTED,
         );
 
@@ -179,7 +289,7 @@ describe("transition mode: Transition mode", () => {
 
         const report = await runTransition(
             { source: "linear", id: "DOT-110" },
-            context(given, disabled("linear")),
+            modeDeps(given, disabled("linear")),
             STARTED,
         );
 
@@ -200,7 +310,7 @@ describe("transition mode: Transition mode", () => {
 
         const report = await runTransition(
             { source: "linear", id: "DOT-110" },
-            context(given),
+            modeDeps(given),
             STARTED,
         );
 
@@ -262,7 +372,7 @@ describe("transition mode: Transition report", () => {
         const given = linear([], ["personal", "grill-me"]);
         const report = await runTransition(
             { source: "linear", id: "DOT-110" },
-            context(given),
+            modeDeps(given),
             STARTED,
         );
 
@@ -281,7 +391,7 @@ describe("transition mode: Transition report", () => {
         const given = linear([], ["personal", "grill-me"]);
         const report = await runTransition(
             { source: "linear", id: "DOT-110" },
-            context(given),
+            modeDeps(given),
             STARTED,
         );
 
@@ -301,7 +411,7 @@ describe("transition mode: Transition report", () => {
         const given = linear([], ["personal", "AFK", "proposal"]);
         const report = await runTransition(
             { source: "linear", id: "DOT-110" },
-            context(given),
+            modeDeps(given),
             STARTED,
         );
 
@@ -320,7 +430,7 @@ describe("transition mode: Transition report", () => {
         const given = linear([], [], { readErrors: { "DOT-110": "boom" } });
         const report = await runTransition(
             { source: "linear", id: "DOT-110" },
-            context(given),
+            modeDeps(given),
             STARTED,
         );
 
@@ -426,7 +536,7 @@ describe("transition answers: Transition answers", () => {
         const calls: string[] = [];
         const given = linear(calls, ["work", "grill-me"]);
 
-        const records = await transitionHandler.answer(
+        const records = await transitionHandler(NO_STATE).answer(
             [
                 answer("transition:linear:DOT-110", "grill-me"),
                 answer("transition:linear:DOT-111", "AFK", "HITL"),
@@ -458,7 +568,7 @@ describe("transition answers: Transition answers", () => {
         const calls: string[] = [];
         const given = linear(calls, ["work", "grill-me"]);
 
-        const records = await transitionHandler.answer(
+        const records = await transitionHandler(NO_STATE).answer(
             [
                 answer("transition", "AFK"),
                 answer("transition:linear", "AFK"),
@@ -487,7 +597,7 @@ describe("transition answers: Transition answers", () => {
         const calls: string[] = [];
         const given = linear(calls, ["work", "grill-me"]);
 
-        const [record] = await transitionHandler.answer(
+        const [record] = await transitionHandler(NO_STATE).answer(
             [answer("transition:linear:DOT-110", "AFK")],
             context(given, disabled("linear")),
         );
@@ -523,7 +633,7 @@ describe("transition answers: Transition answers", () => {
         const given = linear(calls, ["personal", "grill-me"]);
 
         const report = await applyAnswers(
-            [transitionHandler],
+            [transitionHandler(NO_STATE)],
             [answer("transition:linear:DOT-110", "AFK"), answer("transition:linear:DOT-9", "x")],
             context(given),
             STARTED,
@@ -711,14 +821,390 @@ describe("transition answers: A transition replaces the stage", () => {
 
     it("a read-back that loses a label after the adds fails before any removal", async () => {
         const calls: string[] = [];
+        const waits: number[] = [];
         const given = linear(calls, ["work", "grill-me"], { dropsOnAdd: "grill-me" });
 
-        const record = await transition(given, "transition:linear:DOT-110", "AFK");
+        const record = await transitionWaiting(given, waits, "transition:linear:DOT-110", "AFK");
 
         expect(record).toMatchObject({
             status: "failed",
-            detail: "read-back mismatch: before [work, grill-me] + [AFK, proposal] → after [work, AFK, proposal]; nothing was removed",
+            detail: "read-back mismatch: before [work, grill-me] + [AFK, proposal] → after [work, AFK, proposal] (read 6 times over 30 s); nothing was removed",
         });
+        expect(waits).toEqual([...READ_BACK_DELAYS_MS]);
         expect(removals(calls)).toEqual([]);
+    });
+
+    it("a read-back that never shows the removal fails with the hint after the tries", async () => {
+        const calls: string[] = [];
+        const waits: number[] = [];
+        const given = linear(calls, ["work", "grill-me", "AFK", "proposal"]);
+
+        const record = await transitionWaiting(
+            keepingOnRemoval(given, "linear"),
+            waits,
+            "transition:linear:DOT-110",
+            "AFK",
+        );
+
+        expect(record).toMatchObject({
+            status: "failed",
+            detail:
+                "read-back mismatch: before [work, grill-me, AFK, proposal] + [] - [grill-me] → after [work, grill-me, AFK, proposal] (read 6 times over 30 s); " +
+                "grill-me may remain beside proposal, answering again completes the transition",
+        });
+        expect(waits).toEqual([...READ_BACK_DELAYS_MS]);
+    });
+
+    it("a read-back that fails is not read again", async () => {
+        const calls: string[] = [];
+        const waits: number[] = [];
+        const given = linear(calls, ["work", "grill-me"]);
+        const error = "linear issue view DOT-110: boom";
+
+        const record = await transitionWaiting(
+            unreadableAfterWrite(given, "linear", error),
+            waits,
+            "transition:linear:DOT-110",
+            "AFK",
+        );
+
+        expect(record).toMatchObject({
+            status: "failed",
+            detail: `${error} (before [work, grill-me]); nothing was removed`,
+        });
+        expect(waits).toEqual([]);
+        expect(calls.filter((call) => call.includes(":readTask:"))).toHaveLength(2);
+    });
+
+    it("a read-back that matches at once never waits: the task is read three times in all", async () => {
+        const calls: string[] = [];
+        const waits: number[] = [];
+        const given = linear(calls, ["work", "grill-me"]);
+
+        const record = await transitionWaiting(given, waits, "transition:linear:DOT-110", "AFK");
+
+        expect(record.status).toBe("applied");
+        expect(waits).toEqual([]);
+        expect(calls.filter((call) => call.includes(":readTask:"))).toHaveLength(3);
+    });
+
+    it("a read-back that lags the last write is read again until it shows, and the transition completes", async () => {
+        const calls: string[] = [];
+        const waits: number[] = [];
+        const given = linear(calls, ["personal", "grill-me", "taken"]);
+
+        const record = await transitionWaiting(
+            lagging(given, "linear", 2),
+            waits,
+            "transition:linear:DOT-110",
+            "AFK",
+        );
+
+        expect(record).toMatchObject({
+            status: "applied",
+            detail: "added AFK, proposal, removed grill-me on linear DOT-110, read back",
+        });
+        expect(waits).toEqual([1000, 2000, 1000, 2000]);
+        expect(await labelsOf(given, "linear", "DOT-110")).toEqual([
+            "personal",
+            "taken",
+            "AFK",
+            "proposal",
+        ]);
+    });
+
+    it("answering again after a lagging read-back only removes grill-me", async () => {
+        const calls: string[] = [];
+        const waits: number[] = [];
+        const given = linear(calls, ["personal", "grill-me", "taken", "AFK", "proposal"]);
+
+        const record = await transitionWaiting(
+            lagging(given, "linear", 2),
+            waits,
+            "transition:linear:DOT-110",
+            "AFK",
+        );
+
+        expect(record).toMatchObject({
+            status: "applied",
+            detail: "removed grill-me on linear DOT-110, read back",
+        });
+        expect(writes(calls)).toEqual(["linear:removeLabel:DOT-110:grill-me"]);
+        expect(waits).toEqual([1000, 2000]);
+        expect(await labelsOf(given, "linear", "DOT-110")).toEqual([
+            "personal",
+            "taken",
+            "AFK",
+            "proposal",
+        ]);
+    });
+});
+
+describe("transition receipt: The transition waits for the persistence receipt", () => {
+    const states: string[] = [];
+    const ID = attemptId({ source: "linear", id: "DOT-110" }, "grill-me", 1);
+
+    afterEach(() => {
+        for (const state of states.splice(0)) {
+            rmSync(state, { recursive: true, force: true });
+        }
+    });
+
+    async function stateWith(...attempts: Partial<AttemptRecord>[]): Promise<string> {
+        const state = tempState();
+        states.push(state);
+        for (const attempt of attempts) {
+            await writeRecord(state, grillMe(attempt));
+        }
+        return state;
+    }
+
+    function grillMe(overrides: Partial<AttemptRecord> = {}): AttemptRecord {
+        return startedAttempt({
+            id: ID,
+            task: { source: "linear", id: "DOT-110", title: "Grill-me stage" },
+            stage: "grill-me",
+            ...overrides,
+        });
+    }
+
+    const receiptOf = (state: string, id = ID) => receiptPath(attemptDir(state, id));
+
+    async function persisted(state: string, id = ID): Promise<void> {
+        await writeJsonAtomic(receiptOf(state, id), { schema: "autonomous.persisted.v1" });
+    }
+
+    const missing = (state: string, id = ID) =>
+        `grill-me attempt ${id} has no persistence receipt at ${receiptOf(state, id)}; ` +
+        `persist its definition with --apply --persist ${id}, or discard the attempt`;
+
+    async function report(given: Trackers, state: string) {
+        return runTransition(
+            { source: "linear", id: "DOT-110" },
+            modeDeps(given, config(), state),
+            STARTED,
+        );
+    }
+
+    async function answered(given: Trackers, state: string): Promise<AnswerRecord> {
+        const [only] = await transitionHandler(state).answer(
+            [answer("transition:linear:DOT-110", "AFK")],
+            context(given),
+        );
+        if (only === undefined) {
+            throw new Error("no record");
+        }
+        return only;
+    }
+
+    it("Definition not persisted: the report names the attempt and the receipt, has no handoff and exits 3", async () => {
+        const calls: string[] = [];
+        const given = linear(calls, ["personal", "grill-me"]);
+        const state = await stateWith({});
+
+        const result = await report(given, state);
+
+        expect(result).toMatchObject({
+            outcome: "not-evaluable",
+            task: { source: "linear", id: "DOT-110", labels: ["personal", "grill-me"] },
+            reasons: [missing(state)],
+        });
+        expect(result).not.toHaveProperty("handoff");
+        expect(exitCodeFor(result.outcome)).toBe(3);
+        expect(renderTransitionText(result)).toContain(`  - ${missing(state)}`);
+        expect(calls).toEqual(["linear:readTask:DOT-110"]);
+    });
+
+    it("Definition not persisted: the answer is rejected, naming the attempt, and nothing is written", async () => {
+        const calls: string[] = [];
+        const given = linear(calls, ["work", "grill-me"]);
+        const state = await stateWith({});
+
+        const result = await answered(given, state);
+
+        expect(result).toEqual({
+            id: "transition:linear:DOT-110",
+            labels: ["AFK"],
+            status: "rejected",
+            detail: missing(state),
+        });
+        expect(calls).toEqual(["linear:readTask:DOT-110"]);
+        expect(await labelsOf(given, "linear", "DOT-110")).toEqual(["work", "grill-me"]);
+    });
+
+    it("Definition persisted: transition mode emits its question as before", async () => {
+        const given = linear([], ["personal", "grill-me"]);
+        const state = await stateWith({});
+        await persisted(state);
+
+        const result = await report(given, state);
+
+        expect(result.outcome).toBe("advance");
+        expect(result.reasons).toEqual([]);
+        expect(result.handoff?.questions.map((question) => question.id)).toEqual([
+            "transition:linear:DOT-110",
+        ]);
+        expect(exitCodeFor(result.outcome)).toBe(0);
+    });
+
+    it("Definition persisted: the answer is applied as before", async () => {
+        const given = linear([], ["work", "grill-me"]);
+        const state = await stateWith({});
+        await persisted(state);
+
+        const result = await answered(given, state);
+
+        expect(result).toMatchObject({
+            status: "applied",
+            detail: "added AFK, proposal, removed grill-me on linear DOT-110, read back",
+        });
+        expect(await labelsOf(given, "linear", "DOT-110")).toEqual(["work", "AFK", "proposal"]);
+    });
+
+    it("Manual transition: no state directory means no open attempt and nothing is checked", async () => {
+        const given = linear([], ["personal", "grill-me"]);
+        const state = join(tmpdir(), "autonomous-transition-absent-state");
+
+        const result = await report(given, state);
+        const settled = await answered(linear([], ["work", "grill-me"]), state);
+
+        expect(result.outcome).toBe("advance");
+        expect(settled.status).toBe("applied");
+    });
+
+    it("Manual transition: a state directory with no attempt of the task asks the question", async () => {
+        const other = attemptId({ source: "linear", id: "DOT-999" }, "grill-me", 1);
+        const state = await stateWith({
+            id: other,
+            task: { source: "linear", id: "DOT-999", title: "Another task" },
+        });
+
+        const result = await report(linear([], ["personal", "grill-me"]), state);
+
+        expect(result.outcome).toBe("advance");
+    });
+
+    it.each<[string, Partial<AttemptRecord>]>([
+        ["discarded", { state: "discarded" }],
+        ["aborted", { state: "aborted" }],
+        ["completed with nothing to clean up", { state: "completed", cleanup: null }],
+        [
+            "of another stage",
+            {
+                id: attemptId({ source: "linear", id: "DOT-110" }, "proposal", 1),
+                stage: "proposal",
+            },
+        ],
+    ])(
+        "Manual transition: an attempt that is %s does not hold the task",
+        async (_name, attempt) => {
+            const state = await stateWith(attempt);
+
+            const result = await report(linear([], ["personal", "grill-me"]), state);
+            const settled = await answered(linear([], ["work", "grill-me"]), state);
+
+            expect(result.outcome).toBe("advance");
+            expect(settled.status).toBe("applied");
+        },
+    );
+
+    it.each<[string, Partial<AttemptRecord>]>([
+        ["pending", { state: "pending" }],
+        ["created", { state: "created" }],
+        ["retained", { state: "retained" }],
+        [
+            "completed with a cleanup owed",
+            { state: "completed", cleanup: { pending: true, error: "aoe remove failed" } },
+        ],
+    ])("an attempt that is %s holds the task until its receipt exists", async (_name, attempt) => {
+        const state = await stateWith(attempt);
+
+        const waiting = await report(linear([], ["personal", "grill-me"]), state);
+        expect(waiting.reasons).toEqual([missing(state)]);
+        expect(waiting).not.toHaveProperty("handoff");
+
+        await persisted(state);
+        const released = await report(linear([], ["personal", "grill-me"]), state);
+        expect(released.outcome).toBe("advance");
+    });
+
+    it("the first open attempt without a receipt is named when an earlier one has its own", async () => {
+        const first = attemptId({ source: "linear", id: "DOT-110" }, "grill-me", 1);
+        const second = attemptId({ source: "linear", id: "DOT-110" }, "grill-me", 2);
+        const state = await stateWith({}, { id: second, attempt: 2 });
+        await persisted(state, first);
+
+        const result = await report(linear([], ["personal", "grill-me"]), state);
+
+        expect(result.reasons).toEqual([missing(state, second)]);
+    });
+
+    it("a task outside grill-me is reported as such, whatever its attempts hold", async () => {
+        const state = await stateWith({});
+
+        const result = await report(linear([], ["personal", "AFK", "proposal"]), state);
+        const skipped = await answered(linear([], ["work", "AFK", "proposal"]), state);
+
+        expect(result.reasons).toEqual([
+            "linear DOT-110 is not in grill-me (labels [personal, AFK, proposal])",
+        ]);
+        expect(skipped.status).toBe("skipped");
+    });
+
+    it("a GitHub task is found in its nested attempt directory", async () => {
+        const github = attemptId({ source: "github", id: "owner/repo#7" }, "grill-me", 1);
+        const state = await stateWith({
+            id: github,
+            task: { source: "github", id: "owner/repo#7", title: "Grill it" },
+        });
+        const given = trackers([], {
+            github: [task("github", "owner/repo#7", ["work", "grill-me"])],
+        });
+
+        const result = await runTransition(
+            { source: "github", id: "owner/repo#7" },
+            modeDeps(given, config(), state),
+            STARTED,
+        );
+
+        expect(result.reasons).toEqual([missing(state, github)]);
+        expect(result).not.toHaveProperty("handoff");
+    });
+
+    it("an unreadable attempt record is a reason, not a crash, and the answer fails", async () => {
+        const state = await stateWith({});
+        writeFileSync(recordPath(attemptDir(state, ID)), "not json");
+
+        const result = await report(linear([], ["personal", "grill-me"]), state);
+        const failed = await answered(linear([], ["work", "grill-me"]), state);
+
+        expect(result.outcome).toBe("not-evaluable");
+        expect(result.reasons).toHaveLength(1);
+        expect(result.reasons[0]).toContain("is not valid JSON");
+        expect(result).not.toHaveProperty("handoff");
+        expect(failed.status).toBe("failed");
+        expect(failed.detail).toContain("is not valid JSON");
+    });
+
+    it("answer mode routes a transition id through the receipt check", async () => {
+        const given = linear([], ["personal", "grill-me"]);
+        const state = await stateWith({});
+
+        const result = await applyAnswers(
+            [transitionHandler(state)],
+            [answer("transition:linear:DOT-110", "AFK")],
+            context(given),
+            STARTED,
+        );
+
+        expect(result.outcome).toBe("not-evaluable");
+        expect(result.answers).toEqual([
+            {
+                id: "transition:linear:DOT-110",
+                labels: ["AFK"],
+                status: "rejected",
+                detail: missing(state),
+            },
+        ]);
     });
 });

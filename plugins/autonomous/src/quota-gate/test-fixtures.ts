@@ -65,6 +65,7 @@ export function context(exec: OpenUsageExec, args: Partial<RunArgs> = {}): RunCo
             stage: undefined,
             discard: undefined,
             transition: undefined,
+            persist: undefined,
             releaseWorkspace: false,
             force: false,
             json: false,
@@ -96,6 +97,7 @@ export function context(exec: OpenUsageExec, args: Partial<RunArgs> = {}): RunCo
             },
             naming: () => Promise.resolve({ ok: false, error: "unused" }),
             state: "/unused/state",
+            home: "/unused/home",
         },
     };
 }

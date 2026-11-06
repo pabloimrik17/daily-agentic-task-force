@@ -14,20 +14,22 @@ import {
     string,
     stringArray,
 } from "../../validate.ts";
-import { run, runJson } from "./cli-json.ts";
+import { commentBodies, run, runJson } from "./cli-json.ts";
 import type { Tracker, TrackerLabel, TrackerResult, TrackerTask } from "./tracker.ts";
 
 const OPEN_STATUSES = new Set(["open", "in_progress"]);
 
 export function task(entry: Json, path: string): TrackerTask {
+    const status = string(entry, "status", path);
     return {
         source: "beads",
         id: string(entry, "id", path),
         title: string(entry, "title", path),
         description: optional(entry, "description", path, string) ?? "",
         labels: "labels" in entry ? stringArray(entry, "labels", path) : [],
-        status: string(entry, "status", path),
+        status,
         updatedAt: string(entry, "updated_at", path),
+        closed: status === "closed",
     };
 }
 
@@ -52,6 +54,10 @@ function labelEntry(entry: Json, path: string): TrackerLabel {
 function parseLabels(value: unknown): TrackerLabel[] {
     const items = array(value, "$");
     return items.map((item, index) => labelEntry(object(item, `$[${index}]`), `$[${index}]`));
+}
+
+function parseComments(value: unknown): string[] {
+    return commentBodies(array(value, "$"), "$", { body: "text", createdAt: "created_at" });
 }
 
 export function beadsTracker(exec: Exec, config: BeadsConfig): Tracker {
@@ -101,6 +107,38 @@ export function beadsTracker(exec: Exec, config: BeadsConfig): Tracker {
                 "bd label list-all --json",
                 ["-C", dir, "label", "list-all", "--json"],
                 parseLabels,
+            );
+        },
+
+        updateDescription(id: string, file: string): Promise<TrackerResult<void>> {
+            return run(exec, `bd update ${id} --body-file ${file}`, [
+                "-C",
+                dir,
+                "update",
+                id,
+                "--body-file",
+                file,
+            ]);
+        },
+
+        addComment(id: string, file: string): Promise<TrackerResult<void>> {
+            return run(exec, `bd comments add ${id} -f ${file}`, [
+                "-C",
+                dir,
+                "comments",
+                "add",
+                id,
+                "-f",
+                file,
+            ]);
+        },
+
+        readComments(id: string): Promise<TrackerResult<string[]>> {
+            return runJson(
+                exec,
+                `bd comments ${id} --json`,
+                ["-C", dir, "comments", id, "--json"],
+                parseComments,
             );
         },
 

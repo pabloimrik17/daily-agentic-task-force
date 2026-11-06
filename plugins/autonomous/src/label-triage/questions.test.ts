@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 
+import type { TaskKey } from "../attempts/record.ts";
 import { type DecidedGroup, MEANINGS } from "../label-contract/contract.ts";
 import { detect } from "../label-contract/detect.ts";
 import { questionsFor } from "./questions.ts";
@@ -30,7 +31,7 @@ function asked(
 
 const LATER = { label: "Later", value: null, description: "Leave it for a later run" };
 
-function questionsOf(listed: TrackerTask[], descriptions = new Map<string, string>()) {
+function questionsOf(listed: TrackerTask[], descriptions = new Map<TaskKey, string>()) {
     const rules = config().sources;
     return questionsFor(
         listed.map((t) => asked(t, "autonomy")),

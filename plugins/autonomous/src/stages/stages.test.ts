@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { ATTEMPT_SCHEMA, type AttemptRecord } from "../attempts/record.ts";
 import { workTask } from "../select/test-fixtures.ts";
+import { grillMeStage } from "./grill-me/stage.ts";
 import { expectedMarker } from "./prompt.ts";
 import { STAGES, stageFor } from "./registry.ts";
 import type { StagePromptInput } from "./stage.ts";
@@ -38,17 +39,19 @@ function input(description: string | null = "Do the thing."): StagePromptInput {
         attempt: attempt(),
         task: { ...workTask("linear", "DOT-109"), description },
         resultPath: RESULT_PATH,
+        context: {},
     };
 }
 
 describe("the stage registry", () => {
-    it("holds the test stage only", () => {
-        expect([...STAGES.keys()]).toEqual(["test"]);
+    it("holds the test and grill-me stages", () => {
+        expect([...STAGES.keys()]).toEqual(["test", "grill-me"]);
         expect(stageFor("test")).toBe(testStage);
+        expect(stageFor("grill-me")).toBe(grillMeStage);
     });
 
-    it("has no grill-me yet", () => {
-        expect(stageFor("grill-me")).toBeUndefined();
+    it("has no proposal stage yet", () => {
+        expect(stageFor("proposal")).toBeUndefined();
     });
 });
 
@@ -91,6 +94,16 @@ describe("the test stage", () => {
         expect(prompt).toContain("Do not change any file of the repository");
         expect(prompt).toContain("then stop");
     });
+
+    it.each(["claude", "codex"] as const)(
+        "holds its prerequisites without any check for %s",
+        async (tool) => {
+            expect(await testStage.prerequisites({ tool, home: "/unused/home" })).toEqual({
+                ok: true,
+                context: {},
+            });
+        },
+    );
 
     it("always completes", () => {
         expect(testStage.completed(workTask())).toBe(true);

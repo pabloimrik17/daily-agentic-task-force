@@ -3,6 +3,7 @@
 // entirely here so the command only relays them. The options come from the same
 // function that validates a decision.
 
+import { type TaskKey, taskKey } from "../attempts/record.ts";
 import {
     DECIDED_GROUPS,
     type DecidedGroup,
@@ -14,7 +15,7 @@ import type { Detection } from "../label-contract/detect.ts";
 import type { HandoffOption, HandoffQuestion } from "../runner.ts";
 import { compareForJudgement } from "./decide.ts";
 import { LABEL_TRIAGE, questionId } from "./question-id.ts";
-import { taskKey, type TriageRecord, type WriteFailure } from "./write.ts";
+import type { TriageRecord, WriteFailure } from "./write.ts";
 
 const MAX_HEADER = 12;
 
@@ -26,7 +27,6 @@ const LATER: HandoffOption = {
     description: "Leave it for a later run",
 };
 
-// Only a scope or autonomy decision is asked; the stage follows it.
 type AskedRecord = TriageRecord & { group: DecidedGroup };
 
 interface Asked {
@@ -39,7 +39,7 @@ export function questionsFor(
     records: readonly TriageRecord[],
     failures: readonly WriteFailure[],
     detections: readonly Detection[],
-    descriptions: ReadonlyMap<string, string>,
+    descriptions: ReadonlyMap<TaskKey, string>,
 ): HandoffQuestion[] {
     const stopped = new Set(failures.map((failure) => failure.source));
     const byTask = new Map(
@@ -48,7 +48,7 @@ export function questionsFor(
             detection,
         ]),
     );
-    const written = new Map<string, string[]>();
+    const written = new Map<TaskKey, string[]>();
     for (const record of records) {
         if (record.status === "applied") {
             const key = taskKey(record.source, record.taskId);
@@ -78,7 +78,7 @@ function isAsked(record: TriageRecord): record is AskedRecord {
 
 function question(
     { record, detection, written }: Asked,
-    descriptions: ReadonlyMap<string, string>,
+    descriptions: ReadonlyMap<TaskKey, string>,
 ): HandoffQuestion {
     const { task } = detection;
     const confidence = record.confidence.toFixed(2);

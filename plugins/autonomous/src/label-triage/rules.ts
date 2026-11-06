@@ -1,9 +1,8 @@
 // Deriving labels by rule (spec label-triage, "Derive labels by rule first" and
 // "The stage follows the autonomy"): a missing scope or autonomy is resolved
-// from its own evidence alone, before any judgement is requested. A valid set
-// of evidence labels yields a derivation with confidence 1; a conflicting set
-// is reported to the human instead. The stage is never derived from evidence:
-// it follows the autonomy.
+// from its own evidence alone, before any judgement is requested. A conflicting
+// set is reported to the human instead. The stage is never derived from
+// evidence: it follows the autonomy.
 
 import type { Source } from "../config.ts";
 import { type Detection, type Evidence } from "../label-contract/detect.ts";
@@ -57,9 +56,7 @@ export function deriveByRule(detection: Detection): { derived: Derivation[]; ask
     return { derived, asked };
 }
 
-// The derivations an eligible autonomy decision writes, in write order.
-// `grill-me` is recorded in the stage group alone; `AFK` or `HITL` brings `proposal`
-// while the task has no stage label. A decision of another group is returned as is.
+// The derivations an autonomy decision writes, in write order.
 export function recordsForAutonomy(
     decision: Derivation,
     taskLabels: readonly string[],

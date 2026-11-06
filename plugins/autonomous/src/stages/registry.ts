@@ -2,11 +2,14 @@
 // what `launch` consults. A stage selected but absent here is reported as
 // waiting for an implementation.
 
+import { grillMeStage } from "./grill-me/stage.ts";
 import type { Stage, StageId } from "./stage.ts";
 import { testStage } from "./test.ts";
 
-// DOT-110 registers grill-me here.
-export const STAGES: ReadonlyMap<StageId, Stage> = new Map([[testStage.id, testStage]]);
+export const STAGES: ReadonlyMap<StageId, Stage> = new Map([
+    [testStage.id, testStage],
+    [grillMeStage.id, grillMeStage],
+]);
 
 export function stageFor(id: StageId): Stage | undefined {
     return STAGES.get(id);

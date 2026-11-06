@@ -10,7 +10,7 @@ export interface WorkTask extends TrackerTask {
     priority: string | null; // the tracker's own priority label; null when it has none (GitHub)
     blocks: string[]; // ids this task blocks while it is open
     blockedBy: string[] | null; // open blockers; null: not evaluated (GitHub)
-    children: string[] | null; // open children; null: not evaluated (GitHub) or not read yet (Linear before detail)
+    children: string[] | null; // open children; null until detail reads them (GitHub, Linear)
     project: string | null; // Linear project name, read by detail; null elsewhere, when absent and before detail
     repository: string | null; // GitHub "owner/name", from the id; null elsewhere
 }
@@ -33,7 +33,7 @@ export type Exclusion =
     | "blocked"
     | "split";
 
-type Autonomy = AutonomyLabel; // the label that sets how far an agent may go alone
+type Autonomy = AutonomyLabel;
 
 // A task every check permitted, with what the comparison needs about it.
 export interface Candidate {
@@ -84,6 +84,6 @@ export interface SelectData {
     selected: SelectedUnit | null;
     candidates: { source: Source; id: string; title: string; scope: Scope; stage: StageName }[];
     excluded: Excluded[];
-    notEvaluated: string[]; // e.g. "github: dependencies and children"
+    notEvaluated: string[]; // e.g. "github: dependencies"
     comparison: { model: string; effort: string } | null; // set only when the LLM was called
 }

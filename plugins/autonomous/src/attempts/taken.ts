@@ -4,6 +4,7 @@
 // trusted without reading the task again. Triage's own write keeps its path.
 
 import type { Tracker, TrackerResult } from "../label-triage/trackers/tracker.ts";
+import { READ_BACK_TRIES, readUntil } from "../read-back.ts";
 
 export const TAKEN = "taken";
 
@@ -20,13 +21,18 @@ async function confirmed(
     if (!write.ok) {
         return { ok: false, error: write.error, labels: null };
     }
-    const read = await tracker.readTask(id);
+    const read = await readUntil(
+        () => tracker.readTask(id),
+        (task) => contradicts(task.labels) === null,
+    );
     if (!read.ok) {
         return { ok: false, error: read.error, labels: null };
     }
     const labels = read.value.labels;
     const error = contradicts(labels);
-    return error === null ? { ok: true } : { ok: false, error, labels };
+    return error === null
+        ? { ok: true }
+        : { ok: false, error: `${error} (${READ_BACK_TRIES})`, labels };
 }
 
 const list = (labels: string[]) => `[${labels.join(", ")}]`;

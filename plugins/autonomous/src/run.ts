@@ -1,3 +1,5 @@
+import { homedir } from "node:os";
+
 import {
     answeringSteps,
     applyAnswers,
@@ -18,7 +20,7 @@ import {
 import { launchStep } from "./attempts/launch.ts";
 import { acquireLock } from "./attempts/lock.ts";
 import { reconcileStep } from "./attempts/reconcile.ts";
-import type { TaskRef } from "./attempts/record.ts";
+import type { AttemptId, TaskRef } from "./attempts/record.ts";
 import { resolveStateDir } from "./attempts/state.ts";
 import { PRINT_TIMEOUT_MS } from "./claude-print.ts";
 import { type ConfigLoad, loadConfig } from "./config.ts";
@@ -33,6 +35,8 @@ import { claudeJudgement, type JudgementExec } from "./label-triage/judgement.ts
 import { labelTriageStep } from "./label-triage/step.ts";
 import { cliTrackers } from "./label-triage/trackers/cli.ts";
 import type { TrackerFactory } from "./label-triage/trackers/tracker.ts";
+import { runPersist } from "./persist/persist.ts";
+import { renderPersistJson, renderPersistText, unconfiguredPersist } from "./persist/report.ts";
 import { execOpenUsage, type OpenUsageExec } from "./quota-gate/openusage.ts";
 import { quotaGateStep } from "./quota-gate/step.ts";
 import {
@@ -115,6 +119,9 @@ function dispatch(args: RunArgs, steps: readonly Step[], deps: MainDeps): Promis
     if (args.transition !== undefined) {
         return runTransitionMode(args.transition, args, deps);
     }
+    if (args.persist !== undefined) {
+        return runPersistMode(args.persist, args, deps);
+    }
     if (args.answers.length > 0) {
         return runAnswers(args, steps, deps);
     }
@@ -193,6 +200,7 @@ function context(
             workspace: deps.workspace,
             naming: deps.naming,
             state,
+            home: deps.env.HOME ?? homedir(),
         },
     };
 }
@@ -241,14 +249,14 @@ async function runAnswers(args: RunArgs, steps: readonly Step[], deps: MainDeps)
     }
     const { config } = load;
     const ctx = { config, trackers: deps.trackers(config) };
-    const handlers = [...answeringSteps(steps), transitionHandler];
+    const handlers = [...answeringSteps(steps), transitionHandler(resolveStateDir(deps.env))];
     const report = await applyAnswers(handlers, args.answers, ctx, startedAt);
     deps.stdout(args.json ? renderAnswersJson(report) : renderAnswersText(report));
     return exitCodeFor(report.outcome);
 }
 
-// Like answer mode, transition mode runs no step and takes no run lock: neither it nor its
-// answer touches an attempt.
+// Like answer mode, transition mode runs no step and takes no run lock: it and its answer only
+// read the attempts, to find a grill-me attempt still waiting for its persistence receipt.
 async function runTransitionMode(ref: TaskRef, args: RunArgs, deps: MainDeps): Promise<number> {
     const startedAt = deps.now();
     const load = modeConfig(args, deps, (path, error) =>
@@ -258,8 +266,35 @@ async function runTransitionMode(ref: TaskRef, args: RunArgs, deps: MainDeps): P
         return exitCodeFor("not-evaluable");
     }
     const { config } = load;
-    const report = await runTransition(ref, { config, trackers: deps.trackers(config) }, startedAt);
+    const transitionDeps = {
+        config,
+        trackers: deps.trackers(config),
+        state: resolveStateDir(deps.env),
+    };
+    const report = await runTransition(ref, transitionDeps, startedAt);
     deps.stdout(args.json ? renderTransitionJson(report) : renderTransitionText(report));
+    return exitCodeFor(report.outcome);
+}
+
+// Persist mode runs no step and takes no run lock. It writes a new file beside the
+// attempt record, never the record, and a periodic run holding the lock must not fail the
+// session of the human waiting on it.
+async function runPersistMode(attempt: AttemptId, args: RunArgs, deps: MainDeps): Promise<number> {
+    const startedAt = deps.now();
+    const load = modeConfig(args, deps, (path, error) =>
+        renderPersistJson(unconfiguredPersist(attempt, path, error, startedAt)),
+    );
+    if (load === null) {
+        return exitCodeFor("not-evaluable");
+    }
+    const { config } = load;
+    const persistDeps = {
+        config,
+        trackers: deps.trackers(config),
+        state: resolveStateDir(deps.env),
+    };
+    const report = await runPersist(attempt, persistDeps, startedAt);
+    deps.stdout(args.json ? renderPersistJson(report) : renderPersistText(report));
     return exitCodeFor(report.outcome);
 }
 

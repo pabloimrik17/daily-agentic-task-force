@@ -8,6 +8,7 @@ export interface TrackerTask {
     labels: string[]; // label names exactly as the tracker spells them
     status: string; // tracker's own status/state name, informative only
     updatedAt: string; // RFC 3339 as the tracker prints it ("" if unknown)
+    closed: boolean; // beads status "closed"; github state "CLOSED"; linear completed, canceled or Duplicate
 }
 
 export interface TrackerLabel {
@@ -32,10 +33,12 @@ export interface Tracker {
     // transition removes the stage it leaves and the autonomy it replaces. Removing a
     // label the task does not carry is tracker-defined: read the task first.
     removeLabel(id: string, label: string): Promise<TrackerResult<void>>;
+    updateDescription(id: string, file: string): Promise<TrackerResult<void>>; // file: path of the new description
+    addComment(id: string, file: string): Promise<TrackerResult<void>>; // file: path of the comment body
+    readComments(id: string): Promise<TrackerResult<string[]>>; // comment bodies, oldest first
     listLabels(): Promise<TrackerResult<TrackerLabel[]>>; // all scopes at once
     createLabel(scope: string, name: string, colour: string): Promise<TrackerResult<void>>; // beads: { ok: false, error: "Beads needs no label creation: labels exist by use" }
-    // Bootstrap only. Linear needs `label.id`, and a response whose `success` is not true is a failure;
-    // beads: { ok: false, error: "Beads has no label colours" }
+    // Bootstrap only. Linear needs `label.id`; beads always refuses.
     recolourLabel(label: TrackerLabel, colour: string): Promise<TrackerResult<void>>;
 }
 

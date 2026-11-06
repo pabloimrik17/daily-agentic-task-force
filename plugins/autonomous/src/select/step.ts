@@ -24,7 +24,7 @@ import type {
 
 const SELECT = "select";
 
-const GITHUB_NOT_EVALUATED = "github: dependencies and children";
+const GITHUB_NOT_EVALUATED = "github: dependencies";
 
 const EMPTY: SelectData = {
     machineScope: null,

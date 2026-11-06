@@ -1,6 +1,6 @@
 ---
-description: Run the autonomous loop's reconcile, gate, triage, select and launch steps, or launch a supplied task, or discard an attempt, or bootstrap the label contract, or hand off the transition question of a task in grill-me, report the outcome, and ask the user the questions the run hands off
-argument-hint: "[--task <source>:<id> [--stage <stage>]] [--account <provider-key>] [--force] [--json] [--apply] [--no-handoff] | --apply --discard <attempt> [--release-workspace] [--json] | --bootstrap-labels [--json] | --apply --transition <source>:<task> [--json]"
+description: Run the autonomous loop's reconcile, gate, triage, select and launch steps, or launch a supplied task, or discard an attempt, or bootstrap the label contract, or hand off the transition question of a task in grill-me, or save a grill-me attempt's definition and stage summary to its task, report the outcome, and ask the user the questions the run hands off
+argument-hint: "[--task <source>:<id> [--stage <stage>]] [--account <provider-key>] [--force] [--json] [--apply] [--no-handoff] | --apply --discard <attempt> [--release-workspace] [--json] | --bootstrap-labels [--json] | --apply --transition <source>:<task> [--json] | --apply --persist <attempt> [--json]"
 allowed-tools: Bash(bun:*)
 ---
 
@@ -16,7 +16,9 @@ for it. `--task` supplies a task to `launch` in place of `label-triage` and
 `label-triage` step write labels and hand off questions, which `--no-handoff`
 suppresses; `--bootstrap-labels` creates missing labels on every enabled
 tracker and exits instead of running the steps. `--transition` reads a task in
-`grill-me` and hands off its autonomy question, running no step. `--apply` can
+`grill-me` and hands off its autonomy question, running no step. `--persist`
+saves a `grill-me` attempt's definition and stage summary to its task and
+writes the receipt the transition waits for, running no step. `--apply` can
 now also create sessions and worktrees and write `taken`.
 
 ## Steps
@@ -37,16 +39,21 @@ now also create sessions and worktrees and write `taken`.
 2. Relay the script's stdout and stderr verbatim, in a code block, followed by
    its exit code: 0 advance, 2 wait, 3 not evaluable, 1 usage or runner error.
    With `--transition`, 0 means a handoff was emitted and 3 means the task is
-   not in `grill-me`, its source is disabled, it could not be read or the
-   configuration could not be loaded. Write nothing else around it.
+   not in `grill-me`, its source is disabled, it could not be read, an open
+   `grill-me` attempt of the task has no persistence receipt or the
+   configuration could not be loaded. With `--persist`, 0 means the receipt was
+   written and 3 means it was not: the attempt is unknown, not open or not a
+   `grill-me` attempt, a file is missing or empty, a tracker call or read-back
+   failed, or the configuration could not be loaded. Write nothing else around
+   it.
 
 3. Find the handoff. With `--json`, it is the `handoff` field of the JSON
    document on stdout. Without `--json`, it is the last line of stdout when
    that line starts with `handoff:` and a space; the rest of the line after
    that space is the handoff as JSON. A transition report carries its handoff
-   in the same place and in the same form. If there is no handoff, or the
-   AskUserQuestion tool is not available (for example under `claude -p`), end
-   the command.
+   in the same place and in the same form. A persist report carries none, so
+   the command ends here. If there is no handoff, or the AskUserQuestion tool
+   is not available (for example under `claude -p`), end the command.
 
 4. Call AskUserQuestion once, with every question in the handoff's
    `questions`, in their order. For each question pass its `question`,
@@ -87,10 +94,10 @@ now also create sessions and worktrees and write `taken`.
 - Do not retry with different arguments; the answer invocation of step 6 is
   not a retry. If the report says an account must be chosen, show it and stop;
   the user picks the account.
-- Never add `--apply` or `--bootstrap-labels` on your own. In step 1, pass
-  exactly what the user typed, no more and no less. Step 6 is the one
-  exception: it passes `--apply` again, because there is no handoff without
-  it, so the user already typed it.
+- Never add `--apply`, `--bootstrap-labels` or `--persist` on your own. In
+  step 1, pass exactly what the user typed, no more and no less. Step 6 is the
+  one exception: it passes `--apply` again, because there is no handoff
+  without it, so the user already typed it.
 - A first `--apply` with hundreds of rule writes, such as the clean-up of an
   existing backlog or the `proposal` labels after an upgrade, issues about a
   thousand CLI calls and exceeds the command's timeout. It must be run from a
