@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.1.1](https://github.com/pabloimrik17/daily-agentic-task-force/compare/stonks--v1.1.0...stonks--v1.1.1) (2026-11-06)
+
+
+### Code Refactoring
+
+* stop exporting types that are only used in their own file ([#51](https://github.com/pabloimrik17/daily-agentic-task-force/issues/51)) ([f186962](https://github.com/pabloimrik17/daily-agentic-task-force/commit/f18696219373a43c8e78c61efcc37bde865edfda))
+
 ## [1.1.0](https://github.com/pabloimrik17/daily-agentic-task-force/compare/stonks--v1.0.0...stonks--v1.1.0) (2026-10-18)
 
 

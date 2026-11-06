@@ -1,5 +1,18 @@
 # Changelog
 
+## [2.2.0](https://github.com/pabloimrik17/daily-agentic-task-force/compare/autonomous--v2.1.0...autonomous--v2.2.0) (2026-11-06)
+
+
+### Features
+
+* **autonomous:** run the grill-me stage and persist its definition (DOT-110) ([#56](https://github.com/pabloimrik17/daily-agentic-task-force/issues/56)) ([993d6fb](https://github.com/pabloimrik17/daily-agentic-task-force/commit/993d6fbd3cb0e6f79ebfb4fe0b0e562dc13d6cbb))
+* **autonomous:** split autonomy and stage labels and add the grill transition (DOT-110) ([#55](https://github.com/pabloimrik17/daily-agentic-task-force/issues/55)) ([45a3631](https://github.com/pabloimrik17/daily-agentic-task-force/commit/45a3631a827c262dff06ed228f0b74d1e5ee7dd2))
+
+
+### Code Refactoring
+
+* stop exporting types that are only used in their own file ([#51](https://github.com/pabloimrik17/daily-agentic-task-force/issues/51)) ([f186962](https://github.com/pabloimrik17/daily-agentic-task-force/commit/f18696219373a43c8e78c61efcc37bde865edfda))
+
 ## [2.1.0](https://github.com/pabloimrik17/daily-agentic-task-force/compare/autonomous--v2.0.0...autonomous--v2.1.0) (2026-10-18)
 
 
