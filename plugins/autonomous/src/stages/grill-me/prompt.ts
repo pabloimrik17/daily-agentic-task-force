@@ -85,7 +85,7 @@ function closing({ attempt, task, definition, summary }: Closing): string[] {
         "2. Only if the grill changed glossary or ADR files, commit and push them (section 4).",
         `3. Write the definition to \`${definition}\`, following the template below. Write the stage summary to \`${summary}\` (section 3). Create the subtasks of a confirmed split (section 4).`,
         `4. Run \`/autonomous:run --apply --persist ${attempt}\`. It writes the definition into the task's description and posts the stage summary as a comment on the task. If it exits non-zero, tell the human what it reported, and do not run the transition.`,
-        "5. Show the human the task's URL, or its id for a Beads task.",
+        "5. Show the human the task's URL, or its id when the task has no URL.",
         `6. Run \`/autonomous:run --apply --transition ${task}\`. It asks the human for the task's autonomy and applies the answer.`,
         `7. Only once the transition is applied, write the result marker. When the human answers "Later", or the answer is not applied, do not write the marker, and leave this session open.`,
         "",

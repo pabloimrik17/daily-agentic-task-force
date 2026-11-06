@@ -64,7 +64,7 @@ The prompt SHALL tell the agent to end the stage in this order:
 2. commit and push documentation;
 3. write `definition.md` and `stage-summary.md`, and create subtasks;
 4. run persist mode;
-5. show the ticket's URL, or its id for a Beads task;
+5. show the ticket's URL, or its id when the ticket has no URL;
 6. run the transition;
 7. write the result marker.
 

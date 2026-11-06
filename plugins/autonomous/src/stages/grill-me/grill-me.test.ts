@@ -276,7 +276,7 @@ describe("the grill-me prompt", () => {
             "2. Only if the grill changed glossary or ADR files, commit and push them",
             `3. Write the definition to \`${definitionPath(DIR)}\``,
             "4. Run `/autonomous:run --apply --persist",
-            "5. Show the human the task's URL, or its id for a Beads task.",
+            "5. Show the human the task's URL, or its id when the task has no URL.",
             "6. Run `/autonomous:run --apply --transition",
             "7. Only once the transition is applied, write the result marker.",
         ]);
