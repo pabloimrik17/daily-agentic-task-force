@@ -1,7 +1,7 @@
 // Beads tracker (spec label-triage, "Read the open tasks"): reads and writes
 // through `bd`'s own CLI (v1.3.0). Beads has no label objects and no label
 // colours — labels exist by use — so `listLabels` synthesises `TrackerLabel`s
-// with a null colour and `createLabel` always refuses.
+// with a null colour, and `createLabel` and `recolourLabel` always refuse.
 
 import type { BeadsConfig } from "../../config.ts";
 import type { Exec } from "../../exec.ts";
@@ -109,6 +109,10 @@ export function beadsTracker(exec: Exec, config: BeadsConfig): Tracker {
                 ok: false,
                 error: "Beads needs no label creation: labels exist by use",
             });
+        },
+
+        recolourLabel(): Promise<TrackerResult<void>> {
+            return Promise.resolve({ ok: false, error: "Beads has no label colours" });
         },
     };
 }

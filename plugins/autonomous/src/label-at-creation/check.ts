@@ -1,8 +1,14 @@
 import type { ConfigLoad, Source, SourceRules } from "../config.ts";
-import { GROUPS, type Group } from "../label-contract/contract.ts";
+import {
+    DECIDED_GROUPS,
+    type DecidedGroup,
+    GROUPS,
+    type Group,
+    optionsFor,
+} from "../label-contract/contract.ts";
 import { detect } from "../label-contract/detect.ts";
 import { decide } from "../label-triage/decide.ts";
-import { deriveByRule, type Derivation } from "../label-triage/rules.ts";
+import { deriveByRule, recordsForAutonomy, type Derivation } from "../label-triage/rules.ts";
 import type { TrackerTask } from "../label-triage/trackers/tracker.ts";
 
 export interface CheckInput {
@@ -12,12 +18,15 @@ export interface CheckInput {
 }
 
 export interface JudgedGroup {
-    group: Group;
+    group: DecidedGroup;
     labels: string[];
     confidence: number;
 }
 
-const GROUP_ORDER: Group[] = ["scope", "entry"];
+// The helper reports every group, but only scope and autonomy are decided: the stage
+// follows the autonomy and is never judged. A stage in conflict is the one case where it
+// is asked about.
+const REPORTED_GROUPS: readonly Group[] = [...DECIDED_GROUPS, "stage"];
 
 function inspection(input: CheckInput, load: ConfigLoad) {
     const task: TrackerTask = {
@@ -54,27 +63,56 @@ function inspection(input: CheckInput, load: ConfigLoad) {
     return { detection, derivation, notes };
 }
 
+type Inspection = ReturnType<typeof inspection>;
+
 export function prepare(input: CheckInput, load: ConfigLoad): string[] {
-    const { detection, derivation, notes } = inspection(input, load);
-    const lines = GROUP_ORDER.map((group) => {
-        const state = detection.groups[group];
-        if (state.status === "present") {
-            return `${group}: present ${state.labels.join(", ")}`;
-        }
-        if (state.status === "conflict") {
-            return `${group}: conflict ${state.labels.join(", ")}`;
-        }
-        const derived = derivation.derived.find((item) => item.group === group);
-        if (derived) {
-            return `${group}: derived ${derived.labels.join(", ")} (${derived.reason})`;
-        }
-        const conflicting = derivation.asked.find((item) => item.group === group);
-        if (conflicting) {
-            return `${group}: conflict ${conflicting.labels.join(", ")} (${conflicting.reason})`;
-        }
-        return `${group}: judge (${GROUPS[group].join(", ")})`;
-    });
-    return [...lines, ...notes];
+    const inspected = inspection(input, load);
+    const lines = REPORTED_GROUPS.map((group) => `${group}: ${describe(group, inspected)}`);
+    return [...lines, ...inspected.notes];
+}
+
+function describe(group: Group, inspected: Inspection): string {
+    const state = inspected.detection.groups[group];
+    switch (state.status) {
+        case "present":
+            return `present ${state.labels.join(", ")}`;
+        case "conflict":
+            return `conflict ${state.labels.join(", ")}`;
+        case "deferred":
+            return "not needed (grill-me)";
+        case "missing":
+            return describeMissing(group, inspected);
+    }
+}
+
+function describeMissing(group: Group, inspected: Inspection): string {
+    if (group === "stage") {
+        return describeStage(inspected);
+    }
+    const { detection, derivation } = inspected;
+    const derived = derivation.derived.find((item) => item.group === group);
+    if (derived) {
+        return `derived ${derived.labels.join(", ")} (${derived.reason})`;
+    }
+    const conflicting = derivation.asked.find((item) => item.group === group);
+    if (conflicting) {
+        return `conflict ${conflicting.labels.join(", ")} (${conflicting.reason})`;
+    }
+    return `judge (${optionsFor(group, detection.task.labels).join(", ")})`;
+}
+
+function describeStage({ detection, derivation }: Inspection): string {
+    const autonomy = detection.groups.autonomy;
+    if (autonomy.status === "present") {
+        return `derived proposal (autonomy ${autonomy.labels.join(", ")})`;
+    }
+    const decided = derivation.derived.find((item) => item.group === "autonomy");
+    if (decided === undefined) {
+        return "follows autonomy";
+    }
+    return decided.labels.includes("grill-me")
+        ? `derived grill-me (${decided.reason})`
+        : `derived proposal (autonomy ${decided.labels.join(", ")})`;
 }
 
 function judgedDerivation(input: CheckInput, judged: JudgedGroup): Derivation {
@@ -92,8 +130,6 @@ function judgedDerivation(input: CheckInput, judged: JudgedGroup): Derivation {
 
 type Resolution = { labels: string[] } | { reason: string };
 
-type Inspection = ReturnType<typeof inspection>;
-
 function resolveEvidence(evidence: Derivation, answer: JudgedGroup | undefined): Resolution {
     if (answer && !sameLabels(evidence.labels, answer.labels)) {
         return {
@@ -106,6 +142,7 @@ function resolveEvidence(evidence: Derivation, answer: JudgedGroup | undefined):
 function resolveJudgement(
     input: CheckInput,
     load: ConfigLoad,
+    taskLabels: readonly string[],
     answer: JudgedGroup | undefined,
 ): Resolution {
     if (!load.ok) {
@@ -114,12 +151,16 @@ function resolveJudgement(
     if (!answer) {
         return { reason: "no judgement given" };
     }
-    const decision = decide(judgedDerivation(input, answer), load.config.judgement.threshold);
+    const decision = decide(
+        judgedDerivation(input, answer),
+        load.config.judgement.threshold,
+        taskLabels,
+    );
     return decision.status === "eligible" ? { labels: answer.labels } : { reason: decision.reason };
 }
 
 function resolveGroup(
-    group: Group,
+    group: DecidedGroup,
     input: CheckInput,
     load: ConfigLoad,
     { detection, derivation }: Inspection,
@@ -129,6 +170,9 @@ function resolveGroup(
     if (state.status === "present") {
         return { labels: state.labels };
     }
+    if (state.status === "deferred") {
+        return { labels: [] };
+    }
     if (state.status === "conflict") {
         return { reason: `conflicting present labels: ${state.labels.join(", ")}` };
     }
@@ -137,27 +181,80 @@ function resolveGroup(
         return { reason: conflicting.reason };
     }
     const evidence = derivation.derived.find((item) => item.group === group);
-    return evidence ? resolveEvidence(evidence, answer) : resolveJudgement(input, load, answer);
+    return evidence
+        ? resolveEvidence(evidence, answer)
+        : resolveJudgement(input, load, detection.task.labels, answer);
+}
+
+// An applied autonomy brings the stage it implies, unless the task will already carry a
+// stage label: `proposal` with `AFK` or `HITL`, `grill-me` alone.
+function withStage(input: CheckInput, resolution: Resolution, taskLabels: string[]): Resolution {
+    if ("reason" in resolution) {
+        return resolution;
+    }
+    const decision = judgedDerivation(input, {
+        group: "autonomy",
+        labels: resolution.labels,
+        confidence: 1,
+    });
+    return {
+        labels: recordsForAutonomy(decision, taskLabels).flatMap((record) => record.labels),
+    };
+}
+
+function resolveDecided(
+    group: DecidedGroup,
+    input: CheckInput,
+    load: ConfigLoad,
+    inspected: Inspection,
+    answer: JudgedGroup | undefined,
+): Resolution {
+    const resolution = resolveGroup(group, input, load, inspected, answer);
+    return group === "autonomy"
+        ? withStage(input, resolution, inspected.detection.task.labels)
+        : resolution;
 }
 
 export function check(input: CheckInput, load: ConfigLoad, judged: JudgedGroup[]): string[] {
     const inspected = inspection(input, load);
+    const taskLabels = inspected.detection.task.labels;
     const apply: string[] = [];
     const ask: string[] = [];
-    for (const group of GROUP_ORDER) {
+    for (const group of DECIDED_GROUPS) {
         const answer = judged.find((item) => item.group === group);
-        const resolution = resolveGroup(group, input, load, inspected, answer);
+        const resolution = resolveDecided(group, input, load, inspected, answer);
         if ("reason" in resolution) {
-            ask.push(`ask ${group}: ${resolution.reason}; options ${GROUPS[group].join(", ")}`);
+            ask.push(askLine(group, resolution.reason, optionsFor(group, taskLabels)));
             continue;
         }
-        for (const label of resolution.labels) {
-            if (!apply.includes(label)) {
-                apply.push(label);
-            }
-        }
+        addLabels(apply, resolution.labels);
+    }
+    const stage = inspected.detection.groups.stage;
+    if (stage.status === "present") {
+        addLabels(apply, stage.labels);
+    }
+    if (stage.status === "conflict") {
+        ask.push(
+            askLine(
+                "stage",
+                `conflicting present labels: ${stage.labels.join(", ")}`,
+                GROUPS.stage,
+            ),
+        );
     }
     return [`apply: ${apply.length === 0 ? "none" : apply.join(", ")}`, ...ask, ...inspected.notes];
+}
+
+function askLine(group: Group, reason: string, options: readonly string[]): string {
+    return `ask ${group}: ${reason}; options ${options.join(", ")}`;
+}
+
+function addLabels(apply: string[], labels: readonly string[]): void {
+    for (const label of labels) {
+        if (!apply.includes(label)) {
+            apply.push(label);
+        }
+    }
 }
 
 function sameLabels(left: string[], right: string[]): boolean {

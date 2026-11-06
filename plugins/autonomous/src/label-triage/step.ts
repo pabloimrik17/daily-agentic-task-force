@@ -1,14 +1,20 @@
-// The label-triage step (spec label-triage; design D7, D8): reads every
-// enabled source, detects the contract groups, derives what is missing by rule
-// and then by judgement, and writes only with --apply. Reading fails closed —
-// a source that cannot be read makes the step not evaluable, with no partial
+// The label-triage step (spec label-triage): reads every enabled source,
+// detects the contract groups, derives what is missing by rule and then by
+// judgement, and writes only with --apply. Reading fails closed — a source
+// that cannot be read makes the step not evaluable, with no partial
 // evaluation — while judging degrades: a failed judgement leaves its tasks not
 // judged and the outcome unaffected. The step never returns `wait`. The groups
-// it leaves for the human become its questions (handoff design D4).
+// it leaves for the human become its questions. The stage is never judged or
+// asked: it follows the autonomy decision.
 
 import type { AutonomousConfig, Source } from "../config.ts";
-import { GROUPS, type Group } from "../label-contract/contract.ts";
-import { type Detection, detect } from "../label-contract/detect.ts";
+import {
+    DECIDED_GROUPS,
+    type DecidedGroup,
+    GROUPS,
+    type Group,
+} from "../label-contract/contract.ts";
+import { type Detection, detect, isComplete } from "../label-contract/detect.ts";
 import type { Step, StepResult, StepTier } from "../runner.ts";
 import { answerLabelTriage } from "./answer.ts";
 import { decide, selectForJudgement } from "./decide.ts";
@@ -21,8 +27,8 @@ import {
 import { LABEL_TRIAGE } from "./question-id.ts";
 import { questionsFor } from "./questions.ts";
 import { plural, renderLabelTriage } from "./render.ts";
-import { type Derivation, deriveByRule } from "./rules.ts";
-import type { Trackers } from "./trackers/tracker.ts";
+import { type Derivation, deriveByRule, recordsForAutonomy } from "./rules.ts";
+import type { TrackerTask, Trackers } from "./trackers/tracker.ts";
 import { applyDerivations, taskKey, type TriageRecord, type WriteFailure } from "./write.ts";
 
 export interface SourceCounts {
@@ -88,18 +94,7 @@ export const labelTriageStep: Step<LabelTriageData> = {
         const sources = enabled.map((source) => countSource(source, detections));
         const conflicts = detections.flatMap(conflictsOf);
 
-        // A missing group with evidence is settled by rule (derived, or asked on
-        // conflicting evidence); only a missing group without any goes to judgement.
-        const candidates = new Map<Detection, Group[]>();
-        for (const detection of detections) {
-            const groups = ALL_GROUPS.filter((group) => {
-                const state = detection.groups[group];
-                return state.status === "missing" && state.evidence.length === 0;
-            });
-            if (groups.length > 0) {
-                candidates.set(detection, groups);
-            }
-        }
+        const candidates = judgementCandidates(detections);
 
         const { selected, remainder } = selectForJudgement(
             [...candidates.keys()],
@@ -114,23 +109,13 @@ export const labelTriageStep: Step<LabelTriageData> = {
             }),
             ...judged.derivations,
         ]);
-        const eligible: Derivation[] = [];
-        const asked: TriageRecord[] = [];
-        for (const derivation of derivations) {
-            const decision = decide(derivation, config.judgement.threshold);
-            if (decision.status === "eligible") {
-                eligible.push(derivation);
-            } else {
-                asked.push({ ...derivation, status: "asked", detail: decision.reason });
-            }
-        }
-
         const tasks = new Map(
             detections.map((detection) => [
                 taskKey(detection.task.source, detection.task.id),
                 detection.task,
             ]),
         );
+        const { eligible, asked } = decideAll(derivations, tasks, config.judgement.threshold);
         const written = await applyDerivations(eligible, tasks, trackers, ctx.args.apply);
 
         const data: LabelTriageData = {
@@ -156,24 +141,68 @@ export const labelTriageStep: Step<LabelTriageData> = {
         // The step's tier is the highest its parts used in this run: `llm` once a
         // judgement batch was requested, `code` otherwise.
         const tier = judged.batches > 0 ? "llm" : "code";
-        return { ...result("advance", reasonsFor(data), data, tier), questions };
+        return {
+            ...result("advance", reasonsFor(data, written.missing), data, tier),
+            questions,
+        };
     },
     render: renderLabelTriage,
     answer: answerLabelTriage,
 };
 
+// A missing group with evidence is settled by rule (derived, or asked on conflicting
+// evidence); only a missing scope or autonomy without any goes to judgement. The stage
+// is never judged, and a deferred autonomy is complete.
+function judgementCandidates(detections: Detection[]): Map<Detection, DecidedGroup[]> {
+    const candidates = new Map<Detection, DecidedGroup[]>();
+    for (const detection of detections) {
+        const groups = DECIDED_GROUPS.filter((group) => {
+            const state = detection.groups[group];
+            return state.status === "missing" && state.evidence.length === 0;
+        });
+        if (groups.length > 0) {
+            candidates.set(detection, groups);
+        }
+    }
+    return candidates;
+}
+
+function decideAll(
+    derivations: Derivation[],
+    tasks: ReadonlyMap<string, TrackerTask>,
+    threshold: number,
+): { eligible: Derivation[]; asked: TriageRecord[] } {
+    const eligible: Derivation[] = [];
+    const asked: TriageRecord[] = [];
+    for (const derivation of derivations) {
+        const labels = tasks.get(taskKey(derivation.source, derivation.taskId))?.labels ?? [];
+        const decision = decide(derivation, threshold, labels);
+        if (decision.status === "asked") {
+            asked.push({ ...derivation, status: "asked", detail: decision.reason });
+        } else if (derivation.group === "autonomy") {
+            eligible.push(...recordsForAutonomy(derivation, labels));
+        } else {
+            eligible.push(derivation);
+        }
+    }
+    return { eligible, asked };
+}
+
 function countSource(source: Source, detections: Detection[]): SourceCounts {
     const own = detections.filter((detection) => detection.task.source === source);
-    const count = (group: Group, status: "missing" | "conflict") =>
-        own.filter((detection) => detection.groups[group].status === status).length;
+    const count = (status: "missing" | "conflict"): Record<Group, number> => ({
+        scope: own.filter((detection) => detection.groups.scope.status === status).length,
+        autonomy: own.filter((detection) => detection.groups.autonomy.status === status).length,
+        stage: own.filter((detection) => detection.groups.stage.status === status).length,
+    });
     return {
         source,
         read: own.length,
         complete: own.filter((detection) =>
-            ALL_GROUPS.every((group) => detection.groups[group].status === "present"),
+            ALL_GROUPS.every((group) => isComplete(detection.groups[group])),
         ).length,
-        missing: { scope: count("scope", "missing"), entry: count("entry", "missing") },
-        conflict: { scope: count("scope", "conflict"), entry: count("entry", "conflict") },
+        missing: count("missing"),
+        conflict: count("conflict"),
     };
 }
 
@@ -206,7 +235,7 @@ function sortBySource(derivations: Derivation[]): Derivation[] {
 // leaves those tasks not judged and the rest of the step unaffected.
 async function judge(
     selected: Detection[],
-    candidates: Map<Detection, Group[]>,
+    candidates: Map<Detection, DecidedGroup[]>,
     trackers: Trackers,
     judgement: JudgementExec,
     config: AutonomousConfig,
@@ -258,7 +287,7 @@ async function judge(
 // descriptions read here, keyed by `taskKey`, also go into the questions.
 async function readForJudgement(
     selected: Detection[],
-    candidates: Map<Detection, Group[]>,
+    candidates: Map<Detection, DecidedGroup[]>,
     trackers: Trackers,
 ): Promise<{
     ready: JudgementTask[];
@@ -298,11 +327,14 @@ function labelCount(records: TriageRecord[]): number {
     return records.reduce((total, record) => total + record.labels.length, 0);
 }
 
-function reasonsFor(data: LabelTriageData): string[] {
+// `missing`: the label-availability notes, one line per label a tracker lacks (naming the
+// bootstrap) and, without --apply, per source whose labels could not be listed.
+function reasonsFor(data: LabelTriageData, missing: readonly string[]): string[] {
     const reasons = data.sources.map(
         (s) =>
             `${s.source}: ${s.read} read, ${s.complete} complete, ${s.missing.scope} missing scope, ` +
-            `${s.missing.entry} missing entry, ${s.conflict.scope + s.conflict.entry} in conflict`,
+            `${s.missing.autonomy} missing autonomy, ${s.missing.stage} missing stage, ` +
+            `${s.conflict.scope + s.conflict.autonomy + s.conflict.stage} in conflict`,
     );
     for (const status of ["applied", "proposed"] as const) {
         const labels = labelCount(data.records.filter((record) => record.status === status));
@@ -310,6 +342,7 @@ function reasonsFor(data: LabelTriageData): string[] {
             reasons.push(`${status} ${plural(labels, "label")}`);
         }
     }
+    reasons.push(...missing);
     const forHuman =
         data.records.filter((record) => record.status === "asked").length + data.conflicts.length;
     if (forHuman > 0) {

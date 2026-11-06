@@ -1,12 +1,12 @@
 import { readFileSync } from "node:fs";
 
 import { loadConfig, type Source } from "../config.ts";
-import { type Group } from "../label-contract/contract.ts";
+import { DECIDED_GROUPS, type DecidedGroup } from "../label-contract/contract.ts";
 import { check, prepare, type CheckInput, type JudgedGroup } from "./check.ts";
 
 export const USAGE = `Usage:
   cli.ts prepare --source <linear|beads|github> [--repo <owner/name>] [--label <name>]...
-  cli.ts decide  --source <linear|beads|github> [--repo <owner/name>] [--label <name>]... [--judged <group>=<label>[,<label>]@<confidence>]...`;
+  cli.ts decide  --source <linear|beads|github> [--repo <owner/name>] [--label <name>]... [--judged <scope|autonomy>=<label>[,<label>]@<confidence>]...`;
 
 interface Parsed {
     mode: "prepare" | "decide";
@@ -29,10 +29,13 @@ type FlagHandler = (draft: Draft, value: string) => string | undefined;
 
 const SOURCES: readonly string[] = ["linear", "beads", "github"];
 
+// The stage is never judged: it follows the autonomy.
+const JUDGED = new RegExp(`^(${DECIDED_GROUPS.join("|")})=(.*)@(\\d+(?:\\.\\d+)?)$`);
+
 function parseJudged(value: string, judged: readonly JudgedGroup[]): JudgedGroup | string {
-    const match = /^(scope|entry)=(.*)@(\d+(?:\.\d+)?)$/.exec(value);
+    const match = JUDGED.exec(value);
     if (!match) return `invalid --judged: ${value}`;
-    const group = match[1] as Group;
+    const group = match[1] as DecidedGroup;
     const confidence = Number(match[3]);
     if (confidence < 0 || confidence > 1) {
         return `--judged confidence must be in [0, 1]: ${value}`;

@@ -3,7 +3,13 @@ import { type AutonomousConfig, CONFIG_SCHEMA, type ConfigLoad, type Source } fr
 import { NOW } from "../quota-gate/test-fixtures.ts";
 import type { RunContext } from "../runner.ts";
 import type { JudgementExec, JudgementRequest, JudgementResult } from "./judgement.ts";
-import type { Tracker, TrackerResult, TrackerTask, Trackers } from "./trackers/tracker.ts";
+import type {
+    Tracker,
+    TrackerLabel,
+    TrackerResult,
+    TrackerTask,
+    Trackers,
+} from "./trackers/tracker.ts";
 
 export function config(): AutonomousConfig {
     return {
@@ -51,6 +57,8 @@ interface FakeOptions {
     addLabelError?: string;
     addLabelErrors?: Record<string, string>; // per label, for a write cut short after its first label
     dropsOnAdd?: string; // a label every addLabel loses, as a tracker replacing labels would
+    createsLabels?: boolean; // true makes the triage check its labels before writing (default false)
+    labels?: TrackerLabel[] | string; // what listLabels returns; a string makes it fail with it
 }
 
 // A tracker over an in-memory listing: addLabel really adds, so readTask reads
@@ -69,7 +77,7 @@ function fakeTracker(
     return {
         source,
         labelScopes: [],
-        createsLabels: false,
+        createsLabels: options.createsLabels ?? false,
         listTasks: () => {
             calls.push(`${source}:listTasks`);
             return Promise.resolve(
@@ -109,9 +117,18 @@ function fakeTracker(
             );
             return Promise.resolve({ ok: true, value: undefined });
         },
-        listLabels: () => Promise.resolve({ ok: true, value: [] }),
+        listLabels: () => {
+            calls.push(`${source}:listLabels`);
+            const listed = options.labels ?? [];
+            return Promise.resolve(
+                typeof listed === "string"
+                    ? { ok: false, error: listed }
+                    : { ok: true, value: listed },
+            );
+        },
         createLabel: (): Promise<TrackerResult<void>> =>
             Promise.reject(new Error("the triage never creates labels")),
+        recolourLabel: () => Promise.resolve({ ok: false, error: "Beads has no label colours" }),
     };
 }
 
@@ -167,6 +184,7 @@ export function triageContext(options: {
             bootstrapLabels: false,
             noHandoff: false,
             answers: [],
+            transition: undefined,
             ...options.args,
         },
         now: NOW,

@@ -1,8 +1,15 @@
 // The step's questions for the human (spec label-triage, "Questions for the
-// human"; handoff design D4): one per asked group, except on a source whose
-// writes stopped, composed entirely here so the command only relays them.
+// human"): one per asked group, except on a source whose writes stopped, composed
+// entirely here so the command only relays them. The options come from the same
+// function that validates a decision.
 
-import { GROUPS, MEANINGS } from "../label-contract/contract.ts";
+import {
+    DECIDED_GROUPS,
+    type DecidedGroup,
+    isContractLabel,
+    MEANINGS,
+    optionsFor,
+} from "../label-contract/contract.ts";
 import type { Detection } from "../label-contract/detect.ts";
 import type { HandoffOption, HandoffQuestion } from "../runner.ts";
 import { compareForJudgement } from "./decide.ts";
@@ -19,8 +26,11 @@ const LATER: HandoffOption = {
     description: "Leave it for a later run",
 };
 
+// Only a scope or autonomy decision is asked; the stage follows it.
+type AskedRecord = TriageRecord & { group: DecidedGroup };
+
 interface Asked {
-    record: TriageRecord;
+    record: AskedRecord;
     detection: Detection;
     written: string[]; // labels this run has already added to the task
 }
@@ -49,7 +59,7 @@ export function questionsFor(
     for (const record of records) {
         const key = taskKey(record.source, record.taskId);
         const detection = byTask.get(key);
-        if (record.status === "asked" && !stopped.has(record.source) && detection !== undefined) {
+        if (isAsked(record) && !stopped.has(record.source) && detection !== undefined) {
             asked.push({ record, detection, written: written.get(key) ?? [] });
         }
     }
@@ -58,6 +68,12 @@ export function questionsFor(
         (a, b) => compareForJudgement(a.detection, b.detection) || groupRank(a) - groupRank(b),
     );
     return asked.map((item) => question(item, descriptions));
+}
+
+function isAsked(record: TriageRecord): record is AskedRecord {
+    return (
+        record.status === "asked" && (DECIDED_GROUPS as readonly string[]).includes(record.group)
+    );
 }
 
 function question(
@@ -80,12 +96,15 @@ function question(
     if (description !== "") {
         lines.push(`Description: ${description}`);
     }
-    const options = GROUPS[record.group].map((label): HandoffOption => {
-        // Only a judgement chooses an option; a rule record's evidence is already in the text.
-        const judged = record.tier === "llm" && record.labels.includes(label);
-        const prefix = judged ? `judged ${confidence} · ${record.reason} — ` : "";
-        return { label, value: label, description: `${prefix}${MEANINGS[label]}` };
-    });
+    // `grill-me` is an autonomy option only while the task has no stage label.
+    const options = optionsFor(record.group, task.labels)
+        .filter(isContractLabel)
+        .map((label): HandoffOption => {
+            // Only a judgement chooses an option; a rule record's evidence is already in the text.
+            const judged = record.tier === "llm" && record.labels.includes(label);
+            const prefix = judged ? `judged ${confidence} · ${record.reason} — ` : "";
+            return { label, value: label, description: `${prefix}${MEANINGS[label]}` };
+        });
     return {
         id: questionId({ source: record.source, taskId: record.taskId, group: record.group }),
         step: LABEL_TRIAGE,

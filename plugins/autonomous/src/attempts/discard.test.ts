@@ -43,6 +43,7 @@ function args(discard: string, releaseWorkspace = false): RunArgs {
         task: undefined,
         stage: undefined,
         discard,
+        transition: undefined,
         releaseWorkspace,
         force: false,
         json: false,
