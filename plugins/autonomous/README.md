@@ -59,7 +59,7 @@ records why the new configuration blocks are optional and the old ones are not.
   from source; plugins install without dependencies, so it uses nothing but
   `bun` and Node built-ins.
 - The [`openusage`](https://github.com/robinebers/openusage) CLI on `PATH`,
-  verified against 0.7.12. Its `openusage.limits.v1` output is validated
+  verified against 0.7.16. Its `openusage.limits.v1` output is validated
   strictly; a change in that contract makes the gate `not-evaluable`, never a
   silent pass. A call that takes longer than 120 s is treated as a failure
   (`not-evaluable`).
@@ -2185,6 +2185,12 @@ usage projected to the end of the window as OpenUsage's `Pace.evaluate`
 computes it. Other resources, such as `fable`, are listed but not evaluated.
 They must still be well-formed, because validation covers the whole OpenUsage
 document, including accounts that are not selected.
+
+OpenUsage exits non-zero when it reports an account error, and still prints the
+document. The gate reads a non-zero exit when its output is a valid
+`openusage.limits.v1` document with at least one account error. An account error
+then affects only the account it names, so another account's error does not
+block the selected one. Any other non-zero exit is `not-evaluable`.
 
 The decision, in order of precedence:
 

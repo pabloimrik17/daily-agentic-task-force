@@ -1,7 +1,18 @@
 import { describe, expect, it } from "vitest";
 
 import { quotaGateStep } from "./step.ts";
-import { context, fakeExec, limits, provider, resource, session, weekly } from "./test-fixtures.ts";
+import {
+    accountErrorDocument,
+    accountErrorStderr,
+    context,
+    exitExec,
+    fakeExec,
+    limits,
+    provider,
+    resource,
+    session,
+    weekly,
+} from "./test-fixtures.ts";
 
 async function gate(output: unknown, account?: string) {
     return quotaGateStep.run(context(fakeExec(output), { account }));
@@ -202,7 +213,7 @@ describe("quota gate decision: accounts known only from OpenUsage errors", () =>
 });
 
 describe("quota gate decision: not evaluable from malformed output", () => {
-    it("is not evaluable when an account that is not selected is malformed", async () => {
+    it("is not evaluable after exit 0 when an account that is not selected is malformed", async () => {
         const result = await gate(
             limits({
                 claude: provider({ session: session(20), weekly: weekly(30) }),
@@ -280,5 +291,41 @@ describe("quota gate decision: windows past their reset time", () => {
             `session window exhausted: 100/100 percent, resets at ${exhausted.resetsAt}`,
         ]);
         expect(result.data.windows[1]?.problem).toMatch(/^outdated \(exhausted, /);
+    });
+});
+
+describe("quota gate decision: output after a non-zero exit", () => {
+    const execError = `openusage failed: ${accountErrorStderr.trim()}`;
+    const run = (stdout: string, account?: string) =>
+        quotaGateStep.run(context(exitExec(stdout, accountErrorStderr), { account }));
+
+    it("advances when only another account has an error", async () => {
+        const result = await run(JSON.stringify(accountErrorDocument), "claude");
+        expect(result.outcome).toBe("advance");
+        expect(result.reasons.join("\n")).not.toMatch(/claude@12101920|exit|Claude Swap|warning/);
+        expect(result.data.account?.errors).toEqual([]);
+    });
+
+    it("is not evaluable when the selected account has the error", async () => {
+        const result = await run(JSON.stringify(accountErrorDocument), "claude@12101920");
+        expect(result.outcome).toBe("not-evaluable");
+        expect(result.reasons).toContain(
+            "OpenUsage reported an error for claude@12101920: Claude Swap login is stale",
+        );
+    });
+
+    it("is not evaluable when a valid document has no account error", async () => {
+        const document = limits({
+            claude: provider({ session: session(49), weekly: weekly(6) }),
+        });
+        const result = await run(JSON.stringify(document), "claude");
+        expect(result.outcome).toBe("not-evaluable");
+        expect(result.reasons).toEqual([`${execError} (exit 4, no account error in the output)`]);
+    });
+
+    it("is not evaluable with the CLI failure when the output is unusable", async () => {
+        const result = await run("", "claude");
+        expect(result.outcome).toBe("not-evaluable");
+        expect(result.reasons).toEqual([execError]);
     });
 });

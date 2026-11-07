@@ -4,7 +4,13 @@
 
 import { type ExecFileException, execFile } from "node:child_process";
 
-export type ExecResult = { ok: true; stdout: string } | { ok: false; error: string };
+export type ExecResult =
+    | { ok: true; stdout: string }
+    | { ok: false; error: string; exit?: { code: number; stdout: string } };
+
+interface ExecOptions {
+    keepOutputOnExit?: boolean;
+}
 
 export type Exec = (args: string[], input?: string) => Promise<ExecResult>;
 
@@ -22,6 +28,7 @@ export function toExecResult(
     error: ExecFileException | null,
     stdout: string,
     stderr: string,
+    options: ExecOptions = {},
 ): ExecResult {
     if (!error) {
         return { ok: true, stdout };
@@ -35,10 +42,20 @@ export function toExecResult(
         return { ok: false, error: `${command} CLI not found on PATH` };
     }
     const detail = stderr.trim() || error.message;
-    return { ok: false, error: `${command} failed: ${detail}` };
+    const failed = { ok: false as const, error: `${command} failed: ${detail}` };
+    // Only a numeric `code` is a real exit status; a maxBuffer overflow has a string code and a
+    // kill by signal has none, and neither leaves stdout worth reading.
+    if (options.keepOutputOnExit === true && typeof error.code === "number") {
+        return { ...failed, exit: { code: error.code, stdout } };
+    }
+    return failed;
 }
 
-export function execCommand(command: string, timeoutMs = CLI_TIMEOUT_MS): Exec {
+export function execCommand(
+    command: string,
+    timeoutMs = CLI_TIMEOUT_MS,
+    options: ExecOptions = {},
+): Exec {
     return (args, input) =>
         new Promise((resolve) => {
             // Bun can lose a child's exit notification (oven-sh/bun#41024, #34069). execFile then
@@ -62,7 +79,7 @@ export function execCommand(command: string, timeoutMs = CLI_TIMEOUT_MS): Exec {
                 { timeout: timeoutMs, maxBuffer: MAX_BUFFER },
                 (error, stdout, stderr) => {
                     clearTimeout(watchdog);
-                    resolve(toExecResult(command, timeoutMs, error, stdout, stderr));
+                    resolve(toExecResult(command, timeoutMs, error, stdout, stderr, options));
                 },
             );
             if (input !== undefined) {
