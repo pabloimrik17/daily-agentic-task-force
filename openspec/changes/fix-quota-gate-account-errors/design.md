@@ -65,7 +65,7 @@ A fixture in `test-fixtures.ts` reproduces the DOT-104 observation: exit 4, a `c
 
 ### D5: accounts are not candidates
 
-The glossary defines a candidate as a work unit, and this change's **Claude account** entry tells readers to avoid the word for an account. The gate still used it: the `Candidate` type in `select.ts`, the `candidates` field of `QuotaGateData`, which the JSON report carries, the `candidates:` label in the text report, and the main spec's "Several accounts, none selected". They become `ClaudeAccount`, `accounts`, `accounts:` and "the account keys". The field `account`, the selected account's report, keeps its name, so `accounts` sits beside it as the list it was chosen from.
+The glossary defines a candidate as a work unit, and this change's **Claude account** entry tells readers to avoid the word for an account. The gate still used it: the `Candidate` type in `select.ts`, the `candidates` field of `QuotaGateData`, which the JSON report carries, the `candidates:` label in the text report, and the main spec's "Several accounts, none selected". They become `Account`, `accounts`, `accounts:` and "the account keys". The type is `Account`, not `ClaudeAccount`, because nothing in it is specific to Claude. The field `account`, the selected account's report, keeps its name, so `accounts` sits beside it as the list it was chosen from.
 
 Alternatives rejected:
 

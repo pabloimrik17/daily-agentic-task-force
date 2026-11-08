@@ -1,6 +1,6 @@
 import type { OpenUsageLimits, OpenUsageProvider } from "./parse.ts";
 
-export interface ClaudeAccount {
+export interface Account {
     key: string;
     displayName: string | null;
 }
@@ -11,9 +11,9 @@ export type Selection =
           key: string;
           provider: OpenUsageProvider | undefined;
           errors: string[];
-          accounts: ClaudeAccount[];
+          accounts: Account[];
       }
-    | { ok: false; reason: string; accounts: ClaudeAccount[] };
+    | { ok: false; reason: string; accounts: Account[] };
 
 function isClaudeKey(key: string): boolean {
     return key === "claude" || key.startsWith("claude@");

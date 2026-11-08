@@ -8,11 +8,11 @@ import {
 import { readOpenUsage } from "./openusage.ts";
 import type { OpenUsageProvider } from "./parse.ts";
 import { renderQuotaGate } from "./render.ts";
-import { type ClaudeAccount, selectAccount } from "./select.ts";
+import { type Account, selectAccount } from "./select.ts";
 
 export interface QuotaGateData {
     account: AccountReport | null;
-    accounts: ClaudeAccount[];
+    accounts: Account[];
     windows: WindowReport[];
     otherResources: OtherResource[];
 }

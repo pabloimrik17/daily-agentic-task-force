@@ -27,7 +27,7 @@
     - unusable output: `not-evaluable` with `openusage failed: …`.
 
     Verify that `bun run test` passes and that `bun run lint:fallow` stays within the complexity budget.
-- [x] 3.4 Rename the gate's `Candidate` to `ClaudeAccount` and `candidates` to `accounts` in `select.ts`, `step.ts` and `render.ts` (design D5), and the text label `candidates:` to `accounts:`. Verify with `src/quota-gate/select.test.ts`, `step.test.ts` and `render.test.ts`, that `bun run typecheck` passes, and that no `candidate` remains in `src/quota-gate/`.
+- [x] 3.4 Rename the gate's `Candidate` to `Account` and `candidates` to `accounts` in `select.ts`, `step.ts` and `render.ts` (design D5), and the text label `candidates:` to `accounts:`. Verify with `src/quota-gate/select.test.ts`, `step.test.ts` and `render.test.ts`, that `bun run typecheck` passes, and that no `candidate` remains in `src/quota-gate/`.
 
 ## 4. Documentation and evidence
 

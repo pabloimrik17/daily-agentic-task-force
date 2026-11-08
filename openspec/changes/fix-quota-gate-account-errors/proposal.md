@@ -35,7 +35,7 @@ None.
 
 - `plugins/autonomous/src/exec.ts`: an opt-in mode in which a non-zero exit also carries the exit code and stdout. Other CLIs (bd, gh, linear, claude, chezmoi, wt, git, aoe) do not opt in and are unaffected.
 - `plugins/autonomous/src/quota-gate/openusage.ts`: `readOpenUsage` and `execOpenUsage`.
-- `plugins/autonomous/src/quota-gate/select.ts`, `step.ts` and `render.ts`: `Candidate` becomes `ClaudeAccount`, and `candidates` becomes `accounts`.
+- `plugins/autonomous/src/quota-gate/select.ts`, `step.ts` and `render.ts`: `Candidate` becomes `Account`, and `candidates` becomes `accounts`.
 - Tests: `src/exec.test.ts`, `src/quota-gate/openusage.test.ts`, `src/quota-gate/step.test.ts`, `src/quota-gate/select.test.ts`, `src/quota-gate/render.test.ts` and a fixture shaped like the real exit-4 document in `src/quota-gate/test-fixtures.ts`.
 - `plugins/autonomous/README.md` and `plugins/autonomous/GLOSSARY.md`.
 - `openspec/specs/quota-gate/spec.md` on archive.
