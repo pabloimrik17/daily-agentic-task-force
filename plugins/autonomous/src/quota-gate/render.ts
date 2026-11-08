@@ -12,7 +12,7 @@ const PROJECTION_REASONS: Record<Extract<Projection, { available: false }>["reas
 };
 
 export function renderQuotaGate(result: StepResult<QuotaGateData>): string {
-    const { account, candidates, windows, otherResources } = result.data;
+    const { account, accounts, windows, otherResources } = result.data;
     const lines = [`[${result.step}] ${result.outcome} (${result.tier})`];
 
     if (account) {
@@ -30,10 +30,10 @@ export function renderQuotaGate(result: StepResult<QuotaGateData>): string {
     for (const r of otherResources) {
         lines.push(`  ${r.name.padEnd(9)} ${amount(r.used, r.limit, r.unit)}  not evaluated`);
     }
-    if (!account && candidates.length > 0) {
+    if (!account && accounts.length > 0) {
         lines.push(
-            "  candidates:",
-            ...candidates.map((c) => `    - ${c.key}${c.displayName ? ` — ${c.displayName}` : ""}`),
+            "  accounts:",
+            ...accounts.map((a) => `    - ${a.key}${a.displayName ? ` — ${a.displayName}` : ""}`),
         );
     }
     lines.push("  reasons:", ...result.reasons.map((r) => `    - ${r}`));

@@ -8,16 +8,16 @@ import {
 import { readOpenUsage } from "./openusage.ts";
 import type { OpenUsageProvider } from "./parse.ts";
 import { renderQuotaGate } from "./render.ts";
-import { type Candidate, selectAccount } from "./select.ts";
+import { type Account, selectAccount } from "./select.ts";
 
 export interface QuotaGateData {
     account: AccountReport | null;
-    candidates: Candidate[];
+    accounts: Account[];
     windows: WindowReport[];
     otherResources: OtherResource[];
 }
 
-const EMPTY: QuotaGateData = { account: null, candidates: [], windows: [], otherResources: [] };
+const EMPTY: QuotaGateData = { account: null, accounts: [], windows: [], otherResources: [] };
 
 function result(
     outcome: StepResult["outcome"],
@@ -52,7 +52,7 @@ export const quotaGateStep: Step<QuotaGateData> = {
         if (!selection.ok) {
             return result("not-evaluable", [selection.reason], {
                 ...EMPTY,
-                candidates: selection.candidates,
+                accounts: selection.accounts,
             });
         }
 
@@ -61,7 +61,7 @@ export const quotaGateStep: Step<QuotaGateData> = {
         const evaluation = evaluateAccount(account, provider, ctx.now);
         return result(evaluation.outcome, evaluation.reasons, {
             account,
-            candidates: selection.candidates,
+            accounts: selection.accounts,
             windows: evaluation.windows,
             otherResources: evaluation.otherResources,
         });

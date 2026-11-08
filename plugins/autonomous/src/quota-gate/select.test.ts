@@ -30,7 +30,7 @@ describe("selectAccount", () => {
         expect(selection).toEqual({
             ok: false,
             reason: "ambiguous account: 2 Claude accounts present, pass --account <provider-key>",
-            candidates: [
+            accounts: [
                 { key: "claude", displayName: "Claude: Personal (me@example.com)" },
                 { key: "claude@123", displayName: "Claude: Work (me@work.example)" },
             ],
@@ -54,7 +54,7 @@ describe("selectAccount", () => {
         );
         expect(selection.ok).toBe(false);
         expect(!selection.ok && selection.reason).toBe('unknown account "claude@999"');
-        expect(!selection.ok && selection.candidates.map((c) => c.key)).toEqual([
+        expect(!selection.ok && selection.accounts.map((a) => a.key)).toEqual([
             "claude",
             "claude@123",
         ]);
@@ -68,7 +68,7 @@ describe("selectAccount", () => {
         expect(selection).toEqual({
             ok: false,
             reason: "OpenUsage reported no Claude account",
-            candidates: [],
+            accounts: [],
         });
     });
 

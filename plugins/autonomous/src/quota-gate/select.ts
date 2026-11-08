@@ -1,6 +1,6 @@
 import type { OpenUsageLimits, OpenUsageProvider } from "./parse.ts";
 
-export interface Candidate {
+export interface Account {
     key: string;
     displayName: string | null;
 }
@@ -11,9 +11,9 @@ export type Selection =
           key: string;
           provider: OpenUsageProvider | undefined;
           errors: string[];
-          candidates: Candidate[];
+          accounts: Account[];
       }
-    | { ok: false; reason: string; candidates: Candidate[] };
+    | { ok: false; reason: string; accounts: Account[] };
 
 function isClaudeKey(key: string): boolean {
     return key === "claude" || key.startsWith("claude@");
@@ -27,24 +27,24 @@ export function selectAccount(limits: OpenUsageLimits, requested: string | undef
     ]
         .filter(isClaudeKey)
         .sort();
-    const candidates = keys.map((key) => ({
+    const accounts = keys.map((key) => ({
         key,
         displayName: limits.providers[key]?.displayName ?? null,
     }));
 
     if (requested !== undefined && !keys.includes(requested)) {
-        return { ok: false, reason: `unknown account "${requested}"`, candidates };
+        return { ok: false, reason: `unknown account "${requested}"`, accounts };
     }
     if (requested === undefined && keys.length > 1) {
         return {
             ok: false,
             reason: `ambiguous account: ${keys.length} Claude accounts present, pass --account <provider-key>`,
-            candidates,
+            accounts,
         };
     }
     const key = requested ?? keys[0];
     if (key === undefined) {
-        return { ok: false, reason: "OpenUsage reported no Claude account", candidates };
+        return { ok: false, reason: "OpenUsage reported no Claude account", accounts };
     }
 
     return {
@@ -52,6 +52,6 @@ export function selectAccount(limits: OpenUsageLimits, requested: string | undef
         key,
         provider: limits.providers[key],
         errors: limits.errors.filter((e) => e.providerId === key).map((e) => e.message),
-        candidates,
+        accounts,
     };
 }

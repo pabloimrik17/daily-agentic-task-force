@@ -57,6 +57,33 @@ export function fakeExec(output: unknown): OpenUsageExec & { calls: string[][] }
     return Object.assign(exec, { calls });
 }
 
+// The DOT-104 observation of 2026-10-02 (DOT-112): OpenUsage exited 4 with a valid document whose
+// `errors` names a stale Claude Swap login, and the same warning on stderr.
+export const accountErrorDocument = limits(
+    { claude: provider({ session: session(49), weekly: weekly(6) }) },
+    [{ providerId: "claude@12101920", message: "Claude Swap login is stale" }],
+);
+export const accountErrorStderr =
+    "openusage: warning: claude@12101920: Claude Swap login is stale\n";
+
+// A failed exec that carries the exit output, as `execOpenUsage` returns it.
+export function exitExec(
+    stdout: string,
+    stderr: string,
+    code = 4,
+): OpenUsageExec & { calls: string[][] } {
+    const calls: string[][] = [];
+    const exec = (args: string[]) => {
+        calls.push(args);
+        return Promise.resolve({
+            ok: false as const,
+            error: `openusage failed: ${stderr.trim()}`,
+            exit: { code, stdout },
+        });
+    };
+    return Object.assign(exec, { calls });
+}
+
 export function context(exec: OpenUsageExec, args: Partial<RunArgs> = {}): RunContext {
     return {
         args: {
