@@ -24,12 +24,13 @@ Downstream nothing needs to change. `selectAccount` already counts accounts know
 **Goals:**
 
 - Read the document after a non-zero exit when it explains that exit with an account error, and change nothing else in the gate's decision.
+- Call a Claude account an account in the gate's code and report, as the glossary does (D5).
 - Leave every other CLI's exec results unchanged, at the type level and at runtime.
 
 **Non-Goals:**
 
 - Interpreting OpenUsage exit codes by number.
-- Changing `select.ts`, `decide.ts`, `step.ts` or the report.
+- Changing the decision in `select.ts`, `decide.ts` or `step.ts`, or the report beyond the rename in D5.
 
 ## Decisions
 
@@ -62,6 +63,15 @@ Alternatives rejected:
 
 A fixture in `test-fixtures.ts` reproduces the DOT-104 observation: exit 4, a `claude` provider that is fresh at 49 % session and 6 % weekly, `claude@12101920` only in `errors` with the Claude Swap message, and the matching `openusage: warning: …` stderr. A fake exec returns it as a failure with `exit`. No live check is planned, because reproducing one means deliberately staling a Claude Swap login.
 
+### D5: accounts are not candidates
+
+The glossary defines a candidate as a work unit, and this change's **Claude account** entry tells readers to avoid the word for an account. The gate still used it: the `Candidate` type in `select.ts`, the `candidates` field of `QuotaGateData`, which the JSON report carries, the `candidates:` label in the text report, and the main spec's "Several accounts, none selected". They become `ClaudeAccount`, `accounts`, `accounts:` and "the account keys". The field `account`, the selected account's report, keeps its name, so `accounts` sits beside it as the list it was chosen from.
+
+Alternatives rejected:
+
+- **Keep the JSON field `candidates`.** Nothing in the plugin reads it, neither the code nor the command prompt nor the README, so keeping it saves no one. One thing would have two names.
+- **Rename in a later change.** The glossary entry ships here, so the conflict would ship with it.
+
 ## Risks / Trade-offs
 
 - [A future OpenUsage keeps the warning but drops the matching entry from `errors`] → exit 4 with empty `errors` is `not-evaluable`, with the exit code and stderr in the reason (D1).
@@ -71,4 +81,4 @@ A fixture in `test-fixtures.ts` reproduces the DOT-104 observation: exit 4, a `c
 
 ## Migration Plan
 
-None. A `fix(autonomous)` patch with no configuration or report change. To roll back, revert the commit.
+None. A `fix(autonomous)` patch with no configuration change. The report renames the quota gate's `candidates` to `accounts` (D5), and nothing in the plugin reads that field. To roll back, revert the commits.

@@ -21,6 +21,30 @@ The gate SHALL obtain quota by running the `openusage` CLI for the Claude provid
 - **WHEN** OpenUsage exits 0 and a resource or account the gate does not evaluate violates the `openusage.limits.v1` contract
 - **THEN** the outcome is `not-evaluable` and the reason names the offending path
 
+### Requirement: Unambiguous account selection
+
+The gate SHALL consider every provider whose key is `claude` or starts with `claude@` as a Claude account, and SHALL also count, under the same rule, every key that appears only as a `providerId` in OpenUsage's `errors`; such an account is evaluated as having no data and carries its error, so its outcome is `not-evaluable`. With `--account <key>` it SHALL use exactly that account. Without it, it SHALL use the only Claude account when there is exactly one. It SHALL NOT aggregate accounts or switch the active account.
+
+#### Scenario: Several accounts, none selected
+
+- **WHEN** two Claude accounts are present and `--account` is absent
+- **THEN** the outcome is `not-evaluable`, the reason is an ambiguous account, and the account keys and display names are listed
+
+#### Scenario: Unknown account
+
+- **WHEN** `--account` names a key that is not present
+- **THEN** the outcome is `not-evaluable` and the available keys are listed
+
+#### Scenario: Single account
+
+- **WHEN** exactly one Claude account is present and `--account` is absent
+- **THEN** that account is evaluated
+
+#### Scenario: No Claude account
+
+- **WHEN** OpenUsage reports no Claude account and `--account` is absent
+- **THEN** the outcome is `not-evaluable` and the reason says no Claude account was reported
+
 ## ADDED Requirements
 
 ### Requirement: Read output after a non-zero exit

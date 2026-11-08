@@ -125,7 +125,7 @@ describe("quota gate decision: not evaluable from the account data", () => {
             }),
         );
         expect(result.outcome).toBe("not-evaluable");
-        expect(result.data.candidates).toEqual([
+        expect(result.data.accounts).toEqual([
             { key: "claude", displayName: "Claude: Personal (me@example.com)" },
             { key: "claude@1", displayName: "Claude: Work" },
         ]);
@@ -205,7 +205,7 @@ describe("quota gate decision: accounts known only from OpenUsage errors", () =>
         expect(result.reasons).toEqual([
             "ambiguous account: 2 Claude accounts present, pass --account <provider-key>",
         ]);
-        expect(result.data.candidates).toEqual([
+        expect(result.data.accounts).toEqual([
             { key: "claude", displayName: "Claude: Personal (me@example.com)" },
             { key: "claude@work", displayName: null },
         ]);

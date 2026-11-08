@@ -11,8 +11,9 @@ The quota-gate spec contradicts itself here. "Read quota from OpenUsage" maps ev
 - **The CLI failure stays the reason for unusable output.** If OpenUsage exits non-zero and stdout is empty, is not JSON, or does not match the contract, the reason is the CLI failure (`openusage failed: <stderr>`), not the parse error.
 - **Unchanged.** A missing CLI, a timeout, a `maxBuffer` overflow and output that fails validation after exit 0 are still `not-evaluable` as today. Validation still covers the whole document.
 - **The report stays about one account.** Other accounts' errors, stderr and the exit code do not appear in the report when the selected account is fine.
+- **Accounts are called accounts.** The quota gate's list of Claude accounts is renamed from `candidates` to `accounts`, in the text report and in the step's JSON data. The glossary keeps "candidate" for a work unit, and its new **Claude account** entry tells readers to avoid that word for an account.
 - **Docs.** The plugin README records OpenUsage 0.7.16 as the verified version and describes how a non-zero exit is read. The glossary's **Quota** section (Claude account, Account error), written during the DOT-112 grill, ships with this change.
-- **Release.** A `fix(autonomous):` patch. The configuration and the run report format are unchanged.
+- **Release.** A `fix(autonomous):` patch. The configuration is unchanged. The run report changes only in the rename above, and nothing in the plugin reads the old name.
 
 **Out of scope**:
 
@@ -28,12 +29,13 @@ None.
 
 ### Modified Capabilities
 
-- `quota-gate`: "Read quota from OpenUsage" reads a valid document after a non-zero exit when it carries an account error. A non-zero exit stays `not-evaluable` when the output is unusable or has no account error.
+- `quota-gate`: "Read quota from OpenUsage" reads a valid document after a non-zero exit when it carries an account error. A non-zero exit stays `not-evaluable` when the output is unusable or has no account error. "Unambiguous account selection" lists the account keys, not the candidate keys.
 
 ## Impact
 
 - `plugins/autonomous/src/exec.ts`: an opt-in mode in which a non-zero exit also carries the exit code and stdout. Other CLIs (bd, gh, linear, claude, chezmoi, wt, git, aoe) do not opt in and are unaffected.
 - `plugins/autonomous/src/quota-gate/openusage.ts`: `readOpenUsage` and `execOpenUsage`.
-- Tests: `src/exec.test.ts`, `src/quota-gate/openusage.test.ts`, `src/quota-gate/step.test.ts` and a fixture shaped like the real exit-4 document in `src/quota-gate/test-fixtures.ts`.
+- `plugins/autonomous/src/quota-gate/select.ts`, `step.ts` and `render.ts`: `Candidate` becomes `ClaudeAccount`, and `candidates` becomes `accounts`.
+- Tests: `src/exec.test.ts`, `src/quota-gate/openusage.test.ts`, `src/quota-gate/step.test.ts`, `src/quota-gate/select.test.ts`, `src/quota-gate/render.test.ts` and a fixture shaped like the real exit-4 document in `src/quota-gate/test-fixtures.ts`.
 - `plugins/autonomous/README.md` and `plugins/autonomous/GLOSSARY.md`.
 - `openspec/specs/quota-gate/spec.md` on archive.

@@ -83,3 +83,6 @@ used the same configuration and the shared OpenUsage cache.
 No account error was present. The quota gate's outcome and reasons match
 between the branch and `main`. Only `fetchedAt` differs, because OpenUsage
 refreshed its cache between the two runs.
+
+Both runs predate the rename in design D5. The `Candidates` row is the field
+that is now called `accounts`.

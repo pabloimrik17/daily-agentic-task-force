@@ -56,7 +56,7 @@ describe("renderQuotaGate", () => {
         );
     });
 
-    it("lists candidates when no account could be selected", async () => {
+    it("lists the accounts when none could be selected", async () => {
         const text = await rendered(
             limits({
                 claude: provider({}),
@@ -66,7 +66,7 @@ describe("renderQuotaGate", () => {
         expect(text).toBe(
             [
                 "[quota-gate] not-evaluable (code)",
-                "  candidates:",
+                "  accounts:",
                 "    - claude — Claude: Personal (me@example.com)",
                 "    - claude@1 — Claude: Work",
                 "  reasons:",
