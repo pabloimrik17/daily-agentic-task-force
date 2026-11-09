@@ -51,7 +51,7 @@ export default defineConfig({
             ...whenStaged(FALLOW_FILES, "bun run fallow audit", filenames),
             ...forStaged(
                 RENOVATE_FILES,
-                "bunx --package renovate@44.101.2 renovate-config-validator --strict",
+                "bunx --minimum-release-age 1d --package renovate@44.101.2 renovate-config-validator --strict",
                 filenames,
             ),
             ...forStaged(WORKFLOW_FILES, "mise x -- zizmor --offline", filenames),

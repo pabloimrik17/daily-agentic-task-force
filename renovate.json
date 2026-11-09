@@ -60,24 +60,79 @@
     "customManagers": [
         {
             "customType": "regex",
-            "description": "Update pinned CLI tool versions in CI workflows (bunx/npx)",
-            "managerFilePatterns": ["/^\\.github/workflows/.+\\.ya?ml$/"],
+            "description": "Pinned bunx packages in package.json scripts",
+            "managerFilePatterns": ["/(^|/)package\\.json$/"],
             "matchStrings": [
-                "(?:bunx|npx) (?<depName>(?:@[^/\\s]+/)?[^@\\s]+)@(?<currentValue>[^\\s]+)"
+                "(?:^|[\\s\"\\x27`=;|&(])bunx\\s+(?:--minimum-release-age(?:\\s+|=)\\S+\\s+)?(?:--bun\\s+)?(?:(?:--package|-p)(?:\\s+|=))?(?<depName>(?:@[a-z0-9_.-]+/)?[a-z0-9_.-]+)@(?<currentValue>\\d+\\.\\d+\\.\\d+(?:-[0-9A-Za-z.-]+)?(?:\\+[0-9A-Za-z.-]+)?)(?:$|[\\s\"\\x27`\\\\;|&)\\]}])"
             ],
-            "datasourceTemplate": "npm"
+            "datasourceTemplate": "npm",
+            "versioningTemplate": "npm"
         },
         {
             "customType": "regex",
-            "description": "Update pinned 'bunx --package <pkg>@<ver>' versions (renovate-config-validator and similar)",
+            "description": "Pinned bunx packages in CI/CD pipelines",
             "managerFilePatterns": [
-                "/^\\.github/workflows/.+\\.ya?ml$/",
-                "/^lint-staged\\.config\\.ts$/"
+                "/(^|/)(?:\\.github/workflows|\\.github/actions|\\.eas/workflows)/.*\\.ya?ml$/",
+                "/(^|/)(?:bitbucket-pipelines|\\.gitlab-ci|azure-pipelines)\\.ya?ml$/"
             ],
             "matchStrings": [
-                "bunx (?:--package|-p) (?<depName>(?:@[^/\\s]+/)?[^@\\s]+)@(?<currentValue>[^\\s]+)"
+                "(?:^|[\\s\"\\x27`=;|&(])bunx\\s+(?:--minimum-release-age(?:\\s+|=)\\S+\\s+)?(?:--bun\\s+)?(?:(?:--package|-p)(?:\\s+|=))?(?<depName>(?:@[a-z0-9_.-]+/)?[a-z0-9_.-]+)@(?<currentValue>\\d+\\.\\d+\\.\\d+(?:-[0-9A-Za-z.-]+)?(?:\\+[0-9A-Za-z.-]+)?)(?:$|[\\s\"\\x27`\\\\;|&)\\]}])"
             ],
-            "datasourceTemplate": "npm"
+            "datasourceTemplate": "npm",
+            "versioningTemplate": "npm"
+        },
+        {
+            "customType": "regex",
+            "description": "Pinned bunx packages in Git hooks and their tooling",
+            "managerFilePatterns": [
+                "/(^|/)\\.husky/[^/]+$/",
+                "/(^|/)(?:\\.?lint-?staged(?:\\.config)?\\.(?:[cm]?[jt]s|json)|\\.lintstagedrc(?:\\.(?:[cm]?[jt]s|json|ya?ml))?)$/"
+            ],
+            "matchStrings": [
+                "(?:^|[\\s\"\\x27`=;|&(])bunx\\s+(?:--minimum-release-age(?:\\s+|=)\\S+\\s+)?(?:--bun\\s+)?(?:(?:--package|-p)(?:\\s+|=))?(?<depName>(?:@[a-z0-9_.-]+/)?[a-z0-9_.-]+)@(?<currentValue>\\d+\\.\\d+\\.\\d+(?:-[0-9A-Za-z.-]+)?(?:\\+[0-9A-Za-z.-]+)?)(?:$|[\\s\"\\x27`\\\\;|&)\\]}])"
+            ],
+            "datasourceTemplate": "npm",
+            "versioningTemplate": "npm"
+        },
+        {
+            "customType": "regex",
+            "description": "Pinned bunx packages in Dockerfiles and Compose files",
+            "managerFilePatterns": [
+                "/(^|/)(?:Dockerfile(?:\\.[^/]+)?|[^/]+\\.Dockerfile)$/",
+                "/(^|/)(?:docker-)?compose(?:\\.[^/]+)?\\.ya?ml$/"
+            ],
+            "matchStrings": [
+                "(?:^|[\\s\"\\x27`=;|&(])bunx\\s+(?:--minimum-release-age(?:\\s+|=)\\S+\\s+)?(?:--bun\\s+)?(?:(?:--package|-p)(?:\\s+|=))?(?<depName>(?:@[a-z0-9_.-]+/)?[a-z0-9_.-]+)@(?<currentValue>\\d+\\.\\d+\\.\\d+(?:-[0-9A-Za-z.-]+)?(?:\\+[0-9A-Za-z.-]+)?)(?:$|[\\s\"\\x27`\\\\;|&)\\]}])",
+                "\\b(?:command[\"\\x27]?\\s*[:=]|RUN|CMD|ENTRYPOINT)\\s*\\[\\s*\"bunx\"\\s*,\\s*(?:\"--minimum-release-age\"\\s*,\\s*\"[^\"]+\"\\s*,\\s*)?(?:\"--bun\"\\s*,\\s*)?(?:\"(?:--package|-p)\"\\s*,\\s*)?\"(?<depName>(?:@[a-z0-9_.-]+/)?[a-z0-9_.-]+)@(?<currentValue>\\d+\\.\\d+\\.\\d+(?:-[0-9A-Za-z.-]+)?(?:\\+[0-9A-Za-z.-]+)?)\""
+            ],
+            "datasourceTemplate": "npm",
+            "versioningTemplate": "npm"
+        },
+        {
+            "customType": "regex",
+            "description": "Pinned bunx packages in agentic CLI and MCP server configs",
+            "managerFilePatterns": [
+                "/(^|/)(?:\\.mcp|opencode)\\.json$/",
+                "/(^|/)\\.(?:gemini|codex|claude|cursor)/.*\\.(?:jsonc?|toml|ya?ml|[cm]?[jt]s)$/",
+                "/(^|/)\\.junie/mcp/mcp\\.json$/"
+            ],
+            "matchStrings": [
+                "(?:^|[\\s\"\\x27`=;|&(])bunx\\s+(?:--minimum-release-age(?:\\s+|=)\\S+\\s+)?(?:--bun\\s+)?(?:(?:--package|-p)(?:\\s+|=))?(?<depName>(?:@[a-z0-9_.-]+/)?[a-z0-9_.-]+)@(?<currentValue>\\d+\\.\\d+\\.\\d+(?:-[0-9A-Za-z.-]+)?(?:\\+[0-9A-Za-z.-]+)?)(?:$|[\\s\"\\x27`\\\\;|&)\\]}])",
+                "\\bcommand[\"\\x27]?\\s*[:=]\\s*[\"\\x27]bunx[\"\\x27]\\s*,?\\s*[\"\\x27]?args[\"\\x27]?\\s*[:=]\\s*\\[\\s*(?:[\"\\x27]--minimum-release-age[\"\\x27]\\s*,\\s*[\"\\x27][^\"\\x27]+[\"\\x27]\\s*,\\s*)?(?:[\"\\x27]--bun[\"\\x27]\\s*,\\s*)?(?:[\"\\x27](?:--package|-p)[\"\\x27]\\s*,\\s*)?[\"\\x27](?<depName>(?:@[a-z0-9_.-]+/)?[a-z0-9_.-]+)@(?<currentValue>\\d+\\.\\d+\\.\\d+(?:-[0-9A-Za-z.-]+)?(?:\\+[0-9A-Za-z.-]+)?)[\"\\x27]",
+                "\\bcommand[\"\\x27]?\\s*[:=]\\s*\\[\\s*[\"\\x27]bunx[\"\\x27]\\s*,\\s*(?:[\"\\x27]--minimum-release-age[\"\\x27]\\s*,\\s*[\"\\x27][^\"\\x27]+[\"\\x27]\\s*,\\s*)?(?:[\"\\x27]--bun[\"\\x27]\\s*,\\s*)?(?:[\"\\x27](?:--package|-p)[\"\\x27]\\s*,\\s*)?[\"\\x27](?<depName>(?:@[a-z0-9_.-]+/)?[a-z0-9_.-]+)@(?<currentValue>\\d+\\.\\d+\\.\\d+(?:-[0-9A-Za-z.-]+)?(?:\\+[0-9A-Za-z.-]+)?)[\"\\x27]"
+            ],
+            "datasourceTemplate": "npm",
+            "versioningTemplate": "npm"
+        },
+        {
+            "customType": "regex",
+            "description": "Pinned bunx packages in shell scripts and task runners",
+            "managerFilePatterns": ["/\\.(?:sh|bash|zsh)$/", "/(^|/)(?:[Mm]akefile|[Jj]ustfile)$/"],
+            "matchStrings": [
+                "(?:^|[\\s\"\\x27`=;|&(])bunx\\s+(?:--minimum-release-age(?:\\s+|=)\\S+\\s+)?(?:--bun\\s+)?(?:(?:--package|-p)(?:\\s+|=))?(?<depName>(?:@[a-z0-9_.-]+/)?[a-z0-9_.-]+)@(?<currentValue>\\d+\\.\\d+\\.\\d+(?:-[0-9A-Za-z.-]+)?(?:\\+[0-9A-Za-z.-]+)?)(?:$|[\\s\"\\x27`\\\\;|&)\\]}])"
+            ],
+            "datasourceTemplate": "npm",
+            "versioningTemplate": "npm"
         }
     ]
 }

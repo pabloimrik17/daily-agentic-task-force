@@ -56,10 +56,10 @@ jobs:
 
             # Schema only. The version and name invariants are lint:marketplace's job.
             - name: 🔍 Validate marketplace schema
-              run: bunx @anthropic-ai/claude-code@2.1.312 plugin validate .claude-plugin/marketplace.json --strict
+              run: bunx --minimum-release-age 1d @anthropic-ai/claude-code@2.1.312 plugin validate .claude-plugin/marketplace.json --strict
 
             - name: 🔍 Validate OpenSpec change proposals
-              run: bunx @fission-ai/openspec@1.14.3 validate --changes --strict --no-interactive
+              run: bunx --minimum-release-age 1d @fission-ai/openspec@1.14.3 validate --changes --strict --no-interactive
 
             # PRs are gated by fallow.yml (audit, new-only ratchet); this catches
             # dead code landing on main via direct pushes
