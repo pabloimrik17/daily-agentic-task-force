@@ -63,7 +63,7 @@
             "description": "Pinned bunx packages in package.json scripts",
             "managerFilePatterns": ["/(^|/)package\\.json$/"],
             "matchStrings": [
-                "(?:^|[\\s\"\\x27`=;|&(])bunx\\s+(?:--minimum-release-age(?:\\s+|=)1d\\s+)?(?:--bun\\s+)?(?:(?:--package|-p)(?:\\s+|=))?(?<depName>(?:@[a-z0-9_.-]+/)?[a-z0-9_.-]+)@(?<currentValue>\\d+\\.\\d+\\.\\d+(?:-[0-9A-Za-z.-]+)?(?:\\+[0-9A-Za-z.-]+)?)(?:$|[\\s\"\\x27`\\\\;|&)\\]}])"
+                "(?:^|[\\s\"\\x27`=;|&(])bunx\\s+(?:--minimum-release-age(?:\\s+|=)\\S+\\s+)?(?:--bun\\s+)?(?:(?:--package|-p)(?:\\s+|=))?(?<depName>(?:@[a-z0-9_.-]+/)?[a-z0-9_.-]+)@(?<currentValue>\\d+\\.\\d+\\.\\d+(?:-[0-9A-Za-z.-]+)?(?:\\+[0-9A-Za-z.-]+)?)(?:$|[\\s\"\\x27`\\\\;|&)\\]}])"
             ],
             "datasourceTemplate": "npm",
             "versioningTemplate": "npm"
@@ -76,7 +76,7 @@
                 "/(^|/)(?:bitbucket-pipelines|\\.gitlab-ci|azure-pipelines)\\.ya?ml$/"
             ],
             "matchStrings": [
-                "(?:^|[\\s\"\\x27`=;|&(])bunx\\s+(?:--minimum-release-age(?:\\s+|=)1d\\s+)?(?:--bun\\s+)?(?:(?:--package|-p)(?:\\s+|=))?(?<depName>(?:@[a-z0-9_.-]+/)?[a-z0-9_.-]+)@(?<currentValue>\\d+\\.\\d+\\.\\d+(?:-[0-9A-Za-z.-]+)?(?:\\+[0-9A-Za-z.-]+)?)(?:$|[\\s\"\\x27`\\\\;|&)\\]}])"
+                "(?:^|[\\s\"\\x27`=;|&(])bunx\\s+(?:--minimum-release-age(?:\\s+|=)\\S+\\s+)?(?:--bun\\s+)?(?:(?:--package|-p)(?:\\s+|=))?(?<depName>(?:@[a-z0-9_.-]+/)?[a-z0-9_.-]+)@(?<currentValue>\\d+\\.\\d+\\.\\d+(?:-[0-9A-Za-z.-]+)?(?:\\+[0-9A-Za-z.-]+)?)(?:$|[\\s\"\\x27`\\\\;|&)\\]}])"
             ],
             "datasourceTemplate": "npm",
             "versioningTemplate": "npm"
@@ -89,7 +89,7 @@
                 "/(^|/)(?:\\.?lint-?staged(?:\\.config)?\\.(?:[cm]?[jt]s|json)|\\.lintstagedrc(?:\\.(?:[cm]?[jt]s|json|ya?ml))?)$/"
             ],
             "matchStrings": [
-                "(?:^|[\\s\"\\x27`=;|&(])bunx\\s+(?:--minimum-release-age(?:\\s+|=)1d\\s+)?(?:--bun\\s+)?(?:(?:--package|-p)(?:\\s+|=))?(?<depName>(?:@[a-z0-9_.-]+/)?[a-z0-9_.-]+)@(?<currentValue>\\d+\\.\\d+\\.\\d+(?:-[0-9A-Za-z.-]+)?(?:\\+[0-9A-Za-z.-]+)?)(?:$|[\\s\"\\x27`\\\\;|&)\\]}])"
+                "(?:^|[\\s\"\\x27`=;|&(])bunx\\s+(?:--minimum-release-age(?:\\s+|=)\\S+\\s+)?(?:--bun\\s+)?(?:(?:--package|-p)(?:\\s+|=))?(?<depName>(?:@[a-z0-9_.-]+/)?[a-z0-9_.-]+)@(?<currentValue>\\d+\\.\\d+\\.\\d+(?:-[0-9A-Za-z.-]+)?(?:\\+[0-9A-Za-z.-]+)?)(?:$|[\\s\"\\x27`\\\\;|&)\\]}])"
             ],
             "datasourceTemplate": "npm",
             "versioningTemplate": "npm"
@@ -102,8 +102,8 @@
                 "/(^|/)(?:docker-)?compose(?:\\.[^/]+)?\\.ya?ml$/"
             ],
             "matchStrings": [
-                "(?:^|[\\s\"\\x27`=;|&(])bunx\\s+(?:--minimum-release-age(?:\\s+|=)1d\\s+)?(?:--bun\\s+)?(?:(?:--package|-p)(?:\\s+|=))?(?<depName>(?:@[a-z0-9_.-]+/)?[a-z0-9_.-]+)@(?<currentValue>\\d+\\.\\d+\\.\\d+(?:-[0-9A-Za-z.-]+)?(?:\\+[0-9A-Za-z.-]+)?)(?:$|[\\s\"\\x27`\\\\;|&)\\]}])",
-                "\\bcommand[\"\\x27]?\\s*[:=]\\s*\\[\\s*\"bunx\"\\s*,\\s*(?:\"--minimum-release-age\"\\s*,\\s*\"1d\"\\s*,\\s*)?(?:\"--bun\"\\s*,\\s*)?(?:\"(?:--package|-p)\"\\s*,\\s*)?\"(?<depName>(?:@[a-z0-9_.-]+/)?[a-z0-9_.-]+)@(?<currentValue>\\d+\\.\\d+\\.\\d+(?:-[0-9A-Za-z.-]+)?(?:\\+[0-9A-Za-z.-]+)?)\""
+                "(?:^|[\\s\"\\x27`=;|&(])bunx\\s+(?:--minimum-release-age(?:\\s+|=)\\S+\\s+)?(?:--bun\\s+)?(?:(?:--package|-p)(?:\\s+|=))?(?<depName>(?:@[a-z0-9_.-]+/)?[a-z0-9_.-]+)@(?<currentValue>\\d+\\.\\d+\\.\\d+(?:-[0-9A-Za-z.-]+)?(?:\\+[0-9A-Za-z.-]+)?)(?:$|[\\s\"\\x27`\\\\;|&)\\]}])",
+                "\\bcommand[\"\\x27]?\\s*[:=]\\s*\\[\\s*\"bunx\"\\s*,\\s*(?:\"--minimum-release-age\"\\s*,\\s*\"[^\"]+\"\\s*,\\s*)?(?:\"--bun\"\\s*,\\s*)?(?:\"(?:--package|-p)\"\\s*,\\s*)?\"(?<depName>(?:@[a-z0-9_.-]+/)?[a-z0-9_.-]+)@(?<currentValue>\\d+\\.\\d+\\.\\d+(?:-[0-9A-Za-z.-]+)?(?:\\+[0-9A-Za-z.-]+)?)\""
             ],
             "datasourceTemplate": "npm",
             "versioningTemplate": "npm"
@@ -117,9 +117,9 @@
                 "/(^|/)\\.junie/mcp/mcp\\.json$/"
             ],
             "matchStrings": [
-                "(?:^|[\\s\"\\x27`=;|&(])bunx\\s+(?:--minimum-release-age(?:\\s+|=)1d\\s+)?(?:--bun\\s+)?(?:(?:--package|-p)(?:\\s+|=))?(?<depName>(?:@[a-z0-9_.-]+/)?[a-z0-9_.-]+)@(?<currentValue>\\d+\\.\\d+\\.\\d+(?:-[0-9A-Za-z.-]+)?(?:\\+[0-9A-Za-z.-]+)?)(?:$|[\\s\"\\x27`\\\\;|&)\\]}])",
-                "\\bcommand[\"\\x27]?\\s*[:=]\\s*\"bunx\"\\s*,?\\s*[\"\\x27]?args[\"\\x27]?\\s*[:=]\\s*\\[\\s*(?:\"--minimum-release-age\"\\s*,\\s*\"1d\"\\s*,\\s*)?(?:\"--bun\"\\s*,\\s*)?(?:\"(?:--package|-p)\"\\s*,\\s*)?\"(?<depName>(?:@[a-z0-9_.-]+/)?[a-z0-9_.-]+)@(?<currentValue>\\d+\\.\\d+\\.\\d+(?:-[0-9A-Za-z.-]+)?(?:\\+[0-9A-Za-z.-]+)?)\"",
-                "\\bcommand[\"\\x27]?\\s*[:=]\\s*\\[\\s*\"bunx\"\\s*,\\s*(?:\"--minimum-release-age\"\\s*,\\s*\"1d\"\\s*,\\s*)?(?:\"--bun\"\\s*,\\s*)?(?:\"(?:--package|-p)\"\\s*,\\s*)?\"(?<depName>(?:@[a-z0-9_.-]+/)?[a-z0-9_.-]+)@(?<currentValue>\\d+\\.\\d+\\.\\d+(?:-[0-9A-Za-z.-]+)?(?:\\+[0-9A-Za-z.-]+)?)\""
+                "(?:^|[\\s\"\\x27`=;|&(])bunx\\s+(?:--minimum-release-age(?:\\s+|=)\\S+\\s+)?(?:--bun\\s+)?(?:(?:--package|-p)(?:\\s+|=))?(?<depName>(?:@[a-z0-9_.-]+/)?[a-z0-9_.-]+)@(?<currentValue>\\d+\\.\\d+\\.\\d+(?:-[0-9A-Za-z.-]+)?(?:\\+[0-9A-Za-z.-]+)?)(?:$|[\\s\"\\x27`\\\\;|&)\\]}])",
+                "\\bcommand[\"\\x27]?\\s*[:=]\\s*\"bunx\"\\s*,?\\s*[\"\\x27]?args[\"\\x27]?\\s*[:=]\\s*\\[\\s*(?:\"--minimum-release-age\"\\s*,\\s*\"[^\"]+\"\\s*,\\s*)?(?:\"--bun\"\\s*,\\s*)?(?:\"(?:--package|-p)\"\\s*,\\s*)?\"(?<depName>(?:@[a-z0-9_.-]+/)?[a-z0-9_.-]+)@(?<currentValue>\\d+\\.\\d+\\.\\d+(?:-[0-9A-Za-z.-]+)?(?:\\+[0-9A-Za-z.-]+)?)\"",
+                "\\bcommand[\"\\x27]?\\s*[:=]\\s*\\[\\s*\"bunx\"\\s*,\\s*(?:\"--minimum-release-age\"\\s*,\\s*\"[^\"]+\"\\s*,\\s*)?(?:\"--bun\"\\s*,\\s*)?(?:\"(?:--package|-p)\"\\s*,\\s*)?\"(?<depName>(?:@[a-z0-9_.-]+/)?[a-z0-9_.-]+)@(?<currentValue>\\d+\\.\\d+\\.\\d+(?:-[0-9A-Za-z.-]+)?(?:\\+[0-9A-Za-z.-]+)?)\""
             ],
             "datasourceTemplate": "npm",
             "versioningTemplate": "npm"
@@ -129,7 +129,7 @@
             "description": "Pinned bunx packages in shell scripts and task runners",
             "managerFilePatterns": ["/\\.(?:sh|bash|zsh)$/", "/(^|/)(?:[Mm]akefile|[Jj]ustfile)$/"],
             "matchStrings": [
-                "(?:^|[\\s\"\\x27`=;|&(])bunx\\s+(?:--minimum-release-age(?:\\s+|=)1d\\s+)?(?:--bun\\s+)?(?:(?:--package|-p)(?:\\s+|=))?(?<depName>(?:@[a-z0-9_.-]+/)?[a-z0-9_.-]+)@(?<currentValue>\\d+\\.\\d+\\.\\d+(?:-[0-9A-Za-z.-]+)?(?:\\+[0-9A-Za-z.-]+)?)(?:$|[\\s\"\\x27`\\\\;|&)\\]}])"
+                "(?:^|[\\s\"\\x27`=;|&(])bunx\\s+(?:--minimum-release-age(?:\\s+|=)\\S+\\s+)?(?:--bun\\s+)?(?:(?:--package|-p)(?:\\s+|=))?(?<depName>(?:@[a-z0-9_.-]+/)?[a-z0-9_.-]+)@(?<currentValue>\\d+\\.\\d+\\.\\d+(?:-[0-9A-Za-z.-]+)?(?:\\+[0-9A-Za-z.-]+)?)(?:$|[\\s\"\\x27`\\\\;|&)\\]}])"
             ],
             "datasourceTemplate": "npm",
             "versioningTemplate": "npm"
