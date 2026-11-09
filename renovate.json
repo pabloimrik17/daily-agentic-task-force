@@ -103,7 +103,7 @@
             ],
             "matchStrings": [
                 "(?:^|[\\s\"\\x27`=;|&(])bunx\\s+(?:--minimum-release-age(?:\\s+|=)\\S+\\s+)?(?:--bun\\s+)?(?:(?:--package|-p)(?:\\s+|=))?(?<depName>(?:@[a-z0-9_.-]+/)?[a-z0-9_.-]+)@(?<currentValue>\\d+\\.\\d+\\.\\d+(?:-[0-9A-Za-z.-]+)?(?:\\+[0-9A-Za-z.-]+)?)(?:$|[\\s\"\\x27`\\\\;|&)\\]}])",
-                "\\bcommand[\"\\x27]?\\s*[:=]\\s*\\[\\s*\"bunx\"\\s*,\\s*(?:\"--minimum-release-age\"\\s*,\\s*\"[^\"]+\"\\s*,\\s*)?(?:\"--bun\"\\s*,\\s*)?(?:\"(?:--package|-p)\"\\s*,\\s*)?\"(?<depName>(?:@[a-z0-9_.-]+/)?[a-z0-9_.-]+)@(?<currentValue>\\d+\\.\\d+\\.\\d+(?:-[0-9A-Za-z.-]+)?(?:\\+[0-9A-Za-z.-]+)?)\""
+                "\\b(?:command[\"\\x27]?\\s*[:=]|RUN|CMD|ENTRYPOINT)\\s*\\[\\s*\"bunx\"\\s*,\\s*(?:\"--minimum-release-age\"\\s*,\\s*\"[^\"]+\"\\s*,\\s*)?(?:\"--bun\"\\s*,\\s*)?(?:\"(?:--package|-p)\"\\s*,\\s*)?\"(?<depName>(?:@[a-z0-9_.-]+/)?[a-z0-9_.-]+)@(?<currentValue>\\d+\\.\\d+\\.\\d+(?:-[0-9A-Za-z.-]+)?(?:\\+[0-9A-Za-z.-]+)?)\""
             ],
             "datasourceTemplate": "npm",
             "versioningTemplate": "npm"
@@ -118,8 +118,8 @@
             ],
             "matchStrings": [
                 "(?:^|[\\s\"\\x27`=;|&(])bunx\\s+(?:--minimum-release-age(?:\\s+|=)\\S+\\s+)?(?:--bun\\s+)?(?:(?:--package|-p)(?:\\s+|=))?(?<depName>(?:@[a-z0-9_.-]+/)?[a-z0-9_.-]+)@(?<currentValue>\\d+\\.\\d+\\.\\d+(?:-[0-9A-Za-z.-]+)?(?:\\+[0-9A-Za-z.-]+)?)(?:$|[\\s\"\\x27`\\\\;|&)\\]}])",
-                "\\bcommand[\"\\x27]?\\s*[:=]\\s*\"bunx\"\\s*,?\\s*[\"\\x27]?args[\"\\x27]?\\s*[:=]\\s*\\[\\s*(?:\"--minimum-release-age\"\\s*,\\s*\"[^\"]+\"\\s*,\\s*)?(?:\"--bun\"\\s*,\\s*)?(?:\"(?:--package|-p)\"\\s*,\\s*)?\"(?<depName>(?:@[a-z0-9_.-]+/)?[a-z0-9_.-]+)@(?<currentValue>\\d+\\.\\d+\\.\\d+(?:-[0-9A-Za-z.-]+)?(?:\\+[0-9A-Za-z.-]+)?)\"",
-                "\\bcommand[\"\\x27]?\\s*[:=]\\s*\\[\\s*\"bunx\"\\s*,\\s*(?:\"--minimum-release-age\"\\s*,\\s*\"[^\"]+\"\\s*,\\s*)?(?:\"--bun\"\\s*,\\s*)?(?:\"(?:--package|-p)\"\\s*,\\s*)?\"(?<depName>(?:@[a-z0-9_.-]+/)?[a-z0-9_.-]+)@(?<currentValue>\\d+\\.\\d+\\.\\d+(?:-[0-9A-Za-z.-]+)?(?:\\+[0-9A-Za-z.-]+)?)\""
+                "\\bcommand[\"\\x27]?\\s*[:=]\\s*[\"\\x27]bunx[\"\\x27]\\s*,?\\s*[\"\\x27]?args[\"\\x27]?\\s*[:=]\\s*\\[\\s*(?:[\"\\x27]--minimum-release-age[\"\\x27]\\s*,\\s*[\"\\x27][^\"\\x27]+[\"\\x27]\\s*,\\s*)?(?:[\"\\x27]--bun[\"\\x27]\\s*,\\s*)?(?:[\"\\x27](?:--package|-p)[\"\\x27]\\s*,\\s*)?[\"\\x27](?<depName>(?:@[a-z0-9_.-]+/)?[a-z0-9_.-]+)@(?<currentValue>\\d+\\.\\d+\\.\\d+(?:-[0-9A-Za-z.-]+)?(?:\\+[0-9A-Za-z.-]+)?)[\"\\x27]",
+                "\\bcommand[\"\\x27]?\\s*[:=]\\s*\\[\\s*[\"\\x27]bunx[\"\\x27]\\s*,\\s*(?:[\"\\x27]--minimum-release-age[\"\\x27]\\s*,\\s*[\"\\x27][^\"\\x27]+[\"\\x27]\\s*,\\s*)?(?:[\"\\x27]--bun[\"\\x27]\\s*,\\s*)?(?:[\"\\x27](?:--package|-p)[\"\\x27]\\s*,\\s*)?[\"\\x27](?<depName>(?:@[a-z0-9_.-]+/)?[a-z0-9_.-]+)@(?<currentValue>\\d+\\.\\d+\\.\\d+(?:-[0-9A-Za-z.-]+)?(?:\\+[0-9A-Za-z.-]+)?)[\"\\x27]"
             ],
             "datasourceTemplate": "npm",
             "versioningTemplate": "npm"
