@@ -60,24 +60,26 @@
     "customManagers": [
         {
             "customType": "regex",
-            "description": "Update pinned CLI tool versions in CI workflows (bunx/npx)",
-            "managerFilePatterns": ["/^\\.github/workflows/.+\\.ya?ml$/"],
-            "matchStrings": [
-                "(?:bunx|npx) (?<depName>(?:@[^/\\s]+/)?[^@\\s]+)@(?<currentValue>[^\\s]+)"
-            ],
-            "datasourceTemplate": "npm"
-        },
-        {
-            "customType": "regex",
-            "description": "Update pinned 'bunx --package <pkg>@<ver>' versions (renovate-config-validator and similar)",
+            "description": "Pinned bunx packages in executable commands and tool launchers",
             "managerFilePatterns": [
-                "/^\\.github/workflows/.+\\.ya?ml$/",
-                "/^lint-staged\\.config\\.ts$/"
+                "/(^|/)package\\.json$/",
+                "/(^|/)(?:\\.github/workflows|\\.github/actions|\\.eas/workflows)/.*\\.ya?ml$/",
+                "/(^|/)(?:bitbucket-pipelines|\\.gitlab-ci|azure-pipelines)\\.ya?ml$/",
+                "/\\.(?:sh|bash|zsh)$/",
+                "/(^|/)\\.husky/[^/]+$/",
+                "/(^|/)(?:Dockerfile(?:\\.[^/]+)?|[^/]+\\.Dockerfile|[Mm]akefile|[Jj]ustfile)$/",
+                "/(^|/)(?:\\.?lint-?staged(?:\\.config)?\\.(?:[cm]?[jt]s|json)|\\.lintstagedrc(?:\\.(?:[cm]?[jt]s|json|ya?ml))?)$/",
+                "/(^|/)(?:\\.mcp|opencode)\\.json$/",
+                "/(^|/)\\.(?:gemini|codex|claude|cursor)/.*\\.(?:jsonc?|toml|ya?ml|[cm]?[jt]s)$/",
+                "/(^|/)\\.junie/mcp/mcp\\.json$/"
             ],
             "matchStrings": [
-                "bunx (?:--package|-p) (?<depName>(?:@[^/\\s]+/)?[^@\\s]+)@(?<currentValue>[^\\s]+)"
+                "(?:^|[\\s\"\\x27`=;|&(])bunx\\s+(?:--minimum-release-age(?:\\s+|=)1d\\s+)?(?:--bun\\s+)?(?:(?:--package|-p)(?:\\s+|=))?(?<depName>(?:@[a-z0-9_.-]+/)?[a-z0-9_.-]+)@(?<currentValue>\\d+\\.\\d+\\.\\d+(?:-[0-9A-Za-z.-]+)?(?:\\+[0-9A-Za-z.-]+)?)(?:$|[\\s\"\\x27`\\\\;|&)\\]}])",
+                "\\bcommand[\"\\x27]?\\s*[:=]\\s*\"bunx\"\\s*,?\\s*[\"\\x27]?args[\"\\x27]?\\s*[:=]\\s*\\[\\s*(?:\"--minimum-release-age\"\\s*,\\s*\"1d\"\\s*,\\s*)?(?:\"--bun\"\\s*,\\s*)?(?:\"(?:--package|-p)\"\\s*,\\s*)?\"(?<depName>(?:@[a-z0-9_.-]+/)?[a-z0-9_.-]+)@(?<currentValue>\\d+\\.\\d+\\.\\d+(?:-[0-9A-Za-z.-]+)?(?:\\+[0-9A-Za-z.-]+)?)\"",
+                "\\bcommand[\"\\x27]?\\s*[:=]\\s*\\[\\s*\"bunx\"\\s*,\\s*(?:\"--minimum-release-age\"\\s*,\\s*\"1d\"\\s*,\\s*)?(?:\"--bun\"\\s*,\\s*)?(?:\"(?:--package|-p)\"\\s*,\\s*)?\"(?<depName>(?:@[a-z0-9_.-]+/)?[a-z0-9_.-]+)@(?<currentValue>\\d+\\.\\d+\\.\\d+(?:-[0-9A-Za-z.-]+)?(?:\\+[0-9A-Za-z.-]+)?)\""
             ],
-            "datasourceTemplate": "npm"
+            "datasourceTemplate": "npm",
+            "versioningTemplate": "npm"
         }
     ]
 }
