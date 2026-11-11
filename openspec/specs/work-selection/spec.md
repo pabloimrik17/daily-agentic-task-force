@@ -64,7 +64,7 @@ A Linear read whose blocker relations for an open task (from `linear issue query
 
 ### Requirement: Blockers, children and priority
 
-For Beads and Linear, the step SHALL read each task's open blockers, the tasks it blocks, its open children and its tracker priority. A blocker or child counts as open unless it is closed: in Beads, unless its status is `closed`; in Linear, unless its state is completed or canceled. Beads decides which tasks are blocked by its own dependency rules. GitHub tasks SHALL be treated as having no blockers and no children, and the report SHALL say that these were not evaluated for GitHub.
+For Beads and Linear, the step SHALL read each task's open blockers, the tasks it blocks, its open children and its tracker priority. A blocker or child counts as open unless it is closed: in Beads, unless its status is `closed`; in Linear, unless its state is completed or canceled. Beads decides which tasks are blocked by its own dependency rules. For GitHub, the step SHALL read each task's sub-issues as its children, open unless closed; GitHub tasks SHALL be treated as having no blockers and no tracker priority, and the report SHALL say that dependencies were not evaluated for GitHub.
 
 #### Scenario: Linear blocker
 
@@ -74,11 +74,21 @@ For Beads and Linear, the step SHALL read each task's open blockers, the tasks i
 #### Scenario: GitHub task
 
 - **WHEN** GitHub is enabled
-- **THEN** no GitHub task is excluded as blocked or split, and the report says dependencies and children were not evaluated for GitHub
+- **THEN** no GitHub task is excluded as blocked, and the report says dependencies were not evaluated for GitHub
+
+#### Scenario: GitHub split
+
+- **WHEN** a GitHub issue carrying `personal` and `grill-me` has an open sub-issue
+- **THEN** it is excluded as split
+
+#### Scenario: GitHub sub-issues all closed
+
+- **WHEN** every sub-issue of a GitHub issue is closed
+- **THEN** the issue has no open children
 
 ### Requirement: Next stage of a task
 
-The next stage of a task SHALL be `grill-me` when the task carries the `grill-me` label, and `proposal` otherwise. The only supported stage SHALL be `grill-me`.
+The next stage of a task SHALL be the stage label it carries: `grill-me` or `proposal`. A task without a stage label has no next stage and is excluded under classification. The only supported stage SHALL be `grill-me`.
 
 #### Scenario: grill-me task
 
@@ -87,14 +97,14 @@ The next stage of a task SHALL be `grill-me` when the task carries the `grill-me
 
 #### Scenario: AFK task
 
-- **WHEN** a task carries `personal` and `AFK`
+- **WHEN** a task carries `personal`, `AFK` and `proposal`
 - **THEN** its next stage is `proposal`, which is not supported
 
 ### Requirement: Candidates and exclusions
 
 A task SHALL be a candidate, whatever its scope, unless an exclusion applies. Each excluded task SHALL be reported once, under the first that applies, in this order:
 
-1. **classification**: a scope or entry group missing or in conflict, by present contract labels only;
+1. **classification**: a scope, autonomy or stage group missing or in conflict, by present contract labels only; autonomy is not missing while the stage is `grill-me`;
 2. **taken**: it carries `taken`;
 3. **labelled this run**: `label-triage` labelled it, or tried to, this run;
 4. **unsupported stage**: its next stage is not supported;
@@ -113,7 +123,7 @@ A task SHALL be a candidate, whatever its scope, unless an exclusion applies. Ea
 
 #### Scenario: AFK task already taken
 
-- **WHEN** a task carries `personal`, `AFK` and `taken`
+- **WHEN** a task carries `personal`, `AFK`, `proposal` and `taken`
 - **THEN** it is excluded as taken, not as unsupported stage
 
 #### Scenario: Labelled by triage in this run
@@ -140,6 +150,16 @@ A task SHALL be a candidate, whatever its scope, unless an exclusion applies. Ea
 
 - **WHEN** a task carries `grill-me` and no scope label, even with an alias for `work`
 - **THEN** it is excluded under classification
+
+#### Scenario: Missing stage
+
+- **WHEN** a task carries `personal` and `AFK` and no stage label
+- **THEN** it is excluded under classification
+
+#### Scenario: Grill without autonomy
+
+- **WHEN** a task carries `work` and `grill-me` and nothing else excludes it
+- **THEN** it is a candidate
 
 ### Requirement: Tracker status does not make a task taken
 
@@ -215,16 +235,21 @@ The step SHALL be `advance` when it selected a work unit, `wait` when there is n
 The text report SHALL show:
 
 - the machine scope;
-- the selected work unit: source, id, title, next stage, autonomy, scope, explanation;
+- the selected work unit: source, id, title, next stage, autonomy (`none` for a task in `grill-me` without one), scope, explanation;
 - the machine-scope exception reason, when there is one;
 - the candidates compared;
 - the excluded tasks, grouped by reason, each with its source, id and title;
-- the note that GitHub dependencies and children were not evaluated, when GitHub is enabled.
+- the note that GitHub dependencies were not evaluated, when GitHub is enabled.
 
 #### Scenario: Selected task in the text report
 
 - **WHEN** Linear `DOT-120` is selected for its `grill-me` stage
 - **THEN** the report names Linear, `DOT-120`, its title, stage `grill-me`, its autonomy, its scope and the explanation
+
+#### Scenario: Grill selected without autonomy
+
+- **WHEN** a task carrying `personal` and `grill-me` only is selected
+- **THEN** the report gives its autonomy as `none`
 
 ### Requirement: Selection data in JSON
 
