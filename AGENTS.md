@@ -83,7 +83,7 @@ Oxfmt reads exclusions from `oxfmt.config.ts`, including explicit file and
 directory arguments. For selected files, run
 `bunx oxfmt --no-error-on-unmatched-pattern <files>` (add `--check` to validate).
 The flag lets an entirely ignored selection exit successfully; without it,
-oxfmt 0.59 reports "Expected at least one target file". A `./` prefix does not
+oxfmt 0.68 reports "Expected at least one target file". A `./` prefix does not
 change exclusion behavior.
 
 ## Commits
