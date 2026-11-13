@@ -44,6 +44,24 @@ A comment a stage leaves on its task for the next agent, holding what the
 definition does not: rejected options, open nuances and the skills to use.
 _Avoid_: continuation note, handoff
 
+**Logbook**:
+The story of how a task's pull request came to be, told by the logbook
+entries on it, in order: enough for a person to catch up on what happened
+without reading the work itself.
+_Avoid_: log, journal, history
+
+**Cover**:
+The description of a task's pull request, which opens its logbook: a link to
+the task and the problem and solution of its definition, or the start of its
+description when it has no definition.
+_Avoid_: pull request body, summary
+
+**Logbook entry**:
+A comment an agent of a stage leaves on its task's pull request for the human
+who reads it: what it did and what it decided. Unlike the stage summary, it
+lives in the pull request and addresses a person, not the next agent.
+_Avoid_: stage summary, report
+
 **Split**:
 The division of a task into subtasks during its grill, each with its own
 definition and autonomy, while the parent keeps the overall definition.

@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { DEFINITION_HEADING, ORIGINAL_HEADING, spliceDefinition } from "./splice.ts";
+import { DEFINITION_HEADING, ORIGINAL_HEADING, definitionOf, spliceDefinition } from "./splice.ts";
 
 const FIRST = "## Definition\n\n### Problem\n\nLogin fails.\n";
 const SECOND = "## Definition\n\n### Problem\n\nLogin fails on Safari.\n\n### Non-goals\n\nSSO.\n";
@@ -150,4 +150,22 @@ describe("spliceDefinition", () => {
             spliceDefinition(original, SECOND),
         );
     });
+});
+
+describe("definitionOf", () => {
+    it("returns what sits above the separator, trimmed", () => {
+        expect(definitionOf(spliceDefinition("Fix the login", SECOND))).toBe(SECOND.trim());
+    });
+
+    it("returns a definition that has no original below it", () => {
+        expect(definitionOf(spliceDefinition(null, FIRST))).toBe(FIRST.trim());
+        expect(definitionOf(FIRST.trim())).toBe(FIRST.trim());
+    });
+
+    it.each([["Fix the login"], [""], [null], ["Intro\n\n### Problem\n\nx"]])(
+        "is null without a grill: %j",
+        (description) => {
+            expect(definitionOf(description)).toBeNull();
+        },
+    );
 });

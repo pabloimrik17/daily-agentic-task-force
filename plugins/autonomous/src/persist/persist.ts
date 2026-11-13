@@ -6,13 +6,11 @@
 import { readFile, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 
-import { type AttemptId, type AttemptRecord, holdsTask } from "../attempts/record.ts";
+import { readOpenAttempt } from "../attempts/open.ts";
+import type { AttemptId, AttemptRecord } from "../attempts/record.ts";
 import {
-    attemptDir,
     definitionPath,
-    readRecord,
     receiptPath,
-    recordPath,
     stageSummaryPath,
     writeJsonAtomic,
 } from "../attempts/state.ts";
@@ -97,15 +95,18 @@ export async function runPersist(
 
 // Spec autonomous-run, "Persist preconditions": nothing is written before every one holds.
 async function check(attempt: AttemptId, deps: PersistDeps): Promise<Checked> {
-    const dir = attemptDir(deps.state, attempt);
-    const found = await findRecord(attempt, dir);
+    const found = await readOpenAttempt(deps.state, attempt, deps.config);
     if (!found.ok) {
         return { ok: false, reasons: [found.error] };
     }
-    const { value: record } = found;
-    const refusal = refuse(record, deps.config);
-    if (refusal !== null) {
-        return { ok: false, reasons: [refusal] };
+    const { record, dir } = found.value;
+    if (record.stage !== GRILL_ME) {
+        return {
+            ok: false,
+            reasons: [
+                `attempt ${record.id} is a ${record.stage} attempt: persist mode takes only ${GRILL_ME} attempts`,
+            ],
+        };
     }
     const [definition, summary] = await Promise.all([
         readDocument(definitionPath(dir)),
@@ -119,31 +120,6 @@ async function check(attempt: AttemptId, deps: PersistDeps): Promise<Checked> {
         ok: true,
         value: { record, dir, definition: definition.value, summary: summary.value },
     };
-}
-
-async function findRecord(attempt: AttemptId, dir: string): Promise<Result<AttemptRecord>> {
-    try {
-        return { ok: true, value: await readRecord(recordPath(dir)) };
-    } catch (error) {
-        const missing = (error as { cause?: NodeJS.ErrnoException }).cause?.code === "ENOENT";
-        return {
-            ok: false,
-            error: missing
-                ? `unknown attempt ${attempt}: no record at ${recordPath(dir)}`
-                : messageOf(error),
-        };
-    }
-}
-
-function refuse(record: AttemptRecord, config: AutonomousConfig): string | null {
-    if (!holdsTask(record)) {
-        return `attempt ${record.id} is ${record.state}, not open`;
-    }
-    if (record.stage !== GRILL_ME) {
-        return `attempt ${record.id} is a ${record.stage} attempt: persist mode takes only ${GRILL_ME} attempts`;
-    }
-    const { source } = record.task;
-    return config.sources[source].enabled ? null : `${source} is not enabled`;
 }
 
 async function readDocument(file: string): Promise<Result<string>> {

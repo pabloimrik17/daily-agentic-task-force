@@ -2,11 +2,18 @@
 // design D11): the one way a person releases an attempt. The first failure
 // stops the discard, and the report says what was already done.
 
+import { existsSync } from "node:fs";
 import { writeFile } from "node:fs/promises";
+import { join } from "node:path";
 
 import type { RunArgs } from "../args.ts";
 import type { Trackers } from "../label-triage/trackers/tracker.ts";
+import { hasEntry } from "../logbook/marker.ts";
+import { renderDiscardEntry } from "../logbook/header.ts";
+import type { PullRequests, PullRequestsFactory } from "../pull-request/port.ts";
+import type { Result } from "../result.ts";
 import type { SessionManager } from "../sessions/manager.ts";
+import { stageFor } from "../stages/registry.ts";
 import type { WorkspaceManager } from "../workspace/manager.ts";
 import {
     type AttemptId,
@@ -20,6 +27,7 @@ import {
     attemptDir,
     capturePath,
     listRecords,
+    logbookReceiptPath,
     readRecord,
     recordPath,
     writeRecord,
@@ -33,6 +41,7 @@ export interface DiscardDeps {
     sessions: SessionManager;
     workspace: WorkspaceManager;
     trackers: Trackers;
+    pullRequests: PullRequestsFactory;
     now: () => Date;
 }
 
@@ -45,6 +54,7 @@ export interface DiscardReport {
     found: AttemptId[]; // attempt ids found when the task reference resolved to 0 or several
     removed: { session: boolean; taken: boolean; workspace: boolean };
     reasons: string[];
+    notes: string[]; // what did not go as hoped but left the discard as it was
     // `path` and `error` only when the configuration failed to load, leaving nothing
     // to discard; `defaulted` only when keys took a shipped default, as in the run report.
     config?: { path?: string; error?: string; defaulted?: string[] };
@@ -66,6 +76,7 @@ interface Discarding {
 type DiscardStep = (discarding: Discarding) => Promise<string | null>;
 
 const CAPTURE_LINES = 200;
+const DISCARD_ENTRY_FILE = "logbook-discard.md";
 
 const messageOf = (error: unknown) => (error instanceof Error ? error.message : String(error));
 
@@ -85,6 +96,7 @@ function blank(startedAt: Date): DiscardReport {
         found: [],
         removed: { session: false, taken: false, workspace: false },
         reasons: [],
+        notes: [],
     };
 }
 
@@ -108,7 +120,13 @@ export async function discardAttempt(
         releaseWorkspace: args.releaseWorkspace,
         conversation: null,
     };
-    const steps: DiscardStep[] = [removeSession, removeTakenLabel, markDiscarded, releaseWorktree];
+    const steps: DiscardStep[] = [
+        removeSession,
+        removeTakenLabel,
+        markDiscarded,
+        releaseWorktree,
+        publishDiscardEntry,
+    ];
     for (const step of steps) {
         const failure = await step(discarding);
         if (failure !== null) {
@@ -278,6 +296,63 @@ async function releaseWorktree({
     return null;
 }
 
+// Spec stage-logbook, "A discarded attempt leaves an entry"; design D9. The last step and a
+// failure-proof one: it always returns null, and what goes wrong becomes a note.
+async function publishDiscardEntry(discarding: Discarding): Promise<string | null> {
+    let outcome: Result<void>;
+    try {
+        outcome = await entryFor(discarding);
+    } catch (error) {
+        outcome = { ok: false, error: messageOf(error) };
+    }
+    if (!outcome.ok) {
+        discarding.report.notes.push(`discard entry not published: ${outcome.error}`);
+    }
+    return null;
+}
+
+async function entryFor({ record, deps }: Discarding): Promise<Result<void>> {
+    const done: Result<void> = { ok: true, value: undefined };
+    const dir = attemptDir(deps.state, record.id);
+    if (existsSync(logbookReceiptPath(dir))) {
+        return done; // the attempt already has its entry
+    }
+    // The repository, not the worktree, which --release-workspace may have removed.
+    const pullRequests = deps.pullRequests(record.workspace.repository);
+    const found = await pullRequests.find(record.workspace.branch);
+    if (!found.ok || found.value === null) {
+        return found.ok ? done : found;
+    }
+    const { number } = found.value;
+    const comments = await pullRequests.comments(number);
+    if (!comments.ok || hasEntry(comments.value, record.id)) {
+        return comments.ok ? done : comments;
+    }
+    return commentDiscard(pullRequests, number, discardingEntry(record, deps.now()), dir);
+}
+
+function discardingEntry(record: AttemptRecord, at: Date): string {
+    const entry = renderDiscardEntry({
+        attempt: record.id,
+        stage: record.stage,
+        emoji: stageFor(record.stage)?.emoji ?? "",
+        number: record.attempt,
+        at: at.toISOString(),
+    });
+    return `${entry}\n`;
+}
+
+async function commentDiscard(
+    pullRequests: PullRequests,
+    number: number,
+    entry: string,
+    dir: string,
+): Promise<Result<void>> {
+    const file = join(dir, DISCARD_ENTRY_FILE);
+    await writeFile(file, entry);
+    return pullRequests.comment(number, file);
+}
+
 export function renderDiscardJson(report: DiscardReport): string {
     return JSON.stringify(report, null, 2);
 }
@@ -297,5 +372,6 @@ export function renderDiscardText(report: DiscardReport): string {
         ...(report.found.length === 0 ? [] : ["found:", ...report.found.map((id) => `  ${id}`)]),
         "reasons:",
         ...report.reasons.map((reason) => `  ${reason}`),
+        ...(report.notes.length === 0 ? [] : ["notes:", ...report.notes.map((n) => `  ${n}`)]),
     ].join("\n");
 }

@@ -1,4 +1,4 @@
-import { rmSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
@@ -11,6 +11,7 @@ import {
     attemptDir,
     receiptPath,
     recordPath,
+    transitionedPath,
     writeJsonAtomic,
     writeRecord,
 } from "../attempts/state.ts";
@@ -33,6 +34,7 @@ import {
     transitionQuestionId,
     unconfiguredTransition,
 } from "./mode.ts";
+import { readTransitioned, TRANSITIONED_SCHEMA } from "./transitioned.ts";
 
 const STARTED = new Date("2026-11-01T09:00:00.000Z");
 
@@ -1206,5 +1208,224 @@ describe("transition receipt: The transition waits for the persistence receipt",
                 detail: missing(state),
             },
         ]);
+    });
+});
+
+describe("transition record: An applied transition leaves a record in the open attempt", () => {
+    const states: string[] = [];
+    const TASK = { source: "linear", id: "DOT-110", title: "Grill-me stage" } as const;
+    const ID = attemptId(TASK, "grill-me", 1);
+    const AT = new Date("2026-11-13T10:40:00.000Z");
+    const ANSWER = "transition:linear:DOT-110";
+
+    afterEach(() => {
+        for (const state of states.splice(0)) {
+            rmSync(state, { recursive: true, force: true });
+        }
+    });
+
+    // A state directory holding a started grill-me attempt whose definition is persisted.
+    async function grilling(overrides: Partial<AttemptRecord> = {}): Promise<string> {
+        const state = tempState();
+        states.push(state);
+        const started = startedAttempt({ id: ID, task: TASK, stage: "grill-me", ...overrides });
+        await writeRecord(state, started);
+        await writeJsonAtomic(receiptPath(attemptDir(state, started.id)), {
+            schema: "autonomous.persisted.v1",
+        });
+        return state;
+    }
+
+    async function answered(
+        state: string,
+        labels: string[],
+        value: string[] = ["HITL"],
+    ): Promise<AnswerRecord> {
+        const [only] = await transitionHandler(state, undefined, () => AT).answer(
+            [answer(ANSWER, ...value)],
+            context(linear([], labels)),
+        );
+        if (only === undefined) {
+            throw new Error("no record");
+        }
+        return only;
+    }
+
+    const recordIn = (state: string, id = ID) => readTransitioned(attemptDir(state, id));
+
+    it("Autonomy answered in a grill: the attempt's directory holds the answer and its time", async () => {
+        const state = await grilling();
+
+        const settled = await answered(state, ["work", "grill-me"]);
+
+        expect(settled).toEqual({
+            id: ANSWER,
+            labels: ["HITL"],
+            status: "applied",
+            detail: "added HITL, proposal, removed grill-me on linear DOT-110, read back",
+        });
+        expect(await recordIn(state)).toEqual({
+            ok: true,
+            value: { schema: TRANSITIONED_SCHEMA, answer: ["HITL"], at: AT.toISOString() },
+        });
+    });
+
+    it("takes the clock from the handler, the real one by default", async () => {
+        const state = await grilling();
+        const before = Date.now();
+
+        const [only] = await transitionHandler(state).answer(
+            [answer(ANSWER, "HITL")],
+            context(linear([], ["work", "grill-me"])),
+        );
+
+        const read = await recordIn(state);
+        expect(only?.status).toBe("applied");
+        expect(read.ok && read.value !== null && Date.parse(read.value.at)).toBeGreaterThanOrEqual(
+            before,
+        );
+    });
+
+    it("an open attempt of another stage holds it too", async () => {
+        const state = tempState();
+        states.push(state);
+        const proposal = attemptId(TASK, "proposal", 1);
+        await writeRecord(state, startedAttempt({ id: proposal, task: TASK, stage: "proposal" }));
+
+        const settled = await answered(state, ["work", "grill-me"]);
+
+        expect(settled.status).toBe("applied");
+        expect(await recordIn(state, proposal)).toMatchObject({
+            ok: true,
+            value: { answer: ["HITL"] },
+        });
+    });
+
+    it("several open attempts: the first of the sorted list gets it", async () => {
+        const state = await grilling();
+        const second = attemptId(TASK, "grill-me", 2);
+        await writeRecord(
+            state,
+            startedAttempt({ id: second, task: TASK, stage: "grill-me", attempt: 2 }),
+        );
+        await writeJsonAtomic(receiptPath(attemptDir(state, second)), {});
+
+        await answered(state, ["work", "grill-me"]);
+
+        expect(existsSync(transitionedPath(attemptDir(state, ID)))).toBe(true);
+        expect(existsSync(transitionedPath(attemptDir(state, second)))).toBe(false);
+    });
+
+    it("Manual transition: a task with no open attempt leaves no file and the answer is applied", async () => {
+        const state = await grilling({ state: "discarded" });
+
+        const settled = await answered(state, ["work", "grill-me"]);
+
+        expect(settled).toMatchObject({
+            status: "applied",
+            detail: "added HITL, proposal, removed grill-me on linear DOT-110, read back",
+        });
+        expect(existsSync(transitionedPath(attemptDir(state, ID)))).toBe(false);
+    });
+
+    it("an attempt of another task is not the task's open attempt", async () => {
+        const other = { source: "linear", id: "DOT-999", title: "Another" } as const;
+        const state = tempState();
+        states.push(state);
+        const otherId = attemptId(other, "grill-me", 1);
+        await writeRecord(state, startedAttempt({ id: otherId, task: other, stage: "grill-me" }));
+
+        await answered(state, ["work", "grill-me"]);
+
+        expect(existsSync(transitionedPath(attemptDir(state, otherId)))).toBe(false);
+    });
+
+    // Later is the option whose value is null: the command drops it and sends no answer (commands/run.md),
+    // so the handler never sees one. The closest real path is "Later" reaching it as a value, which
+    // is rejected before any label or file is written.
+    it("Later: an answer of Later is rejected and no record is written", async () => {
+        const state = await grilling();
+
+        const settled = await answered(state, ["work", "grill-me"], ["Later"]);
+
+        expect(settled.status).toBe("rejected");
+        expect(existsSync(transitionedPath(attemptDir(state, ID)))).toBe(false);
+    });
+
+    it("a transition that is skipped or failed writes no record", async () => {
+        const state = await grilling();
+
+        const skipped = await answered(state, ["personal", "AFK", "proposal"]);
+        const failed = await transitionHandler(state, undefined, () => AT).answer(
+            [answer(ANSWER, "HITL")],
+            context(failingRemoval(linear([], ["work", "grill-me"]), "linear", "grill-me", "boom")),
+        );
+
+        expect(skipped.status).toBe("skipped");
+        expect(failed[0]?.status).toBe("failed");
+        expect(existsSync(transitionedPath(attemptDir(state, ID)))).toBe(false);
+    });
+
+    it("a failure to write is added to the detail and the status stays applied", async () => {
+        const state = await grilling();
+        mkdirSync(transitionedPath(attemptDir(state, ID))); // a directory where the file goes
+
+        const settled = await answered(state, ["work", "grill-me"]);
+
+        expect(settled.status).toBe("applied");
+        expect(settled.detail).toMatch(
+            /^added HITL, proposal, removed grill-me on linear DOT-110, read back; .+/,
+        );
+    });
+});
+
+describe("transition record: readTransitioned", () => {
+    let dir: string;
+
+    afterEach(() => {
+        rmSync(dir, { recursive: true, force: true });
+    });
+
+    const given = (text?: string) => {
+        dir = tempState();
+        if (text !== undefined) {
+            writeFileSync(transitionedPath(dir), text);
+        }
+        return readTransitioned(dir);
+    };
+
+    it("is null when the file is absent", async () => {
+        expect(await given()).toEqual({ ok: true, value: null });
+    });
+
+    it.each<[string, string, string]>([
+        ["not JSON", "{ nope", "is not valid JSON"],
+        ["another schema", JSON.stringify({ schema: "v2", answer: [], at: "x" }), "$.schema"],
+        [
+            "an unknown key",
+            JSON.stringify({ schema: TRANSITIONED_SCHEMA, answer: [], at: "x", extra: 1 }),
+            "$.extra",
+        ],
+        [
+            "a non-string answer",
+            JSON.stringify({ schema: TRANSITIONED_SCHEMA, answer: [1], at: "x" }),
+            "$.answer[0] must be a string",
+        ],
+        ["no time", JSON.stringify({ schema: TRANSITIONED_SCHEMA, answer: [] }), "$.at"],
+    ])("is an error naming the file for %s", async (_name, text, reason) => {
+        const read = await given(text);
+
+        expect(read.ok).toBe(false);
+        expect(!read.ok && read.error).toContain(transitionedPath(dir));
+        expect(!read.ok && read.error).toContain(reason);
+    });
+
+    it("is an error naming the file when it cannot be read", async () => {
+        dir = tempState();
+        mkdirSync(transitionedPath(dir));
+
+        const read = await readTransitioned(dir);
+
+        expect(!read.ok && read.error).toContain(`cannot read ${transitionedPath(dir)}`);
     });
 });

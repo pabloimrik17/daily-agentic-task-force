@@ -47,6 +47,7 @@ export function record(overrides: Partial<AttemptRecord> = {}): AttemptRecord {
         observed: null,
         cleanup: null,
         retained: null,
+        agentArgs: null,
         ...overrides,
     };
 }

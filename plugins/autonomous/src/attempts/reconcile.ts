@@ -2,7 +2,8 @@
 // sessions are untouched"; design D8). Without `--apply` it writes nothing. It
 // acts only on session ids recorded in an attempt, and never waits.
 
-import { writeFile } from "node:fs/promises";
+import { access, writeFile } from "node:fs/promises";
+import { basename } from "node:path";
 
 import { plural } from "../label-triage/render.ts";
 import type { TrackerTask, Trackers } from "../label-triage/trackers/tracker.ts";
@@ -14,7 +15,14 @@ import type { StageId } from "../stages/stage.ts";
 import type { AttemptId, AttemptRecord, AttemptSession, AttemptState } from "./record.ts";
 import { renderReconcile } from "./reconcile-render.ts";
 import { readMarker } from "./result.ts";
-import { attemptDir, capturePath, listRecords, resultPath, writeRecord } from "./state.ts";
+import {
+    attemptDir,
+    capturePath,
+    listRecords,
+    logbookReceiptPath,
+    resultPath,
+    writeRecord,
+} from "./state.ts";
 import { removeTaken } from "./taken.ts";
 
 const RECONCILE = "reconcile";
@@ -399,6 +407,18 @@ async function saveCapture(
     return [];
 }
 
+// Spec stage-sessions, "A completed attempt without a logbook entry is noted"
+// (design D8): only a note; it never changes the action, the state or the outcome.
+async function missingLogbook(r: Reconciler, record: AttemptRecord): Promise<string[]> {
+    const receipt = logbookReceiptPath(attemptDir(r.state, record.id));
+    try {
+        await access(receipt);
+        return [];
+    } catch {
+        return [`attempt ${record.id} left no logbook entry (no ${basename(receipt)})`];
+    }
+}
+
 function joined(notes: string[]): string | null {
     return notes.length > 0 ? notes.join("; ") : null;
 }
@@ -421,7 +441,10 @@ async function retain(r: Reconciler, target: Target, failure: string | null): Pr
 // cleanup pending for every later run to retry (reconcileCleanup).
 async function finalise(r: Reconciler, target: Target): Promise<Reconciled> {
     const { record, id, observed, parts } = target;
-    const notes = await saveCapture(r, target.current, target);
+    const notes = [
+        ...(await saveCapture(r, target.current, target)),
+        ...(await missingLogbook(r, record)),
+    ];
     const current = await saveConversation(r, target.current, observed);
     const removed = await removeUnlessGone(r, id, observed);
     if (!removed.ok) {

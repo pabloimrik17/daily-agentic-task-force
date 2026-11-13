@@ -6,6 +6,12 @@ import type { AutonomousConfig, Scope, Source } from "../config.ts";
 import type { AutonomyLabel } from "../label-contract/contract.ts";
 import type { TrackerResult, TrackerTask } from "../label-triage/trackers/tracker.ts";
 
+// A task as a link: its id, and its URL when the tracker has one (Beads has none).
+export interface TaskLink {
+    id: string;
+    url: string | null;
+}
+
 export interface WorkTask extends TrackerTask {
     priority: string | null; // the tracker's own priority label; null when it has none (GitHub)
     blocks: string[]; // ids this task blocks while it is open
@@ -13,6 +19,8 @@ export interface WorkTask extends TrackerTask {
     children: string[] | null; // open children; null until detail reads them (GitHub, Linear)
     project: string | null; // Linear project name, read by detail; null elsewhere, when absent and before detail
     repository: string | null; // GitHub "owner/name", from the id; null elsewhere
+    url?: string | null; // filled by detail; null when the tracker has none (Beads)
+    parent?: TaskLink | null; // filled by detail; null when the task is not a subtask
 }
 
 export interface WorkReader {

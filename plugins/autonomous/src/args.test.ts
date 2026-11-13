@@ -16,6 +16,9 @@ const DEFAULTS: RunArgs = {
     answers: [],
     transition: undefined,
     persist: undefined,
+    pullRequest: undefined,
+    title: undefined,
+    log: undefined,
 };
 
 function accepted(overrides: Partial<RunArgs>) {
@@ -141,6 +144,24 @@ describe("parseArgs", () => {
                 json: true,
                 transition: { source: "github", id: "owner/repo#12" },
             }),
+        );
+    });
+
+    it("reads --apply --pull-request with and without --title and --json", () => {
+        const id = "linear:DOT-121:grill-me:1";
+        expect(parseArgs(["--apply", "--pull-request", id])).toEqual(
+            accepted({ apply: true, pullRequest: id }),
+        );
+        expect(parseArgs(["--title", "Fix it", "--json", "--pull-request", id, "--apply"])).toEqual(
+            accepted({ apply: true, json: true, pullRequest: id, title: "Fix it" }),
+        );
+    });
+
+    it("reads --apply --log with and without --json", () => {
+        const id = "linear:DOT-121:grill-me:1";
+        expect(parseArgs(["--apply", "--log", id])).toEqual(accepted({ apply: true, log: id }));
+        expect(parseArgs(["--log", id, "--json", "--apply"])).toEqual(
+            accepted({ apply: true, json: true, log: id }),
         );
     });
 
@@ -417,7 +438,7 @@ describe("parseArgs", () => {
         ],
         [
             ["--apply", "--persist", "linear:DOT-121:grill-me:1", "--transition", "linear:DOT-121"],
-            "--persist can only be combined with --apply and --json",
+            "--transition can only be combined with --apply and --json",
         ],
         [
             ["--apply", "--persist", "linear:DOT-121:grill-me:1", "--answer", "a:b=HITL"],
@@ -434,6 +455,95 @@ describe("parseArgs", () => {
         [
             ["--apply", "--persist", "linear:DOT-121:grill-me:1", "--release-workspace"],
             "--persist can only be combined with --apply and --json",
+        ],
+        [
+            ["--apply", "--pull-request", "linear:DOT-121"],
+            "--pull-request linear:DOT-121 must be an attempt id <source>:<task>:<stage>:<n>",
+        ],
+        [
+            ["--apply", "--log", "linear:DOT-121:review:1"],
+            "--log linear:DOT-121:review:1 must be an attempt id <source>:<task>:<stage>:<n>",
+        ],
+        [
+            [
+                "--apply",
+                "--pull-request",
+                "linear:DOT-121:grill-me:1",
+                "--pull-request",
+                "linear:DOT-121:grill-me:1",
+            ],
+            "--pull-request given more than once",
+        ],
+        [["--pull-request", "linear:DOT-121:grill-me:1"], "--pull-request requires --apply"],
+        [["--log", "linear:DOT-121:grill-me:1"], "--log requires --apply"],
+        [["--apply", "--title", "Fix it"], "--title requires --pull-request"],
+        [
+            ["--apply", "--pull-request", "linear:DOT-121:grill-me:1", "--title", "  "],
+            "--title requires a title",
+        ],
+        [
+            ["--apply", "--pull-request", "linear:DOT-121:grill-me:1", "--title", "--json"],
+            "--title requires a title",
+        ],
+        [
+            [
+                "--apply",
+                "--pull-request",
+                "linear:DOT-121:grill-me:1",
+                "--title",
+                "a",
+                "--title",
+                "b",
+            ],
+            "--title given more than once",
+        ],
+        [
+            [
+                "--apply",
+                "--pull-request",
+                "linear:DOT-121:grill-me:1",
+                "--persist",
+                "linear:DOT-121:grill-me:1",
+            ],
+            "--persist can only be combined with --apply and --json",
+        ],
+        [
+            [
+                "--apply",
+                "--pull-request",
+                "linear:DOT-121:grill-me:1",
+                "--transition",
+                "linear:DOT-121",
+            ],
+            "--transition can only be combined with --apply and --json",
+        ],
+        [
+            ["--apply", "--pull-request", "linear:DOT-121:grill-me:1", "--discard", "beads:X-1"],
+            "--pull-request can only be combined with --apply, --title and --json",
+        ],
+        [
+            [
+                "--apply",
+                "--log",
+                "linear:DOT-121:grill-me:1",
+                "--pull-request",
+                "linear:DOT-121:grill-me:1",
+            ],
+            "--pull-request can only be combined with --apply, --title and --json",
+        ],
+        [
+            [
+                "--apply",
+                "--log",
+                "linear:DOT-121:grill-me:1",
+                "--persist",
+                "linear:DOT-121:grill-me:1",
+            ],
+            "--persist can only be combined with --apply and --json",
+        ],
+        [
+            ["--apply", "--log", "linear:DOT-121:grill-me:1", "--title", "x"],
+            "--title requires --pull-request",
         ],
         [["--release-workspace"], "--release-workspace requires --discard"],
         [["--apply", "--release-workspace"], "--release-workspace requires --discard"],

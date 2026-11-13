@@ -56,9 +56,11 @@ export function beadsWorkReader(exec: Exec, config: BeadsConfig): WorkReader {
             if (!blocked.ok) return blocked;
             const tasks: WorkTask[] = listed.value
                 .filter(({ task }) => task.status === "open" || task.status === "in_progress")
-                .map(({ task, priority }) => ({
+                .map(({ task, priority, parent }) => ({
                     ...task,
                     priority,
+                    url: null, // Beads has no URL: the id stands in
+                    parent: parent === undefined ? null : { id: parent, url: null },
                     project: null,
                     repository: null,
                     blockedBy: blocked.value.get(task.id) ?? [],
@@ -80,8 +82,12 @@ export function beadsWorkReader(exec: Exec, config: BeadsConfig): WorkReader {
                 }));
             return { ok: true, value: tasks };
         },
+        // The listing already holds everything detail fills elsewhere, the parent included.
         detail(task) {
-            return Promise.resolve({ ok: true, value: task });
+            return Promise.resolve({
+                ok: true,
+                value: { ...task, url: task.url ?? null, parent: task.parent ?? null },
+            });
         },
     };
 }

@@ -13,7 +13,14 @@ import { afterAll, describe, expect, it } from "vitest";
 
 import type { Answer } from "./args.ts";
 import { fakeSessions, fakeWorkspace, record, tempState } from "./attempts/test-fixtures.ts";
-import { attemptDir, receiptPath, recordPath, writeRecord } from "./attempts/state.ts";
+import {
+    attemptDir,
+    logbookEntryPath,
+    logbookReceiptPath,
+    receiptPath,
+    recordPath,
+    writeRecord,
+} from "./attempts/state.ts";
 import { type AutonomousConfig, CONFIG_SCHEMA, EXAMPLE_PATH } from "./config.ts";
 import { COLOURS, LABELS } from "./label-contract/contract.ts";
 import {
@@ -36,6 +43,7 @@ import {
     startAttempt,
     trackersWith,
 } from "./persist/test-fixtures.ts";
+import type { PullRequests } from "./pull-request/port.ts";
 import { fakeExec, limits, NOW, provider, session, weekly } from "./quota-gate/test-fixtures.ts";
 import { main, type MainDeps } from "./run.ts";
 import type {
@@ -119,6 +127,9 @@ function deps(steps: readonly Step[] | undefined, overrides: Partial<MainDeps> =
             throw new Error("unused");
         },
         naming: () => Promise.resolve({ ok: false, error: "unused" }),
+        pullRequests: () => {
+            throw new Error("unused");
+        },
         stdout: (t) => out.push(t),
         stderr: (t) => err.push(t),
         ...(steps === undefined ? {} : { steps }),
@@ -1459,6 +1470,204 @@ function named(id: string, outcome: StepOutcome, log: string[], data: unknown = 
 
 const FIVE = ["reconcile", "quota-gate", "label-triage", "select", "launch"];
 
+// A port with no pull request yet, one commit ahead of `main`, that logs each call.
+function fakePullRequests(log: string[]): PullRequests {
+    const ok = <T>(name: string, value: T) => {
+        log.push(name);
+        return Promise.resolve({ ok: true as const, value });
+    };
+    return {
+        defaultBranch: () => ok("defaultBranch", "main"),
+        find: () => ok("find", null),
+        ahead: () => ok("ahead", 1),
+        commitsSince: () => ok("commitsSince", []),
+        emptyCommit: () => ok("emptyCommit", undefined),
+        push: () => ok("push", undefined),
+        open: ({ title }) => ok("open", { number: 7, url: "https://github.com/o/r/pull/7", title }),
+        edit: () => ok("edit", undefined),
+        comment: () => ok("comment", undefined),
+        comments: () => ok("comments", []),
+    };
+}
+
+describe("main --pull-request", () => {
+    const dir = mkdtempSync(join(tmpdir(), "autonomous-pull-request-"));
+    const configPath = join(dir, "config.json");
+    writeFileSync(configPath, JSON.stringify(config()));
+    afterAll(() => rmSync(dir, { recursive: true, force: true }));
+
+    const ATTEMPT = "linear:DOT-121:grill-me:1";
+    const TITLE = "feat(autonomous): read GitHub blockers";
+
+    async function pullRequestDeps(options: AttemptOptions = {}, env: Record<string, string> = {}) {
+        const stateDir = state();
+        await startAttempt(stateDir, options);
+        const log: string[] = [];
+        const reader = fakeReader("linear", [workTask("linear", "DOT-121")], log);
+        const result = deps([], {
+            env: { AUTONOMOUS_CONFIG: configPath, AUTONOMOUS_STATE: stateDir, ...env },
+            work: () => [reader],
+            pullRequests: (directory) => {
+                log.push(`port:${directory}`);
+                return fakePullRequests(log);
+            },
+        });
+        return { ...result, log };
+    }
+
+    it("Pull request opened: runs no step, opens the draft and exits 0", async () => {
+        const { d, out, log } = await pullRequestDeps();
+        expect(
+            await main(["--apply", "--pull-request", ATTEMPT, "--title", TITLE, "--json"], d),
+        ).toBe(0);
+        expect(out).toHaveLength(1);
+        const report = JSON.parse(out[0] as string) as {
+            schema: string;
+            pullRequest: { url: string; title: string; action: string } | null;
+        };
+        expect(report.schema).toBe("autonomous.pull-request.v1");
+        expect(report.pullRequest).toMatchObject({
+            url: "https://github.com/o/r/pull/7",
+            title: `${TITLE} (DOT-121)`,
+            action: "opened",
+        });
+        expect(log).toContain("push");
+        expect(log).toContain("open");
+    });
+
+    it("Pull-request mode without apply: usage error, exit 1", async () => {
+        const { d, out, err, log } = await pullRequestDeps();
+        expect(await main(["--pull-request", ATTEMPT], d)).toBe(1);
+        expect(out).toEqual([]);
+        expect(err.join("\n")).toContain("--pull-request requires --apply");
+        expect(log).toEqual([]);
+    });
+
+    it("Title without the mode: usage error, exit 1", async () => {
+        const { d, err } = await pullRequestDeps();
+        expect(await main(["--apply", "--title", "feat: x"], d)).toBe(1);
+        expect(err.join("\n")).toContain("--title requires --pull-request");
+    });
+
+    it("Completed attempt: nothing is pushed or opened, exit 3", async () => {
+        const { d, log } = await pullRequestDeps({ status: "completed" });
+        expect(await main(["--apply", "--pull-request", ATTEMPT, "--title", TITLE], d)).toBe(3);
+        expect(log.filter((call) => call.startsWith("port:"))).toEqual([]);
+    });
+
+    it("prints a configuration that cannot be loaded as one autonomous.pull-request.v1 document", async () => {
+        const { d, out, err } = await pullRequestDeps(
+            {},
+            { AUTONOMOUS_CONFIG: join(dir, "absent.json") },
+        );
+        expect(await main(["--apply", "--pull-request", ATTEMPT, "--json"], d)).toBe(3);
+        expect(err.join("\n")).toContain("configuration file not found");
+        expect(out).toHaveLength(1);
+        expect(JSON.parse(out[0] as string)).toMatchObject({
+            schema: "autonomous.pull-request.v1",
+            outcome: "not-evaluable",
+            pullRequest: null,
+        });
+    });
+});
+
+describe("main --log", () => {
+    const dir = mkdtempSync(join(tmpdir(), "autonomous-log-"));
+    const configPath = join(dir, "config.json");
+    writeFileSync(configPath, JSON.stringify(config()));
+    afterAll(() => rmSync(dir, { recursive: true, force: true }));
+
+    const ATTEMPT = "linear:DOT-121:grill-me:1";
+    const BODY = [
+        "### What I did",
+        "Grilled the task.",
+        "### Decisions",
+        "none",
+        "### Assumptions",
+        "none",
+        "### Next stage",
+        "See the stage summary.",
+    ].join("\n\n");
+
+    // An open pull request whose comments are what the mode posted.
+    function openPullRequest(log: string[]): PullRequests {
+        const posted: string[] = [];
+        return {
+            ...fakePullRequests(log),
+            find: () => {
+                log.push("find");
+                return Promise.resolve({
+                    ok: true,
+                    value: { number: 7, url: "https://github.com/o/r/pull/7", title: "t" },
+                });
+            },
+            comment: (_number, file) => {
+                log.push("comment");
+                posted.push(readFileSync(file, "utf8"));
+                return Promise.resolve({ ok: true, value: undefined });
+            },
+            comments: () => Promise.resolve({ ok: true, value: [...posted] }),
+        };
+    }
+
+    async function logDeps(body: string | null, env: Record<string, string> = {}) {
+        const stateDir = state();
+        const { dir: attempt } = await startAttempt(stateDir);
+        if (body !== null) {
+            writeFileSync(logbookEntryPath(attempt), body);
+        }
+        const log: string[] = [];
+        const result = deps([], {
+            env: { AUTONOMOUS_CONFIG: configPath, AUTONOMOUS_STATE: stateDir, ...env },
+            trackers: () => trackersWith(fakeDocuments("linear")),
+            pullRequests: () => openPullRequest(log),
+        });
+        return { ...result, log, attempt };
+    }
+
+    it("Entry logged: runs no step, publishes, reads back, writes the receipt and exits 0", async () => {
+        const { d, out, log, attempt } = await logDeps(BODY);
+        expect(await main(["--apply", "--log", ATTEMPT, "--json"], d)).toBe(0);
+        expect(out).toHaveLength(1);
+        expect(JSON.parse(out[0] as string)).toMatchObject({
+            schema: "autonomous.log.v1",
+            outcome: "advance",
+            entry: "published",
+            receipt: logbookReceiptPath(attempt),
+        });
+        expect(log.filter((call) => call === "comment")).toHaveLength(1);
+        expect(existsSync(logbookReceiptPath(attempt))).toBe(true);
+    });
+
+    it("Log mode without apply: usage error, exit 1", async () => {
+        const { d, out, err, log } = await logDeps(BODY);
+        expect(await main(["--log", ATTEMPT], d)).toBe(1);
+        expect(out).toEqual([]);
+        expect(err.join("\n")).toContain("--log requires --apply");
+        expect(log).toEqual([]);
+    });
+
+    it("Body file missing: nothing is published, the report names the file, exit 3", async () => {
+        const { d, out, log, attempt } = await logDeps(null);
+        expect(await main(["--apply", "--log", ATTEMPT, "--json"], d)).toBe(3);
+        const report = JSON.parse(out[0] as string) as { reasons: string[]; receipt: unknown };
+        expect(report.reasons.join("\n")).toContain(logbookEntryPath(attempt));
+        expect(report.receipt).toBeNull();
+        expect(log).not.toContain("comment");
+    });
+
+    it("prints a configuration that cannot be loaded as one autonomous.log.v1 document", async () => {
+        const { d, out } = await logDeps(BODY, { AUTONOMOUS_CONFIG: join(dir, "absent.json") });
+        expect(await main(["--apply", "--log", ATTEMPT, "--json"], d)).toBe(3);
+        expect(out).toHaveLength(1);
+        expect(JSON.parse(out[0] as string)).toMatchObject({
+            schema: "autonomous.log.v1",
+            outcome: "not-evaluable",
+            receipt: null,
+        });
+    });
+});
+
 describe("main stage-session wiring", () => {
     it("runs reconcile before the quota gate and keeps its result when the gate waits", async () => {
         const log: string[] = [];
@@ -1657,6 +1866,7 @@ describe("main --discard", () => {
             found: [],
             removed: { session: false, taken: false, workspace: false },
             reasons: [error],
+            notes: [],
         });
     });
 

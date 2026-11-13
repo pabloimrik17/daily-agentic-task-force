@@ -15,6 +15,7 @@ import { fakeReader, selectContext, workTask } from "../select/test-fixtures.ts"
 import type { SelectData, SelectedUnit, WorkTask } from "../select/types.ts";
 import type { SessionManager, SessionSpec } from "../sessions/manager.ts";
 import type { StagePrerequisites } from "../stages/stage.ts";
+import { grillMeStage } from "../stages/grill-me/stage.ts";
 import { testStage } from "../stages/test.ts";
 import type { WorkspaceManager } from "../workspace/manager.ts";
 import { launchStep } from "./launch.ts";
@@ -725,6 +726,47 @@ describe("launch: session title and group", () => {
 
         expect((await launchStep.run(ctx)).data.group).toBe(group);
         expect((await readAttempt()).session?.group).toBe(group);
+    });
+});
+
+describe("launch: The attempt keeps its agent arguments", () => {
+    afterEach(() => {
+        vi.restoreAllMocks();
+    });
+
+    it("Grill-me attempt launched: the record holds --model opus --effort high from the first write", async () => {
+        vi.spyOn(grillMeStage, "prerequisites").mockResolvedValue({ ok: true, context: {} });
+        vi.spyOn(grillMeStage, "prompt").mockReturnValue("THE PROMPT");
+        const grill = "linear:DOT-109:grill-me:1";
+        const written: (string[] | null)[] = [];
+        const { ctx } = setup({
+            args: { stage: "grill-me" },
+            sessions: {
+                // the pending and taken writes are on disk before the session is created
+                create: async () => {
+                    written.push((await readAttempt(grill)).agentArgs);
+                    return { ok: true, value: { id: SESSION } };
+                },
+            },
+        });
+
+        await launchStep.run(ctx);
+
+        expect(written).toEqual([["--model", "opus", "--effort", "high"]]);
+        expect((await readAttempt(grill)).agentArgs).toEqual([
+            "--model",
+            "opus",
+            "--effort",
+            "high",
+        ]);
+    });
+
+    it("holds what the stage declares for the configured tool", async () => {
+        const { ctx } = setup();
+
+        await launchStep.run(ctx);
+
+        expect((await readAttempt()).agentArgs).toEqual(testStage.agentArgs("claude"));
     });
 });
 

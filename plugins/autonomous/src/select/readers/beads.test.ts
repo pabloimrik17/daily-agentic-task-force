@@ -49,13 +49,36 @@ describe("beadsWorkReader", () => {
         const result = await reader().work.list();
         expect(result.ok && result.value[0]?.children).toEqual(["demo-c", "demo-d"]);
     });
-    it("ignores a closed child and returns details unchanged", async () => {
-        const { work } = reader();
-        const result = await work.list();
-        if (!result.ok) throw new Error(result.error);
-        const task = result.value[1]!;
-        expect(task.children).toEqual([]);
+    it("ignores a closed child", async () => {
+        const result = await reader().work.list();
+        expect(result.ok && result.value[1]?.children).toEqual([]);
+    });
+    it("reads the parent id from the listing and has no url", async () => {
+        const subtask = listing.map((entry) =>
+            entry.id === "demo-b" ? { ...entry, parent: "demo-a" } : entry,
+        );
+        const exec = vi
+            .fn<Exec>()
+            .mockResolvedValueOnce({ ok: true, stdout: JSON.stringify(subtask) })
+            .mockResolvedValueOnce({ ok: true, stdout: JSON.stringify(blocked) });
+        const work = beadsWorkReader(exec, config);
+        const listed = await work.list();
+        if (!listed.ok) throw new Error(listed.error);
+        const task = listed.value[1]!;
+        expect([task.url, task.parent]).toEqual([null, { id: "demo-a", url: null }]);
         expect(await work.detail(task)).toEqual({ ok: true, value: task });
+        expect(exec).toHaveBeenCalledTimes(2); // detail runs no command
+    });
+    it("sets a null url and a null parent for a task without a parent", async () => {
+        const { exec, work } = reader();
+        const listed = await work.list();
+        if (!listed.ok) throw new Error(listed.error);
+        const task = listed.value[0]!;
+        expect(await work.detail(task)).toEqual({
+            ok: true,
+            value: { ...task, url: null, parent: null },
+        });
+        expect(exec).toHaveBeenCalledTimes(2);
     });
     it("names bd blocked when that command fails", async () => {
         const exec = vi

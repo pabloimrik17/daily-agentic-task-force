@@ -24,6 +24,9 @@ export interface RunArgs {
     answers: Answer[];
     transition: { source: Source; id: string } | undefined;
     persist: AttemptId | undefined;
+    pullRequest: AttemptId | undefined;
+    title: string | undefined; // only with --pull-request
+    log: AttemptId | undefined;
 }
 
 export type ParseArgsResult = { ok: true; args: RunArgs } | { ok: false; error: string };
@@ -36,6 +39,8 @@ export const USAGE = [
     "       /autonomous:run --apply --discard <attempt-id|source:id> [--release-workspace] [--json]",
     "       /autonomous:run --apply --transition <source>:<task> [--json]",
     "       /autonomous:run --apply --persist <attempt-id> [--json]",
+    "       /autonomous:run --apply --pull-request <attempt-id> [--title <title>] [--json]",
+    "       /autonomous:run --apply --log <attempt-id> [--json]",
 ].join("\n");
 
 const ANSWER_SHAPE = "--answer requires <id>=<value>[,<value>]";
@@ -60,6 +65,9 @@ const VALUED = new Map<string, (args: RunArgs, value: string | undefined) => str
     ["--discard", readDiscard],
     ["--transition", readTransition],
     ["--persist", readPersist],
+    ["--pull-request", readPullRequest],
+    ["--title", readTitle],
+    ["--log", readLog],
 ]);
 
 export function parseArgs(argv: readonly string[]): ParseArgsResult {
@@ -77,6 +85,9 @@ export function parseArgs(argv: readonly string[]): ParseArgsResult {
         answers: [],
         transition: undefined,
         persist: undefined,
+        pullRequest: undefined,
+        title: undefined,
+        log: undefined,
     };
     for (let i = 0; i < argv.length; i++) {
         const arg = argv[i] ?? "";
@@ -139,17 +150,58 @@ function readTransition(args: RunArgs, value: string | undefined): string | null
 }
 
 function readPersist(args: RunArgs, value: string | undefined): string | null {
-    if (value === undefined || value.startsWith("--")) {
-        return `--persist requires an attempt id ${ATTEMPT_ID_SHAPE}`;
+    const read = readAttemptFlag("--persist", args.persist, value);
+    if (!read.ok) {
+        return read.error;
     }
-    if (args.persist !== undefined) {
-        return "--persist given more than once";
+    args.persist = read.id;
+    return null;
+}
+
+function readPullRequest(args: RunArgs, value: string | undefined): string | null {
+    const read = readAttemptFlag("--pull-request", args.pullRequest, value);
+    if (!read.ok) {
+        return read.error;
+    }
+    args.pullRequest = read.id;
+    return null;
+}
+
+function readLog(args: RunArgs, value: string | undefined): string | null {
+    const read = readAttemptFlag("--log", args.log, value);
+    if (!read.ok) {
+        return read.error;
+    }
+    args.log = read.id;
+    return null;
+}
+
+function readAttemptFlag(
+    flag: string,
+    current: AttemptId | undefined,
+    value: string | undefined,
+): { ok: true; id: AttemptId } | { ok: false; error: string } {
+    if (value === undefined || value.startsWith("--")) {
+        return { ok: false, error: `${flag} requires an attempt id ${ATTEMPT_ID_SHAPE}` };
+    }
+    if (current !== undefined) {
+        return { ok: false, error: `${flag} given more than once` };
     }
     const parsed = parseAttemptId(value);
     if (parsed === null) {
-        return `--persist ${value} must be an attempt id ${ATTEMPT_ID_SHAPE}`;
+        return { ok: false, error: `${flag} ${value} must be an attempt id ${ATTEMPT_ID_SHAPE}` };
     }
-    args.persist = parsed.id;
+    return { ok: true, id: parsed.id };
+}
+
+function readTitle(args: RunArgs, value: string | undefined): string | null {
+    if (value === undefined || value.trim() === "" || value.startsWith("--")) {
+        return "--title requires a title";
+    }
+    if (args.title !== undefined) {
+        return "--title given more than once";
+    }
+    args.title = value;
     return null;
 }
 
@@ -204,6 +256,8 @@ function readDiscard(args: RunArgs, value: string | undefined): string | null {
 const answering = (args: RunArgs) => args.answers.length > 0;
 const transitioning = (args: RunArgs) => args.transition !== undefined;
 const persisting = (args: RunArgs) => args.persist !== undefined;
+const pullRequesting = (args: RunArgs) => args.pullRequest !== undefined;
+const logging = (args: RunArgs) => args.log !== undefined;
 const accountOrForce = (args: RunArgs) => args.account !== undefined || args.force;
 
 // Every flag other than --apply and --json, for the modes that accept only those.
@@ -218,6 +272,12 @@ const otherFlags = (args: RunArgs) =>
         args.discard !== undefined,
         args.releaseWorkspace,
     ].some(Boolean);
+
+// Another mode flag besides the one a rule is about: the modes are mutually exclusive.
+const otherModes = (args: RunArgs, ...modes: ((args: RunArgs) => boolean)[]) =>
+    [transitioning, persisting, pullRequesting, logging]
+        .filter((mode) => !modes.includes(mode))
+        .some((mode) => mode(args));
 
 // Flag combinations that are usage errors, checked in order.
 const COMBINATIONS: readonly (readonly [(args: RunArgs) => boolean, string])[] = [
@@ -254,13 +314,29 @@ const COMBINATIONS: readonly (readonly [(args: RunArgs) => boolean, string])[] =
     ],
     [(args) => transitioning(args) && !args.apply, "--transition requires --apply"],
     [
-        (args) => transitioning(args) && otherFlags(args),
+        (args) => transitioning(args) && (otherFlags(args) || otherModes(args, transitioning)),
         "--transition can only be combined with --apply and --json",
     ],
     [(args) => persisting(args) && !args.apply, "--persist requires --apply"],
     [
-        (args) => persisting(args) && (otherFlags(args) || transitioning(args)),
+        (args) => persisting(args) && (otherFlags(args) || otherModes(args, persisting)),
         "--persist can only be combined with --apply and --json",
+    ],
+    [(args) => pullRequesting(args) && !args.apply, "--pull-request requires --apply"],
+    [
+        (args) => pullRequesting(args) && (otherFlags(args) || otherModes(args, pullRequesting)),
+        "--pull-request can only be combined with --apply, --title and --json",
+    ],
+    [
+        (args) => args.title !== undefined && !pullRequesting(args),
+        "--title requires --pull-request",
+    ],
+    [(args) => logging(args) && !args.apply, "--log requires --apply"],
+    [
+        (args) =>
+            logging(args) &&
+            (otherFlags(args) || args.title !== undefined || otherModes(args, logging)),
+        "--log can only be combined with --apply and --json",
     ],
     [
         (args) => args.releaseWorkspace && args.discard === undefined,

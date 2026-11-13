@@ -5,6 +5,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 
 import type { RunArgs } from "../args.ts";
 import { task, trackers } from "../label-triage/test-fixtures.ts";
+import type { PullRequest, PullRequests } from "../pull-request/port.ts";
 import type { Observed, SessionManager } from "../sessions/manager.ts";
 import type { WorkspaceManager } from "../workspace/manager.ts";
 import {
@@ -16,7 +17,14 @@ import {
     withDefaults,
 } from "./discard.ts";
 import type { AttemptId, AttemptRecord } from "./record.ts";
-import { attemptDir, capturePath, readRecord, recordPath, writeRecord } from "./state.ts";
+import {
+    attemptDir,
+    capturePath,
+    logbookReceiptPath,
+    readRecord,
+    recordPath,
+    writeRecord,
+} from "./state.ts";
 import { fakeSessions, fakeWorkspace, record, tempState } from "./test-fixtures.ts";
 
 const STARTED = new Date("2026-10-17T13:00:00.000Z");
@@ -33,6 +41,7 @@ const states: string[] = [];
 
 afterEach(() => {
     vi.useRealTimers();
+    published.length = 0;
     for (const state of states.splice(0)) {
         rmSync(state, { recursive: true, force: true });
     }
@@ -60,6 +69,9 @@ function args(discard: string, releaseWorkspace = false): RunArgs {
         discard,
         transition: undefined,
         persist: undefined,
+        pullRequest: undefined,
+        title: undefined,
+        log: undefined,
         releaseWorkspace,
         force: false,
         json: false,
@@ -75,7 +87,49 @@ interface Setup {
     sessions?: Partial<SessionManager>;
     workspace?: Partial<WorkspaceManager>;
     labels?: string[];
+    pullRequest?: Partial<PullRequests>;
 }
+
+const OPEN_PULL_REQUEST: PullRequest = {
+    number: 7,
+    url: "https://example.test/pull/7",
+    title: "t",
+};
+const MARKER = "<!-- autonomous:logbook linear:DOT-109:test:1 -->";
+
+// A port for a branch with no pull request. Its calls go to their own log, so the shared `calls`
+// of the other tests stay what they assert.
+function fakePullRequests(script: Partial<PullRequests>, calls: string[]): PullRequests {
+    const unexpected = (method: string) => () =>
+        Promise.resolve({ ok: false as const, error: `${method} was not expected` });
+    return {
+        defaultBranch: unexpected("defaultBranch"),
+        find: (branch) => {
+            calls.push(`find ${branch}`);
+            return script.find?.(branch) ?? Promise.resolve({ ok: true, value: null });
+        },
+        ahead: unexpected("ahead"),
+        commitsSince: unexpected("commitsSince"),
+        emptyCommit: unexpected("emptyCommit"),
+        push: unexpected("push"),
+        open: unexpected("open"),
+        edit: unexpected("edit"),
+        comment: (number, file) => {
+            calls.push(`comment ${number}`);
+            const body = readFileSync(file, "utf8");
+            published.push(body);
+            return (
+                script.comment?.(number, file) ?? Promise.resolve({ ok: true, value: undefined })
+            );
+        },
+        comments: (number) => {
+            calls.push(`comments ${number}`);
+            return script.comments?.(number) ?? Promise.resolve({ ok: true, value: [] });
+        },
+    };
+}
+
+const published: string[] = [];
 
 // Everything shares one `calls` log, so a test can assert the order of the whole discard.
 async function setup(options: Setup = {}) {
@@ -100,14 +154,20 @@ async function setup(options: Setup = {}) {
         ...options.workspace,
     });
     const tasks = [task("linear", "DOT-109", options.labels ?? ["AFK", "taken"])];
+    const pullRequestCalls: string[] = [];
+    const directories: string[] = [];
     const deps = {
         state,
         sessions,
         workspace,
         trackers: trackers(calls, { linear: tasks }),
+        pullRequests: (directory: string) => {
+            directories.push(directory);
+            return fakePullRequests(options.pullRequest ?? {}, pullRequestCalls);
+        },
         now: () => LATER,
     };
-    return { state, calls, deps, workspace };
+    return { state, calls, deps, workspace, pullRequestCalls, directories };
 }
 
 const read = (state: string, id: AttemptId = "linear:DOT-109:test:1") =>
@@ -417,6 +477,133 @@ describe("discardAttempt by attempt id", () => {
 
         expect(report.outcome).toBe("not-evaluable");
         expect(report.reasons).toEqual(["not an attempt or task reference: DOT-109"]);
+    });
+});
+
+describe("the discard entry", () => {
+    const retained = () => record({ state: "retained", retained: { at: "t", reason: "exited" } });
+    const withPullRequest: Partial<PullRequests> = {
+        find: () => Promise.resolve({ ok: true, value: OPEN_PULL_REQUEST }),
+    };
+
+    it("comments once on the open pull request of a retained attempt without a receipt", async () => {
+        const { deps, pullRequestCalls } = await setup({
+            records: [retained()],
+            pullRequest: withPullRequest,
+        });
+
+        const report = await discardAttempt(args("linear:DOT-109:test:1"), deps, STARTED);
+
+        expect(report.outcome).toBe("advance");
+        expect(report.notes).toEqual([]);
+        expect(pullRequestCalls).toEqual([
+            "find feature/DOT-109-stage-session-manager",
+            "comments 7",
+            "comment 7",
+        ]);
+        expect(published).toHaveLength(1);
+        expect(published[0]).toContain(MARKER);
+        expect(published[0]).toContain("🧪 test · attempt 1 · discarded");
+        expect(published[0]).toContain("Discarded at 2026-10-17 13:00 UTC.");
+    });
+
+    it("makes the port for the repository, not the worktree", async () => {
+        const { deps, directories } = await setup({ pullRequest: withPullRequest });
+
+        await discardAttempt(args("linear:DOT-109:test:1", true), deps, STARTED);
+
+        expect(directories).toEqual(["/w/dotfiles"]);
+    });
+
+    it("publishes nothing when the branch has no pull request, and the discard succeeds", async () => {
+        const { state, deps, pullRequestCalls } = await setup({ records: [retained()] });
+
+        const report = await discardAttempt(args("linear:DOT-109:test:1"), deps, STARTED);
+
+        expect(report.outcome).toBe("advance");
+        expect(report.notes).toEqual([]);
+        expect(pullRequestCalls).toEqual(["find feature/DOT-109-stage-session-manager"]);
+        expect(published).toEqual([]);
+        expect((await read(state)).state).toBe("discarded");
+    });
+
+    it("keeps the discard and notes the failed command when the comment fails", async () => {
+        const { state, deps } = await setup({
+            records: [retained()],
+            pullRequest: {
+                ...withPullRequest,
+                comment: () =>
+                    Promise.resolve({ ok: false, error: "gh pr comment 7 failed: HTTP 502" }),
+            },
+        });
+
+        const report = await discardAttempt(args("linear:DOT-109:test:1"), deps, STARTED);
+
+        expect(report.outcome).toBe("advance");
+        expect(report.notes).toEqual([
+            "discard entry not published: gh pr comment 7 failed: HTTP 502",
+        ]);
+        expect((await read(state)).state).toBe("discarded");
+        expect(renderDiscardText(report)).toContain(
+            "notes:\n  discard entry not published: gh pr comment 7 failed: HTTP 502",
+        );
+    });
+
+    it("notes a failed lookup and still discards", async () => {
+        const { deps } = await setup({
+            pullRequest: { find: () => Promise.resolve({ ok: false, error: "gh pr list failed" }) },
+        });
+
+        const report = await discardAttempt(args("linear:DOT-109:test:1"), deps, STARTED);
+
+        expect(report.outcome).toBe("advance");
+        expect(report.notes).toEqual(["discard entry not published: gh pr list failed"]);
+    });
+
+    it("does not even look for a pull request when the attempt has a receipt", async () => {
+        const { state, deps, pullRequestCalls, directories } = await setup({
+            records: [retained()],
+            pullRequest: withPullRequest,
+        });
+        await writeFile(logbookReceiptPath(attemptDir(state, "linear:DOT-109:test:1")), "{}");
+
+        const report = await discardAttempt(args("linear:DOT-109:test:1"), deps, STARTED);
+
+        expect(report.outcome).toBe("advance");
+        expect(report.notes).toEqual([]);
+        expect(pullRequestCalls).toEqual([]);
+        expect(directories).toEqual([]);
+    });
+
+    it("publishes no second entry when the pull request already carries one", async () => {
+        const { deps, pullRequestCalls } = await setup({
+            records: [retained()],
+            pullRequest: {
+                ...withPullRequest,
+                comments: () => Promise.resolve({ ok: true, value: [`${MARKER}\n### entry`] }),
+            },
+        });
+
+        const report = await discardAttempt(args("linear:DOT-109:test:1"), deps, STARTED);
+
+        expect(report.outcome).toBe("advance");
+        expect(pullRequestCalls).toEqual([
+            "find feature/DOT-109-stage-session-manager",
+            "comments 7",
+        ]);
+        expect(published).toEqual([]);
+    });
+
+    it("runs only when every earlier step succeeded", async () => {
+        const { deps, directories } = await setup({
+            pullRequest: withPullRequest,
+            workspace: { release: () => Promise.resolve({ ok: false, error: "wt: dirty" }) },
+        });
+
+        const report = await discardAttempt(args("linear:DOT-109:test:1", true), deps, STARTED);
+
+        expect(report.outcome).toBe("not-evaluable");
+        expect(directories).toEqual([]);
     });
 });
 
