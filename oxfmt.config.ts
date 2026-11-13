@@ -12,6 +12,8 @@ export default {
         ".pi/",
         // husky's generated shim directory
         ".husky/_/",
+        // Read with `markdownlint --config`, whose parser rejects the trailing commas the formatter would add.
+        ".markdownlint.jsonc",
 
         // release-please round-trips JSON through JSON.parse/stringify, expanding
         // compact arrays. Upstream WONTFIX (release-please#2319), so formatting
@@ -28,11 +30,4 @@ export default {
     tabWidth: 4,
     useTabs: false,
     singleAttributePerLine: true,
-    overrides: [
-        {
-            // markdownlint parses this file as JSONC without trailing commas.
-            files: [".markdownlint.jsonc"],
-            options: { trailingComma: "none" },
-        },
-    ],
 } satisfies OxfmtConfig;
