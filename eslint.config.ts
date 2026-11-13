@@ -60,6 +60,11 @@ export default tseslint.config(
         extends: [tseslint.configs.disableTypeChecked],
     },
     {
+        // CommonJS by design: it runs under plain node in CI before any build step.
+        files: ["scripts/check-markdownlint-schema.cjs"],
+        rules: { "@typescript-eslint/no-require-imports": "off" },
+    },
+    {
         rules: {
             "@typescript-eslint/no-unused-vars": [
                 "error",

@@ -28,4 +28,11 @@ export default {
     tabWidth: 4,
     useTabs: false,
     singleAttributePerLine: true,
+    overrides: [
+        {
+            // markdownlint parses this file as JSONC without trailing commas.
+            files: [".markdownlint.jsonc"],
+            options: { trailingComma: "none" },
+        },
+    ],
 } satisfies OxfmtConfig;

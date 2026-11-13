@@ -34,6 +34,15 @@
     "duplicates": {
         "ignore": ["plugins/stonks/src/validate.ts", "plugins/stonks/src/config.ts"],
     },
+    "health": {
+        "thresholdOverrides": [
+            {
+                "files": ["scripts/check-markdownlint-schema.cjs"],
+                "maxCrap": 45,
+                "reason": "CI-only guard, exercised by running it; no coverage report reaches it",
+            },
+        ],
+    },
     "rules": {
         // suppression comments must carry a reason
         "require-suppression-reason": "warn",

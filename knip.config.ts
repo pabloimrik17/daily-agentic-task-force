@@ -13,8 +13,12 @@ export default {
         // loaded by the husky pre-commit hook, not by an import
         "validate-branch-name.config.cjs",
     ],
-    // pinned per-invocation via `bunx --package renovate@<version>`, never installed
-    ignoreDependencies: ["renovate"],
+    ignoreDependencies: [
+        // pinned per-invocation via `bunx --package renovate@<version>`, never installed
+        "renovate",
+        // exact engine pin that scripts/check-markdownlint-schema.cjs compares with the .markdownlint.jsonc $schema version
+        "markdownlint",
+    ],
     workspaces: {
         ".": {
             entry: ["scripts/*.ts", "scripts/**/*.test.ts"],
