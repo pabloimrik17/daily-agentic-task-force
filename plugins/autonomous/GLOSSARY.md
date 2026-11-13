@@ -100,7 +100,7 @@ _Avoid_: machine type, work-first
 **Taken task**:
 A task that carries the taken label: an agent or a person has declared that
 they are advancing it. It is never a candidate, whether or not its session
-occupies a runner slot. A tracker status such as "in progress" does not make a
+occupies a slot. A tracker status such as "in progress" does not make a
 task taken.
 _Avoid_: claimed, locked
 
@@ -137,6 +137,31 @@ _Avoid_: session
 A session of the session manager whose id is recorded in an attempt. The runner
 acts only on managed sessions; a session made by hand is never touched, even
 when it shares a workspace path with an attempt.
+
+**Slot**:
+The unit of capacity for managed sessions. Every open attempt occupies one,
+whichever command launched it, until it is finalised or discarded; a session
+made by hand occupies none. Only the loop is bound by the slot limits: a launch
+a person asks for is never refused for capacity, and still occupies its slot.
+_Avoid_: runner slot, seat
+
+**Loop**:
+The continuous mode of the runner: it repeats iterations at a fixed interval
+until a person stops it. Only one loop runs at a time.
+_Avoid_: watch, daemon
+
+**Iteration**:
+One pass of the loop: it brings the open attempts up to date and then launches
+at most one session, into a free slot.
+_Avoid_: tick, cycle
+
+**Grill slot**:
+A slot occupied by an attempt of the grill stage. Grill slots have their own
+limit, so that tasks can keep being defined while the work slots are full.
+_Avoid_: human slot
+
+**Work slot**:
+A slot occupied by an attempt of any stage other than the grill.
 
 **Stage contract**:
 What a stage declares: its id, its emoji, its prerequisites, its prompt for a
