@@ -17,6 +17,15 @@ export default tseslint.config(
             ".junie/**",
             ".opencode/**",
             ".pi/**",
+            ".agent/**",
+            ".amazonq/**",
+            ".codex/**",
+            ".cursor/**",
+            ".gemini/**",
+            ".github/agents/**",
+            ".github/prompts/**",
+            ".github/skills/**",
+            ".github/copilot-instructions.md",
             "**/CHANGELOG.md",
             // Vendored Claude Code mod API declarations, third-party code pinned to
             // the tested Claude Code version (stonks design D17).

@@ -10,6 +10,15 @@ export default {
         ".junie/",
         ".opencode/",
         ".pi/",
+        ".agent/",
+        ".amazonq/",
+        ".codex/",
+        ".cursor/",
+        ".gemini/",
+        ".github/agents/",
+        ".github/prompts/",
+        ".github/skills/",
+        ".github/copilot-instructions.md",
         // husky's generated shim directory
         ".husky/_/",
         // Read with `markdownlint --config`, whose parser rejects the trailing commas the formatter would add.

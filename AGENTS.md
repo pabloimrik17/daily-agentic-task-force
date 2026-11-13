@@ -74,10 +74,14 @@ Type-aware linting is real here: the root `tsconfig.json` uses
 `include: ["**/*.ts"]` with no exclusions for config files, so a new `.ts` file
 outside that glob fails the parser rather than being skipped quietly.
 
-The agent scaffolding — `openspec/`, `.agents/`, `.claude/`, `.junie/`,
-`.opencode/`, `.pi/` — is excluded from oxfmt, ESLint, knip, fallow and
-markdownlint. Those five ignore lists must stay identical; divergence shows up
-as one tool failing on files the others skip.
+The agent scaffolding — `openspec/`, `.agent/`, `.agents/`, `.amazonq/`,
+`.claude/`, `.codex/`, `.cursor/`, `.gemini/`, `.junie/`, `.opencode/`, `.pi/`,
+`.github/agents/`, `.github/prompts/`, `.github/skills/` and
+`.github/copilot-instructions.md` — is excluded from oxfmt, ESLint, knip,
+fallow and markdownlint. Those five ignore lists must stay identical;
+divergence shows up as one tool failing on files the others skip. Only
+markdownlint also excludes `node_modules/`, `dist/`, `.git/` and `.worktrees/`,
+which the other tools skip on their own, and `AGENTS.md` itself stays linted.
 
 Oxfmt reads exclusions from `oxfmt.config.ts`, including explicit file and
 directory arguments. For selected files, run
