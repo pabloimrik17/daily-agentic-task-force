@@ -27,7 +27,6 @@ coverage/
 /openspec/
 
 # Maintained AGENTS.md and CLAUDE.md guides remain in scope.
-# Append only the generator, workflow, or corpus sections used here.
 
 # Generated workspace and package release changelogs
 **/CHANGELOG.md
