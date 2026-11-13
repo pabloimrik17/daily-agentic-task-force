@@ -66,5 +66,5 @@ forget.
 ## Check before committing
 
 - `bun run lint:marketplace` — every plugin resolves and every version agrees
-- `bun run lint:markdown` — the moved Markdown still lints under its new path
+- `bun run lint:markdownlint` — the moved Markdown still lints under its new path
 - `bun run test` — plugin tests still discover under the new workspace

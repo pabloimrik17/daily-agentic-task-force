@@ -3,7 +3,7 @@ import { existsSync } from "node:fs";
 import path from "node:path";
 
 const ESLINT_FILES = /\.(?:ts|ya?ml)$/;
-const MARKDOWN_FILES = /\.md$/;
+const MARKDOWN_FILES = /\.(?:md|markdown)$/;
 const FALLOW_FILES = /\.(?:ts|js|cjs|mjs|json|jsonc|md)$/;
 const RENOVATE_FILES = /(?:^|\/)renovate\.json$/;
 const WORKFLOW_FILES = /^\.github\/workflows\/.+\.ya?ml$/;
@@ -45,7 +45,7 @@ export default defineConfig({
         (filenames: readonly string[]): string[] =>
             forStaged(ESLINT_FILES, "eslint --fix --no-warn-ignored", filenames),
         (filenames: readonly string[]): string[] =>
-            forStaged(MARKDOWN_FILES, "markdownlint --fix", filenames),
+            forStaged(MARKDOWN_FILES, "markdownlint --config .markdownlint.jsonc --fix", filenames),
         (filenames: readonly string[]): string[] => [
             // New-only ratchet vs the merge-base; the full-repo gate lives in push CI.
             ...whenStaged(FALLOW_FILES, "bun run fallow audit", filenames),

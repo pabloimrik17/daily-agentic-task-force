@@ -23,6 +23,15 @@
         ".junie/**",
         ".opencode/**",
         ".pi/**",
+        ".agent/**",
+        ".amazonq/**",
+        ".codex/**",
+        ".cursor/**",
+        ".gemini/**",
+        ".github/agents/**",
+        ".github/prompts/**",
+        ".github/skills/**",
+        ".github/copilot-instructions.md",
         "coverage/**",
         // Vendored Claude Code mod API declarations (stonks design D17).
         "plugins/stonks/mod/types/claude-code.d.ts",
@@ -33,6 +42,15 @@
     // plugins install independently, so nothing is imported across them (stonks task 4.1).
     "duplicates": {
         "ignore": ["plugins/stonks/src/validate.ts", "plugins/stonks/src/config.ts"],
+    },
+    "health": {
+        "thresholdOverrides": [
+            {
+                "files": ["scripts/check-markdownlint-schema.cjs"],
+                "maxCrap": 45,
+                "reason": "Covered by check-markdownlint-schema.test.ts, but fallow estimates CRAP from export references and the CommonJS script exports nothing",
+            },
+        ],
     },
     "rules": {
         // suppression comments must carry a reason

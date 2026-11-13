@@ -10,8 +10,19 @@ export default {
         ".junie/",
         ".opencode/",
         ".pi/",
+        ".agent/",
+        ".amazonq/",
+        ".codex/",
+        ".cursor/",
+        ".gemini/",
+        ".github/agents/",
+        ".github/prompts/",
+        ".github/skills/",
+        ".github/copilot-instructions.md",
         // husky's generated shim directory
         ".husky/_/",
+        // TODO: drop this entry once `markdownlint --config` accepts trailing commas in JSONC (run-con's strict JSON.parse rejects them); re-check on markdownlint-cli and formatter upgrades
+        ".markdownlint.jsonc",
 
         // release-please round-trips JSON through JSON.parse/stringify, expanding
         // compact arrays. Upstream WONTFIX (release-please#2319), so formatting

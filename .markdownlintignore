@@ -1,16 +1,32 @@
+# Dependencies and generated output at any package depth
 node_modules/
+dist/
 coverage/
 
-# Agent scaffolding, not source. Mirrored in 4 sibling configs; see AGENTS.md.
-openspec/
-.agents/
-.claude/
-.junie/
-.opencode/
-.pi/
+# Git metadata and local worktrees
+.git/
+.worktrees/
 
-# AI agent instruction files
-AGENTS.md
+# Root agent/editor scaffolding; nested product examples stay in scope
+/.agent/
+/.agents/
+/.amazonq/
+/.claude/
+/.codex/
+/.cursor/
+/.gemini/
+/.junie/
+/.opencode/
+/.pi/
+/.github/agents/
+/.github/prompts/
+/.github/skills/
+/.github/copilot-instructions.md
 
-# Auto-generated changelogs
+# Root OpenSpec workflow artifacts
+/openspec/
+
+# Maintained AGENTS.md and CLAUDE.md guides remain in scope.
+
+# Generated workspace and package release changelogs
 **/CHANGELOG.md

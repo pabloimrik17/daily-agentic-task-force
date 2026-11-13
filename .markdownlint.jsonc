@@ -1,0 +1,15 @@
+{
+  "$schema": "https://raw.githubusercontent.com/DavidAnson/markdownlint/v0.42.1/schema/markdownlint-config-schema.json",
+  // Formatting rules follow the formatter-compatible preset.
+  "extends": "markdownlint/style/prettier",
+  // List indentation matches the Markdown formatter configuration.
+  "ul-indent": { "indent": 4 },
+  // Catch heading typos that a formatter preserves as paragraph text.
+  "no-missing-space-atx": true,
+  // Repeated section names are valid beneath different parent headings.
+  "no-duplicate-heading": { "siblings_only": true },
+  // Permit anchors, line breaks and collapsible documentation sections.
+  "no-inline-html": { "allowed_elements": ["a", "br", "details", "summary"] },
+  // Documentation fragments and metadata-led files need no initial H1.
+  "first-line-h1": false
+}
