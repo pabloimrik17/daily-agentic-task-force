@@ -1,5 +1,12 @@
 # Changelog
 
+## [2.2.1](https://github.com/pabloimrik17/daily-agentic-task-force/compare/autonomous--v2.2.0...autonomous--v2.2.1) (2026-11-13)
+
+
+### Bug Fixes
+
+* **autonomous:** read OpenUsage's document after an account-error exit (DOT-112) ([#73](https://github.com/pabloimrik17/daily-agentic-task-force/issues/73)) ([ce30fe5](https://github.com/pabloimrik17/daily-agentic-task-force/commit/ce30fe589dca81b5b3b44d5c860ffffc2c090c04))
+
 ## [2.2.0](https://github.com/pabloimrik17/daily-agentic-task-force/compare/autonomous--v2.1.0...autonomous--v2.2.0) (2026-11-06)
 
 
