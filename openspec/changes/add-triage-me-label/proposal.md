@@ -14,8 +14,8 @@ The decisions were settled with the user in the DOT-111 grill on 2026-11-13.
 - **A marked task still has its question**: the question is composed from the task alone, without a judgement. A manual run hands it off like any other.
 - **The mark comes off by itself**: a run with `--apply` that finds a marked task with no group missing removes `triage-me`. So does the answer that completes the task. The person can also add the missing label in the tracker; the next run removes the mark. This is the only label `label-triage` ever removes.
 - **A marked task is never a candidate**, even when its labels are complete and the mark is only stale.
-- **A read-only mode, `--triage-questions`**: it reads the trackers, runs no step and no LLM, and hands off the questions of the marked tasks, four at a time.
-- **`/autonomous:loop --apply` asks once before it starts**: the command runs `--triage-questions`, asks that one round, applies the answers and then starts the loop. The loop itself asks nothing. A loop started from a shell asks nothing either.
+- **A read-only mode, `--triage-questions`**: it reads the trackers, runs no step and no LLM, lists the questions of every marked task and hands off the first four.
+- **`/autonomous:loop --apply` empties the queue before it starts**: the command runs `--triage-questions` and asks every pending question, in rounds of four, applying the answers after each round. A round answered `Later` in full starts the loop at once. The loop itself asks nothing. A loop started from a shell asks nothing either.
 - **One more notice for the agent that started the loop**: one line when an iteration marks new tasks.
 - **Glossary**: the triage label, already written by the grill.
 
@@ -25,7 +25,6 @@ The decisions were settled with the user in the DOT-111 grill on 2026-11-13.
 - Marking a task at creation. The `labelling-new-tasks` skill keeps leaving groups to triage; the first run with `--apply` marks them.
 - Marking a task whose present labels conflict, a task the LLM failed to judge, and a task beyond the judgement cap. None of them carries a doubt the human can settle with one answer, and the last two must be judged again.
 - Remembering a judgement between runs. The mark is the only memory, and it lives in the tracker.
-- Asking more than one round when the loop starts.
 
 ## Capabilities
 
@@ -39,7 +38,7 @@ None.
 - `label-triage`: the step marks the tasks it leaves for the human, skips the judgement of marked tasks, composes their questions, and removes the mark when the task is complete; the rule that triage never removes a label gains this one exception.
 - `work-selection`: a task that carries `triage-me` is excluded.
 - `autonomous-run`: a new mode, `--triage-questions`.
-- `autonomous-loop`: the command asks one round before it starts the loop; the notices gain the line for newly marked tasks.
+- `autonomous-loop`: the command asks the pending questions before it starts the loop; the notices gain the line for newly marked tasks.
 
 ## Impact
 

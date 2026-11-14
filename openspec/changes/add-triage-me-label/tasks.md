@@ -34,7 +34,7 @@ Implement after `add-autonomous-loop-and-slot-limits`. Groups 1 to 5 touch only 
 ## 6. The loop
 
 - [ ] 6.1 Record the notice for newly marked tasks from the data of `label-triage` (design D9). Verify with the notices test: the scenarios "Tasks newly marked", "Many tasks newly marked" and "Marked in an earlier iteration".
-- [ ] 6.2 Add the round of questions to `commands/loop.md` before the loop starts, for `--apply` only (design D8). Verify by reading the command against every scenario of "Questions before the loop starts" and of "The loop's process never asks".
+- [ ] 6.2 Add the rounds of questions to `commands/loop.md` before the loop starts, for `--apply` only: every listed question, four per round, stopping at a round answered `Later` in full (design D8). Verify by reading the command against every scenario of "Questions before the loop starts" and of "The loop's process never asks".
 - [ ] 6.3 Remove from `README.md` the sentence, written by the loop change, that says the loop judges an undecided task again on every iteration. Verify with `bun run lint:markdown`.
 
 ## 7. Glossary

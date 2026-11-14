@@ -4,31 +4,36 @@
 
 ### Requirement: Questions before the loop starts
 
-Before it starts the loop, `/autonomous:loop --apply` SHALL execute the step runner with `--triage-questions` once. When the report carries a `handoff`, the command SHALL ask its questions in one round, as `/autonomous:run` asks a run's handoff, and apply the answers through answer mode. It SHALL then start the loop whatever was answered, and SHALL NOT ask the questions left in `remaining`.
+Before it starts the loop, `/autonomous:loop --apply` SHALL execute the step runner with `--triage-questions` once and ask every question the report lists, in the report's order, in rounds of at most 4, as `/autonomous:run` asks a run's handoff. After each round it SHALL apply that round's answers through answer mode. It SHALL start the loop when no question is left, or as soon as every question of a round is answered `Later`.
 
 #### Scenario: Marked tasks when the loop starts
 
 - **WHEN** the user runs `/autonomous:loop --apply` and three marked tasks each lack one group
-- **THEN** the command asks three questions once, applies the answers, and then starts the loop
+- **THEN** the command asks three questions in one round, applies the answers, and then starts the loop
 
 #### Scenario: More than one round waiting
 
-- **WHEN** `--triage-questions` reports 4 questions and `remaining` equal to 5
-- **THEN** the command asks the 4, starts the loop and does not ask the other 5
+- **WHEN** `--triage-questions` lists 9 questions
+- **THEN** the command asks rounds of 4, 4 and 1, applies the answers after each, and then starts the loop
+
+#### Scenario: A round left for later
+
+- **WHEN** 9 questions are listed and the user chooses `Later` for the four questions of the first round
+- **THEN** nothing is written, the other 5 questions are not asked, and the loop starts
+
+#### Scenario: One question left for later
+
+- **WHEN** the user answers three questions of a round and chooses `Later` for the fourth
+- **THEN** the three answers are applied, the fourth is not asked again in this start, and the next round is asked
 
 #### Scenario: Nothing marked
 
 - **WHEN** `--triage-questions` reports no marked task
 - **THEN** the command starts the loop without asking anything
 
-#### Scenario: Every question left for later
-
-- **WHEN** the user chooses `Later` for every question
-- **THEN** nothing is written and the loop starts
-
 ### Requirement: The loop's process never asks
 
-The loop's process SHALL never ask a question, and a loop started from a shell SHALL start without the round of questions. A dry iteration SHALL NOT execute `--triage-questions`. When `--triage-questions` exits with code 3, the command SHALL show the reason and start the loop without asking.
+The loop's process SHALL never ask a question, and a loop started from a shell SHALL start without the rounds of questions. A dry iteration SHALL NOT execute `--triage-questions`. When `--triage-questions` exits with code 3, the command SHALL show the reason and start the loop without asking.
 
 #### Scenario: Dry iteration
 
@@ -88,7 +93,7 @@ The loop SHALL record a notice, one line each, only when: an iteration finalises
 
 ### Requirement: The command relays only notices
 
-`/autonomous:loop --apply` SHALL start the loop in the background, wait for notices in the background, show each notice verbatim and wait again from the new count. Once the loop has started it SHALL NOT read the iteration log or add any text of its own, and SHALL stop waiting after a stop notice. The round of questions before the loop starts is the only other thing the command does.
+`/autonomous:loop --apply` SHALL start the loop in the background, wait for notices in the background, show each notice verbatim and wait again from the new count. Once the loop has started it SHALL NOT read the iteration log or add any text of its own, and SHALL stop waiting after a stop notice. The rounds of questions before the loop starts are the only other thing the command does.
 
 #### Scenario: Quiet day
 

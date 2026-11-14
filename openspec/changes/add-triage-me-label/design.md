@@ -26,7 +26,7 @@ The change adds no LLM call and removes many. Marking, skipping, unmarking and t
 
 - A local record of judgements or of asked questions.
 - A different threshold, or any change to what a judgement decides.
-- Changing the handoff: four questions, one round per invocation.
+- Changing the handoff of a run: four questions, one round per invocation.
 
 ## Decisions
 
@@ -71,9 +71,13 @@ A new mode in `run.ts`, beside `--bootstrap-labels`: it loads the configuration,
 
 Alternative considered: have the loop command run `/autonomous:run --apply` once before the loop. Rejected: that run would also judge, write and launch a session.
 
-### D8. The loop command asks once, then starts
+### D8. The loop command empties the queue, then starts
 
-`commands/loop.md` gains a first step for `--apply`: run `--triage-questions --json`; when there is a handoff, ask it with the question tool, apply the answers with `--apply --answer`, and go on. The `remaining` questions are not asked: the person drains them with `/autonomous:run --triage-questions` whenever they want, or answers them in a manual run.
+`commands/loop.md` gains a first step for `--apply`: run `--triage-questions --json` once and take the report's full list of questions, not only its handoff. Ask them with the question tool in rounds of four, in the list's order, and apply each round's answers with `--apply --answer` before the next round. Stop when the list is empty or when a whole round is answered `Later`, then start the loop.
+
+One invocation is enough because the list already holds the scope and the autonomy question of a task that lacks both. A question answered `Later` is not asked again in the same start, because the list is read once. The command still composes nothing: every question comes from the report.
+
+Alternative considered: one round of four, the rest drained by hand. Rejected by the user: the first run with `--apply` can mark up to the cap of judged tasks, a marked task is never selected, and the start of the loop is the one moment the person is surely present.
 
 ### D9. One notice per iteration that marks
 
@@ -83,6 +87,7 @@ The loop's notice writer reads the list of newly marked tasks from the data of `
 
 - **The first run with `--apply` after this lands marks up to the cap of judged tasks.** → Expected and visible: the report lists every mark, and the loop tells it in one line.
 - **A marked task is stuck until a person acts.** → Intended. The count of marked tasks is in every report, and the loop command asks when it starts.
+- **Many rounds before the loop starts.** → Thirty doubts are eight rounds. A round answered `Later` in full starts the loop.
 - **`triage-me` is missing on a tracker.** → The mark is not written and the task is judged again, as today. The report names `--bootstrap-labels`.
 - **A person removes `triage-me` without adding the missing label.** → The task is judged again on the next run and marked again if the doubt stands.
 - **A doubt that would resolve itself after the task's description changes stays marked.** → The person removes the label to ask for a new judgement. No automatic re-judgement.
