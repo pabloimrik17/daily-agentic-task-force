@@ -38,7 +38,7 @@
 
 ## 6. Glossary and ADR
 
-- [ ] 6.1 Check that `GLOSSARY.md` carries slot, grill slot, work slot, loop and iteration as the grill wrote them, and update "Unattended run" to name the loop. The `triage-me` entry belongs to DOT-127: keep it out of this change's commit and commit it apart. Verify with `bun run lint:markdown` and `git show --stat` of both commits.
+- [ ] 6.1 Check that `GLOSSARY.md` carries slot, grill slot, work slot, loop and iteration as the grill wrote them, and update "Unattended run" to name the loop. The `triage-me` entry belongs to DOT-127 and lives on its branch, `feature/DOT-127-triage-me-label`, stacked on this one: keep it out of this branch. Verify with `bun run lint:markdown` and `git grep triage-me plugins/autonomous/GLOSSARY.md`, which finds nothing here.
 - [ ] 6.2 Write the ADR "Slot limits bind only the loop" with the next free number (design D11), and link it from the glossary entry for slot. Verify with `bun run lint:markdown`.
 
 ## 7. Integration
