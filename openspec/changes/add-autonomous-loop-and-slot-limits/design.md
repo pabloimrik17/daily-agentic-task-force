@@ -110,4 +110,4 @@ No migration. An existing configuration file parses unchanged and takes the thre
 
 ## Open Questions
 
-- Whether a background task of an agent session outlives that session. The answer changes only a sentence of the README.
+- Whether a background task of an agent session outlives that session. If it does not, closing the session that ran `/autonomous:loop --apply` stops the loop with no notice, because no agent is left to receive one. Task 7.3 checks it. If the loop dies, the README says so and names the shell as the way to run a loop that must outlive the session; a detached launch from the command is then a follow-up, not part of this change.

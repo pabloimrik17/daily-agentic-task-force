@@ -45,7 +45,7 @@
 
 - [ ] 7.1 Run `bun run lint:oxfmt`, `bun run lint:eslint`, `bun run lint:knip`, `bun run lint:fallow`, `bun run lint:marketplace`, `bun run typecheck` and `bun run test`. Verify that all pass.
 - [ ] 7.2 On the real machine, run `/autonomous:loop` without `--apply` and check the report against the open sessions: the counts per kind, the limits and their sources, and the unit it would launch. Keep the report as evidence in the change folder.
-- [ ] 7.3 On the real machine, with the user's go-ahead, start `/autonomous:loop --apply --parallel 1 --grills 1`, let it launch one grill, start a second loop and check it is refused, then stop the loop. Check the log, the notices and that no second grill was launched. Keep the evidence in the change folder.
+- [ ] 7.3 On the real machine, with the user's go-ahead, start `/autonomous:loop --apply --parallel 1 --grills 1`, let it launch one grill, start a second loop and check it is refused, then stop the loop. Check the log, the notices and that no second grill was launched. Then start the loop again, close the agent session that started it, and check whether the loop's process and its lock survive; record the answer in the README and close the open question of the design. Keep the evidence in the change folder.
 
 ## Workflow follow-up
 
