@@ -50,8 +50,8 @@
 
 Results go to `openspec/changes/add-stage-pull-request-and-logbook/evidence/logbook-verification.md`. Every tracker or repository write here needs the user's go-ahead first.
 
-- [ ] 10.1 In the sandbox repository used for the grill-me verification, run a grill on a throwaway Beads task with no documentation change. Record the empty commit, the draft pull request with its cover, the 🔥 entry with its header, and the reconcile run that finalises the attempt without a note.
-- [ ] 10.2 In the same sandbox, record three more cases: a grill that commits a glossary change (no empty commit); a confirmed split with no documentation change (no pull request, reconcile's note); and a retained attempt discarded after a pull request exists (the discard entry). Clean up the sandbox tasks and pull requests afterwards.
+- [x] 10.1 In the sandbox repository used for the grill-me verification, run a grill on a throwaway Beads task with no documentation change. Record the empty commit, the draft pull request with its cover, the 🔥 entry with its header, and the reconcile run that finalises the attempt without a note.
+- [x] 10.2 In the same sandbox, record three more cases: a grill that commits a glossary change (no empty commit); a confirmed split with no documentation change (no pull request, reconcile's note); and a retained attempt discarded after a pull request exists (the discard entry). Clean up the sandbox tasks and pull requests afterwards.
 
 ## Workflow follow-up
 
