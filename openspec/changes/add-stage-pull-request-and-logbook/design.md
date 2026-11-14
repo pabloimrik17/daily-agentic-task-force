@@ -37,14 +37,15 @@ They are two modes and not one because their moments differ. The grill runs them
 
 A `PullRequests` port, with one `gh`-backed implementation and fakes in tests, offers:
 
-- `defaultBranch(repository)`: `gh repo view --json defaultBranchRef`;
-- `find(repository, branch)`: `gh pr list --head <branch> --state open --json number,url,title`;
-- `ahead(worktree, base)`: `git rev-list --count origin/<base>..HEAD` after `git fetch origin <base>`;
-- `emptyCommit(worktree, message)`, `push(worktree, branch)`;
-- `open(...)` with `--draft --base <default> --title … --body-file …`, and `edit(...)` for the title and the body;
+- `defaultBranch()`: `gh repo view --json defaultBranchRef`;
+- `find(branch)`: `gh pr list --head <branch> --state open --json number,url,title`;
+- `ahead(base)`: `git rev-list --count origin/<base>..HEAD` after `git fetch origin <base>`;
+- `commitsSince(base, since)`: the short ids of the commits on `HEAD` that `origin/<base>` lacks, made since `since`; the logbook header uses it (D6);
+- `emptyCommit(message)`, `push(branch)`;
+- `open(...)` with `--draft --base <default> --title … --body-file …`, and `edit(number, …)` for the title and the body;
 - `comment(number, file)` and `comments(number)`.
 
-Every command runs in the attempt's worktree with the shared `Exec`, so errors name the command and calls are bounded like every other CLI. The push is a plain `git push -u origin <branch>`: hooks run, and nothing is forced.
+A factory makes the port for one directory, and every command runs there with the shared `Exec`, so errors name the command and calls are bounded like every other CLI. The directory is the attempt's worktree. Discard uses the repository instead, because the worktree may be gone by then. The push is a plain `git push -u origin <branch>`: hooks run, and nothing is forced.
 
 Only an open pull request counts. A branch whose earlier pull request was merged or closed gets a new one.
 
@@ -86,11 +87,11 @@ The agent's body follows unchanged. The values come from:
 - autonomy: the task's labels, read from its tracker when the mode runs;
 - start: the record's first `started` entry in `history`; end: the mode's start time;
 - answer: `transition.json`, omitted when absent;
-- commits: `git log --since=<start> --format=%h origin/<base>..HEAD` in the worktree.
+- commits: `git log --since=<start> --format=%h origin/<base>..HEAD` in the worktree, without the empty commit that pull-request mode adds (D3), which is left out of the list.
 
 Before publishing, the mode reads the comments and skips the publish when one already starts with the marker; it then writes the receipt if it is missing. The read-back after a publish uses `readUntil`, as persist mode does, to allow for read lag.
 
-Commits by time is an approximation: a commit made in the worktree by hand during the attempt is counted too. It needs no new field, and a wrong count is harmless.
+Commits by time is an approximation: a commit made in the worktree by hand during the attempt is counted too. The empty commit of pull-request mode is not counted. It needs no new field, and a wrong count is harmless.
 
 ### D7. The body is checked by a pure function
 

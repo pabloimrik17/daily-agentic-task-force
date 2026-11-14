@@ -86,6 +86,7 @@ async function check(attempt: AttemptId, deps: LogDeps, report: LogReport): Prom
         return { ok: false, reasons: [found.error] };
     }
     const { record, dir } = found.value;
+    report.task = { ...record.task };
     const body = await readBody(dir, deps.home, report);
     if (!body.ok) {
         return body;
@@ -194,6 +195,7 @@ async function buildHeader(logging: Logging): Promise<string | null> {
 }
 
 // The task's labels as its tracker holds them now: the answer may have changed them since launch.
+// The report already holds the task from the record; this refreshes its title.
 async function readAutonomy({ deps, record, report }: Logging): Promise<Result<string | null>> {
     const read = await deps.trackers[record.task.source].readTask(record.task.id);
     if (!read.ok) {

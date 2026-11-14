@@ -13,7 +13,12 @@ import type { AutonomousConfig } from "../config.ts";
 import type { Result } from "../result.ts";
 import type { WorkReader, WorkTask } from "../select/types.ts";
 import { cover } from "./cover.ts";
-import type { PullRequest, PullRequests, PullRequestsFactory } from "./port.ts";
+import {
+    EMPTY_COMMIT_SUBJECT,
+    type PullRequest,
+    type PullRequests,
+    type PullRequestsFactory,
+} from "./port.ts";
 import { blankPullRequest, type PullRequestReport } from "./report.ts";
 
 const COVER_FILE = "cover.md";
@@ -236,7 +241,7 @@ async function ensureCommit(opening: Opening): Promise<string | null> {
     if (opening.ahead > 0) {
         return null;
     }
-    const message = `chore: open the pull request of ${opening.task.id}`;
+    const message = `${EMPTY_COMMIT_SUBJECT}${opening.task.id}`;
     const committed = await opening.pullRequests.emptyCommit(message);
     if (!committed.ok) {
         return committed.error;

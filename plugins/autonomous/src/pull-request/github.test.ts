@@ -73,7 +73,7 @@ it("does not count when the fetch fails", async () => {
 });
 
 it("lists the short ids of the commits since a time", async () => {
-    const { execs, port } = setup("abc1234\ndef5678\n\n");
+    const { execs, port } = setup("abc1234 feat: one\ndef5678 fix: two words\n\n");
     expect(await port.commitsSince("main", "2026-01-01T00:00:00Z")).toEqual({
         ok: true,
         value: ["abc1234", "def5678"],
@@ -83,9 +83,19 @@ it("lists the short ids of the commits since a time", async () => {
         DIR,
         "log",
         "--since=2026-01-01T00:00:00Z",
-        "--format=%h",
+        "--format=%h %s",
         "origin/main..HEAD",
     ]);
+});
+
+it("leaves out the empty commit pull-request mode adds", async () => {
+    const { port } = setup(
+        "abc1234 feat: one\n9f8e7d6 chore: open the pull request of DOT-121\ndef5678 chore: open the pull request\n",
+    );
+    expect(await port.commitsSince("main", "2026-01-01T00:00:00Z")).toEqual({
+        ok: true,
+        value: ["abc1234", "def5678"],
+    });
 });
 
 it("returns no commits for empty output", async () => {

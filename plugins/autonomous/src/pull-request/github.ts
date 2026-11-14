@@ -5,7 +5,12 @@
 import { CLI_TIMEOUT_MS, type Exec, execCommand } from "../exec.ts";
 import type { Result } from "../result.ts";
 import { ParseError, array, number, object, string } from "../validate.ts";
-import type { PullRequest, PullRequests, PullRequestsFactory } from "./port.ts";
+import {
+    EMPTY_COMMIT_SUBJECT,
+    type PullRequest,
+    type PullRequests,
+    type PullRequestsFactory,
+} from "./port.ts";
 
 // The commit and the push run the repository's hooks, and a pre-push hook can run a whole test
 // suite, so those two get a long timeout.
@@ -99,6 +104,13 @@ function parseLines(stdout: string): string[] {
         .filter((line) => line !== "");
 }
 
+// `<short id> <subject>` lines to short ids, leaving out the empty commit pull-request mode adds.
+function shortIds(stdout: string): string[] {
+    return parseLines(stdout)
+        .filter((line) => !line.slice(line.indexOf(" ") + 1).startsWith(EMPTY_COMMIT_SUBJECT))
+        .flatMap((line) => line.split(" ", 1)); // the short id is the text before the first space
+}
+
 export function gitHubPullRequests(execs: GitHubExecs, directory: string): PullRequests {
     const { gh, git, hooked } = execs;
     const inDirectory = ["-C", directory];
@@ -128,9 +140,9 @@ export function gitHubPullRequests(execs: GitHubExecs, directory: string): PullR
         },
         async commitsSince(base, since) {
             const label = `git log --since=${since} origin/${base}..HEAD`;
-            const args = [...inDirectory, "log", `--since=${since}`, "--format=%h"];
+            const args = [...inDirectory, "log", `--since=${since}`, "--format=%h %s"];
             const out = await run(git, label, [...args, `origin/${base}..HEAD`]);
-            return out.ok ? { ok: true, value: parseLines(out.value) } : out;
+            return out.ok ? { ok: true, value: shortIds(out.value) } : out;
         },
         emptyCommit(message) {
             const args = [...inDirectory, "commit", "--allow-empty", "-m", message];

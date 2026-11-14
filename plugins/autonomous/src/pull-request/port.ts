@@ -4,6 +4,9 @@
 
 import type { Result } from "../result.ts";
 
+// The subject of the empty commit pull-request mode adds is this prefix and the task id.
+export const EMPTY_COMMIT_SUBJECT = "chore: open the pull request of ";
+
 export interface PullRequest {
     number: number;
     url: string;
@@ -21,7 +24,7 @@ export interface PullRequests {
     defaultBranch(): Promise<Result<string>>;
     find(branch: string): Promise<Result<PullRequest | null>>; // the open one; merged and closed ones never count
     ahead(base: string): Promise<Result<number>>; // commits on HEAD that origin/<base> lacks, after fetching it
-    commitsSince(base: string, since: string): Promise<Result<string[]>>; // short ids on HEAD, not on origin/<base>
+    commitsSince(base: string, since: string): Promise<Result<string[]>>; // short ids on HEAD, not on origin/<base>, without the empty commit of pull-request mode
     emptyCommit(message: string): Promise<Result<void>>;
     push(branch: string): Promise<Result<void>>; // never forced; hooks run
     open(request: OpenRequest): Promise<Result<PullRequest>>; // always a draft

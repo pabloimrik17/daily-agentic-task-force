@@ -146,7 +146,7 @@ The body SHALL hold the sections `### What I did`, `### Decisions`, `### Assumpt
 
 ### Requirement: Logbook entry header
 
-Log mode SHALL write the header of the entry itself, from the attempt's record and its files and never from the agent's text. The header SHALL carry the stage, the attempt number, the task's autonomy label, the agent arguments of the launch, the start, the end and the duration, the transition answer recorded for the attempt, and the commits made on the branch since the attempt started. A value that is not recorded SHALL be left out.
+Log mode SHALL write the header of the entry itself, from the attempt's record and its files and never from the agent's text. The header SHALL carry the stage, the attempt number, the task's autonomy label, the agent arguments of the launch, the start, the end and the duration, the transition answer recorded for the attempt, and the commits made on the branch since the attempt started, other than the empty commit pull-request mode adds. A value that is not recorded SHALL be left out.
 
 #### Scenario: Grill with an answered autonomy
 

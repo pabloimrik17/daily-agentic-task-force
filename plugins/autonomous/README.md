@@ -1069,8 +1069,9 @@ is not recorded:
   the run, in UTC, and the duration;
 - `answered <labels>`, from `transition.json`;
 - the commits made on the branch since the start, as short ids, or `no commits`.
-  The count is an approximation by time: a commit made by hand in the worktree
-  during the attempt is counted too.
+  The empty commit pull-request mode adds is not counted. The count is an
+  approximation by time: a commit made by hand in the worktree during the
+  attempt is counted too.
 
 ### The receipt
 
@@ -1153,7 +1154,7 @@ With `--json` it is one document identified by `schema: "autonomous.log.v1"`:
 | `startedAt`   | The start time of the run                                                                                                 |
 | `outcome`     | `advance` exactly when the receipt was written, `not-evaluable` otherwise                                                 |
 | `attempt`     | The attempt id that was given                                                                                             |
-| `task`        | `{ source, id, title }`, or `null` when the task was not read                                                             |
+| `task`        | `{ source, id, title }` once the attempt was read, or `null` when it was not                                              |
 | `pullRequest` | `{ number, url }`, or `null` when the branch has no open pull request                                                     |
 | `entry`       | `published` now, `existing` when an earlier run published it, or `none`                                                   |
 | `words`       | The word count of the body, as the limit counts it; `null` when the body was not read                                     |

@@ -30,6 +30,7 @@ const HOME = "/Users/someone";
 const ID = "linear:DOT-121:grill-me:1" as AttemptId;
 const BRANCH = "feature/DOT-121-fix-the-login";
 const WORKTREE = "/w/dotfiles-worktrees/feature-DOT-121-fix-the-login";
+const TASK = { source: "linear", id: "DOT-121", title: "Fix the login" } as const;
 const OPEN: PullRequest = {
     number: 42,
     url: "https://github.com/owner/repo/pull/42",
@@ -64,7 +65,7 @@ function grillAttempt(overrides: Partial<AttemptRecord> = {}): AttemptRecord {
     const base = startedAttempt();
     return startedAttempt({
         id: ID,
-        task: { source: "linear", id: "DOT-121", title: "Fix the login" },
+        task: TASK,
         stage: "grill-me",
         history: [
             { state: "pending", at: "2026-11-13T10:01:50.000Z" },
@@ -183,7 +184,7 @@ async function arrange(options: Arrangement = {}) {
             return Promise.resolve();
         },
     };
-    return { dir, fake, waits, run: () => runLog(attempt.id, deps, STARTED) };
+    return { dir, fake, waits, run: (id: AttemptId = attempt.id) => runLog(id, deps, STARTED) };
 }
 
 const readJson = (file: string) => JSON.parse(readFileSync(file, "utf8")) as unknown;
@@ -229,6 +230,7 @@ describe("log: A logbook entry per attempt", () => {
             entry: "existing",
             receipt: logbookReceiptPath(dir),
             reasons: [],
+            task: TASK,
         });
         expect(exitCodeFor(again.outcome)).toBe(0);
         expect(existsSync(logbookReceiptPath(dir))).toBe(true);
@@ -251,6 +253,7 @@ describe("log: A logbook entry per attempt", () => {
         expect(report.outcome).toBe("not-evaluable");
         expect(exitCodeFor(report.outcome)).toBe(3);
         expect(report.pullRequest).toBeNull();
+        expect(report.task).toEqual(TASK);
         expect(report.reasons).toEqual([
             `no open pull request for branch ${BRANCH}: run --pull-request <attempt> first`,
         ]);
@@ -411,12 +414,29 @@ describe("log: Log mode", () => {
         expect(report.outcome).toBe("not-evaluable");
         expect(report.reasons).toEqual([`${logbookEntryPath(dir)} is missing`]);
         expect(report.reasons[0]).toContain("logbook-entry.md");
+        expect(report.task).toEqual(TASK);
         expect(fake.calls).toEqual([]);
     });
 
     it("a blank body file is reported as empty", async () => {
         const { run, dir } = await arrange({ body: "  \n" });
         expect((await run()).reasons).toEqual([`${logbookEntryPath(dir)} is empty`]);
+    });
+
+    it("an unknown attempt leaves the task unread", async () => {
+        const { run, fake } = await arrange();
+        const report = await run("linear:DOT-999:grill-me:1");
+        expect(report.outcome).toBe("not-evaluable");
+        expect(report.task).toBeNull();
+        expect(fake.calls).toEqual([]);
+    });
+
+    it("a rejected body still reports the task", async () => {
+        const { run, fake } = await arrange({ body: "no sections" });
+        const report = await run();
+        expect(report.outcome).toBe("not-evaluable");
+        expect(report.task).toEqual(TASK);
+        expect(fake.calls).toEqual([]);
     });
 
     it("a completed attempt calls nothing on the port", async () => {

@@ -32,10 +32,15 @@ function sectionStart(all: readonly string[], name: string): number {
     return all.findIndex((line) => line.trimEnd() === `### ${name}`);
 }
 
+// The section ends at a heading of its own level or higher; a deeper heading belongs to it but is
+// not content by itself.
 function isEmptySection(all: readonly string[], start: number): boolean {
     for (const line of all.slice(start + 1)) {
-        if (/^#{1,6}\s/.test(line)) {
+        if (/^#{1,3}\s/.test(line)) {
             return true;
+        }
+        if (/^#{4,6}\s/.test(line)) {
+            continue;
         }
         if (line.trim() !== "") {
             return false;

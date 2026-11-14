@@ -25,7 +25,7 @@ export interface LogReport {
     startedAt: string;
     outcome: "advance" | "not-evaluable"; // advance exactly when the receipt is written or already there
     attempt: AttemptId;
-    task: LogTask | null; // null when the task was not read
+    task: LogTask | null; // from the attempt record once it is read, the title as the tracker holds it after; null when the attempt was not read
     pullRequest: LogPullRequest | null; // null when none was found
     entry: EntryWrite;
     words: number | null; // the body's word count; null when the body was not read

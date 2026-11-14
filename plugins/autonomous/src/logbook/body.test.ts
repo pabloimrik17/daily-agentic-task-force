@@ -79,6 +79,16 @@ describe("checkBody", () => {
         expect(checkBody(text, HOME).broken).toEqual(['the section "### What I did" is empty']);
     });
 
+    it("accepts a What I did whose text sits under a deeper sub-heading", () => {
+        const text = body({ ...minimal, "What I did": "#### Grill\nFixed the glossary." });
+        expect(checkBody(text, HOME).broken).toEqual([]);
+    });
+
+    it("rejects a What I did that holds only a deeper sub-heading", () => {
+        const text = body({ ...minimal, "What I did": "#### Grill\n" });
+        expect(checkBody(text, HOME).broken).toEqual(['the section "### What I did" is empty']);
+    });
+
     it("does not take a deeper or longer heading for a required section", () => {
         const text = body({ ...minimal }).replace("### Decisions", "#### Decisions");
         expect(checkBody(text, HOME).broken).toHaveLength(1);
