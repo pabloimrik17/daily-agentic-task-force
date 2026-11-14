@@ -1,6 +1,5 @@
-// The pull-request port over `git` and `gh` (spec stage-logbook; design D2). `gh` reads its
-// repository from its working directory, so its exec is made with `cwd: directory`; every `git`
-// command names the directory with `-C`. Every error names the command that failed.
+// `gh` reads its repository from its working directory, so its exec is made with `cwd: directory`;
+// every `git` command names the directory with `-C`.
 
 import { CLI_TIMEOUT_MS, type Exec, execCommand } from "../exec.ts";
 import type { Result } from "../result.ts";
@@ -19,10 +18,9 @@ const HOOKED_TIMEOUT_MS = 600_000;
 export interface GitHubExecs {
     gh: Exec;
     git: Exec;
-    hooked: Exec; // `git`, with the long timeout; runs the commit and the push
+    hooked: Exec;
 }
 
-// Runs one command; a failure reads `<label>: <command> failed: …`.
 async function run(exec: Exec, label: string, args: string[]): Promise<Result<string>> {
     const result = await exec(args);
     return result.ok
@@ -35,8 +33,6 @@ async function runVoid(exec: Exec, label: string, args: string[]): Promise<Resul
     return result.ok ? { ok: true, value: undefined } : result;
 }
 
-// Parses a command's JSON output with a strict reader; unparseable output is an error naming the
-// command.
 function parseJson<T>(label: string, stdout: string, read: (json: unknown) => T): Result<T> {
     try {
         return { ok: true, value: read(JSON.parse(stdout)) };
@@ -104,11 +100,10 @@ function parseLines(stdout: string): string[] {
         .filter((line) => line !== "");
 }
 
-// `<short id> <subject>` lines to short ids, leaving out the empty commit pull-request mode adds.
 function shortIds(stdout: string): string[] {
     return parseLines(stdout)
         .filter((line) => !line.slice(line.indexOf(" ") + 1).startsWith(EMPTY_COMMIT_SUBJECT))
-        .flatMap((line) => line.split(" ", 1)); // the short id is the text before the first space
+        .flatMap((line) => line.split(" ", 1));
 }
 
 export function gitHubPullRequests(execs: GitHubExecs, directory: string): PullRequests {

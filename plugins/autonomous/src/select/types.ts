@@ -6,7 +6,6 @@ import type { AutonomousConfig, Scope, Source } from "../config.ts";
 import type { AutonomyLabel } from "../label-contract/contract.ts";
 import type { TrackerResult, TrackerTask } from "../label-triage/trackers/tracker.ts";
 
-// A task as a link: its id, and its URL when the tracker has one (Beads has none).
 export interface TaskLink {
     id: string;
     url: string | null;

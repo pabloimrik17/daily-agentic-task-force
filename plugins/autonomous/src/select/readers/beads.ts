@@ -59,7 +59,7 @@ export function beadsWorkReader(exec: Exec, config: BeadsConfig): WorkReader {
                 .map(({ task, priority, parent }) => ({
                     ...task,
                     priority,
-                    url: null, // Beads has no URL: the id stands in
+                    url: null,
                     parent: parent === undefined ? null : { id: parent, url: null },
                     project: null,
                     repository: null,

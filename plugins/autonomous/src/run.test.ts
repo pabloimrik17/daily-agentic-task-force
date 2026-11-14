@@ -1470,7 +1470,6 @@ function named(id: string, outcome: StepOutcome, log: string[], data: unknown = 
 
 const FIVE = ["reconcile", "quota-gate", "label-triage", "select", "launch"];
 
-// A port with no pull request yet, one commit ahead of `main`, that logs each call.
 function fakePullRequests(log: string[]): PullRequests {
     const ok = <T>(name: string, value: T) => {
         log.push(name);
@@ -1589,7 +1588,6 @@ describe("main --log", () => {
         "See the stage summary.",
     ].join("\n\n");
 
-    // An open pull request whose comments are what the mode posted.
     function openPullRequest(log: string[]): PullRequests {
         const posted: string[] = [];
         return {

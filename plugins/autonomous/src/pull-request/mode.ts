@@ -1,8 +1,6 @@
-// Pull-request mode (spec stage-logbook, "One pull request per workspace branch", "A branch with
-// nothing to show", "Pull request title", "The cover"; spec autonomous-run, "Pull-request mode").
-// It writes the cover beside the attempt record and never the record, so it takes no run lock.
-// Every step is safe to repeat: an open pull request is reused, and a run cut short after the push
-// finds the branch ahead and pushes it again.
+// Takes no run lock: it writes the cover beside the attempt record, never the record.
+// Every step is safe to repeat: a run cut short after the push finds the branch ahead and
+// pushes again.
 
 import { writeFile } from "node:fs/promises";
 import { join } from "node:path";
@@ -25,8 +23,8 @@ const COVER_FILE = "cover.md";
 
 export interface PullRequestDeps {
     config: AutonomousConfig;
-    state: string; // where the attempt is read and the cover is written, without the run lock
-    work: WorkReader[]; // one per enabled source
+    state: string;
+    work: WorkReader[];
     pullRequests: PullRequestsFactory;
 }
 
@@ -39,12 +37,12 @@ interface Ready {
 type Checked = { ok: true; value: Ready } | { ok: false; reasons: string[] };
 
 interface Opening extends Ready {
-    title: string | undefined; // as the agent passed it, without the task id
+    title: string | undefined;
     pullRequests: PullRequests;
     report: PullRequestReport;
-    base: string; // the default branch, once read
-    found: PullRequest | null; // the branch's open pull request, once looked up
-    ahead: number; // commits on the branch that the base lacks, once counted
+    base: string;
+    found: PullRequest | null;
+    ahead: number;
 }
 
 // A step returns the reason it stopped, or null when it did its part.
@@ -89,7 +87,6 @@ export async function runPullRequest(
     if (stopped !== null) {
         report.reasons.push(stopped);
     }
-    // Spec autonomous-run, "Pull-request mode": exit 0 when a pull request is reported or none is needed.
     report.outcome = report.pullRequest !== null || !report.needed ? "advance" : "not-evaluable";
     return report;
 }
@@ -108,7 +105,6 @@ async function runSteps(steps: readonly OpeningStep[], opening: Opening): Promis
     return null;
 }
 
-// Spec autonomous-run, "Pull-request mode preconditions": nothing is written before both hold.
 async function check(
     attempt: AttemptId,
     deps: PullRequestDeps,
@@ -129,7 +125,6 @@ async function check(
     return { ok: true, value: { record, dir, task: read.value } };
 }
 
-// The task as its tracker holds it now, with its children, URL and parent (design D3, D4).
 async function readTask(
     readers: readonly WorkReader[],
     record: AttemptRecord,
@@ -151,8 +146,6 @@ async function readTask(
     return detailed.ok ? detailed : { ok: false, error: `${source}: ${detailed.error}` };
 }
 
-// The text the agent passed, followed by the task id unless it already ends with it
-// (spec stage-logbook, "Pull request title").
 function titled(title: string, task: WorkTask): string {
     const suffix = ` (${task.id})`;
     return title.endsWith(suffix) ? title : `${title}${suffix}`;
@@ -172,7 +165,6 @@ async function readBase(opening: Opening): Promise<string | null> {
     return null;
 }
 
-// Only an open pull request counts: a merged or closed one gets a successor (design D2).
 async function findOpen(opening: Opening): Promise<string | null> {
     const found = await opening.pullRequests.find(opening.record.workspace.branch);
     if (!found.ok) {
@@ -182,7 +174,7 @@ async function findOpen(opening: Opening): Promise<string | null> {
     return null;
 }
 
-// Rewritten on every run, so the description follows the task (spec stage-logbook, "The cover").
+// Rewritten on every run, so the description follows the task.
 async function writeCover(opening: Opening): Promise<string | null> {
     const file = coverFile(opening);
     try {
@@ -193,7 +185,6 @@ async function writeCover(opening: Opening): Promise<string | null> {
     }
 }
 
-// The title is replaced only when one was passed; the description always is.
 async function reuse(opening: Opening): Promise<string | null> {
     const found = opening.found!; // REUSE runs only when the lookup found one
     const title = opening.title === undefined ? undefined : titled(opening.title, opening.task);
@@ -210,7 +201,6 @@ async function reuse(opening: Opening): Promise<string | null> {
     return null;
 }
 
-// Spec stage-logbook, "Pull request title": nothing is pushed without one.
 function requireTitle(opening: Opening): Promise<string | null> {
     return Promise.resolve(
         opening.title === undefined
@@ -219,8 +209,6 @@ function requireTitle(opening: Opening): Promise<string | null> {
     );
 }
 
-// Spec stage-logbook, "A branch with nothing to show": the parent of a split with no commit
-// ahead needs no pull request (design D3).
 async function countAhead(opening: Opening): Promise<string | null> {
     const { pullRequests, base, task, report } = opening;
     const ahead = await pullRequests.ahead(base);

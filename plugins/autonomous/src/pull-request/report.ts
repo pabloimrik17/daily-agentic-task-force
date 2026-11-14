@@ -9,7 +9,6 @@ interface PullRequestTask {
     title: string;
 }
 
-// "reused": the branch already had an open pull request, so none was opened.
 interface ReportedPullRequest {
     number: number;
     url: string;
@@ -20,17 +19,16 @@ interface ReportedPullRequest {
 export interface PullRequestReport {
     schema: typeof PULL_REQUEST_SCHEMA;
     startedAt: string;
-    // advance when a pull request is reported or the task needs none (spec autonomous-run, "Pull-request mode").
     outcome: "advance" | "not-evaluable";
     attempt: AttemptId;
-    task: PullRequestTask | null; // null when the task was not read
-    branch: string | null; // the attempt's workspace branch
-    base: string | null; // the repository's default branch; null when it was not read
-    needed: boolean; // false only for the parent of a split with nothing to show (design D3)
+    task: PullRequestTask | null;
+    branch: string | null;
+    base: string | null;
+    needed: boolean; // false only for the parent of a split with nothing to show
     pullRequest: ReportedPullRequest | null;
     emptyCommit: boolean;
     reasons: string[];
-    // Present only when the configuration failed to load, leaving nothing to read.
+    // Present only when the configuration failed to load.
     config?: { path: string; error: string };
 }
 

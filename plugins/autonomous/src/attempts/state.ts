@@ -89,12 +89,10 @@ export function receiptPath(dir: string): string {
     return join(dir, "persisted.json");
 }
 
-// Written by answer mode once a transition is applied and read back, for the logbook header.
 export function transitionedPath(dir: string): string {
     return join(dir, "transition.json");
 }
 
-// The logbook files: the agent writes the entry's body, log mode writes the receipt.
 export function logbookEntryPath(dir: string): string {
     return join(dir, "logbook-entry.md");
 }

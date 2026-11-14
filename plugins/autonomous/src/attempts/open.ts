@@ -1,6 +1,3 @@
-// The attempt a mode acts on (persist, pull-request and log modes): its record, read without the
-// run lock, and the checks each of those modes makes before any write.
-
 import type { AutonomousConfig } from "../config.ts";
 import type { Result } from "../result.ts";
 import { type AttemptId, type AttemptRecord, holdsTask } from "./record.ts";
@@ -13,7 +10,6 @@ export interface OpenAttempt {
 
 const messageOf = (error: unknown) => (error instanceof Error ? error.message : String(error));
 
-// Unknown, not open, or from a source that is not enabled: an error naming which.
 export async function readOpenAttempt(
     state: string,
     attempt: AttemptId,

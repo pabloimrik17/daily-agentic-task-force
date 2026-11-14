@@ -95,9 +95,8 @@ async function settle(
     return leaveRecord(moved, state, ref, answer.values, now);
 }
 
-// Only an applied, read-back transition leaves the record, in the task's open attempt of any stage
-// (the first of the sorted list); a failure to list or write is the settlement's detail, never its
-// status. No open attempt, nothing written.
+// The record goes to the task's open attempt of any stage (the first of the sorted list); a
+// failure to list or write is the settlement's detail, never its status.
 async function leaveRecord(
     settled: Settlement,
     state: string,

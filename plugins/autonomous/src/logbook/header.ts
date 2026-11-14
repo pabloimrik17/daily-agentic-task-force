@@ -1,6 +1,3 @@
-// The header of a logbook entry (design D6, D9), rendered by code from the attempt's record and
-// files, never from the agent's text. Pure: every time is rendered in UTC.
-
 import type { AttemptId } from "../attempts/record.ts";
 import type { StageId } from "../stages/stage.ts";
 import { logbookMarker } from "./marker.ts";
@@ -53,7 +50,6 @@ function utcStamp(date: Date): string {
     return `${utcDay(date)} ${utcTime(date)}`;
 }
 
-// Whole minutes rounded down; from 60 minutes `1 h 5 min`, or `2 h` when the minutes are 0.
 function duration(start: Date, end: Date): string {
     const total = Math.max(0, Math.floor((end.getTime() - start.getTime()) / MS_PER_MINUTE));
     if (total < 60) {
@@ -108,7 +104,7 @@ export function renderHeader(input: HeaderInput): string {
     ].join("\n");
 }
 
-// D9: written entirely by code, under the same marker so a discarded attempt never has two entries.
+// Shares the entry marker, so a discarded attempt never has two entries.
 export function renderDiscardEntry(input: DiscardInput): string {
     return [
         logbookMarker(input.attempt),

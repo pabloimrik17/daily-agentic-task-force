@@ -296,8 +296,7 @@ async function releaseWorktree({
     return null;
 }
 
-// Spec stage-logbook, "A discarded attempt leaves an entry"; design D9. The last step and a
-// failure-proof one: it always returns null, and what goes wrong becomes a note.
+// Never fails the discard: it always returns null, and what goes wrong becomes a note.
 async function publishDiscardEntry(discarding: Discarding): Promise<string | null> {
     let outcome: Result<void>;
     try {
@@ -315,7 +314,7 @@ async function entryFor({ record, deps }: Discarding): Promise<Result<void>> {
     const done: Result<void> = { ok: true, value: undefined };
     const dir = attemptDir(deps.state, record.id);
     if (existsSync(logbookReceiptPath(dir))) {
-        return done; // the attempt already has its entry
+        return done;
     }
     // The repository, not the worktree, which --release-workspace may have removed.
     const pullRequests = deps.pullRequests(record.workspace.repository);

@@ -1,5 +1,5 @@
-// The first line of every logbook entry (design D6), which GitHub does not show: it ties a
-// comment to its attempt, so neither log mode nor discard publishes a second entry for one.
+// GitHub does not show this first line of an entry: it ties a comment to its attempt, so neither
+// log mode nor discard publishes a second entry for one.
 
 import type { AttemptId } from "../attempts/record.ts";
 

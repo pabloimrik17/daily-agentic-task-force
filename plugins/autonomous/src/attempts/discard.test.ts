@@ -97,8 +97,7 @@ const OPEN_PULL_REQUEST: PullRequest = {
 };
 const MARKER = "<!-- autonomous:logbook linear:DOT-109:test:1 -->";
 
-// A port for a branch with no pull request. Its calls go to their own log, so the shared `calls`
-// of the other tests stay what they assert.
+// Its calls go to their own log, so the shared `calls` of the other tests stay what they assert.
 function fakePullRequests(script: Partial<PullRequests>, calls: string[]): PullRequests {
     const unexpected = (method: string) => () =>
         Promise.resolve({ ok: false as const, error: `${method} was not expected` });

@@ -1,8 +1,4 @@
-// Log mode (spec stage-logbook, "A logbook entry per attempt", "Logbook entry body", "Logbook entry
-// header", "The entry is read back and leaves a receipt"; design D6-D8). It writes files beside
-// the attempt record and never the record, so it takes no run lock. Nothing is published before
-// the attempt, its body and its pull request are checked, and the marker keeps a second run from
-// publishing the entry again.
+// Writes files beside the attempt record and never the record, so it takes no run lock.
 
 import { access, readFile, writeFile } from "node:fs/promises";
 import { join } from "node:path";
@@ -27,11 +23,11 @@ const COMMENT_FILE = "logbook-comment.md";
 
 export interface LogDeps {
     config: AutonomousConfig;
-    state: string; // where the attempt is read and its files are written, without the run lock
+    state: string;
     trackers: Trackers;
     pullRequests: PullRequestsFactory;
-    home: string; // the home directory a body must not name
-    wait?: Wait; // between read-back tries; tests pass an instant one
+    home: string;
+    wait?: Wait;
 }
 
 interface Ready {
@@ -78,8 +74,6 @@ export async function runLog(
     return report;
 }
 
-// Spec autonomous-run, "Log mode": nothing is written while the attempt is unknown or not open,
-// its body is missing or breaks a rule, or its branch has no open pull request.
 async function check(attempt: AttemptId, deps: LogDeps, report: LogReport): Promise<Checked> {
     const found = await readOpenAttempt(deps.state, attempt, deps.config);
     if (!found.ok) {
@@ -99,7 +93,6 @@ async function check(attempt: AttemptId, deps: LogDeps, report: LogReport): Prom
     return { ok: true, value: { record, dir, body: body.value, port, pullRequest: open.value } };
 }
 
-// The body the agent wrote: missing, blank, or every rule it breaks (D7) is a reason.
 async function readBody(
     dir: string,
     home: string,
@@ -143,7 +136,6 @@ async function findPullRequest(
     return { ok: true, value: found.value };
 }
 
-// D6: an entry already on the pull request is not published again; only its receipt is owed.
 async function log(logging: Logging): Promise<string | null> {
     const { port, pullRequest, record, report } = logging;
     const listed = await port.comments(pullRequest.number);
@@ -163,7 +155,7 @@ async function log(logging: Logging): Promise<string | null> {
     return null;
 }
 
-// D6: every value comes from the record, its files, the tracker and the branch, never the body.
+// Every value comes from the record, its files, the tracker and the branch, never the body.
 async function buildHeader(logging: Logging): Promise<string | null> {
     const { record, report } = logging;
     const stage = stageFor(record.stage);
@@ -194,8 +186,7 @@ async function buildHeader(logging: Logging): Promise<string | null> {
     return null;
 }
 
-// The task's labels as its tracker holds them now: the answer may have changed them since launch.
-// The report already holds the task from the record; this refreshes its title.
+// Read from the tracker now: the answer may have changed the labels since launch.
 async function readAutonomy({ deps, record, report }: Logging): Promise<Result<string | null>> {
     const read = await deps.trackers[record.task.source].readTask(record.task.id);
     if (!read.ok) {
@@ -206,7 +197,7 @@ async function readAutonomy({ deps, record, report }: Logging): Promise<Result<s
     return { ok: true, value: labels.find(isAutonomyLabel) ?? null };
 }
 
-// Commits since the start are an approximation (D6); without a start there is nothing to count.
+// Commits since the start are an approximation.
 async function readCommits(port: PullRequests, start: string | null): Promise<Result<string[]>> {
     if (start === null) {
         return { ok: true, value: [] };

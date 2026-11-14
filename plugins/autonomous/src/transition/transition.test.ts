@@ -1224,7 +1224,6 @@ describe("transition record: An applied transition leaves a record in the open a
         }
     });
 
-    // A state directory holding a started grill-me attempt whose definition is persisted.
     async function grilling(overrides: Partial<AttemptRecord> = {}): Promise<string> {
         const state = tempState();
         states.push(state);

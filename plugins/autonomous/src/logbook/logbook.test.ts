@@ -60,7 +60,6 @@ afterAll(() => {
     }
 });
 
-// The first grill-me attempt of DOT-121, launched with opus at high effort and started at 10:02.
 function grillAttempt(overrides: Partial<AttemptRecord> = {}): AttemptRecord {
     const base = startedAttempt();
     return startedAttempt({
@@ -79,8 +78,8 @@ function grillAttempt(overrides: Partial<AttemptRecord> = {}): AttemptRecord {
 }
 
 interface PortScript {
-    open?: PullRequest | null; // what find returns; OPEN when absent
-    comments?: string[]; // what the pull request already holds
+    open?: PullRequest | null;
+    comments?: string[];
     commits?: string[];
     lag?: number; // reads after a comment that do not show it yet; Infinity never shows it
     failures?: Partial<Record<keyof PullRequests, string>>;
@@ -88,12 +87,11 @@ interface PortScript {
 
 interface FakePort {
     port: PullRequests;
-    directories: string[]; // what the factory was made for
-    calls: string[]; // "<method> <args joined by space>", in order
+    directories: string[];
+    calls: string[];
     comments: () => readonly string[];
 }
 
-// A pull request that keeps its comments and reads the files it is handed; every other write fails.
 function fakePort(script: PortScript = {}): FakePort {
     const calls: string[] = [];
     const stored = [...(script.comments ?? [])];
@@ -139,9 +137,9 @@ function fakePort(script: PortScript = {}): FakePort {
 
 interface Arrangement {
     record?: AttemptRecord;
-    body?: string | null; // null: no logbook-entry.md
-    answer?: string[] | "malformed"; // transition.json; absent when not given
-    labels?: string[]; // the task's labels when the mode reads it
+    body?: string | null;
+    answer?: string[] | "malformed";
+    labels?: string[];
     readError?: string;
     port?: PortScript;
 }
@@ -189,7 +187,6 @@ async function arrange(options: Arrangement = {}) {
 
 const readJson = (file: string) => JSON.parse(readFileSync(file, "utf8")) as unknown;
 
-// The facts line of the one entry published.
 const factsOf = (comments: readonly string[]) => comments[0]?.split("\n")[3];
 
 describe("log: A logbook entry per attempt", () => {

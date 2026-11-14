@@ -1,6 +1,3 @@
-// The log mode report (spec autonomous-run, "Log report"): one JSON document with --json, a text
-// report of the same information without it.
-
 import type { AttemptId } from "../attempts/record.ts";
 import type { Source } from "../config.ts";
 
@@ -25,15 +22,14 @@ export interface LogReport {
     startedAt: string;
     outcome: "advance" | "not-evaluable"; // advance exactly when the receipt is written or already there
     attempt: AttemptId;
-    task: LogTask | null; // from the attempt record once it is read, the title as the tracker holds it after; null when the attempt was not read
-    pullRequest: LogPullRequest | null; // null when none was found
+    task: LogTask | null;
+    pullRequest: LogPullRequest | null;
     entry: EntryWrite;
-    words: number | null; // the body's word count; null when the body was not read
-    // What the operator should know although the entry went through, e.g. an unreadable answer.
+    words: number | null;
+    // What the operator should know although the entry went through.
     notes: string[];
     reasons: string[];
     receipt: string | null;
-    // Present only when the configuration failed to load, leaving nothing to read.
     config?: { path: string; error: string };
 }
 
@@ -53,8 +49,6 @@ export function blankLog(attempt: AttemptId, startedAt: Date): LogReport {
     };
 }
 
-// With --json a configuration that fails to load still yields one document;
-// the error itself goes to stderr.
 export function unconfiguredLog(
     attempt: AttemptId,
     path: string,

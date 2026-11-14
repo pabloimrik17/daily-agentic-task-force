@@ -1,6 +1,5 @@
-// The check on the body of a logbook entry (design D7, spec "Logbook entry body"). The format is
-// expected to change as it is used, so every limit lives in this file. Who took each decision is
-// the agent's to write and is not checked.
+// The format is expected to change as it is used, so every limit lives in this file. Who took
+// each decision is the agent's to write and is not checked.
 
 export const REQUIRED_SECTIONS: readonly string[] = [
     "What I did",
@@ -27,7 +26,6 @@ function countWords(text: string): number {
     return text.split(/\s+/).filter((token) => token !== "").length;
 }
 
-// A heading is a line that is exactly `### <name>`; trailing whitespace is not the agent's fault.
 function sectionStart(all: readonly string[], name: string): number {
     return all.findIndex((line) => line.trimEnd() === `### ${name}`);
 }

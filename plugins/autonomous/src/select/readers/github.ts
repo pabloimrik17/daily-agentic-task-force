@@ -39,7 +39,6 @@ function linkId(url: string, number: number, fallbackRepository: string): string
     return `${ISSUE_URL.exec(url)?.[1] ?? fallbackRepository}#${number}`;
 }
 
-// `gh issue view --json parent` is null for an issue that is not a sub-issue.
 function parentLink(root: Json, taskRepository: string): TaskLink | null {
     const value = root.parent;
     if (value === undefined || value === null) return null;

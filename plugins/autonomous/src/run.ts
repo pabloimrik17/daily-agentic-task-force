@@ -315,9 +315,7 @@ async function runPersistMode(attempt: AttemptId, args: RunArgs, deps: MainDeps)
     return exitCodeFor(report.outcome);
 }
 
-// Pull-request mode (stage-logbook design D1), like persist mode, runs no step and takes no run
-// lock: it writes only the cover beside the attempt record, and acts on the branch and its pull
-// request.
+// No run lock: the only state it writes is the cover beside the attempt record.
 async function runPullRequestMode(
     attempt: AttemptId,
     args: RunArgs,
@@ -342,8 +340,8 @@ async function runPullRequestMode(
     return exitCodeFor(report.outcome);
 }
 
-// Log mode (stage-logbook design D1, D6) runs no step and takes no run lock: it writes only the
-// entry and its receipt beside the attempt record, never the record.
+// No run lock: it writes only the entry and its receipt beside the attempt record, never the
+// record.
 async function runLogMode(attempt: AttemptId, args: RunArgs, deps: MainDeps): Promise<number> {
     const startedAt = deps.now();
     const load = modeConfig(args, deps, (path, error) =>

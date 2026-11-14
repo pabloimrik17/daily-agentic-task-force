@@ -1,7 +1,3 @@
-// The record an applied transition leaves in the open attempt's directory (spec autonomous-run,
-// "An applied transition leaves a record in the open attempt"; design D5): the labels the human
-// answered and when. The logbook header reads it; no other mode does.
-
 import { readFile } from "node:fs/promises";
 
 import { transitionedPath, writeJsonAtomic } from "../attempts/state.ts";
@@ -19,8 +15,8 @@ export const TRANSITIONED_SCHEMA = "autonomous.transitioned.v1";
 
 export interface Transitioned {
     schema: typeof TRANSITIONED_SCHEMA;
-    answer: string[]; // the labels answered, in the order given
-    at: string; // ISO time the transition was applied
+    answer: string[];
+    at: string;
 }
 
 const messageOf = (error: unknown) => (error instanceof Error ? error.message : String(error));
@@ -52,7 +48,7 @@ function parseTransitioned(input: unknown): Transitioned {
 }
 
 // Null when the attempt's directory holds no record: a manual transition, or one answered before
-// the record existed. An unreadable or malformed file is an error naming it.
+// the record existed.
 export async function readTransitioned(dir: string): Promise<Result<Transitioned | null>> {
     const file = transitionedPath(dir);
     let text: string;

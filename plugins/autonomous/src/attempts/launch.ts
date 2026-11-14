@@ -428,7 +428,7 @@ function begin(ctx: RunContext, config: AutonomousConfig, plan: Plan, path: stri
         observed: null,
         cleanup: null,
         retained: null,
-        agentArgs: stage.agentArgs(config.sessions.tool), // what the stage declared at launch (D5)
+        agentArgs: stage.agentArgs(config.sessions.tool),
     };
     const tracker = ctx.io.trackers(config)[task.source];
     return {

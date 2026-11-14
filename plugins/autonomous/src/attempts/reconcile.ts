@@ -407,8 +407,7 @@ async function saveCapture(
     return [];
 }
 
-// Spec stage-sessions, "A completed attempt without a logbook entry is noted"
-// (design D8): only a note; it never changes the action, the state or the outcome.
+// Only a note: it never changes the action, the state or the outcome.
 async function missingLogbook(r: Reconciler, record: AttemptRecord): Promise<string[]> {
     const receipt = logbookReceiptPath(attemptDir(r.state, record.id));
     try {

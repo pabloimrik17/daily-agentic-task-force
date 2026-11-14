@@ -25,7 +25,7 @@ export interface RunArgs {
     transition: { source: Source; id: string } | undefined;
     persist: AttemptId | undefined;
     pullRequest: AttemptId | undefined;
-    title: string | undefined; // only with --pull-request
+    title: string | undefined;
     log: AttemptId | undefined;
 }
 
@@ -273,7 +273,6 @@ const otherFlags = (args: RunArgs) =>
         args.releaseWorkspace,
     ].some(Boolean);
 
-// Another mode flag besides the one a rule is about: the modes are mutually exclusive.
 const otherModes = (args: RunArgs, ...modes: ((args: RunArgs) => boolean)[]) =>
     [transitioning, persisting, pullRequesting, logging]
         .filter((mode) => !modes.includes(mode))

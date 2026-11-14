@@ -54,16 +54,16 @@ type Method = keyof PullRequests;
 
 interface PortScript {
     base?: string;
-    found?: PullRequest | null; // the branch's open pull request before the run
-    ahead?: number; // commits ahead of the base before the run
-    failures?: Partial<Record<Method, string>>; // a method that fails every call with this error
+    found?: PullRequest | null;
+    ahead?: number;
+    failures?: Partial<Record<Method, string>>;
 }
 
 interface FakePort {
     factory: (directory: string) => PullRequests;
-    directories: string[]; // one per factory call
-    calls: string[]; // "<method> <args>", objects as JSON
-    bodies: string[]; // the body file's text at each open or edit
+    directories: string[];
+    calls: string[];
+    bodies: string[];
     script: PortScript; // mutable, so a second run sees what the first one did
 }
 
@@ -71,8 +71,6 @@ function show(argument: unknown): string {
     return typeof argument === "string" ? argument : JSON.stringify(argument);
 }
 
-// A branch with a remote: `open` keeps the pull request so a later `find` returns it,
-// and `emptyCommit` puts the branch one commit ahead.
 function fakePort(script: PortScript = {}): FakePort {
     const calls: string[] = [];
     const bodies: string[] = [];
@@ -118,10 +116,10 @@ function fakePort(script: PortScript = {}): FakePort {
 
 interface Arrange {
     status?: AttemptState;
-    task?: Partial<WorkTask>; // what the listing holds
-    detail?: Partial<WorkTask>; // what detail fills in
+    task?: Partial<WorkTask>;
+    detail?: Partial<WorkTask>;
     port?: PortScript;
-    listed?: boolean; // false: the task is not in the listing
+    listed?: boolean;
 }
 
 async function arrange(options: Arrange = {}) {

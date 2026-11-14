@@ -22,8 +22,6 @@ export function spliceDefinition(description: string | null, definition: string)
     return `${headed.trimEnd()}\n${below}`;
 }
 
-// The definition a grill wrote: what sits above the separator. Null when the description
-// does not start with the heading, that is, when no grill has written one.
 export function definitionOf(description: string | null): string | null {
     if (description === null || !description.startsWith(DEFINITION_HEADING)) return null;
     const text = `${description.trimEnd()}\n`;
