@@ -289,6 +289,7 @@ describe("launch: a proposal unit", () => {
                 exception: null,
             },
             candidates: [],
+            setAside: [],
             excluded: [],
             readyToClose: [],
             notEvaluated: [],

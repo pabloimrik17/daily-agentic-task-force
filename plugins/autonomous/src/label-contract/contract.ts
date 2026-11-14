@@ -32,6 +32,9 @@ export const GROUPS: Record<Group, readonly ContractLabel[]> = {
     stage: STAGE_LABELS,
 };
 
+// From the earliest stage to the most advanced.
+export const STAGE_ORDER: readonly StageLabel[] = STAGE_LABELS;
+
 export const DECIDED_GROUPS: readonly DecidedGroup[] = ["scope", "autonomy"];
 
 export const COLOURS: Record<ContractLabel, string> = {

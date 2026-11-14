@@ -106,6 +106,7 @@ function selectResult(overrides: Partial<SelectedUnit> = {}): StepResult<SelectD
             machineScope: "personal",
             selected,
             candidates: [],
+            setAside: [],
             excluded: [],
             notEvaluated: [],
             comparison: null,

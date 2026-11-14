@@ -1,18 +1,20 @@
 # autonomous
 
 Entry point of the autonomous loop: an orchestrator that discovers previously
-defined work and delegates it to other agents. It runs a fixed list of five
+defined work and delegates it to other agents. It runs a fixed list of six
 steps, in this order:
 
 1. `reconcile` brings the attempts of earlier runs up to date: it resolves,
    observes, finalises or retains each one (see
    [The `reconcile` step](#the-reconcile-step)).
-2. `quota-gate` decides whether the Claude account has quota to spend.
-3. `label-triage` reports the tasks missing a label of the contract and, with
+2. `capacity` counts the open attempts as slots and compares them with the
+   limits (see [Slots and the `capacity` step](#slots-and-the-capacity-step)).
+3. `quota-gate` decides whether the Claude account has quota to spend.
+4. `label-triage` reports the tasks missing a label of the contract and, with
    `--apply`, writes the labels it is confident about.
-4. `select` chooses the next work unit and explains the choice (see
+5. `select` chooses the next work unit and explains the choice (see
    [The `select` step](#the-select-step)).
-5. `launch` starts one managed session for the selected unit (see
+6. `launch` starts one managed session for the selected unit (see
    [The `launch` step](#the-launch-step)).
 
 With `--apply`, a run can also end with questions for the human, which
@@ -49,6 +51,8 @@ runner removes `taken` when an attempt is finalised or discarded.
 records why the new configuration blocks are optional and the old ones are not.
 [ADR 0004](docs/adr/0004-afk-proposal-transition-needs-no-answer.md) records why
 an `AFK` task leaves proposal preparation without an answer.
+[ADR 0005](docs/adr/0005-slot-limits-bind-only-the-loop.md) records why the
+slot limits bind only the loop.
 
 ## Install
 
@@ -123,6 +127,8 @@ adding the Linear CLI there is tracked as DOT-82 sub-issue 7.
 /autonomous:run --apply --persist <attempt-id> [--json]
 /autonomous:run --apply --pull-request <attempt-id> [--title <title>] [--json]
 /autonomous:run --apply --log <attempt-id> [--json]
+/autonomous:loop [--apply] [--account <provider-key>] [--force] [--json] [--grills <n>] [--parallel <n>] [--interval <minutes>]
+bun src/run.ts --notices <n>
 ```
 
 | Flag                                | Effect                                                                                                                                                                                                                                                                                                                                                                                                                                                                                             |
@@ -131,7 +137,7 @@ adding the Linear CLI there is tracked as DOT-82 sub-issue 7.
 | `--force`                           | Accepted, and does nothing: OpenUsage 0.8 prints what its app last fetched and refreshes on its own schedule                                                                                                                                                                                                                                                                                                                                                                                       |
 | `--json`                            | Print one `autonomous.run.v2` JSON document instead of the text report; with `--bootstrap-labels`, one `autonomous.bootstrap.v1` document; with `--answer`, one `autonomous.answers.v1` document; with `--discard`, one `autonomous.discard.v1` document; with `--transition`, one `autonomous.transition.v1` document; with `--persist`, one `autonomous.persist.v1` document; with `--pull-request`, one `autonomous.pull-request.v1` document; with `--log`, one `autonomous.log.v1` document   |
 | `--apply`                           | Let steps write. Without it a run has no side effects beyond the CLIs' own caches and the run lock. Required by `--answer`, `--discard`, `--transition`, `--persist`, `--pull-request` and `--log`                                                                                                                                                                                                                                                                                                 |
-| `--no-handoff`                      | Emit no handoff; the questions stay in the step's report. For runs with no human present, such as a `/loop`. Not combined with `--bootstrap-labels`, `--answer`, `--transition` or `--persist`                                                                                                                                                                                                                                                                                                     |
+| `--no-handoff`                      | Emit no handoff; the questions stay in the step's report. For runs with no human present; the unattended way is the [loop](#the-loop). Not combined with `--bootstrap-labels`, `--answer`, `--transition` or `--persist`                                                                                                                                                                                                                                                                           |
 | `--answer <id>=<value>[,<value>]`   | [Answer mode](#answer-mode): apply the answer to the question `<id>` and exit, running no step. Repeat it once per question. Only combines with `--apply` and `--json`                                                                                                                                                                                                                                                                                                                             |
 | `--bootstrap-labels`                | Run only the label bootstrap and exit. Only combines with `--json`                                                                                                                                                                                                                                                                                                                                                                                                                                 |
 | `--task <source>:<id>`              | Give that task to `launch` instead of running `label-triage` and `select`. `<source>` is `linear`, `beads` or `github`, split at the first `:`. Given once. Not combined with `--bootstrap-labels`, `--answer`, `--discard`, `--transition` or `--persist`. See [The supplied task](#the-supplied-task)                                                                                                                                                                                            |
@@ -143,9 +149,13 @@ adding the Linear CLI there is tracked as DOT-82 sub-issue 7.
 | `--title <title>`                   | With `--pull-request`, the text of the pull request's title; the task id is appended. Required to open a pull request; replaces the title of one already open. Requires `--pull-request`. Given once                                                                                                                                                                                                                                                                                               |
 | `--log <attempt-id>`                | [Log mode](#log-mode): publish the attempt's [logbook entry](#the-logbook) on the pull request, read it back and write the receipt, running no step. `<attempt-id>` is `<source>:<task>:<stage>:<n>`. Requires `--apply`. Only combines with `--apply` and `--json`. Given once                                                                                                                                                                                                                    |
 | `--persist <attempt-id>`            | [Persist mode](#persist-mode): save the definition and the stage summary of that open grill-me attempt, or the stage summary of that open proposal attempt, to its task and write the receipt, running no step. `<attempt-id>` is `<source>:<task>:<stage>:<n>`. Requires `--apply`. Only combines with `--apply` and `--json`. Given once                                                                                                                                                         |
+| `--loop`                            | Run an iteration of the loop, where the [slot limits](#slots-and-the-capacity-step) bind. Only combines with `--apply`, `--account`, `--force`, `--json`, `--grills`, `--parallel` and `--interval`. Not combined with `--no-handoff`, `--bootstrap-labels`, `--answer`, `--task`, `--stage`, `--discard`, `--release-workspace`, `--transition`, `--persist`, `--pull-request`, `--title`, `--log` or `--notices`                                                                                 |
+| `--grills <n>`                      | The limit of grill slots for this loop, an integer of 0 or more. Replaces `runner.grills`. Requires `--loop`. Given once                                                                                                                                                                                                                                                                                                                                                                           |
+| `--parallel <n>`                    | The limit of work slots for this loop, an integer of 0 or more. Replaces `runner.parallel`. Requires `--loop`. Given once                                                                                                                                                                                                                                                                                                                                                                          |
+| `--interval <minutes>`              | The time between two iterations, an integer of 1 or more. Replaces `runner.intervalMinutes`. Requires `--loop`. Given once                                                                                                                                                                                                                                                                                                                                                                         |
+| `--notices <n>`                     | The count of notices already shown, an integer of 0 or more. Cannot be combined with any other flag. Given once                                                                                                                                                                                                                                                                                                                                                                                    |
 
-The script can also be run directly, which is what a shell or `/loop` should
-branch on:
+The script can also be run directly, which is what a shell should branch on:
 
 ```bash
 bun plugins/autonomous/src/run.ts --account claude@1a2b3c4d --json --apply --no-handoff
@@ -159,10 +169,8 @@ explicitly: nothing adds either on its own. With `--apply`, `reconcile` and
 `launch` write attempt records, sessions, worktrees and the `taken` label.
 The one exception is the answer invocation of `/autonomous:run`, which passes
 `--apply` again; it only follows a run the user started with `--apply`. A
-`/loop` that should write passes `--apply` explicitly, and `--no-handoff` with
-it, as above; through the command that is
-`/autonomous:run --account claude@1a2b3c4d --apply --no-handoff` (see
-[The round](#the-round)).
+script run that should write passes `--apply` explicitly, as above. The
+unattended way is [the loop](#the-loop), which needs no `--no-handoff`.
 
 ### Exit codes
 
@@ -308,8 +316,111 @@ ends; nothing is asked and nothing more is written.
 
 `--no-handoff` suppresses the handoff and changes nothing else about the run;
 the questions stay in the step's report. It is meant for runs with no human
-present. A `/loop` that runs `/autonomous:run` with `--apply` must pass it, or
-it stops at the first question until someone answers.
+present. An unattended `/autonomous:run --apply` must pass it, or it stops at
+the first question until someone answers. The [loop](#the-loop) never hands
+off.
+
+## The loop
+
+The loop repeats iterations at a fixed interval. An iteration runs the steps of
+a run without a supplied task, in the same order and under the same rules, with
+the [slot limits](#slots-and-the-capacity-step) enforced and no handoff. It
+launches at most one session. The loop is the only thing the limits bind.
+
+### Starting it
+
+From an agent session:
+
+```text
+/autonomous:loop --account claude --apply
+```
+
+The command starts the loop as a background task, waits for its notices in the
+background and shows each one verbatim. It shows nothing else and says nothing
+while no notice arrives.
+
+From a shell:
+
+```bash
+bun plugins/autonomous/src/run.ts --loop --apply --account claude
+```
+
+The loop prints nothing to standard output. It exits with 0 when stopped, 1 on
+a runner error, and 3 when another loop is alive; the message on standard error
+names that loop. Only one loop runs per state directory. A manual
+`/autonomous:run` may run between two iterations, and an iteration that starts
+while a manual run holds the run lock is `not-evaluable`.
+
+**Caveat.** A loop started from an agent session is a background task of that
+session. Whether it survives the session closing has not been verified yet. For
+a loop that must outlive the session, start it from a shell.
+
+`--interval <minutes>` replaces `runner.intervalMinutes` (10 by default), the
+wait between the end of one iteration and the start of the next. `--grills` and
+`--parallel` replace the slot limits for that loop.
+
+### The dry iteration
+
+Without `--apply`, `--loop` runs exactly one iteration that writes nothing,
+prints its report as a run does, and exits with the code of its outcome (see
+[Exit codes](#exit-codes)). It takes no loop lock and writes no log or notice.
+
+```bash
+bun plugins/autonomous/src/run.ts --loop --account claude
+```
+
+### What keeps it going
+
+An iteration ending in `advance`, `wait` or `not-evaluable` does not stop the
+loop: an exhausted quota, an unreachable tracker, full slots or a run lock held
+by a manual run all end in the next iteration after the interval. The loop
+stops only on a runner error or when its process is asked to stop.
+
+### Notices
+
+A notice is one line, recorded only when:
+
+- an iteration finalises an attempt: `<source>:<task> <stage> → <stage now>`,
+  where the last part is the stage label the task now carries, or `closed`;
+- an iteration newly retains an attempt: `retained <attempt>: <reason>`;
+- the loop stops: `loop stopped: received SIGINT`,
+  `loop stopped: received SIGTERM` or `loop stopped: runner error: <message>`.
+
+A session that waits for the person produces no notice. For example:
+
+```text
+linear:DOT-98 grill-me → proposal
+retained linear:DOT-77:grill-me:1: <reason>
+```
+
+`--notices <n>` prints the notices recorded after the first `n`, then
+`next: <m>` with the new count, and exits with 0. While there is none and a
+loop is alive, it waits. With no live loop it first waits up to 10 seconds for
+one to start, then prints what it has, or prints `loop stopped: not running`
+and exits with 2. It takes no other flag.
+
+```bash
+bun plugins/autonomous/src/run.ts --notices 0
+```
+
+### Files
+
+In the state directory (`$AUTONOMOUS_STATE`, else `$XDG_STATE_HOME/autonomous`,
+else `~/.local/state/autonomous`):
+
+| File           | Content                                                                                                  |
+| -------------- | -------------------------------------------------------------------------------------------------------- |
+| `loop.lock`    | The loop's pid and start time, held from start to end                                                    |
+| `loop.log`     | The report of every iteration with its start time, as text or, with `--json`, JSON; the only full report |
+| `loop.log.1`   | The log of the previous loop; a new loop renames the log to it, so the log is bounded to two loops       |
+| `loop.notices` | The notices of the current loop, one per line; emptied when a loop starts                                |
+
+### Stopping it
+
+There is no stop command. Send SIGTERM or SIGINT to the pid in `loop.lock`; from
+an agent session, stop the background task instead. A stop during an iteration
+is honoured when the iteration ends, so a launch is never cut. A second
+identical signal kills the process, and the next loop reclaims the stale lock.
 
 ## Answer mode
 
@@ -1288,7 +1399,7 @@ that names the limit of 300 and no receipt. The exit codes are in
 Per-user settings live outside the plugin, in one JSON file validated as
 strictly as the OpenUsage document: a missing file, a missing required field,
 a mistyped field or an unknown field is an error naming the path, never a
-default. The one exception is the three [optional blocks](#optional-blocks)
+default. The one exception is the four [optional blocks](#optional-blocks)
 below, whose missing keys take a shipped default. No credentials are stored in
 it.
 
@@ -1347,6 +1458,11 @@ it.
     "naming": {
         "model": "haiku",
         "effort": "low"
+    },
+    "runner": {
+        "grills": 1,
+        "parallel": 2,
+        "intervalMinutes": 10
     }
 }
 ```
@@ -1380,26 +1496,35 @@ judged labels, and `/autonomous:run` is not evaluable.
 
 ### Optional blocks
 
-`sessions`, `workspace` and `naming` are optional. The plugin ships
+`sessions`, `workspace`, `naming` and `runner` are optional. The plugin ships
 `plugins/autonomous/config.defaults.json`, and a key missing from the user's
 file, or a whole missing block, takes the shipped value for that key. A
 mistyped or unknown key is still an error naming its path, so a file written
 for an earlier version keeps working unchanged. ADR 0003 records why these
 blocks have defaults while `selection` stayed required. The shipped defaults:
 
-| Key                | Default              | Meaning                                                                             |
-| ------------------ | -------------------- | ----------------------------------------------------------------------------------- |
-| `sessions.tool`    | `claude`             | The agent each session runs: `claude` or `codex`. Any other value is rejected       |
-| `sessions.profile` | `null`               | The `aoe` profile passed to every `aoe` command; `null` leaves `aoe`'s default      |
-| `sessions.binary`  | `null`               | The agent binary or wrapper, passed as `--cmd-override`; `null` uses the tool's own |
-| `workspace.root`   | `~/WebstormProjects` | The directory whose git repositories a task is inferred against; `~` uses `HOME`    |
-| `naming.model`     | `haiku`              | `--model` of the `claude -p` call that names a session                              |
-| `naming.effort`    | `low`                | `--effort` of that call                                                             |
+| Key                      | Default              | Meaning                                                                             |
+| ------------------------ | -------------------- | ----------------------------------------------------------------------------------- |
+| `sessions.tool`          | `claude`             | The agent each session runs: `claude` or `codex`. Any other value is rejected       |
+| `sessions.profile`       | `null`               | The `aoe` profile passed to every `aoe` command; `null` leaves `aoe`'s default      |
+| `sessions.binary`        | `null`               | The agent binary or wrapper, passed as `--cmd-override`; `null` uses the tool's own |
+| `workspace.root`         | `~/WebstormProjects` | The directory whose git repositories a task is inferred against; `~` uses `HOME`    |
+| `naming.model`           | `haiku`              | `--model` of the `claude -p` call that names a session                              |
+| `naming.effort`          | `low`                | `--effort` of that call                                                             |
+| `runner.grills`          | `1`                  | The limit of [grill slots](#slots-and-the-capacity-step): an integer of 0 or more   |
+| `runner.parallel`        | `2`                  | The limit of work slots: an integer of 0 or more                                    |
+| `runner.intervalMinutes` | `10`                 | The minutes between two iterations of the loop: an integer of 1 or more             |
 
 When a run used a default, the text report's header gains a third line,
 `defaults: sessions.tool, naming.model`, listing the dotted keys in the order
 of the table; with `--json` the report holds `config.defaulted`, the same list.
 A run whose configuration sets every key shows neither.
+
+A limit of 0 is valid: that kind of slot is then always full. A negative or
+fractional limit, or an interval below 1 or not an integer, is rejected with
+the key's path, for example `runner.parallel`. A flag of the loop replaces the
+file's value for that loop, so each setting takes the first of these that
+exists: the flag, the key in the user's file, the shipped default.
 
 ## The label contract
 
@@ -1600,7 +1725,7 @@ database. The run that built it is recorded in
 
 ## The `label-triage` step
 
-Third in the run, after `reconcile` and `quota-gate`. It reads the open tasks of every
+Fourth in the run, after `reconcile`, `capacity` and `quota-gate`. It reads the open tasks of every
 enabled source — Linear across all teams except completed, canceled and
 `Duplicate` issues, Beads issues that are `open` or `in_progress`, GitHub open
 issues per configured repo — and reports every task missing a label group or
@@ -1848,8 +1973,8 @@ because the prompt carries issue text anyone can write.
 
 ## The `select` step
 
-Fourth in the run, after `reconcile`, `quota-gate` and `label-triage`, so it
-runs only when all three advanced. It chooses the next work unit: a task
+Fifth in the run, after `reconcile`, `capacity`, `quota-gate` and
+`label-triage`, so it runs only when all four advanced. It chooses the next work unit: a task
 together with its next stage, which [`launch`](#the-launch-step) then takes. It
 writes nothing to any tracker, asks the human nothing and contributes no
 questions to the [handoff](#the-handoff), with or without `--apply`.
@@ -1887,6 +2012,7 @@ In order, the step:
     | 4     | unsupported stage | Its next stage is not supported                                                                                   |
     | 5     | blocked           | It has an open blocker                                                                                            |
     | 6     | split             | It has an open child, or its next stage is `proposal` and it has any child, open or closed                        |
+    | 7     | no free slot      | Only in an iteration of the loop: the slot kind of its next stage is full                                         |
 
     Classification counts present contract labels only: an alias or a
     structural rule does not rescue a task here. A task in `grill-me` without an
@@ -1897,11 +2023,23 @@ In order, the step:
     one whose label was skipped because its tracker lacks it. Tracker status does
     not exclude a task; only `taken` does.
 
-4. Chooses among the candidates. A task of either scope is a candidate. With
-   one candidate, it is selected without an LLM and the report says it was the
-   only one; when it is outside the machine scope, the report marks it as a
-   machine-scope exception for that reason. With two or more, an LLM compares
-   them.
+    **No free slot** comes last, so a task that is blocked, split or otherwise
+    excluded keeps that reason. It applies only in an iteration of the loop
+    (`--loop`), and only to a candidate whose slot kind is full: a task in
+    `grill-me` needs a free grill slot, any other stage a free work slot. A
+    run outside the loop never excludes a task for a slot.
+
+4. Keeps the candidates at the most advanced stage. The order is the order of
+   the stage labels of the [label contract](#the-label-contract), by code:
+   `grill-me`, then `proposal`. Candidates at an earlier stage are set aside
+   for this run and shown apart in the report, not among the excluded tasks.
+   The rule applies to every candidate whatever its scope, in a run and in an
+   iteration: a `personal` candidate in `proposal` is kept over a `work`
+   candidate in `grill-me`.
+5. Chooses among the candidates kept. With one, it is selected without an LLM
+   and the report says it was the only one; when it is outside the machine
+   scope, the report marks it as a machine-scope exception for that reason.
+   With two or more, an LLM compares them.
 
 The next stage of a task is the stage label it carries, `grill-me`, `proposal`
 or `implement`. A task without one has no next stage and is excluded under
@@ -1967,6 +2105,8 @@ The text report shows:
   task in `grill-me` without one), scope and the explanation;
 - the machine-scope exception reason, when there is one;
 - the candidates compared;
+- the candidates set aside because a candidate at a more advanced stage
+  exists, each with its source, id, title and stage;
 - the excluded tasks, grouped by reason, each with its source, id and title;
 - the `ready to close` tasks: the tasks excluded as split that have no open
   child, as `ready to close: N task(s)` followed by one line per task with its
@@ -2198,6 +2338,63 @@ it was not checked. `action` is one of `none`, `adopted`, `aborted`,
 `cleanup-pending` and `cleanup-cleared`. `detail` is free text: the retention
 reason, the cleanup error, the adopted session id, or `null`.
 
+## Slots and the `capacity` step
+
+A slot is one open attempt. Every open attempt occupies exactly one slot,
+whichever command launched it: the loop, `/autonomous:run`, or a run with
+`--task`. A retained attempt occupies its slot until it is discarded, and so
+does a completed attempt whose cleanup is still owed. A session that no attempt
+records, such as one made by hand with the session manager, occupies none. A
+tracker status does not matter.
+
+There are two kinds of slot, counted separately:
+
+- A **grill slot** is occupied by an attempt whose stage is `grill-me`.
+- A **work slot** is occupied by an attempt of any other stage.
+
+Each kind has a limit, `runner.grills` and `runner.parallel` (see
+[Optional blocks](#optional-blocks)). A kind is full when its occupied slots
+are equal to or above its limit, so a limit of 0 is full with no open attempt.
+The limits can be replaced for one loop with `--grills` and `--parallel`.
+
+**Only the loop is bound by the limits.** In an iteration (`--loop`), a launch
+goes only into a kind that has a free slot, as the
+[`select` step](#the-select-step) applies it. Outside the loop, a launch is
+never refused because a kind is full, and it still occupies its slot: a run
+with `--apply --task linear:DOT-120` launches the grill even when the grill
+kind is full, and the grill kind then reads over its limit.
+
+`capacity` is the second step, after `reconcile`. It counts the open attempts
+from the attempts as `reconcile` left them, so an attempt finalised in the same
+run no longer counts. It writes nothing, with or without `--apply`, and its
+tier is `code`. Its outcomes:
+
+| Outcome         | Exit | When                                                                        |
+| --------------- | ---- | --------------------------------------------------------------------------- |
+| `advance`       | 0    | Outside the loop, whatever the counts; in an iteration, when a kind is free |
+| `wait`          | 2    | In an iteration, when every kind is full. No later step runs                |
+| `not-evaluable` | 3    | The configuration could not be loaded. The reason names the path            |
+
+The text report shows, per kind, the occupied slots over the limit, where the
+limit came from (`flag`, `file` or `default`), the attempts that occupy the
+slots, and `over its limit` when the kind has more slots occupied than its
+limit. A kind that is exactly full says `full`. For example, an iteration with
+one grill attempt and one work attempt open, and `--grills 1` given:
+
+```text
+[capacity] advance (code)
+  grill slots 1/1  limit from flag  full
+    linear:DOT-120:grill-me:1
+  work slots  1/2  limit from file
+    linear:DOT-109:test:1
+  reasons:
+    - grill slots 1/1
+    - work slots 1/2
+```
+
+With `--json` the step's data carries the same information: per kind (`grill`
+and `work`), `occupied`, `limit`, `source`, `attempts` and `full`.
+
 ## The `launch` step
 
 Last in the run, after `select`. It takes the selected work unit, or the task
@@ -2329,7 +2526,7 @@ The step's tier is `llm` when the LLM named the session and `code` otherwise.
 /autonomous:run --task <source>:<id> [--stage <stage>] [--account <provider-key>] [--force] [--json] [--apply] [--no-handoff]
 ```
 
-With `--task`, only `reconcile`, `quota-gate` and `launch` run; `label-triage`
+With `--task`, only `reconcile`, `capacity`, `quota-gate` and `launch` run; `label-triage`
 and `select` do not. The task is given to `launch`, with `input` `supplied`,
 and the stage is `--stage`, or the task's next stage when it is omitted.
 `launch` applies every precondition as usual: a supplied task without a scope
@@ -2938,8 +3135,8 @@ matches. The report says which signal matched.
 
 ## The quota gate
 
-Second in the run, after `reconcile`, so a stage that completed is recorded even
-when the gate says to wait. For the selected account the gate reads OpenUsage and evaluates the `session`
+Third in the run, after `reconcile` and `capacity`, so a stage that completed is
+recorded even when the gate says to wait. For the selected account the gate reads OpenUsage and evaluates the `session`
 and `weekly` windows: used amount, limit, window length, reset time, and the
 usage projected to the end of the window as OpenUsage's `Pace.evaluate`
 computes it. Other resources, such as `fable`, are listed but not evaluated; a

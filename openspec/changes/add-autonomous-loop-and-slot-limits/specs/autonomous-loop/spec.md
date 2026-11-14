@@ -135,17 +135,31 @@ The loop SHALL record a notice, one line each, only when: an iteration finalises
 
 ### Requirement: Waiting for notices
 
-The step runner SHALL accept `--notices <n>`, which prints the notices recorded after the first `n` of the current loop, one per line, followed by a line `next: <m>` with the new count, and exits with code 0. While there is none and the loop is alive it SHALL wait. When there is none and no loop is alive it SHALL print `loop stopped: not running` and exit with code 2.
+The step runner SHALL accept `--notices <n>`, which prints the notices recorded after the first `n` of the current loop, one per line, followed by a line `next: <m>` with the new count, and exits with code 0. While there is none and the loop is alive it SHALL wait.
 
 #### Scenario: Notice arrives
 
 - **WHEN** `--notices 0` is waiting and the loop records its first notice
 - **THEN** the command prints that notice and `next: 1`, and exits with code 0
 
+### Requirement: Waiting when no loop is alive
+
+When `--notices <n>` finds no live loop, it SHALL first wait up to 10 seconds for one to start. If none starts, it SHALL print the notices it has as usual or, when there is none, print `loop stopped: not running` and exit with code 2. Notices left by an earlier loop SHALL NOT be printed for a loop that has just started.
+
+#### Scenario: Wait started before the loop
+
+- **WHEN** `--notices 0` starts a moment before the loop takes its lock, and the notices of an earlier loop are still on disk
+- **THEN** the command prints none of the earlier notices and waits for the new loop's first notice
+
 #### Scenario: Loop killed
 
 - **WHEN** `--notices 3` is waiting and the loop's process disappears without recording a stop notice
 - **THEN** the command prints `loop stopped: not running` and exits with code 2
+
+#### Scenario: Stop notice not yet read
+
+- **WHEN** `--notices 3` starts after the loop stopped and recorded its stop notice as the fourth
+- **THEN** the command prints the stop notice and `next: 4`, and exits with code 0
 
 ### Requirement: The command relays only notices
 

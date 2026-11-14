@@ -29,6 +29,7 @@ const valid = () => ({
     sessions: { tool: "claude", profile: null, binary: null },
     workspace: { root: "/home/me/WebstormProjects" },
     naming: { model: "haiku", effort: "low" },
+    runner: { grills: 1, parallel: 2, intervalMinutes: 10 },
 });
 
 const withoutOptional = (): Record<string, unknown> => {
@@ -36,6 +37,7 @@ const withoutOptional = (): Record<string, unknown> => {
     delete input.sessions;
     delete input.workspace;
     delete input.naming;
+    delete input.runner;
     return input;
 };
 
@@ -46,6 +48,9 @@ const ALL_DEFAULTED = [
     "workspace.root",
     "naming.model",
     "naming.effort",
+    "runner.grills",
+    "runner.parallel",
+    "runner.intervalMinutes",
 ];
 const MISMATCH = "configuration does not match autonomous.config.v1: ";
 
@@ -193,7 +198,7 @@ describe("parseConfig", () => {
 });
 
 describe("optional blocks", () => {
-    it("fills every key of a file without the blocks and lists all six paths", () => {
+    it("fills every key of a file without the blocks and lists every path", () => {
         const result = parseConfig(withoutOptional(), undefined, "/home/me");
         expect(result.ok && result.defaulted).toEqual(ALL_DEFAULTED);
         expect(result.ok && result.value.sessions).toEqual({
@@ -205,6 +210,11 @@ describe("optional blocks", () => {
             root: join("/home/me", "WebstormProjects"),
         });
         expect(result.ok && result.value.naming).toEqual({ model: "haiku", effort: "low" });
+        expect(result.ok && result.value.runner).toEqual({
+            grills: 1,
+            parallel: 2,
+            intervalMinutes: 10,
+        });
     });
 
     it("keeps the other defaults when sessions.tool is set alone", () => {
@@ -244,6 +254,7 @@ describe("optional blocks", () => {
         ["sessions", { extra: true }, "$.sessions.extra"],
         ["workspace", { root: "/w", extra: true }, "$.workspace.extra"],
         ["naming", { extra: true }, "$.naming.extra"],
+        ["runner", { extra: true }, "$.runner.extra"],
     ])("rejects an unknown key inside %s with its path", (block, value, path) => {
         const result = parseConfig({ ...withoutOptional(), [block]: value });
         expect(result).toEqual({
@@ -256,6 +267,7 @@ describe("optional blocks", () => {
         ["sessions", "$.sessions"],
         ["workspace", "$.workspace"],
         ["naming", "$.naming"],
+        ["runner", "$.runner"],
     ])("rejects a %s block that is not an object", (block, path) => {
         const result = parseConfig({ ...withoutOptional(), [block]: "claude" });
         expect(result).toEqual({ ok: false, error: `${MISMATCH}${path} must be an object` });
@@ -295,7 +307,40 @@ describe("optional blocks", () => {
             sessions: { tool: "claude", profile: null, binary: null },
             workspace: { root: "~/WebstormProjects" },
             naming: { model: "haiku", effort: "low" },
+            runner: { grills: 1, parallel: 2, intervalMinutes: 10 },
         });
+    });
+
+    it("keeps the other runner defaults when one key is set", () => {
+        const input = { ...withoutOptional(), runner: { parallel: 0 } };
+        const result = parseConfig(input);
+        expect(result.ok && result.value.runner).toEqual({
+            grills: 1,
+            parallel: 0,
+            intervalMinutes: 10,
+        });
+        expect(result.ok && result.defaulted).toEqual([
+            ...ALL_DEFAULTED.slice(0, 6),
+            "runner.grills",
+            "runner.intervalMinutes",
+        ]);
+    });
+
+    it.each([
+        [{ grills: -1 }, "$.runner.grills must be an integer >= 0"],
+        [{ parallel: -1 }, "$.runner.parallel must be an integer >= 0"],
+        [{ parallel: 1.5 }, "$.runner.parallel must be an integer >= 0"],
+        [{ intervalMinutes: 2.5 }, "$.runner.intervalMinutes must be an integer >= 1"],
+        [{ intervalMinutes: 0 }, "$.runner.intervalMinutes must be an integer >= 1"],
+        [{ grills: "1" }, "$.runner.grills must be a finite number"],
+    ])("rejects the runner keys %j with their path", (runner, message) => {
+        const result = parseConfig({ ...valid(), runner });
+        expect(result).toEqual({ ok: false, error: `${MISMATCH}${message}` });
+    });
+
+    it("accepts a limit of zero", () => {
+        const result = parseConfig({ ...valid(), runner: { ...valid().runner, grills: 0 } });
+        expect(result.ok && result.value.runner.grills).toBe(0);
     });
 
     it("uses the defaults it is given", () => {
@@ -303,6 +348,7 @@ describe("optional blocks", () => {
             sessions: { tool: "codex", profile: "p", binary: "b" },
             workspace: { root: "/srv" },
             naming: { model: "m", effort: "max" },
+            runner: { grills: 4, parallel: 5, intervalMinutes: 6 },
         };
         const result = parseConfig(withoutOptional(), defaults);
         expect(result.ok && result.value.sessions).toEqual({
@@ -311,6 +357,11 @@ describe("optional blocks", () => {
             binary: "b",
         });
         expect(result.ok && result.value.workspace.root).toBe("/srv");
+        expect(result.ok && result.value.runner).toEqual({
+            grills: 4,
+            parallel: 5,
+            intervalMinutes: 6,
+        });
     });
 });
 

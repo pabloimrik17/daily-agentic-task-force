@@ -39,7 +39,8 @@ export type Exclusion =
     | "labelled-this-run"
     | "unsupported-stage"
     | "blocked"
-    | "split";
+    | "split"
+    | "no-free-slot";
 
 type Autonomy = AutonomyLabel;
 
@@ -87,10 +88,13 @@ export interface SelectedUnit {
     exception: string | null; // non-null only when scope differs from the machine scope
 }
 
+type Summary = { source: Source; id: string; title: string; scope: Scope; stage: StageName };
+
 export interface SelectData {
     machineScope: Scope | null;
     selected: SelectedUnit | null;
-    candidates: { source: Source; id: string; title: string; scope: Scope; stage: StageName }[];
+    candidates: Summary[]; // the candidates compared: those at the most advanced stage
+    setAside: Summary[]; // candidates at a less advanced stage, left for a later run
     excluded: Excluded[];
     readyToClose: { source: Source; id: string; title: string }[]; // split parents whose children are all closed
     notEvaluated: string[]; // e.g. "github: dependencies"

@@ -547,6 +547,50 @@ describe("reconcile: a completed attempt without a logbook entry", () => {
     });
 });
 
+describe("reconcile: the stage the task carries after finalisation", () => {
+    const GRILL: AttemptId = "linear:DOT-109:grill-me:1";
+
+    async function finalised(fakes: Trackers, dry = false) {
+        await given(record({ id: GRILL, stage: "grill-me" }));
+        await marker(GRILL);
+        const sessions = fakeSessions({
+            observe: () => ok(seen("idle")),
+            capture: () => ok("pane"),
+            remove: () => ok(undefined),
+        });
+        const result = await reconcileStep.run(context({ sessions, trackers: fakes, apply: !dry }));
+        return result.data.attempts[0];
+    }
+
+    it("is the stage label the task now carries", async () => {
+        const fakes = linear([], ["taken", "proposal", "AFK"]);
+        expect(await finalised(fakes)).toMatchObject({ action: "finalised", stageNow: "proposal" });
+    });
+
+    it("is closed when the task is closed", async () => {
+        const closed = task("linear", "DOT-109", ["taken", "grill-me"], { closed: true });
+        const fakes = trackers([], { linear: [closed] });
+        expect(await finalised(fakes)).toMatchObject({ action: "finalised", stageNow: "closed" });
+    });
+
+    it("is reported by a dry run too", async () => {
+        const fakes = linear([], ["taken", "proposal", "AFK"]);
+        expect(await finalised(fakes, true)).toMatchObject({
+            action: "finalised",
+            stageNow: "proposal",
+        });
+    });
+
+    it("is null for an attempt that is not finalised", async () => {
+        await given(record());
+        const sessions = fakeSessions({ observe: () => ok(seen("running")) });
+        const result = await reconcileStep.run(
+            context({ sessions, trackers: linear([], ["taken", "grill-me"]) }),
+        );
+        expect(result.data.attempts[0]?.stageNow).toBeNull();
+    });
+});
+
 describe("reconcile: pending cleanup", () => {
     it("records completed with the error and keeps taken when removal fails", async () => {
         await given(record());

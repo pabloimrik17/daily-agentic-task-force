@@ -6,10 +6,15 @@ allowed-tools: Bash(bun:*)
 
 # autonomous-run
 
-Entry point of the autonomous loop. Every decision is made by the script; this
+The plugin has two commands. `/autonomous:run` does one run and asks the user
+the questions it hands off; `/autonomous:loop` repeats iterations at an
+interval under the slot limits and relays only their notices.
+
+Every decision is made by the script; this
 command only runs it, relays what it prints, and asks the user the questions
-the report hands off. The steps are `reconcile`, `quota-gate`, `label-triage`,
-`select` and `launch`: `reconcile` brings earlier attempts up to date, `select`
+the report hands off. The steps are `reconcile`, `capacity`, `quota-gate`,
+`label-triage`, `select` and `launch`: `reconcile` brings earlier attempts up
+to date, `capacity` counts them as slots, `select`
 chooses the next work unit and writes nothing, and `launch` starts one session
 for it. `--task` supplies a task to `launch` in place of `label-triage` and
 `select`; `--discard` discards an attempt and runs no step. `--apply` lets the

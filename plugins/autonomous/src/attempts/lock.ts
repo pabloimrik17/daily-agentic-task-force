@@ -1,5 +1,6 @@
-// The run lock (spec stage-sessions, "Run lock"; design D12). A live holder
-// fails the run at once; a lock whose process is gone is reclaimed by renaming
+// The run lock (spec stage-sessions, "Run lock"; design D12) and the loop lock
+// (spec autonomous-loop, "Loop lock"), which differ only by file name. A live
+// holder fails the run at once; a lock whose process is gone is reclaimed by renaming
 // it aside, as ghd-aoe does.
 
 import { randomUUID } from "node:crypto";
@@ -24,8 +25,11 @@ interface Seen {
 
 const OWNERLESS_GRACE_MS = 10_000;
 
-function lockFile(state: string): string {
-    return join(state, "run.lock");
+const RUN_LOCK = "run.lock";
+const LOOP_LOCK = "loop.lock";
+
+function lockFile(state: string, name: string): string {
+    return join(state, name);
 }
 
 function isAlive(pid: number): boolean {
@@ -108,10 +112,10 @@ function holds(seen: Seen, now: Date): boolean {
         : now.getTime() - seen.mtimeMs <= OWNERLESS_GRACE_MS;
 }
 
-function heldBy(file: string, seen: Seen | null): LockResult {
+function heldBy(file: string, seen: Seen | null, holder: string): LockResult {
     const owner = seen?.owner;
     const who = owner ? ` (pid ${owner.pid}, started ${owner.startedAt})` : "";
-    return { ok: false, error: `another run holds ${file}${who}` };
+    return { ok: false, error: `another ${holder} holds ${file}${who}` };
 }
 
 function releaser(file: string, pid: number): () => Promise<void> {
@@ -123,7 +127,7 @@ function releaser(file: string, pid: number): () => Promise<void> {
     };
 }
 
-async function acquire(file: string, pid: number, now: Date): Promise<LockResult> {
+async function acquire(file: string, pid: number, now: Date, holder: string): Promise<LockResult> {
     const owner = { pid, startedAt: now.toISOString() };
     await mkdir(dirname(file), { recursive: true });
     if (await create(file, owner)) {
@@ -131,24 +135,25 @@ async function acquire(file: string, pid: number, now: Date): Promise<LockResult
     }
     const seen = await look(file);
     if (seen && holds(seen, now)) {
-        return heldBy(file, seen);
+        return heldBy(file, seen, holder);
     }
     if (seen !== null && !(await reclaim(file, seen))) {
-        return heldBy(file, await look(file));
+        return heldBy(file, await look(file), holder);
     }
     if (await create(file, owner)) {
         return { ok: true, release: releaser(file, pid) };
     }
-    return heldBy(file, await look(file));
+    return heldBy(file, await look(file), holder);
 }
 
 export async function acquireLockAt(
     file: string,
     pid: number = process.pid,
     now: Date = new Date(),
+    holder: string = "run",
 ): Promise<LockResult> {
     try {
-        return await acquire(file, pid, now);
+        return await acquire(file, pid, now, holder);
     } catch (error) {
         const message = error instanceof Error ? error.message : String(error);
         return { ok: false, error: `cannot take ${file}: ${message}` };
@@ -156,5 +161,15 @@ export async function acquireLockAt(
 }
 
 export function acquireLock(state: string, pid?: number, now?: Date): Promise<LockResult> {
-    return acquireLockAt(lockFile(state), pid, now);
+    return acquireLockAt(lockFile(state, RUN_LOCK), pid, now);
+}
+
+export function acquireLoopLock(state: string, pid?: number, now?: Date): Promise<LockResult> {
+    return acquireLockAt(lockFile(state, LOOP_LOCK), pid, now, "loop");
+}
+
+// True while a live process holds the loop lock; never writes.
+export async function loopIsAlive(state: string, now: Date = new Date()): Promise<boolean> {
+    const seen = await look(lockFile(state, LOOP_LOCK));
+    return seen !== null && holds(seen, now);
 }

@@ -3,6 +3,7 @@ import {
     existsSync,
     mkdirSync,
     mkdtempSync,
+    readdirSync,
     readFileSync,
     rmSync,
     writeFileSync,
@@ -22,6 +23,7 @@ import {
     recordPath,
     writeRecord,
 } from "./attempts/state.ts";
+import { capacityStep } from "./capacity/step.ts";
 import { type AutonomousConfig, CONFIG_SCHEMA, EXAMPLE_PATH } from "./config.ts";
 import type { ContextReader } from "./context/types.ts";
 import { COLOURS, LABELS } from "./label-contract/contract.ts";
@@ -144,6 +146,8 @@ function deps(steps: readonly Step[] | undefined, overrides: Partial<MainDeps> =
         openspec: () => Promise.resolve({ ok: false, error: "unused" }),
         stdout: (t) => out.push(t),
         stderr: (t) => err.push(t),
+        wait: () => Promise.reject(new Error("wait was not expected")),
+        stopSignal: () => new AbortController().signal,
         ...(steps === undefined ? {} : { steps }),
         ...overrides,
     };
@@ -606,6 +610,7 @@ describe("main with the real steps", () => {
         const text = out[0] as string;
         expect(text).toContain("outcome: wait");
         expect(text).toContain("[reconcile] advance (code)");
+        expect(text).toContain("[capacity] advance (code)");
         expect(text).toContain("[quota-gate] advance (code)");
         expect(text).toContain("[label-triage] advance (code)");
         expect(text).toContain("[select] advance (llm)");
@@ -613,6 +618,42 @@ describe("main with the real steps", () => {
         expect(text).toContain(
             `cannot read the plugin registry ${join(dir, ".claude", "plugins", "installed_plugins.json")}`,
         );
+    });
+
+    it("runs reconcile, capacity, quota-gate, label-triage, select and launch, in that order", async () => {
+        const { d, out } = deps(undefined, {
+            env: { AUTONOMOUS_CONFIG: configPath, HOME: dir },
+            openUsage: capacity(),
+            trackers: emptyTrackers,
+            ...selecting([]),
+        });
+        await main(["--json"], d);
+        const report = JSON.parse(out[0] as string) as { steps: { step: string }[] };
+        expect(report.steps.map((s) => s.step)).toEqual([
+            "reconcile",
+            "capacity",
+            "quota-gate",
+            "label-triage",
+            "select",
+            "launch",
+        ]);
+    });
+
+    it("runs reconcile, capacity, quota-gate and launch with --task", async () => {
+        const { d, out } = deps(undefined, {
+            env: { AUTONOMOUS_CONFIG: configPath, HOME: dir },
+            openUsage: capacity(),
+            trackers: emptyTrackers,
+            ...selecting([]),
+        });
+        await main(["--json", "--task", "beads:B-7"], d);
+        const report = JSON.parse(out[0] as string) as { steps: { step: string }[] };
+        expect(report.steps.map((s) => s.step)).toEqual([
+            "reconcile",
+            "capacity",
+            "quota-gate",
+            "launch",
+        ]);
     });
 
     it("does not run the select step when label-triage is not evaluable because bd cannot be executed", async () => {
@@ -629,6 +670,7 @@ describe("main with the real steps", () => {
         };
         expect(report.steps.map((s) => [s.step, s.outcome])).toEqual([
             ["reconcile", "advance"],
+            ["capacity", "advance"],
             ["quota-gate", "advance"],
             ["label-triage", "not-evaluable"],
         ]);
@@ -664,7 +706,7 @@ describe("main with the real steps", () => {
         const report = JSON.parse(out[0] as string) as {
             steps: { step: string; tier: string; outcome: string; data: unknown }[];
         };
-        const select = report.steps[3];
+        const select = report.steps[4];
         expect(select?.step).toBe("select");
         expect(select?.tier).toBe("llm");
         expect(select?.data).toEqual({
@@ -695,6 +737,7 @@ describe("main with the real steps", () => {
                     stage: "grill-me",
                 },
             ],
+            setAside: [],
             excluded: [],
             notEvaluated: ["github: dependencies"],
             comparison: { model: "sonnet", effort: "high" },
@@ -1953,9 +1996,17 @@ describe("main --discard", () => {
                 sessions: undefined,
                 workspace: undefined,
                 naming: undefined,
+                runner: undefined,
             }),
         );
-        const defaulted = ["sessions.tool", "sessions.profile", "sessions.binary"];
+        const defaulted = [
+            "sessions.tool",
+            "sessions.profile",
+            "sessions.binary",
+            "runner.grills",
+            "runner.parallel",
+            "runner.intervalMinutes",
+        ];
 
         const text = await discardDeps({ AUTONOMOUS_CONFIG: bare });
         await main(argv(), text.d);
@@ -1986,11 +2037,11 @@ describe("main configuration defaults", () => {
     afterAll(() => rmSync(dir, { recursive: true, force: true }));
 
     function configFile(name: string, full: boolean): string {
-        const { sessions, workspace, naming, ...required } = config();
+        const { sessions, workspace, naming, runner, ...required } = config();
         const path = join(dir, name);
         writeFileSync(
             path,
-            JSON.stringify(full ? { ...required, sessions, workspace, naming } : required),
+            JSON.stringify(full ? { ...required, sessions, workspace, naming, runner } : required),
         );
         return path;
     }
@@ -2002,6 +2053,9 @@ describe("main configuration defaults", () => {
         "workspace.root",
         "naming.model",
         "naming.effort",
+        "runner.grills",
+        "runner.parallel",
+        "runner.intervalMinutes",
     ];
 
     it("shows the defaulted keys in the text header and in the JSON", async () => {
@@ -2032,5 +2086,261 @@ describe("main configuration defaults", () => {
         const json = deps([fakeStep("advance")], { env });
         await main(["--json"], json.d);
         expect(JSON.parse(json.out[0] as string)).not.toHaveProperty("config");
+    });
+});
+
+describe("main --loop", () => {
+    const dir = mkdtempSync(join(tmpdir(), "autonomous-loop-config-"));
+    afterAll(() => rmSync(dir, { recursive: true, force: true }));
+
+    function configFile(runner: Partial<AutonomousConfig["runner"]>): string {
+        const base = config();
+        const path = join(dir, `config-${STATES.length}.json`);
+        writeFileSync(path, JSON.stringify({ ...base, runner: { ...base.runner, ...runner } }));
+        return path;
+    }
+
+    const RECONCILED = { attempts: [], retained: [], cleanups: [], needsHuman: [], errors: [] };
+
+    // Stops the loop in the wait that follows its `iterations`-th iteration.
+    function looped(iterations: number, onWait: (n: number) => Promise<void> = async () => {}) {
+        const controller = new AbortController();
+        const waits: number[] = [];
+        return {
+            waits,
+            overrides: {
+                wait: async (ms: number) => {
+                    waits.push(ms);
+                    await onWait(waits.length);
+                    if (waits.length >= iterations) {
+                        controller.abort("received SIGTERM");
+                    }
+                },
+                stopSignal: () => controller.signal,
+            },
+        };
+    }
+
+    const read = (state: string, name: string) => readFileSync(join(state, name), "utf8");
+
+    it("logs an iteration where every kind is full and prints nothing", async () => {
+        const log: string[] = [];
+        const stateDir = state();
+        const loop = looped(2);
+        const { d, out, err } = deps(
+            [
+                named("reconcile", "advance", log, RECONCILED),
+                capacityStep,
+                named("launch", "advance", log),
+            ],
+            {
+                ...loop.overrides,
+                env: {
+                    AUTONOMOUS_STATE: stateDir,
+                    AUTONOMOUS_CONFIG: configFile({ grills: 0, parallel: 0 }),
+                },
+            },
+        );
+        expect(await main(["--loop", "--apply"], d)).toBe(0);
+        expect(log).toEqual(["reconcile", "reconcile"]);
+        expect(out).toEqual([]);
+        expect(err).toEqual([]);
+        const entries = read(stateDir, "loop.log").split(`autonomous run — started `).slice(1);
+        expect(entries).toHaveLength(2);
+        expect(entries[0]).toContain("outcome: wait");
+        expect(entries[0]).toContain("every kind of slot is full: grill slots 0/0, work slots 0/0");
+        expect(read(stateDir, "loop.notices")).toBe("loop stopped: received SIGTERM\n");
+        expect(existsSync(join(stateDir, "loop.lock"))).toBe(false);
+    });
+
+    it("writes one JSON line per iteration with --json, without a handoff", async () => {
+        const stateDir = state();
+        const loop = looped(2);
+        const asking: Step = {
+            id: "asking",
+            run: () =>
+                Promise.resolve({
+                    step: "asking",
+                    tier: "code",
+                    outcome: "advance",
+                    reasons: [],
+                    data: null,
+                    questions: [
+                        {
+                            id: "asking:1",
+                            step: "asking",
+                            header: "Q1",
+                            question: "Which scope?",
+                            options: [
+                                { label: "A", value: "a", description: "a" },
+                                { label: "Later", value: null, description: "later" },
+                            ],
+                            multiSelect: false,
+                        },
+                    ],
+                }),
+            render: () => "[asking]",
+        };
+        const { d, out } = deps([asking], {
+            ...loop.overrides,
+            env: { AUTONOMOUS_STATE: stateDir },
+        });
+        expect(await main(["--loop", "--apply", "--json"], d)).toBe(0);
+        expect(out).toEqual([]);
+        const lines = read(stateDir, "loop.log").split("\n").filter(Boolean);
+        expect(lines).toHaveLength(2);
+        for (const line of lines) {
+            const report = JSON.parse(line) as Record<string, unknown>;
+            expect(report).toMatchObject({ schema: "autonomous.run.v2", outcome: "advance" });
+            expect(report).not.toHaveProperty("handoff");
+        }
+    });
+
+    it.each<[string, string[], Partial<AutonomousConfig["runner"]> | null, number]>([
+        ["the shipped default", [], null, 10],
+        ["the file", [], { intervalMinutes: 5 }, 5],
+        ["the flag over the file", ["--interval", "30"], { intervalMinutes: 5 }, 30],
+    ])("waits the interval from %s", async (_, flags, runner, minutes) => {
+        const loop = looped(2);
+        const env = {
+            AUTONOMOUS_STATE: state(),
+            ...(runner === null ? {} : { AUTONOMOUS_CONFIG: configFile(runner) }),
+        };
+        const { d } = deps([fakeStep("advance")], { ...loop.overrides, env });
+        expect(await main(["--loop", "--apply", ...flags], d)).toBe(0);
+        expect(loop.waits).toEqual([minutes * 60_000, minutes * 60_000]);
+    });
+
+    it("goes on while a manual run holds the run lock", async () => {
+        const log: string[] = [];
+        const { dir: stateDir, error } = heldLock();
+        const loop = looped(2);
+        const { d } = deps([named("reconcile", "advance", log)], {
+            ...loop.overrides,
+            env: { AUTONOMOUS_STATE: stateDir },
+        });
+        expect(await main(["--loop", "--apply"], d)).toBe(0);
+        expect(log).toEqual([]);
+        const text = read(stateDir, "loop.log");
+        expect(text.split("outcome: not-evaluable")).toHaveLength(3);
+        expect(text).toContain(`lock: ${error}`);
+    });
+
+    it("lets a manual run execute while the loop waits", async () => {
+        const stateDir = state();
+        const manual: string[] = [];
+        const codes: number[] = [];
+        const loop = looped(1, async () => {
+            const run = deps([named("reconcile", "advance", manual)], {
+                env: { AUTONOMOUS_STATE: stateDir },
+            });
+            codes.push(await main(["--apply"], run.d));
+        });
+        const { d } = deps([fakeStep("advance")], {
+            ...loop.overrides,
+            env: { AUTONOMOUS_STATE: stateDir },
+        });
+        expect(await main(["--loop", "--apply"], d)).toBe(0);
+        expect(codes).toEqual([0]);
+        expect(manual).toEqual(["reconcile"]);
+    });
+
+    it("refuses a second loop with code 3, naming the first, and runs no iteration", async () => {
+        const log: string[] = [];
+        const stateDir = state();
+        const startedAt = "2026-11-14T08:00:00.000Z";
+        writeFileSync(join(stateDir, "loop.lock"), JSON.stringify({ pid: process.pid, startedAt }));
+        const { d, out, err } = deps([named("reconcile", "advance", log)], {
+            env: { AUTONOMOUS_STATE: stateDir },
+        });
+        expect(await main(["--loop", "--apply"], d)).toBe(3);
+        expect(log).toEqual([]);
+        expect(out).toEqual([]);
+        expect(err).toEqual([
+            `another loop holds ${join(stateDir, "loop.lock")} (pid ${process.pid}, started ${startedAt})`,
+        ]);
+    });
+
+    it("stops with code 1 and the stop notice when the runner throws", async () => {
+        const stateDir = state();
+        const broken: Step = {
+            id: "broken",
+            run: () => Promise.reject(new Error("boom")),
+            render: () => "",
+        };
+        const { d, err } = deps([broken], { env: { AUTONOMOUS_STATE: stateDir } });
+        expect(await main(["--loop", "--apply"], d)).toBe(1);
+        expect(err).toEqual(["autonomous loop failed: boom"]);
+        expect(read(stateDir, "loop.notices")).toBe("loop stopped: runner error: boom\n");
+        expect(existsSync(join(stateDir, "loop.lock"))).toBe(false);
+        expect(existsSync(join(stateDir, "run.lock"))).toBe(false);
+    });
+
+    it("runs one dry iteration without --apply, prints its report and writes nothing", async () => {
+        const log: string[] = [];
+        const stateDir = state();
+        const { d, out, err } = deps(
+            [
+                named("reconcile", "advance", log, RECONCILED),
+                capacityStep,
+                named("launch", "advance", log),
+            ],
+            {
+                env: { AUTONOMOUS_STATE: stateDir, AUTONOMOUS_CONFIG: configFile({}) },
+                stopSignal: () => {
+                    throw new Error("a dry iteration asks for no stop signal");
+                },
+            },
+        );
+        expect(await main(["--loop"], d)).toBe(0);
+        expect(log).toEqual(["reconcile", "launch"]);
+        expect(err).toEqual([]);
+        expect(out).toHaveLength(1);
+        expect(out[0]).toContain("[capacity] advance (code)");
+        expect(out[0]).toContain("grill slots 0/1  limit from file");
+        expect(out[0]).toContain("[launch] advance");
+        expect(readdirSync(stateDir)).toEqual([]);
+    });
+
+    it("exits a dry iteration with the code of its outcome", async () => {
+        const stateDir = state();
+        const { d } = deps([named("reconcile", "advance", [], RECONCILED), capacityStep], {
+            env: {
+                AUTONOMOUS_STATE: stateDir,
+                AUTONOMOUS_CONFIG: configFile({ grills: 0, parallel: 0 }),
+            },
+        });
+        expect(await main(["--loop"], d)).toBe(2);
+        expect(readdirSync(stateDir)).toEqual([]);
+    });
+});
+
+describe("main --notices", () => {
+    // Polls without real time and counts them.
+    function polled(stateDir: string) {
+        const waits: number[] = [];
+        const wait = (ms: number) => {
+            waits.push(ms);
+            return Promise.resolve();
+        };
+        return { waits, ...deps(undefined, { env: { AUTONOMOUS_STATE: stateDir }, wait }) };
+    }
+
+    it("prints the new notices of the live loop and the next count", async () => {
+        const stateDir = state();
+        const startedAt = "2026-01-01T00:00:00.000Z";
+        writeFileSync(join(stateDir, "loop.lock"), JSON.stringify({ pid: process.pid, startedAt }));
+        writeFileSync(join(stateDir, "loop.notices"), "linear:DOT-98 grill-me → proposal\n");
+        const { d, out, waits } = polled(stateDir);
+        expect(await main(["--notices", "0"], d)).toBe(0);
+        expect(out).toEqual(["linear:DOT-98 grill-me → proposal\nnext: 1"]);
+        expect(waits).toEqual([]);
+    });
+
+    it("says the loop is not running, with code 2, when none appears within the grace", async () => {
+        const { d, out, waits } = polled(state());
+        expect(await main(["--notices", "3"], d)).toBe(2);
+        expect(out).toEqual(["loop stopped: not running"]);
+        expect(waits).toEqual([2_000, 2_000, 2_000, 2_000, 2_000]);
     });
 });

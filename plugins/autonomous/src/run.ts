@@ -23,6 +23,7 @@ import { reconcileStep } from "./attempts/reconcile.ts";
 import type { AttemptId, TaskRef } from "./attempts/record.ts";
 import { resolveStateDir } from "./attempts/state.ts";
 import { PRINT_TIMEOUT_MS } from "./claude-print.ts";
+import { capacityStep } from "./capacity/step.ts";
 import { type ConfigLoad, loadConfig } from "./config.ts";
 import { cliContext } from "./context/cli.ts";
 import type { ContextReaderFactory } from "./context/types.ts";
@@ -39,6 +40,10 @@ import { runLog } from "./logbook/logbook.ts";
 import { renderLogJson, renderLogText, unconfiguredLog } from "./logbook/report.ts";
 import { cliTrackers } from "./label-triage/trackers/cli.ts";
 import type { TrackerFactory } from "./label-triage/trackers/tracker.ts";
+import { intervalMs } from "./loop/interval.ts";
+import { runLoop } from "./loop/loop.ts";
+import { sleep, stopOnSignals, type Wait } from "./loop/signals.ts";
+import { waitForNotices } from "./loop/wait-notices.ts";
 import { runPersist } from "./persist/persist.ts";
 import { renderPersistJson, renderPersistText, unconfiguredPersist } from "./persist/report.ts";
 import { ghPullRequests } from "./pull-request/github.ts";
@@ -79,6 +84,7 @@ import { worktrunkWorkspace } from "./workspace/worktrunk.ts";
 
 const STEPS: readonly Step[] = [
     reconcileStep,
+    capacityStep,
     quotaGateStep,
     labelTriageStep,
     selectStep,
@@ -87,7 +93,12 @@ const STEPS: readonly Step[] = [
 
 // Spec stage-sessions, "Supplied task": with --task, triage and selection are
 // skipped and launch takes the supplied task.
-const SUPPLIED_TASK_STEPS: ReadonlySet<string> = new Set(["reconcile", "quota-gate", "launch"]);
+const SUPPLIED_TASK_STEPS: ReadonlySet<string> = new Set([
+    "reconcile",
+    "capacity",
+    "quota-gate",
+    "launch",
+]);
 
 export interface MainDeps {
     now: () => Date;
@@ -106,6 +117,8 @@ export interface MainDeps {
     openspec: Exec;
     stdout: (text: string) => void;
     stderr: (text: string) => void;
+    wait: Wait; // the loop's interval and the poll of --notices
+    stopSignal: () => AbortSignal; // the loop's stop request
     steps?: readonly Step[];
 }
 
@@ -127,6 +140,9 @@ export async function main(argv: readonly string[], deps: MainDeps): Promise<num
     }
 }
 
+// Without --apply, --loop is one dry iteration: a run with the limits enforced.
+const looping = (args: RunArgs) => args.loop && args.apply;
+
 function dispatch(args: RunArgs, steps: readonly Step[], deps: MainDeps): Promise<number> {
     if (args.bootstrapLabels) {
         return runBootstrap(args, deps);
@@ -143,21 +159,31 @@ function dispatch(args: RunArgs, steps: readonly Step[], deps: MainDeps): Promis
     if (args.log !== undefined) {
         return runLogMode(args.log, args, deps);
     }
+    return dispatchRest(args, steps, deps);
+}
+
+function dispatchRest(args: RunArgs, steps: readonly Step[], deps: MainDeps): Promise<number> {
     if (args.answers.length > 0) {
         return runAnswers(args, steps, deps);
     }
     if (args.discard !== undefined) {
         return runDiscard(args, deps);
     }
+    if (args.notices !== undefined) {
+        return runNoticesMode(args.notices, deps);
+    }
+    if (looping(args)) {
+        return runLoopMode(args, steps, deps);
+    }
     return runPipeline(args, steps, deps);
 }
 
 // Design D12: one run at a time reads or writes attempts.
-async function withLock(
+async function withLock<T>(
     state: string,
-    held: () => Promise<number>,
-    refused: (error: string) => number,
-): Promise<number> {
+    held: () => Promise<T>,
+    refused: (error: string) => T,
+): Promise<T> {
     const lock = await acquireLock(state);
     if (!lock.ok) {
         return refused(lock.error);
@@ -170,14 +196,20 @@ async function withLock(
 }
 
 async function runPipeline(args: RunArgs, steps: readonly Step[], deps: MainDeps): Promise<number> {
+    const report = await pipelineReport(args, steps, deps);
+    deps.stdout(args.json ? renderJson(report) : renderText(report, steps));
+    return exitCodeFor(report.outcome);
+}
+
+async function pipelineReport(
+    args: RunArgs,
+    steps: readonly Step[],
+    deps: MainDeps,
+): Promise<RunReport> {
     const startedAt = deps.now();
     const load = loadConfig(deps.env);
     const defaulted = load.ok ? load.defaulted : [];
     const state = resolveStateDir(deps.env);
-    const print = (report: RunReport) => {
-        deps.stdout(args.json ? renderJson(report) : renderText(report, steps));
-        return exitCodeFor(report.outcome);
-    };
     return withLock(
         state,
         async () => {
@@ -185,13 +217,39 @@ async function runPipeline(args: RunArgs, steps: readonly Step[], deps: MainDeps
                 stepsFor(args, steps),
                 context(args, startedAt, load, state, deps),
             );
-            return print(buildReport(startedAt, run, args, defaulted));
+            return buildReport(startedAt, run, args, defaulted);
         },
         (error) => {
             const none = { results: [], questions: [], outcome: "not-evaluable" as const };
-            return print({ ...buildReport(startedAt, none, args, defaulted), lock: { error } });
+            return { ...buildReport(startedAt, none, args, defaulted), lock: { error } };
         },
     );
+}
+
+// Design D5: every iteration is a run with the limits enforced and no handoff.
+function runLoopMode(args: RunArgs, steps: readonly Step[], deps: MainDeps): Promise<number> {
+    const iterationArgs = { ...args, noHandoff: true };
+    return runLoop({
+        state: resolveStateDir(deps.env),
+        json: args.json,
+        now: deps.now,
+        wait: deps.wait,
+        stopSignal: deps.stopSignal,
+        iterate: () => pipelineReport(iterationArgs, steps, deps),
+        render: (report) => renderText(report, steps),
+        intervalMs: () => intervalMs(args, loadConfig(deps.env)),
+        stderr: deps.stderr,
+    });
+}
+
+// Design D8: reads only the loop's files, so it needs no configuration and takes no lock.
+function runNoticesMode(seen: number, deps: MainDeps): Promise<number> {
+    return waitForNotices(seen, {
+        state: resolveStateDir(deps.env),
+        now: deps.now,
+        wait: deps.wait,
+        stdout: deps.stdout,
+    });
 }
 
 function stepsFor(args: RunArgs, steps: readonly Step[]): readonly Step[] {
@@ -436,5 +494,7 @@ if (import.meta.main) {
         openspec: execCommand("openspec"),
         stdout: (text) => process.stdout.write(`${text}\n`),
         stderr: (text) => process.stderr.write(`${text}\n`),
+        wait: sleep,
+        stopSignal: stopOnSignals,
     });
 }

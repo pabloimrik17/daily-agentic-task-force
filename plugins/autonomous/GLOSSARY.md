@@ -142,7 +142,8 @@ when it shares a workspace path with an attempt.
 The unit of capacity for managed sessions. Every open attempt occupies one,
 whichever command launched it, until it is finalised or discarded; a session
 made by hand occupies none. Only the loop is bound by the slot limits: a launch
-a person asks for is never refused for capacity, and still occupies its slot.
+a person asks for is never refused for capacity, and still occupies its slot
+([ADR 0005](docs/adr/0005-slot-limits-bind-only-the-loop.md)).
 _Avoid_: runner slot, seat
 
 **Loop**:
@@ -271,5 +272,6 @@ An invocation that applies answers and runs no step.
 _Avoid_: re-run
 
 **Unattended run**:
-A run with no human present to answer, such as one driven by `/loop`. It
-passes `--no-handoff`, so it carries no handoff.
+A run with no human present to answer. The unattended way is the loop
+(`/autonomous:loop`), whose iteration never carries a handoff. A run of
+`/autonomous:run` can also be made unattended with `--no-handoff`.

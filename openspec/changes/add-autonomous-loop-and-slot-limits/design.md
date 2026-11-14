@@ -81,6 +81,8 @@ Notices come from the iteration's `ReconcileData`: a finalised attempt gives `<s
 
 `--notices <n>` reads `loop.notices` every 2 s. It prints the lines after the first `n` and `next: <m>`, and exits. It also checks the owner of `loop.lock`: when no loop is alive and nothing is left to print, it prints `loop stopped: not running` and exits with code 2. A loop killed without a stop notice is therefore still reported.
 
+The command starts the loop and the wait one after the other, so the wait may run before the loop holds its lock. Two guards cover that: with no live loop, the wait gives one 10 s to start before it decides; and while a loop is alive, a notices file older than the lock's start time counts as empty, because it belongs to an earlier loop. The loop takes its lock first and empties the file second, so a refused second loop never empties the first loop's notices.
+
 Alternative: stream the loop's output to the agent. Rejected: a stream wakes the agent on a timer to renew it, even when nothing happened.
 
 ### D9 — The command

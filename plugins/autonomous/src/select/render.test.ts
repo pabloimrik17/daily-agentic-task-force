@@ -8,7 +8,7 @@ import {
     selectContext,
     workTask,
 } from "./test-fixtures.ts";
-import type { SelectionAnswer } from "./types.ts";
+import type { SelectData, SelectionAnswer } from "./types.ts";
 
 // Two candidates of either scope and one task excluded under each of three reasons.
 function readers(calls: string[]) {
@@ -259,5 +259,75 @@ describe("renderSelect", () => {
                 "    - chezmoi data: chezmoi CLI not found on PATH",
             ].join("\n"),
         );
+    });
+});
+
+describe("renderSelect: candidates set aside", () => {
+    const data: SelectData = {
+        machineScope: "personal",
+        selected: null,
+        candidates: [
+            {
+                source: "linear",
+                id: "P-1",
+                title: "Write it",
+                scope: "personal",
+                stage: "proposal",
+            },
+        ],
+        setAside: [
+            { source: "beads", id: "G-1", title: "Think it", scope: "personal", stage: "grill-me" },
+        ],
+        excluded: [{ source: "linear", id: "T-1", title: "Busy", reason: "taken" }],
+        readyToClose: [],
+        notEvaluated: [],
+        comparison: null,
+    };
+
+    it("lists a set-aside candidate with its stage, apart from the excluded tasks", () => {
+        const lines = selectStep
+            .render({ step: "select", tier: "code", outcome: "advance", reasons: [], data })
+            .split("\n");
+
+        const heading = lines.findIndex((line) => line.includes("set aside"));
+        expect(lines.slice(heading, heading + 2)).toEqual([
+            "  set aside for a candidate at a more advanced stage: 1 task",
+            "    beads → G-1 → Think it (personal, grill-me)",
+        ]);
+        expect(heading).toBeGreaterThan(lines.indexOf("  candidates: 1 task"));
+        expect(heading).toBeLessThan(lines.indexOf("  excluded: 1 task"));
+        expect(lines.slice(lines.indexOf("  excluded: 1 task"))).not.toContain(
+            "      beads → G-1 → Think it",
+        );
+    });
+
+    it("leaves the heading out when nothing is set aside", () => {
+        const text = selectStep.render({
+            step: "select",
+            tier: "code",
+            outcome: "advance",
+            reasons: [],
+            data: { ...data, setAside: [] },
+        });
+
+        expect(text).not.toContain("set aside");
+    });
+
+    it("names the no-free-slot exclusion last", () => {
+        const text = selectStep.render({
+            step: "select",
+            tier: "code",
+            outcome: "wait",
+            reasons: [],
+            data: {
+                ...data,
+                excluded: [
+                    { source: "linear", id: "N-1", title: "Full", reason: "no-free-slot" },
+                    { source: "linear", id: "T-1", title: "Busy", reason: "taken" },
+                ],
+            },
+        });
+
+        expect(text.indexOf("no free slot: 1")).toBeGreaterThan(text.indexOf("taken: 1"));
     });
 });
