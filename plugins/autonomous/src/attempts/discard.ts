@@ -15,6 +15,7 @@ import type { Result } from "../result.ts";
 import type { SessionManager } from "../sessions/manager.ts";
 import { stageFor } from "../stages/registry.ts";
 import type { WorkspaceManager } from "../workspace/manager.ts";
+import { acquireLockAt } from "./lock.ts";
 import {
     type AttemptId,
     type AttemptRecord,
@@ -27,6 +28,7 @@ import {
     attemptDir,
     capturePath,
     listRecords,
+    logbookLockPath,
     logbookReceiptPath,
     readRecord,
     recordPath,
@@ -310,9 +312,22 @@ async function publishDiscardEntry(discarding: Discarding): Promise<string | nul
     return null;
 }
 
-async function entryFor({ record, deps }: Discarding): Promise<Result<void>> {
+// Under the lock log mode takes, so the two never publish an entry for one attempt at once.
+async function entryFor(discarding: Discarding): Promise<Result<void>> {
+    const dir = attemptDir(discarding.deps.state, discarding.record.id);
+    const lock = await acquireLockAt(logbookLockPath(dir));
+    if (!lock.ok) {
+        return lock;
+    }
+    try {
+        return await publishEntry(discarding, dir);
+    } finally {
+        await lock.release();
+    }
+}
+
+async function publishEntry({ record, deps }: Discarding, dir: string): Promise<Result<void>> {
     const done: Result<void> = { ok: true, value: undefined };
-    const dir = attemptDir(deps.state, record.id);
     if (existsSync(logbookReceiptPath(dir))) {
         return done;
     }

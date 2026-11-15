@@ -1,11 +1,18 @@
-// Writes files beside the attempt record and never the record, so it takes no run lock.
+// Writes files beside the attempt record and never the record, so it takes no run lock. Its own
+// lock keeps two publications of one attempt apart.
 
 import { access, readFile, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 
+import { acquireLockAt } from "../attempts/lock.ts";
 import { readOpenAttempt } from "../attempts/open.ts";
 import type { AttemptId, AttemptRecord } from "../attempts/record.ts";
-import { logbookEntryPath, logbookReceiptPath, writeJsonAtomic } from "../attempts/state.ts";
+import {
+    logbookEntryPath,
+    logbookLockPath,
+    logbookReceiptPath,
+    writeJsonAtomic,
+} from "../attempts/state.ts";
 import type { AutonomousConfig } from "../config.ts";
 import type { Trackers } from "../label-triage/trackers/tracker.ts";
 import { isAutonomyLabel } from "../label-contract/contract.ts";
@@ -65,7 +72,7 @@ export async function runLog(
         return report;
     }
     const logging: Logging = { ...checked.value, deps, report, header: "" };
-    const failure = await log(logging);
+    const failure = await logLocked(logging);
     if (failure !== null) {
         report.reasons.push(failure);
         return report;
@@ -134,6 +141,18 @@ async function findPullRequest(
     const { number, url } = found.value;
     report.pullRequest = { number, url };
     return { ok: true, value: found.value };
+}
+
+async function logLocked(logging: Logging): Promise<string | null> {
+    const lock = await acquireLockAt(logbookLockPath(logging.dir));
+    if (!lock.ok) {
+        return lock.error;
+    }
+    try {
+        return await log(logging);
+    } finally {
+        await lock.release();
+    }
 }
 
 async function log(logging: Logging): Promise<string | null> {

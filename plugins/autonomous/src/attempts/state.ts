@@ -101,6 +101,10 @@ export function logbookReceiptPath(dir: string): string {
     return join(dir, "logbook.json");
 }
 
+export function logbookLockPath(dir: string): string {
+    return join(dir, "logbook.lock");
+}
+
 // A temporary file and a rename, so a reader never sees a partial file.
 export async function writeJsonAtomic(file: string, value: unknown): Promise<void> {
     await mkdir(dirname(file), { recursive: true });

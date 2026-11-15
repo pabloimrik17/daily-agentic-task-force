@@ -26,6 +26,8 @@ function errorOf(result: Result<unknown>): string {
     return result.error;
 }
 
+const [FIRST, SECOND] = list.map(({ number, url, title }) => ({ number, url, title }));
+
 const OPEN = { base: "main", branch: "feature/x", title: "T", bodyFile: "/b.md" };
 
 it("reads the default branch from gh repo view", async () => {
@@ -36,7 +38,7 @@ it("reads the default branch from gh repo view", async () => {
 
 it("finds the first open pull request of a branch", async () => {
     const { execs, port } = setup(JSON.stringify(list));
-    expect(await port.find("feature/x")).toEqual({ ok: true, value: list[0] });
+    expect(await port.find("feature/x")).toEqual({ ok: true, value: FIRST });
     expect(execs.gh).toHaveBeenCalledWith([
         "pr",
         "list",
@@ -45,8 +47,19 @@ it("finds the first open pull request of a branch", async () => {
         "--state",
         "open",
         "--json",
-        "number,url,title",
+        "number,url,title,isCrossRepository",
     ]);
+});
+
+it("skips a pull request whose head is in a fork", async () => {
+    const fork = { ...list[0], number: 99, isCrossRepository: true };
+    const { port } = setup(JSON.stringify([fork, list[1]]));
+    expect(await port.find("feature/x")).toEqual({ ok: true, value: SECOND });
+});
+
+it("finds no pull request when every one listed is from a fork", async () => {
+    const { port } = setup(JSON.stringify([{ ...list[0], isCrossRepository: true }]));
+    expect(await port.find("feature/x")).toEqual({ ok: true, value: null });
 });
 
 it("finds no pull request when the list is empty", async () => {
@@ -114,6 +127,7 @@ it("runs the empty commit and the push on the hooked exec, never skipping hooks 
         "-C",
         DIR,
         "commit",
+        "--only",
         "--allow-empty",
         "-m",
         "chore: start",

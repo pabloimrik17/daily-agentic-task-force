@@ -1,3 +1,4 @@
+import { findOutsideFences } from "../markdown.ts";
 import { definitionOf } from "../persist/splice.ts";
 import type { TaskLink, WorkTask } from "../select/types.ts";
 
@@ -10,10 +11,10 @@ function link({ id, url }: TaskLink): string {
 
 function section(definition: string, heading: string): string | null {
     const lines = definition.split("\n");
-    const start = lines.findIndex((line) => line.trimEnd() === heading);
+    const start = findOutsideFences(lines, (line) => line.trimEnd() === heading);
     if (start === -1) return null;
     const rest = lines.slice(start + 1);
-    const end = rest.findIndex((line) => /^#{2,3} /.test(line));
+    const end = findOutsideFences(rest, (line) => /^#{2,3} /.test(line));
     return [heading, ...(end === -1 ? rest : rest.slice(0, end))].join("\n").trim();
 }
 

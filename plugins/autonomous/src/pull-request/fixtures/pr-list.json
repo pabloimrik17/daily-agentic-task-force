@@ -1,10 +1,12 @@
 [
     {
+        "isCrossRepository": false,
         "number": 81,
         "title": "build(markdownlint): normalize config, ignore list and wiring",
         "url": "https://github.com/pabloimrik17/daily-agentic-task-force/pull/81"
     },
     {
+        "isCrossRepository": false,
         "number": 80,
         "title": "chore(deps): update dependency markdownlint-cli to v0.50.0",
         "url": "https://github.com/pabloimrik17/daily-agentic-task-force/pull/80"

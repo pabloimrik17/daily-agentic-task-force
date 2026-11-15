@@ -49,6 +49,22 @@ describe("cover", () => {
         );
     });
 
+    it("takes the first paragraph when the first heading only begins like the definition's", () => {
+        const task = described("## Definition of done\n\nUsers can sign in.");
+
+        expect(cover(task, null)).toBe(`Task: [TEST-1](${URL})\n\n## Definition of done`);
+    });
+
+    it("keeps a fenced example whose lines look like headings inside the Solution", () => {
+        const solution =
+            "Use this template.\n\n```md\n## Example\n### Problem\n```\n\nThen ship it.";
+        const definition = `## Definition\n\n### Problem\n\nNo template.\n\n### Solution\n\n${solution}\n\n### Non-goals\n\nSSO.\n`;
+
+        expect(cover(described(spliceDefinition(null, definition)), null)).toBe(
+            `Task: [TEST-1](${URL})\n\n### Problem\n\nNo template.\n\n### Solution\n\n${solution}`,
+        );
+    });
+
     it("holds only the links of a task without a description", () => {
         expect(cover(described(null), null)).toBe(`Task: [TEST-1](${URL})`);
         expect(cover(described("  \n"), null)).toBe(`Task: [TEST-1](${URL})`);

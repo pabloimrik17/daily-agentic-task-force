@@ -124,7 +124,7 @@ The closing gains steps 7 and 8 (see the grill-me-stage delta) with the exact co
 
 ## Migration Plan
 
-No configuration change and no data migration. Records without `agentArgs` parse as before. Attempts that are open when the plugin updates keep their old prompt and simply publish no entry; reconcile notes it. Rollback is the previous plugin version: `transition.json` and `logbook.json` are ignored by it.
+No configuration change and no data migration. Records without `agentArgs` parse as before. Attempts that are open when the plugin updates keep their old prompt and simply publish no entry; reconcile notes it. Rollback is the previous plugin version, with one limit. Its `parseRecord` rejects unknown keys, so it cannot read the record of an attempt launched by this version, which stores `agentArgs`. Finish or discard each such attempt before rolling back. `transition.json` and `logbook.json` are ignored by it.
 
 ## Open Questions
 

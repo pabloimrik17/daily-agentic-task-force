@@ -8,6 +8,7 @@ import { type AttemptId, type AttemptRecord } from "../attempts/record.ts";
 import {
     attemptDir,
     logbookEntryPath,
+    logbookLockPath,
     logbookReceiptPath,
     transitionedPath,
     writeRecord,
@@ -188,6 +189,33 @@ async function arrange(options: Arrangement = {}) {
 const readJson = (file: string) => JSON.parse(readFileSync(file, "utf8")) as unknown;
 
 const factsOf = (comments: readonly string[]) => comments[0]?.split("\n")[3];
+
+describe("log: one publication per attempt at a time", () => {
+    it("publishes nothing while another publication holds the attempt's lock", async () => {
+        const { run, fake, dir } = await arrange();
+        const lock = logbookLockPath(dir);
+        await writeFile(lock, JSON.stringify({ pid: process.pid, startedAt: "t" }));
+
+        const report = await run();
+
+        expect(report.outcome).toBe("not-evaluable");
+        expect(report.reasons).toEqual([
+            `another run holds ${lock} (pid ${process.pid}, started t)`,
+        ]);
+        expect(fake.calls).toEqual([`find ${BRANCH}`]);
+        expect(fake.comments()).toEqual([]);
+    });
+
+    it("releases the lock when it ends, published or failed", async () => {
+        const published = await arrange();
+        await published.run();
+        expect(existsSync(logbookLockPath(published.dir))).toBe(false);
+
+        const failed = await arrange({ port: { failures: { comment: "gh pr comment failed" } } });
+        expect((await failed.run()).reasons).toEqual(["gh pr comment failed"]);
+        expect(existsSync(logbookLockPath(failed.dir))).toBe(false);
+    });
+});
 
 describe("log: A logbook entry per attempt", () => {
     it("Entry published: one comment on the pull request holds the header and the body", async () => {

@@ -3,7 +3,7 @@
 
 import { CLI_TIMEOUT_MS, type Exec, execCommand } from "../exec.ts";
 import type { Result } from "../result.ts";
-import { ParseError, array, number, object, string } from "../validate.ts";
+import { ParseError, array, boolean, number, object, string } from "../validate.ts";
 import {
     EMPTY_COMMIT_SUBJECT,
     type PullRequest,
@@ -12,8 +12,9 @@ import {
 } from "./port.ts";
 
 // The commit and the push run the repository's hooks, and a pre-push hook can run a whole test
-// suite, so those two get a long timeout.
-const HOOKED_TIMEOUT_MS = 600_000;
+// suite, so those two get a long timeout. Both together stay under the 600 s the run command
+// gives the whole process, so a slow hook is reported by name instead of the process being killed.
+const HOOKED_TIMEOUT_MS = 240_000;
 
 export interface GitHubExecs {
     gh: Exec;
@@ -56,9 +57,15 @@ function readDefaultBranch(json: unknown): string {
     return string(ref, "name", "output.defaultBranchRef");
 }
 
+// `--head` matches the branch name alone, so a pull request from a fork with the same branch name
+// is skipped.
 function readFirstPullRequest(json: unknown): PullRequest | null {
-    const [first] = array(json, "output");
-    return first === undefined ? null : readPullRequest(first, "output[0]");
+    const list = array(json, "output");
+    const own = list.findIndex((item, index) => {
+        const path = `output[${index}]`;
+        return !boolean(object(item, path), "isCrossRepository", path);
+    });
+    return own === -1 ? null : readPullRequest(list[own], `output[${own}]`);
 }
 
 function readCommentBodies(json: unknown): string[] {
@@ -119,7 +126,11 @@ export function gitHubPullRequests(execs: GitHubExecs, directory: string): PullR
         async find(branch) {
             const label = `gh pr list --head ${branch}`;
             const args = ["pr", "list", "--head", branch, "--state", "open"];
-            const out = await run(gh, label, [...args, "--json", "number,url,title"]);
+            const out = await run(gh, label, [
+                ...args,
+                "--json",
+                "number,url,title,isCrossRepository",
+            ]);
             return out.ok ? parseJson(label, out.value, readFirstPullRequest) : out;
         },
         async ahead(base) {
@@ -140,7 +151,8 @@ export function gitHubPullRequests(execs: GitHubExecs, directory: string): PullR
             return out.ok ? { ok: true, value: shortIds(out.value) } : out;
         },
         emptyCommit(message) {
-            const args = [...inDirectory, "commit", "--allow-empty", "-m", message];
+            // `--only` with no path keeps whatever is staged out of the commit.
+            const args = [...inDirectory, "commit", "--only", "--allow-empty", "-m", message];
             return runVoid(hooked, "git commit --allow-empty", args);
         },
         push(branch) {

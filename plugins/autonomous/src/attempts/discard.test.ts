@@ -20,6 +20,7 @@ import type { AttemptId, AttemptRecord } from "./record.ts";
 import {
     attemptDir,
     capturePath,
+    logbookLockPath,
     logbookReceiptPath,
     readRecord,
     recordPath,
@@ -572,6 +573,24 @@ describe("the discard entry", () => {
         expect(report.notes).toEqual([]);
         expect(pullRequestCalls).toEqual([]);
         expect(directories).toEqual([]);
+    });
+
+    it("notes a publication already running for the attempt and still discards", async () => {
+        const { state, deps, pullRequestCalls } = await setup({
+            records: [retained()],
+            pullRequest: withPullRequest,
+        });
+        const lock = logbookLockPath(attemptDir(state, "linear:DOT-109:test:1"));
+        await writeFile(lock, JSON.stringify({ pid: process.pid, startedAt: "t" }));
+
+        const report = await discardAttempt(args("linear:DOT-109:test:1"), deps, STARTED);
+
+        expect(report.outcome).toBe("advance");
+        expect(report.notes).toEqual([
+            `discard entry not published: another run holds ${lock} (pid ${process.pid}, started t)`,
+        ]);
+        expect(pullRequestCalls).toEqual([]);
+        expect((await read(state)).state).toBe("discarded");
     });
 
     it("publishes no second entry when the pull request already carries one", async () => {

@@ -1,6 +1,8 @@
 // The format is expected to change as it is used, so every limit lives in this file. Who took
 // each decision is the agent's to write and is not checked.
 
+import { findOutsideFences } from "../markdown.ts";
+
 export const REQUIRED_SECTIONS: readonly string[] = [
     "What I did",
     "Decisions",
@@ -27,7 +29,7 @@ function countWords(text: string): number {
 }
 
 function sectionStart(all: readonly string[], name: string): number {
-    return all.findIndex((line) => line.trimEnd() === `### ${name}`);
+    return findOutsideFences(all, (line) => line.trimEnd() === `### ${name}`);
 }
 
 // The section ends at a heading of its own level or higher; a deeper heading belongs to it but is

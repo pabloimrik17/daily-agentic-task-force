@@ -89,6 +89,16 @@ describe("checkBody", () => {
         expect(checkBody(text, HOME).broken).toEqual(['the section "### What I did" is empty']);
     });
 
+    it("reports as missing the sections whose headings sit only inside a fence", () => {
+        const example = "```md\n### Decisions\n### Assumptions\n### Next stage\n```";
+        const check = checkBody(`### What I did\nWrote the template.\n\n${example}`, HOME);
+        expect(check.broken).toEqual([
+            'the section "### Decisions" is missing',
+            'the section "### Assumptions" is missing',
+            'the section "### Next stage" is missing',
+        ]);
+    });
+
     it("does not take a deeper or longer heading for a required section", () => {
         const text = body({ ...minimal }).replace("### Decisions", "#### Decisions");
         expect(checkBody(text, HOME).broken).toHaveLength(1);

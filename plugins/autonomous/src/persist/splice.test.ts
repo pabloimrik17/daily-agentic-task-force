@@ -162,10 +162,13 @@ describe("definitionOf", () => {
         expect(definitionOf(FIRST.trim())).toBe(FIRST.trim());
     });
 
-    it.each([["Fix the login"], [""], [null], ["Intro\n\n### Problem\n\nx"]])(
-        "is null without a grill: %j",
-        (description) => {
-            expect(definitionOf(description)).toBeNull();
-        },
-    );
+    it.each([
+        ["Fix the login"],
+        [""],
+        [null],
+        ["Intro\n\n### Problem\n\nx"],
+        ["## Definition of done\n\nUsers can sign in."],
+    ])("is null without a grill: %j", (description) => {
+        expect(definitionOf(description)).toBeNull();
+    });
 });
