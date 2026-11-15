@@ -25,6 +25,16 @@ export function resource(used: number, elapsedSeconds: number, windowSeconds: nu
     };
 }
 
+// A balance shaped like the `rateLimitResets` that OpenUsage 0.8.0 prints for a Claude account.
+export function balance(available: number) {
+    return {
+        kind: "balance",
+        unit: "resets",
+        available,
+        expiresAt: [isoFromNow(2 * DAY), isoFromNow(25 * DAY)],
+    };
+}
+
 export const session = (used: number, elapsedHours = 2) =>
     resource(used, elapsedHours * HOUR, 5 * HOUR);
 export const weekly = (used: number, elapsedDays = 3) => resource(used, elapsedDays * DAY, 7 * DAY);
@@ -34,7 +44,7 @@ export function provider(
     overrides: Record<string, unknown> = {},
 ) {
     return {
-        displayName: "Claude: Personal (me@example.com)",
+        displayName: "Claude · Personal",
         plan: "Pro",
         fetchedAt: isoFromNow(-60),
         expiresAt: isoFromNow(240),
@@ -44,8 +54,11 @@ export function provider(
     };
 }
 
-export function limits(providers: Record<string, unknown>, errors: unknown[] = []) {
-    return { schema: "openusage.limits.v1", generatedAt: NOW.toISOString(), providers, errors };
+// OpenUsage 0.8 keys an account by its kind and the first 8 hex digits of its id.
+export const ACCOUNT = "claude@1a2b3c4d";
+
+export function limits(providers: Record<string, unknown>) {
+    return { schema: "openusage.limits.v2", generatedAt: NOW.toISOString(), providers };
 }
 
 export function fakeExec(output: unknown): OpenUsageExec & { calls: string[][] } {
@@ -57,14 +70,10 @@ export function fakeExec(output: unknown): OpenUsageExec & { calls: string[][] }
     return Object.assign(exec, { calls });
 }
 
-// The DOT-104 observation of 2026-10-02 (DOT-112): OpenUsage exited 4 with a valid document whose
-// `errors` names a stale Claude Swap login, and the same warning on stderr.
-export const accountErrorDocument = limits(
-    { claude: provider({ session: session(49), weekly: weekly(6) }) },
-    [{ providerId: "claude@12101920", message: "Claude Swap login is stale" }],
-);
-export const accountErrorStderr =
-    "openusage: warning: claude@12101920: Claude Swap login is stale\n";
+// OpenUsage 0.8.0 with no Claude account fetched yet: exit 4, the empty envelope on stdout.
+export const nothingFetchedDocument = limits({});
+export const nothingFetchedStderr =
+    "openusage: nothing fetched yet; open OpenUsage and add or refresh an account\n";
 
 // A failed exec that carries the exit output, as `execOpenUsage` returns it.
 export function exitExec(

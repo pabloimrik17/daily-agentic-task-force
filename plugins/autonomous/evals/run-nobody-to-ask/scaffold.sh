@@ -26,7 +26,8 @@ cat > "$HOME/.config/autonomous/config.json" <<EOF
 }
 EOF
 
-# A stand-in for `openusage claude`: one Claude account with plenty of capacity,
+# A stand-in for `openusage claude` (OpenUsage 0.8, `openusage.limits.v2`): one
+# Claude account, `claude@1a2b3c4d`, with plenty of capacity,
 # so the quota gate advances and the run reaches label-triage.
 cat > "$HOME/bin/openusage" <<'EOF'
 #!/usr/bin/env bun
@@ -44,14 +45,14 @@ const window = (used, elapsed, size) => ({
 });
 console.log(
     JSON.stringify({
-        schema: "openusage.limits.v1",
+        schema: "openusage.limits.v2",
         generatedAt: iso(0),
         providers: {
-            claude: {
-                displayName: "Claude: Eval",
+            "claude@1a2b3c4d": {
+                displayName: "Claude · Eval",
                 plan: "Pro",
                 fetchedAt: iso(-60),
-                expiresAt: iso(240),
+                expiresAt: iso(540),
                 stale: false,
                 resources: {
                     session: window(5, 7200, 18000),
@@ -59,7 +60,6 @@ console.log(
                 },
             },
         },
-        errors: [],
     }),
 );
 EOF

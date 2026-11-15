@@ -63,10 +63,13 @@ an `AFK` task leaves proposal preparation without an answer.
   from source; plugins install without dependencies, so it uses nothing but
   `bun` and Node built-ins.
 - The [`openusage`](https://github.com/robinebers/openusage) CLI on `PATH`,
-  verified against 0.7.16. Its `openusage.limits.v1` output is validated
-  strictly; a change in that contract makes the gate `not-evaluable`, never a
-  silent pass. A call that takes longer than 120 s is treated as a failure
-  (`not-evaluable`).
+  0.8.0 or later, verified against 0.8.0. Its `openusage.limits.v2` output is
+  validated strictly; a change in that contract makes the gate `not-evaluable`,
+  never a silent pass. OpenUsage 0.7 prints `openusage.limits.v1`, which the
+  gate does not read: the reason asks for 0.8 or later. The CLI prints what the
+  OpenUsage app last fetched and never refreshes, so the app must be running to
+  keep the data fresh. A call that takes longer than 120 s is treated as a
+  failure (`not-evaluable`).
 - [`bd`](https://github.com/steveyegge/beads) on `PATH`, verified against
   1.3.0.
 - [`gh`](https://cli.github.com) on `PATH`, 2.100.0 or later, authenticated
@@ -124,8 +127,8 @@ adding the Linear CLI there is tracked as DOT-82 sub-issue 7.
 
 | Flag                                | Effect                                                                                                                                                                                                                                                                                                                                                                                                                                                                                             |
 | ----------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `--account <provider-key>`          | Claude account to evaluate (`claude` or `claude@<id>`). Required when several Claude accounts are present                                                                                                                                                                                                                                                                                                                                                                                          |
-| `--force`                           | Ask OpenUsage to bypass its shared cache                                                                                                                                                                                                                                                                                                                                                                                                                                                           |
+| `--account <provider-key>`          | Claude account to evaluate, by its OpenUsage account id (`claude@<id>`, such as `claude@1a2b3c4d`). Required when several Claude accounts are present                                                                                                                                                                                                                                                                                                                                              |
+| `--force`                           | Accepted, and does nothing: OpenUsage 0.8 prints what its app last fetched and refreshes on its own schedule                                                                                                                                                                                                                                                                                                                                                                                       |
 | `--json`                            | Print one `autonomous.run.v2` JSON document instead of the text report; with `--bootstrap-labels`, one `autonomous.bootstrap.v1` document; with `--answer`, one `autonomous.answers.v1` document; with `--discard`, one `autonomous.discard.v1` document; with `--transition`, one `autonomous.transition.v1` document; with `--persist`, one `autonomous.persist.v1` document; with `--pull-request`, one `autonomous.pull-request.v1` document; with `--log`, one `autonomous.log.v1` document   |
 | `--apply`                           | Let steps write. Without it a run has no side effects beyond the CLIs' own caches and the run lock. Required by `--answer`, `--discard`, `--transition`, `--persist`, `--pull-request` and `--log`                                                                                                                                                                                                                                                                                                 |
 | `--no-handoff`                      | Emit no handoff; the questions stay in the step's report. For runs with no human present, such as a `/loop`. Not combined with `--bootstrap-labels`, `--answer`, `--transition` or `--persist`                                                                                                                                                                                                                                                                                                     |
@@ -145,7 +148,7 @@ The script can also be run directly, which is what a shell or `/loop` should
 branch on:
 
 ```bash
-bun plugins/autonomous/src/run.ts --account claude --json --apply --no-handoff
+bun plugins/autonomous/src/run.ts --account claude@1a2b3c4d --json --apply --no-handoff
 ```
 
 `--apply` and `--bootstrap-labels` are the only ways anything is written;
@@ -158,7 +161,7 @@ The one exception is the answer invocation of `/autonomous:run`, which passes
 `--apply` again; it only follows a run the user started with `--apply`. A
 `/loop` that should write passes `--apply` explicitly, and `--no-handoff` with
 it, as above; through the command that is
-`/autonomous:run --account claude --apply --no-handoff` (see
+`/autonomous:run --account claude@1a2b3c4d --apply --no-handoff` (see
 [The round](#the-round)).
 
 ### Exit codes
@@ -2939,23 +2942,32 @@ Second in the run, after `reconcile`, so a stage that completed is recorded even
 when the gate says to wait. For the selected account the gate reads OpenUsage and evaluates the `session`
 and `weekly` windows: used amount, limit, window length, reset time, and the
 usage projected to the end of the window as OpenUsage's `Pace.evaluate`
-computes it. Other resources, such as `fable`, are listed but not evaluated.
+computes it. Other resources, such as `fable`, are listed but not evaluated; a
+balance, such as `rateLimitResets`, is listed with its available amount.
 They must still be well-formed, because validation covers the whole OpenUsage
 document, including accounts that are not selected.
 
-OpenUsage exits non-zero when it reports an account error, and still prints the
-document. The gate reads a non-zero exit when its output is a valid
-`openusage.limits.v1` document with at least one account error. An account error
-then affects only the account it names, so another account's error does not
-block the selected one. Any other non-zero exit is `not-evaluable`.
+The gate runs `openusage claude`, which prints every Claude account as one
+`openusage.limits.v2` document. An account is keyed by its id, such as
+`claude@1a2b3c4d`; the bare `claude` is a provider kind, not an account. An
+account OpenUsage has not fetched yet is left out, so `--account` naming it is
+an unknown account. When an account's refreshes fail, OpenUsage keeps its last
+values and marks them stale once they expire, 10 minutes after they were
+fetched. That account is then `not-evaluable`; the other accounts are
+unaffected.
+
+Any non-zero exit is `not-evaluable`, with stderr and the exit code as the
+reason, and its output is not read. OpenUsage 0.8.0 exits 2 when no Claude
+account is set up and 4 when none has been fetched yet.
 
 The decision, in order of precedence:
 
 1. **wait** when either window, with fresh, complete and valid data, has
    `used ≥ limit` and a reset time still ahead;
-2. **not-evaluable** when the account is stale, OpenUsage reports an error for
-   it, a window is missing, incomplete or invalid, or an exhausted window's
-   reset time has already passed (refresh with `--force`);
+2. **not-evaluable** when the account is stale, a window is missing,
+   incomplete or invalid, or an exhausted window's reset time has already
+   passed (OpenUsage refreshes on its own schedule; to refresh sooner, refresh
+   the account in the app);
 3. **advance** otherwise.
 
 Projection is reported but never blocks. Missing or stale data is never read as

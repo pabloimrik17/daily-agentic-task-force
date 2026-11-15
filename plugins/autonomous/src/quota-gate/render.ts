@@ -1,5 +1,5 @@
 import type { StepResult } from "../runner.ts";
-import type { WindowReport } from "./decide.ts";
+import type { OtherResource, WindowReport } from "./decide.ts";
 import type { Projection } from "./project.ts";
 import type { QuotaGateData } from "./step.ts";
 
@@ -28,7 +28,7 @@ export function renderQuotaGate(result: StepResult<QuotaGateData>): string {
         lines.push(`  ${w.name.padEnd(9)} ${renderWindow(w)}`);
     }
     for (const r of otherResources) {
-        lines.push(`  ${r.name.padEnd(9)} ${amount(r.used, r.limit, r.unit)}  not evaluated`);
+        lines.push(`  ${r.name.padEnd(9)} ${current(r)}  not evaluated`);
     }
     if (!account && accounts.length > 0) {
         lines.push(
@@ -38,6 +38,12 @@ export function renderQuotaGate(result: StepResult<QuotaGateData>): string {
     }
     lines.push("  reasons:", ...result.reasons.map((r) => `    - ${r}`));
     return lines.join("\n");
+}
+
+// A balance shows what is available; anything else shows used over limit.
+function current(r: OtherResource): string {
+    if (r.used === null && r.available !== null) return `${value(r.available, r.unit)} available`;
+    return amount(r.used, r.limit, r.unit);
 }
 
 function renderWindow(w: WindowReport): string {
