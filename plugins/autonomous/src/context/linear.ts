@@ -2,9 +2,9 @@
 // description, so one read-only `linear api` query reads them.
 
 import type { Exec } from "../exec.ts";
-import { runJson } from "../label-triage/trackers/cli-json.ts";
+import { type AuthoredComment, runJson } from "../label-triage/trackers/cli-json.ts";
 import { mapExecError, nullableDescription } from "../label-triage/trackers/linear.ts";
-import type { Tracker } from "../label-triage/trackers/tracker.ts";
+import type { TrackerResult } from "../label-triage/trackers/tracker.ts";
 import { array, boolean, type Json, object, string } from "../validate.ts";
 import { absent, emptyContext } from "./shared.ts";
 import type { ContextReader, RelatedTask, TaskContext } from "./types.ts";
@@ -108,7 +108,9 @@ function parseContext(value: unknown): TaskContext {
     };
 }
 
-export function linearContext(exec: Exec, tracker: Pick<Tracker, "readComments">): ContextReader {
+export type ReadComments = (id: string) => Promise<TrackerResult<AuthoredComment[]>>;
+
+export function linearContext(exec: Exec, readComments: ReadComments): ContextReader {
     return {
         source: "linear",
         async read(task) {
@@ -120,7 +122,7 @@ export function linearContext(exec: Exec, tracker: Pick<Tracker, "readComments">
                 mapExecError,
             );
             if (!read.ok) return read;
-            const comments = await tracker.readComments(task.id);
+            const comments = await readComments(task.id);
             if (!comments.ok) return comments;
             return { ok: true, value: { ...read.value, comments: comments.value } };
         },

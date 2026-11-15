@@ -2,9 +2,9 @@
 
 import type { BeadsConfig } from "../config.ts";
 import type { Exec } from "../exec.ts";
-import { commentBodies, runJson } from "../label-triage/trackers/cli-json.ts";
+import { authoredComments, runJson } from "../label-triage/trackers/cli-json.ts";
 import { array, type Json, object, optional, ParseError, string } from "../validate.ts";
-import { absent, emptyContext } from "./shared.ts";
+import { absent, emptyContext, nullableString } from "./shared.ts";
 import type { ContextReader, RelatedTask, TaskContext } from "./types.ts";
 
 interface Edge {
@@ -49,10 +49,12 @@ function parseContext(value: unknown): TaskContext {
     const parent = dependencies.find(({ type }) => type === "parent-child");
     return {
         ...emptyContext(),
-        comments: commentBodies(list(entry, "comments", "$[0]"), "$[0].comments", {
-            body: "text",
-            createdAt: "created_at",
-        }),
+        comments: authoredComments(
+            list(entry, "comments", "$[0]"),
+            "$[0].comments",
+            { body: "text", createdAt: "created_at" },
+            (comment, path) => nullableString(comment, "author", path),
+        ),
         parent: parent === undefined ? null : { ...parent.task, description: parent.description },
         children: ofType(dependents, "parent-child"),
         blockedBy: ofType(dependencies, "blocks"),

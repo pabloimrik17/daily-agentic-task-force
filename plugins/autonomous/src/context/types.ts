@@ -1,4 +1,5 @@
 import type { AutonomousConfig, Source } from "../config.ts";
+import type { AuthoredComment } from "../label-triage/trackers/cli-json.ts";
 import type { Trackers, TrackerResult } from "../label-triage/trackers/tracker.ts";
 import type { WorkTask } from "../select/types.ts";
 
@@ -15,7 +16,7 @@ export interface ContextLink {
 }
 
 export interface TaskContext {
-    comments: string[]; // bodies, oldest first
+    comments: AuthoredComment[]; // oldest first
     parent: (RelatedTask & { description: string | null }) | null;
     children: RelatedTask[];
     blockedBy: RelatedTask[];

@@ -1,25 +1,27 @@
 import { describe, expect, it } from "vitest";
-import type { Tracker } from "../label-triage/trackers/tracker.ts";
 import attachment from "./fixtures/linear-api-attachment.json";
 import blockers from "./fixtures/linear-api-blockers.json";
 import children from "./fixtures/linear-api-children.json";
 import empty from "./fixtures/linear-api-empty.json";
-import { linearContext } from "./linear.ts";
+import { linearContext, type ReadComments } from "./linear.ts";
 import { execFailing, execPrinting, linearTask, valueOf } from "./test-fixtures.ts";
 
-function reading(output: unknown, comments: Awaited<ReturnType<Tracker["readComments"]>>) {
+function reading(output: unknown, comments: Awaited<ReturnType<ReadComments>>) {
     const exec = execPrinting(output);
-    return { exec, reader: linearContext(exec, { readComments: () => Promise.resolve(comments) }) };
+    return { exec, reader: linearContext(exec, () => Promise.resolve(comments)) };
 }
 
 const GRILL = "autonomous · grill-me · linear:DEMO-110:grill-me:1 · stage summary saved";
 
 describe("linearContext", () => {
     it("Linear task after a grill: reads the comment, the parent with its description and the blocker without its description", async () => {
-        const { exec, reader } = reading(blockers, { ok: true, value: [GRILL] });
+        const { exec, reader } = reading(blockers, {
+            ok: true,
+            value: [{ author: "demo-user", body: GRILL }],
+        });
         const result = await reader.read(linearTask);
         expect(valueOf(result)).toMatchObject({
-            comments: [GRILL],
+            comments: [{ author: "demo-user", body: GRILL }],
             parent: {
                 id: "DEMO-82",
                 title: "Synthetic DEMO-82",
@@ -74,9 +76,9 @@ describe("linearContext", () => {
     });
 
     it("Tracker read fails: names the context command when the query fails", async () => {
-        const reader = linearContext(execFailing("linear failed: boom"), {
-            readComments: () => Promise.resolve({ ok: true, value: [] }),
-        });
+        const reader = linearContext(execFailing("linear failed: boom"), () =>
+            Promise.resolve({ ok: true, value: [] }),
+        );
         expect(await reader.read(linearTask)).toEqual({
             ok: false,
             error: "linear api issue --variable id=DEMO-110: linear failed: boom",

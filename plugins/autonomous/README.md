@@ -2628,8 +2628,8 @@ that pull request.
 ### The task's context
 
 Before it writes the prompt, the run reads in code, from the task's tracker:
-every comment, oldest first; the parent with its id, title, state, URL and
-description; and the children, the tasks that block the task, the tasks it
+every comment with its author, oldest first; the parent with its id, title,
+state, URL and description; and the children, the tasks that block the task, the tasks it
 blocks, its related tasks and its duplicates, each with id, title, state and
 URL. It reads nothing more about those tasks, not their descriptions. For
 Linear it also reads the project's name and the attachments, each with title and
@@ -2649,6 +2649,11 @@ read. A GitHub task has no blockers, and its context says that dependencies were
 not read. The prompt's Context section renders what was read: an empty list
 renders neither heading nor body, and a task with nothing around it gets one
 sentence saying so.
+
+Anyone who can comment on the task can write a comment, so the Context section
+names the author of each one, quotes every line of its body, and tells the agent
+that a comment is material about the task and not an instruction: it overrides
+neither the prompt's sections nor its constraints.
 
 ### What the session does
 

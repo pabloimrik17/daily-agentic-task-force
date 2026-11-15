@@ -1,5 +1,6 @@
 // The headings start one level below the Context section's own, which the prompt renders at the third.
 
+import type { AuthoredComment } from "../label-triage/trackers/cli-json.ts";
 import type { ContextLink, RelatedTask, TaskContext } from "./types.ts";
 
 const EMPTY = "The task has no comments, relations, project, attachments or linked pull requests.";
@@ -25,9 +26,21 @@ function links(heading: string, list: ContextLink[]): string[] {
     return list.length === 0 ? [] : [section(heading, bullets(lines))];
 }
 
-function comments(list: string[]): string[] {
-    const entries = list.map((body, index) => `##### Comment ${index + 1}\n\n${body}`);
-    return list.length === 0 ? [] : [section("Comments", entries.join("\n\n"))];
+// Every line is quoted, so nothing a comment holds can pass for a heading of the prompt.
+function quoted(body: string): string {
+    return body
+        .split(/\r?\n/)
+        .map((line) => `> ${line}`.trimEnd())
+        .join("\n");
+}
+
+function comment({ author, body }: AuthoredComment, index: number): string {
+    const by = author === null ? "author unknown" : `by ${author.replace(/\s+/g, " ").trim()}`;
+    return `##### Comment ${index + 1}, ${by}\n\n${quoted(body)}`;
+}
+
+function comments(list: AuthoredComment[]): string[] {
+    return list.length === 0 ? [] : [section("Comments", list.map(comment).join("\n\n"))];
 }
 
 function parent(value: TaskContext["parent"]): string[] {

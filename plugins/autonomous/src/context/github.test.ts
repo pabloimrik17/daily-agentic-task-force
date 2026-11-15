@@ -19,7 +19,10 @@ describe("githubContext", () => {
         const exec = execPrinting(parentFixture);
         const result = await githubContext(exec).read(githubTask);
         expect(valueOf(result)).toMatchObject({
-            comments: ["First synthetic comment.", "Second synthetic comment."],
+            comments: [
+                { author: "demo-user", body: "First synthetic comment." },
+                { author: "demo-user", body: "Second synthetic comment." },
+            ],
             children: [
                 {
                     id: "demo/one#10",

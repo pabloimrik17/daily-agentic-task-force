@@ -2,7 +2,11 @@
 
 import type { Exec } from "../exec.ts";
 import type { TrackerResult } from "../label-triage/trackers/tracker.ts";
-import { commentBodies, runJson } from "../label-triage/trackers/cli-json.ts";
+import {
+    type AuthoredComment,
+    authoredComments,
+    runJson,
+} from "../label-triage/trackers/cli-json.ts";
 import { array, type Json, number, object, string } from "../validate.ts";
 import { ISSUE_URL, splitId } from "../select/readers/github.ts";
 import { absent, emptyContext } from "./shared.ts";
@@ -55,11 +59,15 @@ function pullRequests(root: Json, notes: string[]): ContextLink[] {
     });
 }
 
-function comments(root: Json): string[] {
-    return commentBodies(array(root.comments, "$.comments"), "$.comments", {
-        body: "body",
-        createdAt: "createdAt",
-    });
+// A deleted account leaves a comment with a null author.
+function login(comment: Json, path: string): string | null {
+    if (absent(comment.author)) return null;
+    return string(object(comment.author, `${path}.author`), "login", `${path}.author`);
+}
+
+function comments(root: Json): AuthoredComment[] {
+    const keys = { body: "body", createdAt: "createdAt" };
+    return authoredComments(array(root.comments, "$.comments"), "$.comments", keys, login);
 }
 
 function parseContext(repository: string): (value: unknown) => TaskContext {

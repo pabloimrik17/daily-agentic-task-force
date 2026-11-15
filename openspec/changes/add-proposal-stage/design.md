@@ -49,7 +49,7 @@ A new port, one implementation per source, returns a `TaskContext`:
 ```ts
 interface RelatedTask { id: string; title: string; state: string; url: string | null }
 interface TaskContext {
-    comments: string[];
+    comments: { author: string | null; body: string }[];
     parent: (RelatedTask & { description: string | null }) | null;
     children: RelatedTask[]; blockedBy: RelatedTask[]; blocks: RelatedTask[];
     related: RelatedTask[]; duplicates: RelatedTask[];

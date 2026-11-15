@@ -12,7 +12,10 @@ describe("beadsContext", () => {
         const exec = execPrinting([task]);
         const result = await beadsContext(exec, CONFIG).read(beadsTask);
         expect(valueOf(result)).toMatchObject({
-            comments: ["First synthetic comment.", "Second synthetic comment."],
+            comments: [
+                { author: "Demo Author", body: "First synthetic comment." },
+                { author: "Demo Author", body: "Second synthetic comment." },
+            ],
             parent: {
                 id: "demo-1",
                 title: "Synthetic parent",
