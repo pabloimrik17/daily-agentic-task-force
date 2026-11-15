@@ -6,6 +6,7 @@ import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import type { RunArgs } from "../args.ts";
+import type { CapacityData } from "../capacity/step.ts";
 import type { ConfigLoad } from "../config.ts";
 import type { ContextReader } from "../context/types.ts";
 import type { Exec } from "../exec.ts";
@@ -106,11 +107,29 @@ function selectResult(overrides: Partial<SelectedUnit> = {}): StepResult<SelectD
             machineScope: "personal",
             selected,
             candidates: [],
+            setAside: [],
             excluded: [],
             notEvaluated: [],
             comparison: null,
             readyToClose: [],
         },
+    };
+}
+
+function capacityResult(full: { grill: boolean; work: boolean }): StepResult<CapacityData> {
+    const kind = (isFull: boolean) => ({
+        occupied: isFull ? 1 : 0,
+        limit: 1,
+        source: "default" as const,
+        attempts: [],
+        full: isFull,
+    });
+    return {
+        step: "capacity",
+        tier: "code",
+        outcome: "advance",
+        reasons: [],
+        data: { grill: kind(full.grill), work: kind(full.work) },
     };
 }
 
@@ -280,6 +299,36 @@ describe("launch: the unit", () => {
 
         expect(result).toMatchObject({ outcome: "advance", data: { stage: "test" } });
         expect((await readAttempt()).state).toBe("started");
+    });
+});
+
+describe("launch: the slots of the loop", () => {
+    // The task was selected in `grill-me` with a free grill slot, and carries `proposal` now.
+    const MOVED = { ...TASK, labels: ["personal", "AFK", "proposal"] };
+    const WORK_FULL = capacityResult({ grill: false, work: true });
+
+    it("waits in an iteration when the task moved to a kind that is full", async () => {
+        const { ctx, workspace } = setup({
+            tasks: [MOVED],
+            args: { task: undefined, stage: undefined, loop: true },
+            results: [WORK_FULL, selectResult()],
+        });
+
+        const result = await launchStep.run(ctx);
+
+        expect(result).toMatchObject({
+            outcome: "wait",
+            data: { input: "selected", excluded: { id: "DOT-109", reason: "no-free-slot" } },
+        });
+        expect(workspace.calls).toEqual([]);
+    });
+
+    it("does not refuse a launch outside the loop for a full kind", async () => {
+        const { ctx } = setup({ tasks: [MOVED], results: [WORK_FULL] });
+
+        const result = await launchStep.run(ctx);
+
+        expect(result).toMatchObject({ outcome: "advance", data: { stage: "test" } });
     });
 });
 

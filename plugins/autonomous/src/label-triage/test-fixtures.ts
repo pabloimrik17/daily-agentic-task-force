@@ -30,6 +30,7 @@ export function config(): AutonomousConfig {
         sessions: { tool: "claude", profile: null, binary: null },
         workspace: { root: "/home/me/WebstormProjects" },
         naming: { model: "haiku", effort: "low" },
+        runner: { grills: 1, parallel: 2, intervalMinutes: 10 },
     };
 }
 
@@ -200,6 +201,11 @@ export function triageContext(options: {
             pullRequest: undefined,
             title: undefined,
             log: undefined,
+            loop: false,
+            grills: undefined,
+            parallel: undefined,
+            interval: undefined,
+            notices: undefined,
             ...options.args,
         },
         now: NOW,

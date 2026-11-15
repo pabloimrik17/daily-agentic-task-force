@@ -19,6 +19,7 @@ const EMPTY: SelectData = {
     machineScope: null,
     selected: null,
     candidates: [],
+    setAside: [],
     excluded: [],
     readyToClose: [],
     notEvaluated: [],
@@ -399,6 +400,7 @@ describe("select: JSON data", () => {
                     stage: "grill-me",
                 },
             ],
+            setAside: [],
             excluded: [
                 { source: "beads", id: "B-1", title: "Task B-1", reason: "classification" },
                 { source: "beads", id: "B-2", title: "Task B-2", reason: "blocked" },

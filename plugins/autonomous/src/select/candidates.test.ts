@@ -438,6 +438,86 @@ describe("selectCandidates", () => {
     });
 });
 
+describe("selectCandidates: no free slot", () => {
+    const grill = workTask("linear", "G-1", ["personal", "grill-me"]);
+    const proposal = workTask("linear", "P-1", ["personal", "AFK", "proposal"]);
+
+    it("excludes the grill-me task when the grill kind is full and keeps the proposal task", async () => {
+        const result = await evaluate([grill, proposal], { full: { grill: true, work: false } });
+
+        expect(result).toEqual({
+            ok: true,
+            value: {
+                candidates: [expect.objectContaining({ task: proposal, stage: "proposal" })],
+                excluded: [
+                    { source: "linear", id: "G-1", title: "Task G-1", reason: "no-free-slot" },
+                ],
+                readyToClose: [],
+            },
+        });
+    });
+
+    it("excludes a proposal task when the work kind is full", async () => {
+        const result = await evaluate([grill, proposal], { full: { grill: false, work: true } });
+
+        expect(result).toMatchObject({
+            ok: true,
+            value: {
+                candidates: [{ task: grill }],
+                excluded: [{ id: "P-1", reason: "no-free-slot" }],
+            },
+        });
+    });
+
+    it("excludes a blocked grill-me task as blocked, not as no free slot", async () => {
+        const blocked = workTask("linear", "G-2", ["personal", "grill-me"], { blockedBy: ["X-1"] });
+
+        const result = await evaluate([blocked], { full: { grill: true, work: true } });
+
+        expect(result).toMatchObject({ ok: true, value: { excluded: [{ reason: "blocked" }] } });
+    });
+
+    it("excludes a split task as split, not as no free slot", async () => {
+        const parent = workTask("linear", "G-3", ["personal", "grill-me"], { children: ["C-1"] });
+
+        const result = await evaluate([parent], { full: { grill: true, work: true } });
+
+        expect(result).toMatchObject({ ok: true, value: { excluded: [{ reason: "split" }] } });
+    });
+
+    it("excludes a proposal parent whose children are all closed as split, ready to close", async () => {
+        const parent = workTask("linear", "P-2", ["personal", "AFK", "proposal"], {
+            children: [],
+            childCount: 1,
+        });
+
+        const result = await evaluate([parent], { full: { grill: true, work: true } });
+
+        expect(result).toMatchObject({
+            ok: true,
+            value: {
+                excluded: [{ id: "P-2", reason: "split" }],
+                readyToClose: [{ id: "P-2" }],
+            },
+        });
+    });
+
+    it("keeps the grill-me task outside a loop whatever the kinds", async () => {
+        const result = await evaluate([grill]);
+
+        expect(result).toMatchObject({
+            ok: true,
+            value: { candidates: [{ task: grill }], excluded: [] },
+        });
+    });
+
+    it("keeps the grill-me task when its kind has a free slot", async () => {
+        const result = await evaluate([grill], { full: { grill: false, work: true } });
+
+        expect(result).toMatchObject({ ok: true, value: { candidates: [{ task: grill }] } });
+    });
+});
+
 describe("labelledThisRun", () => {
     it("takes applied and failed records from label-triage and deduplicates task keys", () => {
         const results: StepResult[] = [

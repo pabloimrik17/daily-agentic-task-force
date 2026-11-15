@@ -27,6 +27,11 @@ export interface RunArgs {
     pullRequest: AttemptId | undefined;
     title: string | undefined;
     log: AttemptId | undefined;
+    loop: boolean;
+    grills: number | undefined; // only with --loop
+    parallel: number | undefined; // only with --loop
+    interval: number | undefined; // minutes; only with --loop
+    notices: number | undefined; // the count of notices already shown
 }
 
 export type ParseArgsResult = { ok: true; args: RunArgs } | { ok: false; error: string };
@@ -41,6 +46,8 @@ export const USAGE = [
     "       /autonomous:run --apply --persist <attempt-id> [--json]",
     "       /autonomous:run --apply --pull-request <attempt-id> [--title <title>] [--json]",
     "       /autonomous:run --apply --log <attempt-id> [--json]",
+    "       /autonomous:loop [--account <provider-key>] [--force] [--json] [--apply] [--grills <n>] [--parallel <n>] [--interval <minutes>]",
+    "       bun plugins/autonomous/src/run.ts --notices <n>",
 ].join("\n");
 
 const ANSWER_SHAPE = "--answer requires <id>=<value>[,<value>]";
@@ -54,6 +61,7 @@ const SWITCHES = new Map<string, (args: RunArgs) => void>([
     ["--bootstrap-labels", (args) => (args.bootstrapLabels = true)],
     ["--no-handoff", (args) => (args.noHandoff = true)],
     ["--release-workspace", (args) => (args.releaseWorkspace = true)],
+    ["--loop", (args) => (args.loop = true)],
 ]);
 
 // Flags that take the next argument as their value; each returns an error or null.
@@ -68,6 +76,10 @@ const VALUED = new Map<string, (args: RunArgs, value: string | undefined) => str
     ["--pull-request", readPullRequest],
     ["--title", readTitle],
     ["--log", readLog],
+    ["--grills", integer("--grills", "grills", 0)],
+    ["--parallel", integer("--parallel", "parallel", 0)],
+    ["--interval", integer("--interval", "interval", 1)],
+    ["--notices", integer("--notices", "notices", 0)],
 ]);
 
 export function parseArgs(argv: readonly string[]): ParseArgsResult {
@@ -88,6 +100,11 @@ export function parseArgs(argv: readonly string[]): ParseArgsResult {
         pullRequest: undefined,
         title: undefined,
         log: undefined,
+        loop: false,
+        grills: undefined,
+        parallel: undefined,
+        interval: undefined,
+        notices: undefined,
     };
     for (let i = 0; i < argv.length; i++) {
         const arg = argv[i] ?? "";
@@ -106,6 +123,25 @@ export function parseArgs(argv: readonly string[]): ParseArgsResult {
     }
     const error = combinationError(args);
     return error === null ? { ok: true, args } : { ok: false, error };
+}
+
+type IntegerKey = "grills" | "parallel" | "interval" | "notices";
+
+// A flag whose value is a whole number of at least `min`, written in digits.
+function integer(flag: string, key: IntegerKey, min: number) {
+    return (args: RunArgs, value: string | undefined): string | null => {
+        if (value === undefined || !/^\d+$/.test(value) || !Number.isSafeInteger(Number(value))) {
+            return `${flag} requires an integer of ${min} or more`;
+        }
+        if (Number(value) < min) {
+            return `${flag} ${value} must be an integer of ${min} or more`;
+        }
+        if (args[key] !== undefined) {
+            return `${flag} given more than once`;
+        }
+        args[key] = Number(value);
+        return null;
+    };
 }
 
 function readAccount(args: RunArgs, value: string | undefined): string | null {
@@ -259,6 +295,25 @@ const persisting = (args: RunArgs) => args.persist !== undefined;
 const pullRequesting = (args: RunArgs) => args.pullRequest !== undefined;
 const logging = (args: RunArgs) => args.log !== undefined;
 const accountOrForce = (args: RunArgs) => args.account !== undefined || args.force;
+const limited = (args: RunArgs) =>
+    [args.grills, args.parallel, args.interval].some((value) => value !== undefined);
+
+// Every mode flag that a loop does not accept.
+const modeFlags = (args: RunArgs) =>
+    [
+        args.noHandoff,
+        args.bootstrapLabels,
+        answering(args),
+        args.task !== undefined,
+        args.stage !== undefined,
+        args.discard !== undefined,
+        args.releaseWorkspace,
+        transitioning(args),
+        persisting(args),
+        pullRequesting(args),
+        args.title !== undefined,
+        logging(args),
+    ].some(Boolean);
 
 // Every flag other than --apply and --json, for the modes that accept only those.
 const otherFlags = (args: RunArgs) =>
@@ -340,6 +395,22 @@ const COMBINATIONS: readonly (readonly [(args: RunArgs) => boolean, string])[] =
     [
         (args) => args.releaseWorkspace && args.discard === undefined,
         "--release-workspace requires --discard",
+    ],
+    [(args) => limited(args) && !args.loop, "--grills, --parallel and --interval require --loop"],
+    [
+        (args) => args.loop && modeFlags(args),
+        "--loop can only be combined with --apply, --account, --force, --json, --grills, --parallel and --interval",
+    ],
+    [
+        (args) =>
+            args.notices !== undefined &&
+            (args.loop ||
+                args.apply ||
+                args.json ||
+                limited(args) ||
+                accountOrForce(args) ||
+                modeFlags(args)),
+        "--notices cannot be combined with other flags",
     ],
 ];
 

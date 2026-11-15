@@ -101,6 +101,7 @@ function config(enabled: Partial<Record<Source, boolean>> = {}): AutonomousConfi
         sessions: { tool: "claude", profile: null, binary: null },
         workspace: { root: "/home/me/WebstormProjects" },
         naming: { model: "haiku", effort: "low" },
+        runner: { grills: 1, parallel: 2, intervalMinutes: 10 },
     };
 }
 

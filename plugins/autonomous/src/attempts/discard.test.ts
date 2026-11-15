@@ -80,6 +80,11 @@ function args(discard: string, releaseWorkspace = false): RunArgs {
         bootstrapLabels: false,
         noHandoff: false,
         answers: [],
+        loop: false,
+        grills: undefined,
+        parallel: undefined,
+        interval: undefined,
+        notices: undefined,
     };
 }
 

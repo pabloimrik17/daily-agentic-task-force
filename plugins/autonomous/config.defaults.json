@@ -1,5 +1,6 @@
 {
     "sessions": { "tool": "claude", "profile": null, "binary": null },
     "workspace": { "root": "~/WebstormProjects" },
-    "naming": { "model": "haiku", "effort": "low" }
+    "naming": { "model": "haiku", "effort": "low" },
+    "runner": { "grills": 1, "parallel": 2, "intervalMinutes": 10 }
 }

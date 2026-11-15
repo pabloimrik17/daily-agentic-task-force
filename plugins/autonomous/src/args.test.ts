@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { parseArgs, type RunArgs } from "./args.ts";
+import { parseArgs, type RunArgs, USAGE } from "./args.ts";
 
 const DEFAULTS: RunArgs = {
     account: undefined,
@@ -19,7 +19,17 @@ const DEFAULTS: RunArgs = {
     pullRequest: undefined,
     title: undefined,
     log: undefined,
+    loop: false,
+    grills: undefined,
+    parallel: undefined,
+    interval: undefined,
+    notices: undefined,
 };
+
+const REQUIRE_LOOP = "--grills, --parallel and --interval require --loop";
+const LOOP_ONLY =
+    "--loop can only be combined with --apply, --account, --force, --json, --grills, --parallel and --interval";
+const NOTICES_ALONE = "--notices cannot be combined with other flags";
 
 function accepted(overrides: Partial<RunArgs>) {
     return { ok: true, args: { ...DEFAULTS, ...overrides } };
@@ -547,7 +557,94 @@ describe("parseArgs", () => {
         ],
         [["--release-workspace"], "--release-workspace requires --discard"],
         [["--apply", "--release-workspace"], "--release-workspace requires --discard"],
+        [["--parallel", "3"], REQUIRE_LOOP],
+        [["--apply", "--grills", "1"], REQUIRE_LOOP],
+        [["--interval", "5"], REQUIRE_LOOP],
+        [["--loop", "--task", "linear:DOT-120"], LOOP_ONLY],
+        [["--loop", "--no-handoff"], LOOP_ONLY],
+        [["--loop", "--bootstrap-labels"], LOOP_ONLY],
+        [["--loop", "--apply", "--answer", "a:b=HITL"], LOOP_ONLY],
+        [["--loop", "--apply", "--discard", "beads:X-1"], LOOP_ONLY],
+        [["--loop", "--apply", "--transition", "linear:DOT-121"], LOOP_ONLY],
+        [["--loop", "--apply", "--persist", "linear:DOT-121:grill-me:1"], LOOP_ONLY],
+        [["--loop", "--apply", "--pull-request", "linear:DOT-121:grill-me:1"], LOOP_ONLY],
+        [["--loop", "--apply", "--log", "linear:DOT-121:grill-me:1"], LOOP_ONLY],
+        [["--loop", "--interval", "0"], "--interval 0 must be an integer of 1 or more"],
+        [["--loop", "--interval", "2.5"], "--interval requires an integer of 1 or more"],
+        [["--loop", "--interval", "-3"], "--interval requires an integer of 1 or more"],
+        [["--loop", "--interval", "soon"], "--interval requires an integer of 1 or more"],
+        [["--loop", "--interval"], "--interval requires an integer of 1 or more"],
+        [["--loop", "--interval", "--apply"], "--interval requires an integer of 1 or more"],
+        [["--loop", "--parallel", "-1"], "--parallel requires an integer of 0 or more"],
+        [["--loop", "--grills", "1.5"], "--grills requires an integer of 0 or more"],
+        [["--loop", "--grills", "1", "--grills", "2"], "--grills given more than once"],
+        [["--notices"], "--notices requires an integer of 0 or more"],
+        [["--notices", "-1"], "--notices requires an integer of 0 or more"],
+        [["--notices", "0", "--loop"], NOTICES_ALONE],
+        [["--notices", "0", "--apply"], NOTICES_ALONE],
+        [["--notices", "0", "--json"], NOTICES_ALONE],
+        [["--notices", "0", "--force"], NOTICES_ALONE],
+        [["--notices", "0", "--task", "linear:DOT-120"], NOTICES_ALONE],
+        [["--notices", "0", "--bootstrap-labels"], NOTICES_ALONE],
+        [["--notices", "0", "--no-handoff"], NOTICES_ALONE],
+        [["--notices", "0", "--loop", "--interval", "5"], NOTICES_ALONE],
+        [["--apply", "--notices", "0", "--persist", "linear:DOT-121:grill-me:1"], NOTICES_ALONE],
+        [["--apply", "--notices", "0", "--log", "linear:DOT-121:grill-me:1"], NOTICES_ALONE],
     ])("rejects %j", (argv, error) => {
         expect(parseArgs(argv)).toEqual({ ok: false, error });
+    });
+});
+
+describe("parseArgs loop flags", () => {
+    it("reads --loop alone as a dry iteration", () => {
+        expect(parseArgs(["--loop"])).toEqual(accepted({ loop: true }));
+    });
+
+    it("reads --loop with every flag it accepts", () => {
+        expect(
+            parseArgs([
+                "--loop",
+                "--apply",
+                "--account",
+                "claude",
+                "--force",
+                "--json",
+                "--grills",
+                "0",
+                "--parallel",
+                "3",
+                "--interval",
+                "30",
+            ]),
+        ).toEqual(
+            accepted({
+                loop: true,
+                apply: true,
+                account: "claude",
+                force: true,
+                json: true,
+                grills: 0,
+                parallel: 3,
+                interval: 30,
+            }),
+        );
+    });
+
+    it("accepts --grills 0 and --parallel 0", () => {
+        expect(parseArgs(["--loop", "--grills", "0", "--parallel", "0"])).toEqual(
+            accepted({ loop: true, grills: 0, parallel: 0 }),
+        );
+    });
+
+    it("reads --notices alone", () => {
+        expect(parseArgs(["--notices", "0"])).toEqual(accepted({ notices: 0 }));
+        expect(parseArgs(["--notices", "12"])).toEqual(accepted({ notices: 12 }));
+    });
+
+    it("names the loop in the usage text", () => {
+        expect(USAGE).toContain("/autonomous:loop [");
+        expect(USAGE).not.toContain("/autonomous:run --loop");
+        expect(USAGE).not.toContain("/autonomous:run --notices");
+        expect(USAGE).toContain("--notices <n>");
     });
 });

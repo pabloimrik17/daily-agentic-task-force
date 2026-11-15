@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 
-import { isSupported, nextStage } from "./stage.ts";
+import { isSupported, nextStage, splitByStage } from "./stage.ts";
+import type { StageName } from "./types.ts";
 
 describe("nextStage", () => {
     it("gives grill-me, which is supported, for a grill-me task", () => {
@@ -38,5 +39,41 @@ describe("nextStage", () => {
 
     it("reads the stage by exact spelling only", () => {
         expect(nextStage(["personal", "Grill Me", "PROPOSAL"])).toBeNull();
+    });
+});
+
+describe("splitByStage", () => {
+    const at = (id: string, stage: StageName) => ({ id, stage });
+
+    it("keeps the proposal candidate and sets the grill-me one aside", () => {
+        const grill = at("a", "grill-me");
+        const proposal = at("b", "proposal");
+        expect(splitByStage([grill, proposal])).toEqual({ kept: [proposal], setAside: [grill] });
+    });
+
+    it("keeps every candidate of the most advanced stage, in order", () => {
+        const [first, grill, second] = [
+            at("a", "proposal"),
+            at("b", "grill-me"),
+            at("c", "proposal"),
+        ];
+        expect(splitByStage([first, grill, second])).toEqual({
+            kept: [first, second],
+            setAside: [grill],
+        });
+    });
+
+    it("keeps all when every candidate is at the same stage", () => {
+        const all = [at("a", "grill-me"), at("b", "grill-me")];
+        expect(splitByStage(all)).toEqual({ kept: all, setAside: [] });
+    });
+
+    it("keeps a single candidate", () => {
+        const only = at("a", "grill-me");
+        expect(splitByStage([only])).toEqual({ kept: [only], setAside: [] });
+    });
+
+    it("keeps nothing for no candidate", () => {
+        expect(splitByStage([])).toEqual({ kept: [], setAside: [] });
     });
 });
