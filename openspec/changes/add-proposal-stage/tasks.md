@@ -48,9 +48,9 @@
 
 Results go to `openspec/changes/add-proposal-stage/evidence/proposal-verification.md`. Every tracker or repository write here needs the user's go-ahead first.
 
-- [ ] 10.1 Bootstrap `implement` on the trackers with the user's go-ahead, and record the bootstrap report.
-- [ ] 10.2 Real task: run the stage on DOT-121 (`HITL`), or another task the user picks, through the review, the `Approve` answer, the logbook entry and the reconcile run that removes the session. Record the pull request, the stage summary comment and the labels.
-- [ ] 10.3 Sandbox cases, in the sandbox repository with OpenSpec initialised by the user, each recorded with its tracker state and the reconcile result:
+- [x] 10.1 Bootstrap `implement` on the trackers with the user's go-ahead, and record the bootstrap report.
+- [x] 10.2 Real task: run the stage on DOT-121 (`HITL`), or another task the user picks, through the review, the `Approve` answer, the logbook entry and the reconcile run that removes the session. Record the pull request, the stage summary comment and the labels.
+- [x] 10.3 Sandbox cases, in the sandbox repository with OpenSpec initialised by the user, each recorded with its tracker state and the reconcile result:
     1. an `AFK` task from launch to `implement` with no question;
     2. a `Later` answer, which leaves the session open and no entry;
     3. a blocked `AFK` agent, on a task whose description contradicts itself, ending retained;
