@@ -351,9 +351,11 @@ names that loop. Only one loop runs per state directory. A manual
 `/autonomous:run` may run between two iterations, and an iteration that starts
 while a manual run holds the run lock is `not-evaluable`.
 
-**Caveat.** A loop started from an agent session is a background task of that
-session. Whether it survives the session closing has not been verified yet. For
-a loop that must outlive the session, start it from a shell.
+**The loop outlives the session.** A loop started from an agent session is a
+background task of that session, and it keeps running after the session is
+closed. No agent then receives its notices, so stop it on purpose (see
+[Stopping it](#stopping-it)) or wait for its notices again from a new session
+with `--notices <n>`: the notices stay on disk.
 
 `--interval <minutes>` replaces `runner.intervalMinutes` (10 by default), the
 wait between the end of one iteration and the start of the next. `--grills` and

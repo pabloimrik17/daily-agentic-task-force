@@ -85,6 +85,7 @@ The text report SHALL show:
 - the candidates compared;
 - the candidates set aside because a candidate at a more advanced stage exists, each with its source, id, title and stage;
 - the excluded tasks, grouped by reason, each with its source, id and title;
+- the tasks ready to close: each task excluded as split whose children are all closed;
 - the note that GitHub dependencies were not evaluated, when GitHub is enabled.
 
 #### Scenario: Selected task in the text report
@@ -96,6 +97,16 @@ The text report SHALL show:
 
 - **WHEN** a task carrying `personal` and `grill-me` only is selected
 - **THEN** the report gives its autonomy as `none`
+
+#### Scenario: Parent ready to close
+
+- **WHEN** a task in `proposal` is excluded as split and every one of its children is closed
+- **THEN** the report lists it as ready to close, and no tracker write is issued for it
+
+#### Scenario: Parent with an open subtask
+
+- **WHEN** a task excluded as split still has an open child
+- **THEN** the report does not list it as ready to close
 
 #### Scenario: Candidate set aside in the report
 

@@ -101,7 +101,7 @@ A new ADR records that the slot limits bind only the loop: a manual launch is ne
 
 - [An undecided task is judged again on every iteration until DOT-127 lands, up to `judgement.cap` tasks each time] → The proposal states it. Do DOT-127 before the loop is left on for long.
 - [A manual run that finalises an attempt between two iterations produces no notice] → Accepted: the person who ran it saw the report.
-- [A loop started from an agent session may end when that session ends] → The loop runs from a shell as well, and `--notices` reports a loop that is gone.
+- [A loop started from an agent session keeps running after that session is closed, with no agent to hear it] → The README says so; `--notices <n>` from a new session picks the notices up again, and SIGTERM to the pid in `loop.lock` stops it.
 - [A configuration error repeats on every iteration] → It is in the log each time and stops nothing. Accepted by the user.
 - [`fallow audit` limits cyclomatic complexity; `args.ts` and `run.ts` already hold many branches] → The loop lives in its own module, and new argument rules are table rows, not branches.
 - [The stage order rule cannot be seen in real use while `grill-me` is the only supported stage] → Unit tests cover it with both stages supported.
@@ -112,4 +112,4 @@ No migration. An existing configuration file parses unchanged and takes the thre
 
 ## Open Questions
 
-- Whether a background task of an agent session outlives that session. If it does not, closing the session that ran `/autonomous:loop --apply` stops the loop with no notice, because no agent is left to receive one. Task 7.3 checks it. If the loop dies, the README says so and names the shell as the way to run a loop that must outlive the session; a detached launch from the command is then a follow-up, not part of this change.
+None. A background task of an agent session does outlive that session: checked on 2026-11-15 (see `evidence/7.3-real-loop.md`). Closing the session that ran `/autonomous:loop --apply` leaves the loop running with no agent to receive its notices. The README says so and tells how to stop it or to wait for its notices from a new session.
