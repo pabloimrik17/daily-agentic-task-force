@@ -50,5 +50,5 @@ Implement after `add-autonomous-loop-and-slot-limits`. Groups 1 to 5 touch only 
 
 ## Workflow follow-up
 
-- [ ] Update Linear DOT-127 when the change is implemented, with the user's go-ahead.
+- [x] Update Linear DOT-127 when the change is implemented, with the user's go-ahead.
 - [ ] Archive the change after `add-autonomous-loop-and-slot-limits` is archived.
