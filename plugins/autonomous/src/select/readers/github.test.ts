@@ -23,6 +23,7 @@ const PARENT: WorkTask = {
     repository: "ghrecon-ec0359/sv-issues",
     blockedBy: null,
     children: null,
+    childCount: null,
     blocks: [],
 };
 
@@ -44,6 +45,7 @@ it("marks priority, blockers and children unevaluated for every GitHub task unti
         expect(task.priority).toBeNull();
         expect(task.blockedBy).toBeNull();
         expect(task.children).toBeNull();
+        expect(task.childCount).toBeNull();
         expect(task.blocks).toEqual([]);
     }
     expect(exec).toHaveBeenCalledTimes(2);
@@ -82,6 +84,7 @@ it("keeps the open sub-issues as children, and the closed one out, leaving the t
         value: {
             ...PARENT,
             children: ["ghrecon-ec0359/sv-issues#10", "ghrecon-ec0359/sv-issues#11"],
+            childCount: 3,
             url: "https://github.com/ghrecon-ec0359/sv-issues/issues/9",
             parent: null,
         },
@@ -166,15 +169,21 @@ it("gives a sub-issue without a url the repository of the task", async () => {
     });
 });
 
-it("has no open children when every sub-issue is closed", async () => {
+it("counts every sub-issue but has no open child when all of them are closed", async () => {
     const closed = subIssues.subIssues.nodes.map((node) => ({ ...node, state: "CLOSED" }));
     const { work } = reading(withNodes(closed));
-    expect(await work.detail(PARENT)).toMatchObject({ ok: true, value: { children: [] } });
+    expect(await work.detail(PARENT)).toMatchObject({
+        ok: true,
+        value: { children: [], childCount: 3 },
+    });
 });
 
-it("has no children when the issue has no sub-issues", async () => {
+it("has no children, open or in all, when the issue has no sub-issues", async () => {
     const { work } = reading(withNodes([]));
-    expect(await work.detail(PARENT)).toMatchObject({ ok: true, value: { children: [] } });
+    expect(await work.detail(PARENT)).toMatchObject({
+        ok: true,
+        value: { children: [], childCount: 0 },
+    });
 });
 
 it("fails naming the command when gh fails", async () => {

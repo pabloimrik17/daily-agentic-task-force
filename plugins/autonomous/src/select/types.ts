@@ -3,7 +3,7 @@
 // the comparison (D6) and the step's data (D9).
 
 import type { AutonomousConfig, Scope, Source } from "../config.ts";
-import type { AutonomyLabel } from "../label-contract/contract.ts";
+import type { AutonomyLabel, StageLabel } from "../label-contract/contract.ts";
 import type { TrackerResult, TrackerTask } from "../label-triage/trackers/tracker.ts";
 
 export interface TaskLink {
@@ -16,6 +16,7 @@ export interface WorkTask extends TrackerTask {
     blocks: string[]; // ids this task blocks while it is open
     blockedBy: string[] | null; // open blockers; null: not evaluated (GitHub)
     children: string[] | null; // open children; null until detail reads them (GitHub, Linear)
+    childCount: number | null; // children in all, closed included; null until detail reads them
     project: string | null; // Linear project name, read by detail; null elsewhere, when absent and before detail
     repository: string | null; // GitHub "owner/name", from the id; null elsewhere
     url?: string | null; // filled by detail; null when the tracker has none (Beads)
@@ -30,7 +31,7 @@ export interface WorkReader {
 
 export type WorkReaderFactory = (config: AutonomousConfig) => WorkReader[]; // one per enabled source
 
-export type StageName = "grill-me" | "proposal";
+export type StageName = StageLabel;
 
 export type Exclusion =
     | "classification"
@@ -91,6 +92,7 @@ export interface SelectData {
     selected: SelectedUnit | null;
     candidates: { source: Source; id: string; title: string; scope: Scope; stage: StageName }[];
     excluded: Excluded[];
+    readyToClose: { source: Source; id: string; title: string }[]; // split parents whose children are all closed
     notEvaluated: string[]; // e.g. "github: dependencies"
     comparison: { model: string; effort: string } | null; // set only when the LLM was called
 }

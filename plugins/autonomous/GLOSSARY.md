@@ -29,6 +29,18 @@ The stage that refines a task with the human before proposal preparation. It
 ends with a confirmed definition and a decided autonomy.
 _Avoid_: refinement
 
+**Proposal preparation**:
+The stage that turns a task's definition into a proposal. It ends with the
+proposal committed on the task's branch, in a draft pull request, and the task
+ready to implement.
+_Avoid_: propose stage, proposal stage
+
+**Proposal**:
+The planning documents of a task, written before any code: what changes and
+why, the design, the requirements it adds or changes, and the tasks to
+implement it.
+_Avoid_: change, spec, plan
+
 **Definition**:
 The confirmed description of a task: its objective, its non-goals, its
 acceptance criteria, the decisions that shape it and its autonomy. A grill
@@ -173,10 +185,11 @@ the whole life of the task, and provisional while the task is in its grill.
 _Avoid_: participation mode
 
 **Stage label**:
-Where a task is in the process: `grill-me` or `proposal`. Every task has
-exactly one, and each transition replaces it. A task whose autonomy is decided
-starts at `proposal`, and a task in `grill-me` moves to `proposal` when the
-grill ends.
+Where a task is in the process: `grill-me`, `proposal` or `implement`. Every
+task has exactly one, and each transition replaces it. A task whose autonomy is
+decided starts at `proposal`, a task in `grill-me` moves to `proposal` when the
+grill ends, and a task in `proposal` moves to `implement` when its proposal
+preparation ends.
 
 **Taken label**:
 `taken`: marks a taken task for as long as an agent or a person advances it.
@@ -195,7 +208,8 @@ to the human.
 **Transition**:
 A task leaving its stage: its stage label is replaced and, when the stage
 decided it, its autonomy label is set. It follows the human's answer to a
-question at the end of the stage, and a script applies it.
+question at the end of the stage, except when an `AFK` task leaves proposal
+preparation, which needs no answer. A script applies it.
 
 ### Talking to the human
 

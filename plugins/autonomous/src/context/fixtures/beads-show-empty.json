@@ -1,0 +1,12 @@
+{
+    "id": "demo-3",
+    "title": "Synthetic task without relations",
+    "description": "Synthetic description.",
+    "status": "open",
+    "priority": 2,
+    "issue_type": "task",
+    "labels": ["personal"],
+    "dependent_count": 0,
+    "dependency_count": 0,
+    "comment_count": 0
+}

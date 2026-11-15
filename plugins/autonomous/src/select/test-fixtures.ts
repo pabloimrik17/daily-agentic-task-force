@@ -24,6 +24,7 @@ export function workTask(
         blocks: [],
         blockedBy: [],
         children: [],
+        childCount: 0,
         project: null,
         repository: null,
         ...overrides,

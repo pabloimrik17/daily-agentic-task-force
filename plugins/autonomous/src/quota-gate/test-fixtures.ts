@@ -126,6 +126,13 @@ export function context(exec: OpenUsageExec, args: Partial<RunArgs> = {}): RunCo
                 throw new Error("unused");
             },
             naming: () => Promise.resolve({ ok: false, error: "unused" }),
+            context: () => {
+                throw new Error("unused");
+            },
+            pullRequests: () => {
+                throw new Error("unused");
+            },
+            openspec: () => Promise.resolve({ ok: false, error: "unused" }),
             state: "/unused/state",
             home: "/unused/home",
         },

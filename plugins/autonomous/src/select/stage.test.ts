@@ -9,9 +9,15 @@ describe("nextStage", () => {
         expect(stage !== null && isSupported(stage)).toBe(true);
     });
 
-    it("gives proposal, which is not supported, for an AFK task", () => {
+    it("gives proposal, which is supported, for an AFK task", () => {
         const stage = nextStage(["personal", "AFK", "proposal"]);
         expect(stage).toBe("proposal");
+        expect(stage !== null && isSupported(stage)).toBe(true);
+    });
+
+    it("gives implement, which is not supported, for a task ready to implement", () => {
+        const stage = nextStage(["personal", "AFK", "implement"]);
+        expect(stage).toBe("implement");
         expect(stage !== null && isSupported(stage)).toBe(false);
     });
 

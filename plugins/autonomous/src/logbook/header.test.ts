@@ -57,6 +57,20 @@ describe("renderHeader", () => {
         expect(header).toContain("answered `HITL`, `AFK`");
     });
 
+    it("says the agent moved the task, with no answer, when by is agent", () => {
+        const facts = renderHeader({ ...base, answer: ["implement"], answeredBy: "agent" }).split(
+            "\n",
+        )[3];
+        expect(facts).toContain(" · moved to `implement` by the agent, with no answer · ");
+        expect(facts).not.toContain("answered");
+    });
+
+    it("keeps the answered wording when by is human or absent", () => {
+        const human = renderHeader({ ...base, answeredBy: "human" });
+        expect(human).toBe(renderHeader(base));
+        expect(human).toContain("answered `HITL`");
+    });
+
     it("lists several commits", () => {
         const header = renderHeader({ ...base, commits: ["a", "b", "c"] });
         expect(header).toContain("3 commits (`a`, `b`, `c`)");

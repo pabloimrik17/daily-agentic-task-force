@@ -89,6 +89,7 @@ describe("selectCandidates", () => {
             value: {
                 candidates: [{ task, scope: "personal", autonomy: null, stage: "grill-me" }],
                 excluded: [],
+                readyToClose: [],
             },
         });
     });
@@ -193,7 +194,7 @@ describe("selectCandidates", () => {
         { labels: ["grill-me", "taken"], reason: "classification" },
         { labels: ["personal", "grill-me", "taken"], reason: "taken" },
         { labels: ["personal", "grill-me"], reason: "labelled-this-run", labelled: true },
-        { labels: ["personal", "AFK", "proposal"], reason: "unsupported-stage" },
+        { labels: ["personal", "AFK", "implement"], reason: "unsupported-stage" },
         { labels: ["personal", "grill-me"], reason: "blocked", blocked: true },
     ])("never reads detail for $reason", async ({ labels, reason, labelled, blocked }) => {
         const task = workTask("linear", "TEST-1", labels, {
@@ -214,12 +215,21 @@ describe("selectCandidates", () => {
         expect(detail).not.toHaveBeenCalled();
     });
 
-    it("excludes a task in proposal with autonomy as an unsupported stage", async () => {
-        const task = workTask("linear", "TEST-1", ["personal", "AFK", "proposal"]);
+    it("excludes a task ready to implement as an unsupported stage", async () => {
+        const task = workTask("linear", "TEST-1", ["personal", "AFK", "implement"]);
 
         expect(await evaluate([task])).toMatchObject({
             ok: true,
             value: { candidates: [], excluded: [{ reason: "unsupported-stage" }] },
+        });
+    });
+
+    it("keeps an AFK task in proposal as a candidate", async () => {
+        const task = workTask("linear", "TEST-1", ["personal", "AFK", "proposal"]);
+
+        expect(await evaluate([task])).toMatchObject({
+            ok: true,
+            value: { candidates: [{ task, autonomy: "AFK", stage: "proposal" }], excluded: [] },
         });
     });
 
@@ -250,6 +260,7 @@ describe("selectCandidates", () => {
                         reason: "classification",
                     },
                 ],
+                readyToClose: [],
             },
         });
     });
@@ -279,7 +290,60 @@ describe("selectCandidates", () => {
                         reason: "split",
                     },
                 ],
+                readyToClose: [],
             },
+        });
+    });
+
+    it("excludes a parent in proposal whose subtasks are all closed as split, ready to close", async () => {
+        const task = workTask("linear", "TEST-1", ["personal", "AFK", "proposal"], {
+            children: [],
+            childCount: 2,
+        });
+
+        expect(await evaluate([task])).toEqual({
+            ok: true,
+            value: {
+                candidates: [],
+                excluded: [{ source: "linear", id: "TEST-1", title: task.title, reason: "split" }],
+                readyToClose: [{ source: "linear", id: "TEST-1", title: task.title }],
+            },
+        });
+    });
+
+    it("excludes a parent in proposal with an open subtask as split, not ready to close", async () => {
+        const task = workTask("linear", "TEST-1", ["personal", "AFK", "proposal"], {
+            children: ["TEST-2"],
+            childCount: 3,
+        });
+
+        expect(await evaluate([task])).toMatchObject({
+            ok: true,
+            value: { candidates: [], excluded: [{ reason: "split" }], readyToClose: [] },
+        });
+    });
+
+    it("keeps a grill of a task whose only subtask is closed as a candidate", async () => {
+        const task = workTask("linear", "TEST-1", ["personal", "grill-me"], {
+            children: [],
+            childCount: 1,
+        });
+
+        expect(await evaluate([task])).toMatchObject({
+            ok: true,
+            value: { candidates: [{ task, stage: "grill-me" }], excluded: [], readyToClose: [] },
+        });
+    });
+
+    it("does not exclude a task in proposal that never had a child", async () => {
+        const task = workTask("beads", "task-1", ["personal", "AFK", "proposal"], {
+            children: [],
+            childCount: 0,
+        });
+
+        expect(await evaluate([task])).toMatchObject({
+            ok: true,
+            value: { candidates: [{ task, stage: "proposal" }], excluded: [], readyToClose: [] },
         });
     });
 

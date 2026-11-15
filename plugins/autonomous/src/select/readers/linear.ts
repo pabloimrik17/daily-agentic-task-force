@@ -90,18 +90,17 @@ function parseDetail(
     states: ReadonlyMap<string, string>,
 ): WorkTask {
     const entry = object(value, "$");
-    const children = nodes(entry, "children", "$", CHILDREN_CAP)
-        .map((item, index) => {
-            const path = `$.children.nodes[${index}]`;
-            const child = object(item, path);
-            string(object(child.state, `${path}.state`), "name", `${path}.state`);
-            return string(child, "identifier", path);
-        })
-        .filter((id) => openState(states.get(id)));
+    const ids = nodes(entry, "children", "$", CHILDREN_CAP).map((item, index) => {
+        const path = `$.children.nodes[${index}]`;
+        const child = object(item, path);
+        string(object(child.state, `${path}.state`), "name", `${path}.state`);
+        return string(child, "identifier", path);
+    });
     return {
         ...task,
         description: nullableDescription(entry, "$"),
-        children,
+        children: ids.filter((id) => openState(states.get(id))),
+        childCount: ids.length,
         project: projectName(entry, "$"),
         url: nullable(entry, "url", "$"),
         parent: parentLink(entry, "$"),
@@ -129,6 +128,7 @@ export function linearWorkReader(exec: Exec, _config: LinearConfig): WorkReader 
                     priority,
                     blockedBy,
                     children: null,
+                    childCount: null,
                     project: null,
                     repository: null,
                     blocks: [],

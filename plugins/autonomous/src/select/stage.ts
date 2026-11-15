@@ -1,10 +1,10 @@
 // A task without exactly one stage label has no next stage, and selection excludes it under
-// classification before it asks. `SUPPORTED_STAGES` grows once the proposal stage runs.
+// classification before it asks. `implement` is a stage label with no stage behind it yet.
 
 import { isStageLabel } from "../label-contract/contract.ts";
 import type { StageName } from "./types.ts";
 
-const SUPPORTED_STAGES: readonly StageName[] = ["grill-me"];
+const SUPPORTED_STAGES: readonly StageName[] = ["grill-me", "proposal"];
 
 export function nextStage(labels: readonly string[]): StageName | null {
     const [stage, ...rest] = labels.filter(isStageLabel);

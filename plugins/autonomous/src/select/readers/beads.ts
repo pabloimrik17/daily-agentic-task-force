@@ -74,6 +74,7 @@ export function beadsWorkReader(exec: Exec, config: BeadsConfig): WorkReader {
                                 ),
                         )
                         .map(([id]) => id),
+                    childCount: null,
                     children: listed.value
                         .filter(
                             (entry) => entry.parent === task.id && entry.task.status !== "closed",
@@ -82,12 +83,30 @@ export function beadsWorkReader(exec: Exec, config: BeadsConfig): WorkReader {
                 }));
             return { ok: true, value: tasks };
         },
-        // The listing already holds everything detail fills elsewhere, the parent included.
+        // The listing already holds the parent; closed children are not in it, so they are counted
+        // by listing the task's children of every status.
         detail(task) {
-            return Promise.resolve({
-                ok: true,
-                value: { ...task, url: task.url ?? null, parent: task.parent ?? null },
-            });
+            return runJson(
+                exec,
+                `bd list --parent ${task.id} --all --json`,
+                [
+                    "-C",
+                    config.directory,
+                    "list",
+                    "--json",
+                    "--limit",
+                    "0",
+                    "--all",
+                    "--parent",
+                    task.id,
+                ],
+                (value) => ({
+                    ...task,
+                    childCount: array(value, "$").length,
+                    url: task.url ?? null,
+                    parent: task.parent ?? null,
+                }),
+            );
         },
     };
 }

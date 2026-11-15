@@ -10,13 +10,19 @@ import type { TrackerResult } from "../label-triage/trackers/tracker.ts";
 import type { StepResult } from "../runner.ts";
 import type { StageId } from "../stages/stage.ts";
 import { isSupported, nextStage } from "./stage.ts";
-import type { Candidate, Excluded, Exclusion, WorkTask } from "./types.ts";
+import type { Candidate, Excluded, Exclusion, SelectData, WorkTask } from "./types.ts";
 
 interface CandidateDeps {
     config: AutonomousConfig;
     labelledThisRun: ReadonlySet<TaskKey>;
     detail: (task: WorkTask) => Promise<TrackerResult<WorkTask>>;
     stage?: StageId; // supplied by `--stage`: the next stage's support is not checked
+}
+
+interface Selection {
+    candidates: Candidate[];
+    excluded: Excluded[];
+    readyToClose: SelectData["readyToClose"];
 }
 
 export function labelledThisRun(results: readonly StepResult[]): Set<TaskKey> {
@@ -69,6 +75,18 @@ function exclusionBeforeDetail(task: WorkTask, deps: CandidateDeps): Exclusion |
     return null;
 }
 
+function hasOpenChild(task: WorkTask): boolean {
+    return task.children !== null && task.children.length > 0;
+}
+
+// A parent in `proposal` is split once it ever had a child, closed or not; a grill of a task
+// whose children are all closed was reopened on purpose.
+function isSplit(task: WorkTask): boolean {
+    return (
+        hasOpenChild(task) || (nextStage(task.labels) === "proposal" && (task.childCount ?? 0) > 0)
+    );
+}
+
 // Null when the task has no next stage, which classification rules out.
 function candidate(task: WorkTask): Candidate | null {
     const stage = nextStage(task.labels);
@@ -83,12 +101,24 @@ function candidate(task: WorkTask): Candidate | null {
     return { task, scope: task.labels.includes("work") ? "work" : "personal", autonomy, stage };
 }
 
+function excluding(task: WorkTask, reason: Exclusion): Excluded {
+    return { source: task.source, id: task.id, title: task.title, reason };
+}
+
+// What a task that survived every check before detail still is once detail has filled it in.
+function afterDetail(task: WorkTask): { candidate: Candidate } | { reason: Exclusion } {
+    if (isSplit(task)) {
+        return { reason: "split" };
+    }
+    const found = candidate(task);
+    return found === null ? { reason: "unsupported-stage" } : { candidate: found };
+}
+
 export async function selectCandidates(
     tasks: readonly WorkTask[],
     deps: CandidateDeps,
-): Promise<TrackerResult<{ candidates: Candidate[]; excluded: Excluded[] }>> {
-    const candidates: Candidate[] = [];
-    const excluded: Excluded[] = [];
+): Promise<TrackerResult<Selection>> {
+    const selection: Selection = { candidates: [], excluded: [], readyToClose: [] };
     for (const task of tasks) {
         let reason = exclusionBeforeDetail(task, deps);
         if (reason === null) {
@@ -96,18 +126,21 @@ export async function selectCandidates(
             if (!detailed.ok) {
                 return detailed;
             }
-            if (detailed.value.children !== null && detailed.value.children.length > 0) {
-                reason = "split";
-            } else {
-                const found = candidate(detailed.value);
-                if (found !== null) {
-                    candidates.push(found);
-                    continue;
-                }
-                reason = "unsupported-stage";
+            const outcome = afterDetail(detailed.value);
+            if ("candidate" in outcome) {
+                selection.candidates.push(outcome.candidate);
+                continue;
+            }
+            reason = outcome.reason;
+            if (reason === "split" && !hasOpenChild(detailed.value)) {
+                selection.readyToClose.push({
+                    source: task.source,
+                    id: task.id,
+                    title: task.title,
+                });
             }
         }
-        excluded.push({ source: task.source, id: task.id, title: task.title, reason });
+        selection.excluded.push(excluding(task, reason));
     }
-    return { ok: true, value: { candidates, excluded } };
+    return { ok: true, value: selection };
 }

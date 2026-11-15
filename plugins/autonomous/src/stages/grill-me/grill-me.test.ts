@@ -24,6 +24,7 @@ import { fakeReader, selectContext, workTask } from "../../select/test-fixtures.
 import type { SelectData, WorkTask } from "../../select/types.ts";
 import type { SessionSpec, SessionTool } from "../../sessions/manager.ts";
 import type { StagePromptInput } from "../stage.ts";
+import { stageEnv } from "../test-fixtures.ts";
 import { SKILLS_PLUGIN } from "./prompt.ts";
 import { grillMeStage } from "./stage.ts";
 
@@ -186,7 +187,7 @@ describe("grill-me prerequisites", () => {
     it("refuses codex, naming the configured tool, before any skill is read", async () => {
         install();
 
-        expect(await grillMeStage.prerequisites({ tool: "codex", home })).toEqual({
+        expect(await grillMeStage.prerequisites(stageEnv({ tool: "codex", home }))).toEqual({
             ok: false,
             reason: "grill-me runs only with claude; sessions.tool is codex",
         });
@@ -195,7 +196,7 @@ describe("grill-me prerequisites", () => {
     it("holds for claude with both skill bodies, without their frontmatter, as the context", async () => {
         install();
 
-        const ready = await grillMeStage.prerequisites({ tool: "claude", home });
+        const ready = await grillMeStage.prerequisites(stageEnv({ tool: "claude", home }));
 
         expect(ready.ok).toBe(true);
         const context = ready.ok ? ready.context : {};
@@ -207,7 +208,7 @@ describe("grill-me prerequisites", () => {
     it("names the plugin when it is not installed", async () => {
         writeRegistry({ "other@market": [{ scope: "user", installPath: "/elsewhere" }] });
 
-        const ready = await grillMeStage.prerequisites({ tool: "claude", home });
+        const ready = await grillMeStage.prerequisites(stageEnv({ tool: "claude", home }));
 
         expect(ready).toMatchObject({ ok: false });
         expect(ready.ok ? "" : ready.reason).toContain(
@@ -218,7 +219,7 @@ describe("grill-me prerequisites", () => {
     it("names handoff when that skill is missing", async () => {
         install({ "engineering/grill-with-docs": GRILL_BODY });
 
-        const ready = await grillMeStage.prerequisites({ tool: "claude", home });
+        const ready = await grillMeStage.prerequisites(stageEnv({ tool: "claude", home }));
 
         expect(ready.ok ? "" : ready.reason).toContain("the skill handoff is not found");
     });
@@ -226,7 +227,9 @@ describe("grill-me prerequisites", () => {
     it("finds the skills of a new plugin version under other category directories", async () => {
         install({ "core/grill-with-docs": GRILL_BODY, "writing/handoff": HANDOFF_BODY }, "1.4.0");
 
-        expect((await grillMeStage.prerequisites({ tool: "claude", home })).ok).toBe(true);
+        expect((await grillMeStage.prerequisites(stageEnv({ tool: "claude", home }))).ok).toBe(
+            true,
+        );
     });
 });
 
@@ -558,6 +561,7 @@ describe("launch: a grill-me unit", () => {
             },
             candidates: [],
             excluded: [],
+            readyToClose: [],
             notEvaluated: [],
             comparison: null,
         },
@@ -598,6 +602,7 @@ describe("launch: a grill-me unit", () => {
                 ? { apply: true, task: { source: "linear", id: "DOT-121" }, stage: "grill-me" }
                 : { apply: true },
         });
+        const env = stageEnv().readers;
         const ctx: RunContext = {
             ...base,
             io: {
@@ -606,6 +611,8 @@ describe("launch: a grill-me unit", () => {
                 sessions: () => sessions,
                 workspace: () => workspace,
                 naming: answering("Login fix"),
+                context: () => ({ beads: env.context, github: env.context, linear: env.context }),
+                pullRequests: () => env.pullRequests,
                 state,
                 home,
             },

@@ -30,8 +30,8 @@ function readers(calls: string[]) {
                 workTask("linear", "DOT-4", ["personal", "grill-me", "taken"], {
                     title: "Being worked on",
                 }),
-                workTask("linear", "DOT-5", ["personal", "AFK", "proposal"], {
-                    title: "Write the proposal",
+                workTask("linear", "DOT-5", ["personal", "AFK", "implement"], {
+                    title: "Build the feature",
                 }),
             ],
             calls,
@@ -58,7 +58,7 @@ const OTHER_SECTIONS = [
     "    taken: 1",
     "      linear → DOT-4 → Being worked on",
     "    unsupported stage: 1",
-    "      linear → DOT-5 → Write the proposal",
+    "      linear → DOT-5 → Build the feature",
     "  not evaluated: github: dependencies",
     "  comparison: sonnet (high)",
 ];
@@ -168,7 +168,7 @@ describe("renderSelect", () => {
                     fakeReader(
                         "beads",
                         ["B-1", "B-2", "B-3"].map((id) =>
-                            workTask("beads", id, ["personal", "AFK", "proposal"]),
+                            workTask("beads", id, ["personal", "AFK", "implement"]),
                         ),
                         calls,
                     ),
@@ -195,6 +195,50 @@ describe("renderSelect", () => {
                 "  reasons:",
                 "    - 1 taken",
                 "    - 3 unsupported stage",
+            ].join("\n"),
+        );
+    });
+
+    it("lists a split parent whose subtasks are all closed as ready to close, under its own heading", async () => {
+        const calls: string[] = [];
+        const result = await selectStep.run(
+            selectContext({
+                calls,
+                readers: [
+                    fakeReader(
+                        "linear",
+                        [
+                            workTask("linear", "DOT-8", ["personal", "AFK", "proposal"], {
+                                title: "Parent of finished work",
+                            }),
+                            workTask("linear", "DOT-9", ["personal", "AFK", "proposal"], {
+                                title: "Parent with work left",
+                            }),
+                        ],
+                        calls,
+                        {
+                            details: {
+                                "DOT-8": { children: [], childCount: 2 },
+                                "DOT-9": { children: ["DOT-10"], childCount: 2 },
+                            },
+                        },
+                    ),
+                ],
+            }),
+        );
+        expect(selectStep.render(result)).toBe(
+            [
+                "[select] wait (code)",
+                "  machine scope  personal",
+                "  excluded: 2 tasks",
+                "    split: 2",
+                "      linear → DOT-8 → Parent of finished work",
+                "      linear → DOT-9 → Parent with work left",
+                "  ready to close: 1 task",
+                "    linear → DOT-8 → Parent of finished work",
+                "  not evaluated: github: dependencies",
+                "  reasons:",
+                "    - 2 split",
             ].join("\n"),
         );
     });

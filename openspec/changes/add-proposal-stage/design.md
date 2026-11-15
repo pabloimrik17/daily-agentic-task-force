@@ -60,13 +60,13 @@ interface TaskContext {
 }
 ```
 
-- **Linear:** one `linear issue view <id> --json` gives relations, inverse relations, parent, children, project and attachments; comments come from the tracker's `readComments`.
-- **Beads:** `bd show <id> --json --include-comments --include-dependents`, whose dependencies carry their type.
-- **GitHub:** `gh issue view --json comments,subIssues,parent,closedByPullRequestsReferences`; no blockers, and the note.
+- **Linear:** one read-only `linear api` GraphQL query gives relations, inverse relations, parent, children, project and attachments; comments come from the tracker's `readComments`. The recorded output of `linear issue view <id> --json` (CLI 2.6.0) showed that it prints no relations, and neither a URL nor a description for the parent, so it cannot serve this read.
+- **Beads:** `bd show <id> --json --include-comments --include-dependents`, whose dependencies and dependents carry their type. A task with no relation omits those fields, which reads as none. Beads has no URL and no project.
+- **GitHub:** `gh issue view --json comments,subIssues,parent,closedByPullRequestsReferences`; no blockers, and the note. Its `parent` carries no body, so the parent's description takes a second `gh issue view <parent> --json body`. A linked pull request carries no title, so its title is `owner/name#number`.
 
 The stage's `prerequisites` calls the reader and serialises the result as one JSON string in the stage context, under the key `context`. `prompt` parses it and renders the section. A failed read fails the prerequisites.
 
-The exact JSON fields of each CLI are confirmed from recorded outputs in task 4.1 before the parsers are written; a field a CLI does not print yields an empty list and a note, never a failure.
+The exact JSON fields of each CLI were confirmed from recorded outputs in task 4.1; a field a CLI does not print yields an empty list and a note, never a failure.
 
 *Alternative:* the agent reads the context itself. Rejected by the user: code first, and the prompt file must be auditable.
 

@@ -87,6 +87,27 @@ describe("decide: confidence threshold per group", () => {
     });
 });
 
+describe("decide: autonomy in implement", () => {
+    it("Task in implement: HITL is eligible and grill-me is asked as invalid", () => {
+        expect(
+            decide(derivation({ group: "autonomy", labels: ["HITL"] }), 0.95, [
+                "personal",
+                "implement",
+            ]),
+        ).toEqual({ status: "eligible", reason: "" });
+        expect(
+            decide(
+                derivation({ group: "autonomy", labels: ["grill-me"], confidence: 0.99 }),
+                0.95,
+                ["personal", "implement"],
+            ),
+        ).toEqual({
+            status: "asked",
+            reason: "invalid under the contract: grill-me with a stage label: implement",
+        });
+    });
+});
+
 describe("decide", () => {
     it("is eligible when confidence is at or above the threshold and the labels are valid", () => {
         expect(decide(derivation({ confidence: 1 }), 0.95, [])).toEqual({

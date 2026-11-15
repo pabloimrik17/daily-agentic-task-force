@@ -1,5 +1,6 @@
 import type { AttemptId } from "../attempts/record.ts";
 import type { StageId } from "../stages/stage.ts";
+import type { TransitionedBy } from "../transition/transitioned.ts";
 import { logbookMarker } from "./marker.ts";
 
 export interface HeaderInput {
@@ -17,6 +18,8 @@ export interface HeaderInput {
     end: string;
     /** From transition.json; null when absent. */
     answer: string[] | null;
+    /** From transition.json; null when absent or recorded before `by` existed. */
+    answeredBy?: TransitionedBy | null;
     /** Short ids. */
     commits: string[];
 }
@@ -89,7 +92,12 @@ function facts(input: HeaderInput): string[] {
     }
     found.push(span(input.start, input.end));
     if (input.answer !== null && input.answer.length > 0) {
-        found.push(`answered ${input.answer.map(code).join(", ")}`);
+        const labels = input.answer.map(code).join(", ");
+        found.push(
+            input.answeredBy === "agent"
+                ? `moved to ${labels} by the agent, with no answer`
+                : `answered ${labels}`,
+        );
     }
     found.push(commitsFact(input.commits));
     return found;

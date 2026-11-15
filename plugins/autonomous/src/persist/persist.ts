@@ -1,13 +1,14 @@
 // Persist mode (spec grill-me-stage, "Definition layout", "Stage summary comment", "Persistence
-// is read back and leaves a receipt"). It writes a new file beside the attempt record and never
-// the record, so it takes no run lock. Every step is safe to repeat: the splice replaces the
-// definition and the comment is skipped once its header exists.
+// is read back and leaves a receipt"; spec proposal-stage, "Proposal stage summary comment"). It
+// writes a new file beside the attempt record and never the record, so it takes no run lock. Every
+// step is safe to repeat: the splice replaces the definition and the comment is skipped once its
+// header exists.
 
 import { readFile, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 
 import { readOpenAttempt } from "../attempts/open.ts";
-import type { AttemptId, AttemptRecord } from "../attempts/record.ts";
+import { type AttemptId, type AttemptRecord, parseAttemptId } from "../attempts/record.ts";
 import {
     definitionPath,
     receiptPath,
@@ -25,8 +26,6 @@ import { spliceDefinition } from "./splice.ts";
 
 export const RECEIPT_SCHEMA = "autonomous.persisted.v1";
 
-const GRILL_ME: StageId = "grill-me";
-
 const DESCRIPTION_FILE = "description.md";
 const DESCRIPTION_READ_FILE = "description.read.md"; // what the tracker returned, when it differs
 const COMMENT_FILE = "comment.md";
@@ -40,11 +39,11 @@ export interface PersistDeps {
 interface Ready {
     record: AttemptRecord;
     dir: string;
-    definition: string;
+    definition: string; // empty for a stage that persists none
     summary: string;
 }
 
-type Checked = { ok: true; value: Ready } | { ok: false; reasons: string[] };
+type Checked = { ok: true; value: Ready; plan: Plan } | { ok: false; reasons: string[] };
 
 interface Persisting extends Ready {
     tracker: Tracker;
@@ -56,13 +55,45 @@ interface Persisting extends Ready {
 // A step returns the reason it failed, or null when it did its part.
 type PersistStep = (persisting: Persisting) => Promise<string | null>;
 
-const STEPS: readonly PersistStep[] = [readTask, saveDescription, saveComment, writeReceipt];
+type Document = "definition" | "summary";
+
+const DOCUMENT_PATHS: Readonly<Record<Document, (dir: string) => string>> = {
+    definition: definitionPath,
+    summary: stageSummaryPath,
+};
+
+// What persist mode does for a stage: the files it requires, its steps and its comment's wording.
+interface Plan {
+    requires: readonly Document[];
+    steps: readonly PersistStep[];
+    saved: string; // ends the comment's header
+}
+
+const PLANS: Readonly<Partial<Record<StageId, Plan>>> = {
+    "grill-me": {
+        requires: ["definition", "summary"],
+        steps: [readTask, saveDescription, saveComment, writeReceipt],
+        saved: "definition saved",
+    },
+    proposal: {
+        requires: ["summary"],
+        steps: [readTask, saveComment, writeReceipt],
+        saved: "stage summary saved",
+    },
+};
+
+const supportedStages = () => Object.keys(PLANS).join(" and ");
 
 const messageOf = (error: unknown) => (error instanceof Error ? error.message : String(error));
 
 // The first line of the comment, which tells this attempt's apart from any other.
 export function headerOf(attempt: AttemptId): string {
-    return `autonomous · ${GRILL_ME} · ${attempt} · definition saved`;
+    const stage = parseAttemptId(attempt)?.stage;
+    const plan = stage === undefined ? undefined : PLANS[stage];
+    if (plan === undefined) {
+        throw new Error(`persist mode takes no header for attempt ${attempt}`);
+    }
+    return `autonomous · ${stage} · ${attempt} · ${plan.saved}`;
 }
 
 export async function runPersist(
@@ -75,14 +106,15 @@ export async function runPersist(
     if (!checked.ok) {
         return { ...report, reasons: checked.reasons };
     }
+    const { value, plan } = checked;
     const persisting: Persisting = {
-        ...checked.value,
-        tracker: deps.trackers[checked.value.record.task.source],
+        ...value,
+        tracker: deps.trackers[value.record.task.source],
         header: headerOf(attempt),
         report,
         current: null,
     };
-    for (const step of STEPS) {
+    for (const step of plan.steps) {
         const failure = await step(persisting);
         if (failure !== null) {
             report.reasons.push(failure);
@@ -100,26 +132,43 @@ async function check(attempt: AttemptId, deps: PersistDeps): Promise<Checked> {
         return { ok: false, reasons: [found.error] };
     }
     const { record, dir } = found.value;
-    if (record.stage !== GRILL_ME) {
+    const plan = PLANS[record.stage];
+    if (plan === undefined) {
         return {
             ok: false,
             reasons: [
-                `attempt ${record.id} is a ${record.stage} attempt: persist mode takes only ${GRILL_ME} attempts`,
+                `attempt ${record.id} is a ${record.stage} attempt: persist mode takes only ${supportedStages()} attempts`,
             ],
         };
     }
-    const [definition, summary] = await Promise.all([
-        readDocument(definitionPath(dir)),
-        readDocument(stageSummaryPath(dir)),
-    ]);
-    if (!definition.ok || !summary.ok) {
-        const reasons = [definition, summary].flatMap((read) => (read.ok ? [] : [read.error]));
-        return { ok: false, reasons };
+    const read = await readRequired(dir, plan);
+    if (!read.ok) {
+        return { ok: false, reasons: read.errors };
     }
-    return {
-        ok: true,
-        value: { record, dir, definition: definition.value, summary: summary.value },
-    };
+    const { definition, summary } = read.texts;
+    return { ok: true, value: { record, dir, definition, summary }, plan };
+}
+
+// Reads every file the stage requires, so that all the missing ones are named at once.
+async function readRequired(
+    dir: string,
+    plan: Plan,
+): Promise<{ ok: true; texts: Record<Document, string> } | { ok: false; errors: string[] }> {
+    const reads = await Promise.all(
+        plan.requires.map(async (name) => ({
+            name,
+            read: await readDocument(DOCUMENT_PATHS[name](dir)),
+        })),
+    );
+    const errors = reads.flatMap(({ read }) => (read.ok ? [] : [read.error]));
+    if (errors.length > 0) {
+        return { ok: false, errors };
+    }
+    const texts: Record<Document, string> = { definition: "", summary: "" };
+    for (const { name, read } of reads) {
+        texts[name] = read.ok ? read.value : "";
+    }
+    return { ok: true, texts };
 }
 
 async function readDocument(file: string): Promise<Result<string>> {

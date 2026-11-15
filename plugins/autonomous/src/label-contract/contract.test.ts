@@ -24,7 +24,7 @@ function normalise(text: string): string {
 }
 
 describe("LABELS, GROUPS and COLOURS", () => {
-    it("lists exactly the seven contract labels", () => {
+    it("lists exactly the eight contract labels", () => {
         expect(LABELS).toEqual([
             "work",
             "personal",
@@ -32,6 +32,7 @@ describe("LABELS, GROUPS and COLOURS", () => {
             "HITL",
             "grill-me",
             "proposal",
+            "implement",
             "taken",
         ]);
     });
@@ -40,7 +41,7 @@ describe("LABELS, GROUPS and COLOURS", () => {
         expect(GROUPS).toEqual({
             scope: ["work", "personal"],
             autonomy: ["AFK", "HITL"],
-            stage: ["grill-me", "proposal"],
+            stage: ["grill-me", "proposal", "implement"],
         });
     });
 
@@ -54,6 +55,7 @@ describe("LABELS, GROUPS and COLOURS", () => {
             HITL: "#eb5757",
             "grill-me": "#f2994a",
             proposal: "#bb87fc",
+            implement: "#26b5ce",
             work: "#2f80ed",
             personal: "#27ae60",
             taken: "#95a2b3",
@@ -79,6 +81,10 @@ describe("LABELS, GROUPS and COLOURS", () => {
         expect(MEANINGS.proposal).toBe(
             "The task is ready for proposal preparation, its autonomy decided and any grill it needed over.",
         );
+    });
+
+    it("states that implement means the task has a proposal and is ready to implement", () => {
+        expect(MEANINGS.implement).toBe("The task has a proposal and is ready to implement.");
     });
 
     it("states grill-me without any precedence over AFK and HITL", () => {
@@ -117,6 +123,7 @@ describe("isContractLabel", () => {
     it("accepts exact spellings", () => {
         expect(isContractLabel("grill-me")).toBe(true);
         expect(isContractLabel("proposal")).toBe(true);
+        expect(isContractLabel("implement")).toBe(true);
     });
 
     it("rejects a near-miss spelling", () => {
@@ -198,6 +205,10 @@ describe("optionsFor", () => {
     it("offers AFK and HITL only for autonomy when the task has a stage label", () => {
         expect(optionsFor("autonomy", ["personal", "proposal"])).toEqual(["AFK", "HITL"]);
         expect(optionsFor("autonomy", ["grill-me"])).toEqual(["AFK", "HITL"]);
+    });
+
+    it("Task in implement: its autonomy is AFK or HITL, never grill-me", () => {
+        expect(optionsFor("autonomy", ["personal", "implement"])).toEqual(["AFK", "HITL"]);
     });
 });
 

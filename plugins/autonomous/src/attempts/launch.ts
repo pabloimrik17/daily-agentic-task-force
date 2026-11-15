@@ -12,8 +12,15 @@ import { labelledThisRun, selectCandidates } from "../select/candidates.ts";
 import type { Excluded, SelectData, WorkReader, WorkTask } from "../select/types.ts";
 import type { SessionManager } from "../sessions/manager.ts";
 import { type Naming, nameSession } from "../sessions/naming.ts";
+import type { StageLabel } from "../label-contract/contract.ts";
 import { STAGES } from "../stages/registry.ts";
-import type { Stage, StageContext, StageId } from "../stages/stage.ts";
+import {
+    isStageId,
+    type Stage,
+    type StageContext,
+    type StageEnv,
+    type StageId,
+} from "../stages/stage.ts";
 import { branchFor, groupFor, inferRepository, listRepositories } from "../workspace/infer.ts";
 import { exclusionName, renderLaunch } from "./launch-render.ts";
 import {
@@ -36,9 +43,12 @@ import { addTaken, TAKEN } from "./taken.ts";
 
 const LAUNCH = "launch";
 
+// A selected unit may be at a stage no session implements (`implement`).
+type LaunchStage = StageId | StageLabel;
+
 export interface LaunchData {
     task: { source: Source; id: string; title: string } | null;
-    stage: StageId | null;
+    stage: LaunchStage | null;
     input: "selected" | "supplied" | null;
     excluded: Excluded | null;
     repository: { path: string; inferredFrom: string } | null;
@@ -202,7 +212,7 @@ async function readUnit(
     config: AutonomousConfig,
     unit: Unit,
     data: LaunchData,
-): Promise<Gate<{ task: WorkTask; stage: StageId }>> {
+): Promise<Gate<{ task: WorkTask; stage: LaunchStage }>> {
     const read = await readTask(ctx.io.work(config), unit);
     if (!read.ok) {
         return read;
@@ -247,45 +257,69 @@ async function readTask(
         : pass({ task, reader });
 }
 
-// The checks run in this order: the stage is registered, its prerequisites hold,
-// the task carries no `taken`, no attempt of the task is open, and a repository
-// is inferred.
+// The checks run in this order: the stage is registered, a repository is inferred, the
+// stage's prerequisites hold for the task and that repository, the task carries no `taken`
+// and no attempt of the task is open.
 async function preconditions(
     ctx: RunContext,
     config: AutonomousConfig,
-    read: { task: WorkTask; stage: StageId },
+    read: { task: WorkTask; stage: LaunchStage },
 ): Promise<Gate<Pick<Plan, "task" | "stage" | "context" | "records" | "repository">>> {
     const { task } = read;
-    const stage = STAGES.get(read.stage);
+    const stage = isStageId(read.stage) ? STAGES.get(read.stage) : undefined;
     if (stage === undefined) {
         return wait(`stage ${read.stage} has no implementation`);
     }
-    const ready = await stage.prerequisites({ tool: config.sessions.tool, home: ctx.io.home });
-    if (!ready.ok) {
-        return wait(ready.reason);
-    }
-    // Already an exclusion of readUnit; kept so the order of D9 reads here.
-    if (task.labels.includes(TAKEN)) {
-        return wait(`${task.source}:${task.id} carries taken`);
+    const repository = await inferFor(config.workspace.root, task);
+    if (!repository.ok) {
+        return repository;
     }
     const records = await readRecords(ctx.io.state);
     if (!records.ok) {
         return records;
     }
+    const env = stageEnv(ctx, config, task, repository.value.path, records.value);
+    const ready = await stage.prerequisites(env);
+    if (!ready.ok) {
+        return wait(ready.reason);
+    }
+    // Already an exclusion of readUnit; kept so the order of D2 reads here.
+    if (task.labels.includes(TAKEN)) {
+        return wait(`${task.source}:${task.id} carries taken`);
+    }
     const open = openAttempt(records.value, task);
     if (open !== null) {
         return wait(open);
     }
-    const repository = await inferFor(config.workspace.root, task);
-    return repository.ok
-        ? pass({
-              task,
-              stage,
-              context: ready.context,
-              records: records.value,
-              repository: repository.value,
-          })
-        : repository;
+    return pass({
+        task,
+        stage,
+        context: ready.context,
+        records: records.value,
+        repository: repository.value,
+    });
+}
+
+function stageEnv(
+    ctx: RunContext,
+    config: AutonomousConfig,
+    task: WorkTask,
+    repository: string,
+    records: readonly AttemptRecord[],
+): StageEnv {
+    const { io } = ctx;
+    return {
+        tool: config.sessions.tool,
+        home: io.home,
+        task,
+        repository,
+        branch: branchOf(records, task),
+        readers: {
+            context: io.context(config, io.trackers(config))[task.source],
+            pullRequests: io.pullRequests(repository),
+            openspec: io.openspec,
+        },
+    };
 }
 
 async function readRecords(state: string): Promise<Gate<AttemptRecord[]>> {

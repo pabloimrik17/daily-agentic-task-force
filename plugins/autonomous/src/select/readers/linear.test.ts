@@ -81,6 +81,49 @@ describe("linearWorkReader", () => {
             ["issue", "view", "DEMO-82", "--no-comments", "--json"],
         ]);
     });
+    it("counts the children in all beside the open ones", async () => {
+        const result = await detailOf(detail);
+        expect(result.ok && [result.value.children, result.value.childCount]).toEqual([
+            ["DEMO-108", "DEMO-999"],
+            4,
+        ]);
+    });
+    it("counts three completed sub-issues as three children and no open child", async () => {
+        const done = { ...listing.nodes[3]!, identifier: "DEMO-202" };
+        const query = { ...listing, nodes: [...listing.nodes, done] };
+        const children = ["DEMO-200", "DEMO-201", "DEMO-202"].map((identifier) => ({
+            identifier,
+            title: "Synthetic child",
+            state: { name: "Done", color: "#000000" },
+        }));
+        const work = readerWith(
+            {
+                ...query,
+                nodes: query.nodes.map((node) =>
+                    node.identifier === "DEMO-201"
+                        ? { ...node, state: { ...node.state, type: "completed" } }
+                        : node,
+                ),
+            },
+            { ...detail, children: { nodes: children } },
+        );
+        const listed = await work.list();
+        if (!listed.ok) throw new Error(listed.error);
+        const result = await work.detail(listed.value.find((task) => task.id === "DEMO-82")!);
+        expect(result.ok && [result.value.children, result.value.childCount]).toEqual([[], 3]);
+    });
+    it("counts no children for an issue without sub-issues", async () => {
+        const result = await detailOf({ ...detail, children: { nodes: [] } });
+        expect(result.ok && [result.value.children, result.value.childCount]).toEqual([[], 0]);
+    });
+    it("leaves the child count unread in the listing", async () => {
+        const result = await reader().work.list();
+        expect(result.ok && result.value.map((task) => task.childCount)).toEqual([
+            null,
+            null,
+            null,
+        ]);
+    });
     it("reads the project name from the issue view, and none from the listing", async () => {
         const { work } = reader();
         const listed = await work.list();

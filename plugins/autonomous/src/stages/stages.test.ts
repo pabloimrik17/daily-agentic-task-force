@@ -5,6 +5,7 @@ import { grillMeStage } from "./grill-me/stage.ts";
 import { expectedMarker } from "./prompt.ts";
 import { STAGES, stageFor } from "./registry.ts";
 import type { StagePromptInput } from "./stage.ts";
+import { stageEnv } from "./test-fixtures.ts";
 import { testStage } from "./test.ts";
 
 const ID = "linear:DOT-109:test:1";
@@ -99,7 +100,7 @@ describe("the test stage", () => {
     it.each(["claude", "codex"] as const)(
         "holds its prerequisites without any check for %s",
         async (tool) => {
-            expect(await testStage.prerequisites({ tool, home: "/unused/home" })).toEqual({
+            expect(await testStage.prerequisites(stageEnv({ tool }))).toEqual({
                 ok: true,
                 context: {},
             });

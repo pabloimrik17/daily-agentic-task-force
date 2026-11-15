@@ -1,6 +1,7 @@
 import {
     copyFileSync,
     existsSync,
+    mkdirSync,
     mkdtempSync,
     readFileSync,
     rmSync,
@@ -22,6 +23,7 @@ import {
     writeRecord,
 } from "./attempts/state.ts";
 import { type AutonomousConfig, CONFIG_SCHEMA, EXAMPLE_PATH } from "./config.ts";
+import type { ContextReader } from "./context/types.ts";
 import { COLOURS, LABELS } from "./label-contract/contract.ts";
 import {
     config,
@@ -85,6 +87,15 @@ function state(): string {
     return dir;
 }
 
+const inertContext: ContextReader = {
+    source: "linear",
+    read: () => Promise.resolve({ ok: false, error: "unused" }),
+};
+
+const inertPullRequests = new Proxy({} as PullRequests, {
+    get: () => () => Promise.resolve({ ok: false, error: "unused" }),
+});
+
 // The run lock (design D12) of every run whose env does not name its own state.
 const STATE = state();
 
@@ -127,9 +138,10 @@ function deps(steps: readonly Step[] | undefined, overrides: Partial<MainDeps> =
             throw new Error("unused");
         },
         naming: () => Promise.resolve({ ok: false, error: "unused" }),
-        pullRequests: () => {
-            throw new Error("unused");
-        },
+        // Launch builds the stage's readers before its prerequisites, so these are inert.
+        pullRequests: () => inertPullRequests,
+        context: () => ({ beads: inertContext, github: inertContext, linear: inertContext }),
+        openspec: () => Promise.resolve({ ok: false, error: "unused" }),
         stdout: (t) => out.push(t),
         stderr: (t) => err.push(t),
         ...(steps === undefined ? {} : { steps }),
@@ -365,7 +377,7 @@ describe("main --bootstrap-labels", () => {
             [
                 `label bootstrap — started ${NOW.toISOString()}`,
                 "outcome: advance",
-                "  linear    workspace: created work, personal, AFK, HITL, grill-me, proposal, taken",
+                "  linear    workspace: created work, personal, AFK, HITL, grill-me, proposal, implement, taken",
             ].join("\n"),
         ]);
     });
@@ -400,7 +412,7 @@ describe("main --bootstrap-labels", () => {
             [
                 `label bootstrap — started ${NOW.toISOString()}`,
                 "outcome: not-evaluable",
-                `  linear    workspace: present work, personal, AFK, HITL, grill-me, taken; failed proposal (${error})`,
+                `  linear    workspace: present work, personal, AFK, HITL, grill-me, implement, taken; failed proposal (${error})`,
             ].join("\n"),
         ]);
     });
@@ -413,7 +425,7 @@ describe("main --bootstrap-labels", () => {
             [
                 `label bootstrap — started ${NOW.toISOString()}`,
                 "outcome: advance",
-                "  linear    workspace: recoloured AFK (was #000000); present work, personal, HITL, grill-me, proposal, taken",
+                "  linear    workspace: recoloured AFK (was #000000); present work, personal, HITL, grill-me, proposal, implement, taken",
             ].join("\n"),
         ]);
     });
@@ -442,7 +454,7 @@ describe("main --bootstrap-labels", () => {
             [
                 `label bootstrap — started ${NOW.toISOString()}`,
                 "outcome: not-evaluable",
-                `  linear    workspace: present work, personal, HITL, grill-me, proposal, taken; failed AFK (${error})`,
+                `  linear    workspace: present work, personal, HITL, grill-me, proposal, implement, taken; failed AFK (${error})`,
             ].join("\n"),
         ]);
     });
@@ -497,6 +509,9 @@ describe("main with the real steps", () => {
     const dir = mkdtempSync(join(tmpdir(), "autonomous-steps-"));
     const configPath = join(dir, "config.json");
     copyFileSync(EXAMPLE_PATH, configPath);
+    // The example's workspace root, under the HOME of these runs: launch infers the repository
+    // before the stage's prerequisites.
+    mkdirSync(join(dir, "WebstormProjects", "dotfiles", ".git"), { recursive: true });
     afterAll(() => rmSync(dir, { recursive: true, force: true }));
 
     function empty(source: Tracker["source"]): Tracker {
@@ -553,7 +568,11 @@ describe("main with the real steps", () => {
                 fakeReader("beads", [workTask("beads", "B-7", ["personal", "grill-me"])], calls),
                 fakeReader(
                     "linear",
-                    [workTask("linear", "DOT-120", ["personal", "HITL", "grill-me"])],
+                    [
+                        workTask("linear", "DOT-120", ["personal", "HITL", "grill-me"], {
+                            project: "Dotfiles",
+                        }),
+                    ],
                     calls,
                 ),
             ],
@@ -599,7 +618,7 @@ describe("main with the real steps", () => {
     it("does not run the select step when label-triage is not evaluable because bd cannot be executed", async () => {
         const calls: string[] = [];
         const { d, out } = deps(undefined, {
-            env: { AUTONOMOUS_CONFIG: configPath },
+            env: { AUTONOMOUS_CONFIG: configPath, HOME: dir },
             openUsage: capacity(),
             trackers: () => trackers(calls, { beads: "bd list --json: bd CLI not found on PATH" }),
             ...selecting(calls),
@@ -619,7 +638,7 @@ describe("main with the real steps", () => {
     it("writes nothing and carries no question from the select step with --apply", async () => {
         const calls: string[] = [];
         const { d, out } = deps(undefined, {
-            env: { AUTONOMOUS_CONFIG: configPath },
+            env: { AUTONOMOUS_CONFIG: configPath, HOME: dir },
             openUsage: capacity(),
             // Every listed task is complete, so label-triage has nothing to write or ask either.
             trackers: () =>
@@ -636,7 +655,7 @@ describe("main with the real steps", () => {
     it("carries the select step's data in the --json report", async () => {
         const calls: string[] = [];
         const { d, out } = deps(undefined, {
-            env: { AUTONOMOUS_CONFIG: configPath },
+            env: { AUTONOMOUS_CONFIG: configPath, HOME: dir },
             openUsage: capacity(),
             trackers: emptyTrackers,
             ...selecting(calls),
@@ -679,13 +698,14 @@ describe("main with the real steps", () => {
             excluded: [],
             notEvaluated: ["github: dependencies"],
             comparison: { model: "sonnet", effort: "high" },
+            readyToClose: [],
         } satisfies SelectData);
     });
 
     it("prints an autonomous.run.v2 document that names no entry group with --json", async () => {
         const calls: string[] = [];
         const { d, out } = deps(undefined, {
-            env: { AUTONOMOUS_CONFIG: configPath },
+            env: { AUTONOMOUS_CONFIG: configPath, HOME: dir },
             openUsage: capacity(),
             trackers: emptyTrackers,
             ...selecting(calls),
@@ -700,9 +720,12 @@ describe("main with the real steps", () => {
 describe("main --answer", () => {
     const dir = mkdtempSync(join(tmpdir(), "autonomous-answers-"));
     const configPath = join(dir, "config.json");
+    // The workspace holds the repository B-2 names, as launch infers it before the prerequisites.
+    mkdirSync(join(dir, "dotfiles", ".git"), { recursive: true });
     // Only Beads is enabled, so the round at the end reads a single source.
     const settings: AutonomousConfig = {
         ...config(),
+        workspace: { root: dir },
         sources: {
             linear: { enabled: false },
             beads: { enabled: true, directory: "/repo" },
@@ -1011,7 +1034,13 @@ describe("main --answer", () => {
             judgement,
             // B-1 still lacks its autonomy group, so select advances on another, complete task.
             chezmoi: fakeChezmoi({ machineType: "personal" }, []),
-            work: () => [fakeReader("beads", [workTask("beads", "B-2", ["work", "grill-me"])], [])],
+            work: () => [
+                fakeReader(
+                    "beads",
+                    [workTask("beads", "B-2", ["work", "grill-me", "dotfiles"])],
+                    [],
+                ),
+            ],
         };
 
         // launch waits: the home holds no plugin registry for the grill-me prerequisites.
@@ -1166,15 +1195,32 @@ describe("main --transition", () => {
     });
 
     it("Task not in grill-me: exits 3 with the reason and no handoff", async () => {
-        const { d, out, calls } = transitionDeps(["personal", "AFK", "proposal"]);
+        const { d, out, calls } = transitionDeps(["personal", "AFK", "implement"]);
         expect(await main(transitionArgs("--json"), d)).toBe(3);
         const report = documentOf(out);
         expect(report.outcome).toBe("not-evaluable");
         expect(report.reasons).toEqual([
-            "beads B-1 is not in grill-me (labels [personal, AFK, proposal])",
+            "beads B-1 is in neither grill-me nor proposal (labels [personal, AFK, implement])",
         ]);
         expect(report).not.toHaveProperty("handoff");
         expect(calls).toEqual(["beads:readTask:B-1"]);
+    });
+
+    it("AFK task in proposal: applies the transition, exits 0 and carries no handoff", async () => {
+        const { d, out, fake } = transitionDeps(["personal", "AFK", "proposal"], {
+            AUTONOMOUS_CONFIG: configPath,
+            AUTONOMOUS_STATE: dir,
+        });
+        expect(await main(transitionArgs("--json"), d)).toBe(0);
+        const report = documentOf(out);
+        expect(report).toMatchObject({ outcome: "advance", applied: true });
+        expect(report).not.toHaveProperty("handoff");
+        const read = await fake.beads.readTask("B-1");
+        expect(read.ok ? [...read.value.labels].sort() : []).toEqual([
+            "AFK",
+            "implement",
+            "personal",
+        ]);
     });
 
     it("Transition without apply: prints usage and exits 1", async () => {
@@ -1207,6 +1253,7 @@ describe("main --transition", () => {
             schema: "autonomous.transition.v1",
             startedAt: NOW.toISOString(),
             outcome: "not-evaluable",
+            applied: false,
             task: null,
             reasons: [],
             config: { path: missing, error: missingError },

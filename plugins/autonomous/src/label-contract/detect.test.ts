@@ -96,6 +96,25 @@ describe("detect: three label groups", () => {
         expect(isComplete(detection.groups.autonomy)).toBe(false);
     });
 
+    it("Task ready to implement: personal, AFK and implement are complete for all three groups", () => {
+        const detection = detect(task(["personal", "AFK", "implement"]), rules());
+        expect(detection.groups).toEqual({
+            scope: { status: "present", labels: ["personal"] },
+            autonomy: { status: "present", labels: ["AFK"] },
+            stage: { status: "present", labels: ["implement"] },
+        });
+        expect(Object.values(detection.groups).every(isComplete)).toBe(true);
+    });
+
+    it("proposal with implement: a stage conflict for a human to resolve", () => {
+        const detection = detect(task(["proposal", "implement"]), rules());
+        expect(detection.groups.stage).toEqual({
+            status: "conflict",
+            labels: ["proposal", "implement"],
+        });
+        expect(isComplete(detection.groups.stage)).toBe(false);
+    });
+
     it("Two stages: grill-me and proposal are a stage conflict for a human to resolve", () => {
         const detection = detect(task(["grill-me", "proposal"]), rules());
         expect(detection.groups.stage).toEqual({

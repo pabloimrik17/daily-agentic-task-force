@@ -2,8 +2,8 @@
 
 ## 1. Baseline
 
-- [ ] 1.1 Verify the starting point: `add-stage-pull-request-and-logbook` is fully implemented (every task in its `tasks.md` is checked, except its workflow follow-up), and `bun run test`, `bun run typecheck` and `bun run lint:fallow` pass before any code change.
-- [ ] 1.2 Bring in the documentation the grill wrote for this change: the glossary terms Proposal preparation and Proposal, the Stage label and Transition wording, and `docs/adr/0004-afk-proposal-transition-needs-no-answer.md`. The glossary text was set aside in `openspec/changes/add-proposal-stage/glossary-set-aside.patch`, committed with this proposal: restore it with `git apply openspec/changes/add-proposal-stage/glossary-set-aside.patch` (do not rewrite the terms), then delete the patch. The ADR was committed with this proposal and is already in place. Verify with `bun run lint:markdown` and that the glossary's opening paragraph no longer says the stages after the grill are unimplemented.
+- [x] 1.1 Verify the starting point: `add-stage-pull-request-and-logbook` is fully implemented (every task in its `tasks.md` is checked, except its workflow follow-up), and `bun run test`, `bun run typecheck` and `bun run lint:fallow` pass before any code change.
+- [x] 1.2 Bring in the documentation the grill wrote for this change: the glossary terms Proposal preparation and Proposal, the Stage label and Transition wording, and `docs/adr/0004-afk-proposal-transition-needs-no-answer.md`. The glossary text was set aside in `openspec/changes/add-proposal-stage/glossary-set-aside.patch`, committed with this proposal: restore it with `git apply openspec/changes/add-proposal-stage/glossary-set-aside.patch` (do not rewrite the terms), then delete the patch. The ADR was committed with this proposal and is already in place. Verify with `bun run lint:markdown` and that the glossary's opening paragraph no longer says the stages after the grill are unimplemented.
 
 ## 2. The implement label
 
@@ -15,14 +15,14 @@
 
 ## 4. Task context
 
-- [ ] 4.1 Record the real output of each context read as a fixture, with read-only commands on existing tasks: `linear issue view --json` for an issue with relations and an attachment, `bd show --json --include-comments --include-dependents`, and `gh issue view --json comments,subIssues,parent,closedByPullRequestsReferences`. Verify that each fixture is committed under `src/context/fixtures/` and that the fields design D4 names are present, or note in the design which are not.
+- [x] 4.1 Record the real output of each context read as a fixture, with read-only commands on existing tasks: `linear issue view --json` for an issue with relations and an attachment, `bd show --json --include-comments --include-dependents`, and `gh issue view --json comments,subIssues,parent,closedByPullRequestsReferences`. Verify that each fixture is committed under `src/context/fixtures/` and that the fields design D4 names are present, or note in the design which are not.
 - [ ] 4.2 Implement the `ContextReader` port and its three implementations in `src/context/` (design D4). Verify with one test file per source on the fixtures, one test per scenario of "The run gathers the task's context" and "Context that only some trackers have", plus a missing field that yields an empty list and a note.
-- [ ] 4.3 Render the Context section as a pure function in `src/context/render.ts`. Verify with `render.test.ts`: a full context, an empty one that renders no empty list, and comments in order.
+- [x] 4.3 Render the Context section as a pure function in `src/context/render.ts`. Verify with `render.test.ts`: a full context, an empty one that renders no empty list, and comments in order.
 
 ## 5. Transitions
 
-- [ ] 5.1 Replace `FROM_STAGE` and `TO_STAGE` with the transition table, and extract the shared apply function from `transition/answer.ts` (design D6), with no change in behaviour for `grill-me`. Verify that `transition.test.ts` passes unchanged.
-- [ ] 5.2 Add the `proposal` row: the approval question for `HITL`, the direct apply for `AFK`, the receipt check by stage, the `applied` field of the report, the answer `implement`, and `by` in `transition.json`. Verify with `transition.test.ts`, one test per scenario of the autonomous-run deltas "Transition mode", "Transition answers", "The transition waits for the persistence receipt" and "Approval question", and of the label-contract requirements "A transition replaces the stage" and "The autonomy decides whether leaving proposal needs an answer".
+- [x] 5.1 Replace `FROM_STAGE` and `TO_STAGE` with the transition table, and extract the shared apply function from `transition/answer.ts` (design D6), with no change in behaviour for `grill-me`. Verify that `transition.test.ts` passes unchanged.
+- [x] 5.2 Add the `proposal` row: the approval question for `HITL`, the direct apply for `AFK`, the receipt check by stage, the `applied` field of the report, the answer `implement`, and `by` in `transition.json`. Verify with `transition.test.ts`, one test per scenario of the autonomous-run deltas "Transition mode", "Transition answers", "The transition waits for the persistence receipt" and "Approval question", and of the label-contract requirements "A transition replaces the stage" and "The autonomy decides whether leaving proposal needs an answer".
 - [ ] 5.3 Document the second transition, the approval question and the `AFK` path in the README's transition sections and in `commands/run.md`. Verify with `bun run lint:markdown`.
 
 ## 6. Persist mode for the stage
@@ -31,7 +31,7 @@
 
 ## 7. Selection
 
-- [ ] 7.1 Read `childCount` in the three readers' `detail` (design D8) from recorded outputs. Verify with the reader tests, one test per scenario of "Closed children are counted".
+- [x] 7.1 Read `childCount` in the three readers' `detail` (design D8) from recorded outputs. Verify with the reader tests, one test per scenario of "Closed children are counted".
 - [ ] 7.2 Support `proposal` in `select/stage.ts`, exclude a `proposal` task with any child as split, and add `readyToClose` to the step's data and both reports. Update the README's select section. Verify with `stage.test.ts`, `candidates.test.ts` and `render.test.ts`, one test per scenario of the work-selection deltas, and `bun run lint:markdown`.
 
 ## 8. The proposal stage

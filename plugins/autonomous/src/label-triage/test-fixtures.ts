@@ -221,6 +221,13 @@ export function triageContext(options: {
                 throw new Error("the triage never prepares workspaces");
             },
             naming: () => Promise.reject(new Error("the triage never names sessions")),
+            context: () => {
+                throw new Error("the triage never reads context");
+            },
+            pullRequests: () => {
+                throw new Error("the triage never opens pull requests");
+            },
+            openspec: () => Promise.reject(new Error("the triage never runs openspec")),
             state: "/unused/state",
             home: "/unused/home",
         },
