@@ -8,7 +8,7 @@ import {
     nullableDescription,
 } from "../../label-triage/trackers/linear.ts";
 import { array, type Json, number, object, ParseError, string } from "../../validate.ts";
-import type { WorkReader, WorkTask } from "../types.ts";
+import type { TaskLink, WorkReader, WorkTask } from "../types.ts";
 
 // linear-cli v2.6.0 requests these connections without pageInfo, so a full page may hide more.
 const INVERSE_RELATIONS_CAP = 100;
@@ -66,6 +66,24 @@ function projectName(entry: Json, path: string): string | null {
     return string(object(value, projectPath), "name", projectPath);
 }
 
+function nullable(entry: Json, key: string, path: string): string | null {
+    const value = entry[key];
+    return value === undefined || value === null ? null : string(entry, key, path);
+}
+
+// linear-cli 2.6.0 returns the parent as { identifier, title, state } with no url, so its url is
+// null unless a later CLI adds one.
+function parentLink(entry: Json, path: string): TaskLink | null {
+    const value = entry.parent;
+    if (value === undefined || value === null) return null;
+    const parentPath = `${path}.parent`;
+    const parent = object(value, parentPath);
+    return {
+        id: string(parent, "identifier", parentPath),
+        url: nullable(parent, "url", parentPath),
+    };
+}
+
 function parseDetail(
     value: unknown,
     task: WorkTask,
@@ -85,6 +103,8 @@ function parseDetail(
         description: nullableDescription(entry, "$"),
         children,
         project: projectName(entry, "$"),
+        url: nullable(entry, "url", "$"),
+        parent: parentLink(entry, "$"),
     };
 }
 

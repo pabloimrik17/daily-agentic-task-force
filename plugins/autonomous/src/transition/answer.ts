@@ -4,7 +4,8 @@
 
 import type { Answer } from "../args.ts";
 import type { AnswerHandler } from "../answer-mode.ts";
-import type { TaskRef } from "../attempts/record.ts";
+import { type AttemptRecord, holdsTask, type TaskRef } from "../attempts/record.ts";
+import { attemptDir, listRecords } from "../attempts/state.ts";
 import { type AutonomyLabel, isAutonomyLabel, isStageLabel } from "../label-contract/contract.ts";
 import type { Tracker, TrackerResult } from "../label-triage/trackers/tracker.ts";
 import { labelCheckFor, missingLabelDetail, READ_BACK_MISMATCH } from "../label-triage/write.ts";
@@ -12,6 +13,7 @@ import { READ_BACK_TRIES, readUntil, type Wait } from "../read-back.ts";
 import type { AnswerContext, AnswerRecord, AnswerStatus } from "../runner.ts";
 import { AUTONOMY_OPTIONS, FROM_STAGE, parseTransitionId, TO_STAGE, TRANSITION } from "./mode.ts";
 import { awaitedDetail, awaitedReceipt } from "./receipt.ts";
+import { writeTransitioned } from "./transitioned.ts";
 
 interface Moving {
     tracker: Tracker;
@@ -36,13 +38,17 @@ const ANSWER_AGAIN = `; ${FROM_STAGE} may remain beside ${TO_STAGE}, answering a
 
 const list = (labels: readonly string[]) => `[${labels.join(", ")}]`;
 
-export function transitionHandler(state: string, wait?: Wait): AnswerHandler {
+export function transitionHandler(
+    state: string,
+    wait?: Wait,
+    now: () => Date = () => new Date(),
+): AnswerHandler {
     return {
         id: TRANSITION,
         async answer(answers: readonly Answer[], ctx: AnswerContext): Promise<AnswerRecord[]> {
             const records: AnswerRecord[] = [];
             for (const answer of answers) {
-                const { status, detail } = await settle(answer, ctx, state, wait);
+                const { status, detail } = await settle(answer, ctx, state, wait, now);
                 records.push({ id: answer.id, labels: [...answer.values], status, detail });
             }
             return records;
@@ -54,7 +60,8 @@ async function settle(
     answer: Answer,
     ctx: AnswerContext,
     state: string,
-    wait?: Wait,
+    wait: Wait | undefined,
+    now: () => Date,
 ): Promise<Settlement> {
     const parsed = parseTransitionId(answer.id);
     if (!parsed.ok) {
@@ -84,8 +91,36 @@ async function settle(
     if (awaited.value !== null) {
         return { status: "rejected", detail: awaitedDetail(awaited.value) };
     }
-    return move({ ...plan(tracker, ref, autonomy, before), wait });
+    const moved = await move({ ...plan(tracker, ref, autonomy, before), wait });
+    return leaveRecord(moved, state, ref, answer.values, now);
 }
+
+// The record goes to the task's open attempt of any stage (the first of the sorted list); a
+// failure to list or write is the settlement's detail, never its status.
+async function leaveRecord(
+    settled: Settlement,
+    state: string,
+    ref: TaskRef,
+    answered: readonly string[],
+    now: () => Date,
+): Promise<Settlement> {
+    if (settled.status !== "applied") {
+        return settled;
+    }
+    try {
+        const open = (await listRecords(state)).find((record) => opens(record, ref));
+        if (open !== undefined) {
+            await writeTransitioned(attemptDir(state, open.id), answered, now());
+        }
+        return settled;
+    } catch (error) {
+        const failure = error instanceof Error ? error.message : String(error);
+        return { ...settled, detail: `${settled.detail}; ${failure}` };
+    }
+}
+
+const opens = (record: AttemptRecord, ref: TaskRef) =>
+    record.task.source === ref.source && record.task.id === ref.id && holdsTask(record);
 
 function answeredAutonomy(values: readonly string[]): AutonomyLabel | null {
     const [value] = values;

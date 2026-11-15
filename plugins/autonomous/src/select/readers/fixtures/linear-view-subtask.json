@@ -1,0 +1,29 @@
+{
+    "identifier": "DEMO-108",
+    "title": "Synthetic child",
+    "description": "A synthetic child description.",
+    "url": "https://linear.app/example/issue/DEMO-108",
+    "state": {
+        "name": "Backlog",
+        "color": "#000000"
+    },
+    "project": null,
+    "labels": {
+        "nodes": [
+            {
+                "name": "personal"
+            }
+        ]
+    },
+    "parent": {
+        "identifier": "DEMO-82",
+        "title": "Synthetic parent",
+        "state": {
+            "name": "Backlog",
+            "color": "#000000"
+        }
+    },
+    "children": {
+        "nodes": []
+    }
+}

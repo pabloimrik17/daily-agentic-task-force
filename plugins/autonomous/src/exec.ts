@@ -10,6 +10,7 @@ export type ExecResult =
 
 interface ExecOptions {
     keepOutputOnExit?: boolean;
+    cwd?: string; // for a CLI that reads its repository from the working directory (gh)
 }
 
 export type Exec = (args: string[], input?: string) => Promise<ExecResult>;
@@ -76,7 +77,7 @@ export function execCommand(
             const child = execFile(
                 command,
                 args,
-                { timeout: timeoutMs, maxBuffer: MAX_BUFFER },
+                { timeout: timeoutMs, maxBuffer: MAX_BUFFER, cwd: options.cwd },
                 (error, stdout, stderr) => {
                     clearTimeout(watchdog);
                     resolve(toExecResult(command, timeoutMs, error, stdout, stderr, options));

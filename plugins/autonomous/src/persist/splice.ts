@@ -3,21 +3,31 @@ export const ORIGINAL_HEADING = "## Original description";
 
 const SEPARATOR = `\n---\n\n${ORIGINAL_HEADING}\n`;
 
+// The heading is the whole first line: "## Definition of done" is not a definition.
+function hasDefinition(text: string): boolean {
+    return (text.split("\n", 1)[0] ?? "").trimEnd() === DEFINITION_HEADING;
+}
+
 // The original description stays below the separator byte for byte, so a second
 // grill replaces only the definition above it. A definition without the heading
 // gets it, because the detection of an earlier grill keys on it. Trackers strip trailing
 // whitespace, so with an empty original the heading can be the last line, without its newline.
 export function spliceDefinition(description: string | null, definition: string): string {
     const current = description ?? "";
-    const headed = definition.startsWith(DEFINITION_HEADING)
+    const headed = hasDefinition(definition)
         ? definition
         : `${DEFINITION_HEADING}\n\n${definition}`;
-    const separator = current.startsWith(DEFINITION_HEADING)
-        ? `${current.trimEnd()}\n`.indexOf(SEPARATOR)
-        : -1;
+    const separator = hasDefinition(current) ? `${current.trimEnd()}\n`.indexOf(SEPARATOR) : -1;
     const below =
         separator === -1
             ? `${SEPARATOR}${current === "" ? "" : `\n${current}`}`
             : current.slice(separator);
     return `${headed.trimEnd()}\n${below}`;
+}
+
+export function definitionOf(description: string | null): string | null {
+    if (description === null || !hasDefinition(description)) return null;
+    const text = `${description.trimEnd()}\n`;
+    const separator = text.indexOf(SEPARATOR);
+    return (separator === -1 ? text : text.slice(0, separator)).trim();
 }

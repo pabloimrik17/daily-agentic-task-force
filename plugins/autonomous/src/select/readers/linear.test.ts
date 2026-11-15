@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
 import type { Exec } from "../../exec.ts";
 import listing from "./fixtures/linear-query.json";
+import subtask from "./fixtures/linear-view-subtask.json";
 import detail from "./fixtures/linear-view.json";
 import { linearWorkReader } from "./linear.ts";
 
@@ -114,6 +115,43 @@ describe("linearWorkReader", () => {
             ok: false,
             error: "linear issue view DEMO-82: output does not match the expected shape: $.project.name must be a string",
         });
+    });
+    it("reads the url and the parent of a subtask, the parent having no url of its own", async () => {
+        const result = await detailOf(subtask);
+        expect(result.ok && [result.value.url, result.value.parent]).toEqual([
+            "https://linear.app/example/issue/DEMO-108",
+            { id: "DEMO-82", url: null },
+        ]);
+    });
+    it("takes the parent's url when the CLI returns one", async () => {
+        const parent = { ...subtask.parent, url: "https://linear.app/example/issue/DEMO-82" };
+        const result = await detailOf({ ...subtask, parent });
+        expect(result.ok && result.value.parent).toEqual({
+            id: "DEMO-82",
+            url: "https://linear.app/example/issue/DEMO-82",
+        });
+    });
+    it("sets a null url and a null parent for a task with neither", async () => {
+        const result = await detailOf(detail);
+        expect(result.ok && [result.value.url, result.value.parent]).toEqual([null, null]);
+    });
+    it("reads a null parent when the view's parent is null", async () => {
+        const result = await detailOf({ ...subtask, parent: null });
+        expect(result.ok && result.value.parent).toBeNull();
+    });
+    it("fails naming the path when the parent has no identifier", async () => {
+        expect(await detailOf({ ...subtask, parent: { title: "x" } })).toEqual({
+            ok: false,
+            error: "linear issue view DEMO-82: output does not match the expected shape: $.parent.identifier must be a string",
+        });
+    });
+    it("leaves url and parent unset in the listing", async () => {
+        const result = await reader().work.list();
+        expect(result.ok && result.value.map((task) => [task.url, task.parent])).toEqual([
+            [undefined, undefined],
+            [undefined, undefined],
+            [undefined, undefined],
+        ]);
     });
     it("names linear auth login for an unauthenticated CLI", async () => {
         const { exec, work } = reader();

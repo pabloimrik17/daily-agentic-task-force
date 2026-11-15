@@ -68,7 +68,10 @@ records why the new configuration blocks are optional and the old ones are not.
 - [`gh`](https://cli.github.com) on `PATH`, 2.100.0 or later, authenticated
   through its own keyring. The `select` step reads a GitHub issue's sub-issues
   with `gh issue view --json subIssues`, a field that 2.100.0 provides; with an
-  older `gh` that read fails and the step is `not-evaluable`.
+  older `gh` that read fails and the step is `not-evaluable`. For every source,
+  not only GitHub tasks, [pull-request mode](#pull-request-mode) and
+  [log mode](#log-mode) also need `gh` authenticated and a repository whose
+  remote is on GitHub.
 - [`linear`](https://github.com/schpet/linear-cli) (schpet/linear-cli) on
   `PATH`, verified against 2.6.0, authenticated with `linear auth login`
   (credentials in the macOS keychain, or `LINEAR_API_KEY`). No official
@@ -108,23 +111,28 @@ adding the Linear CLI there is tracked as DOT-82 sub-issue 7.
 /autonomous:run --apply --discard <attempt-id|source:id> [--release-workspace] [--json]
 /autonomous:run --apply --transition <source>:<task> [--json]
 /autonomous:run --apply --persist <attempt-id> [--json]
+/autonomous:run --apply --pull-request <attempt-id> [--title <title>] [--json]
+/autonomous:run --apply --log <attempt-id> [--json]
 ```
 
-| Flag                                | Effect                                                                                                                                                                                                                                                                                                                                                                                                                       |
-| ----------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `--account <provider-key>`          | Claude account to evaluate (`claude` or `claude@<id>`). Required when several Claude accounts are present                                                                                                                                                                                                                                                                                                                    |
-| `--force`                           | Ask OpenUsage to bypass its shared cache                                                                                                                                                                                                                                                                                                                                                                                     |
-| `--json`                            | Print one `autonomous.run.v2` JSON document instead of the text report; with `--bootstrap-labels`, one `autonomous.bootstrap.v1` document; with `--answer`, one `autonomous.answers.v1` document; with `--discard`, one `autonomous.discard.v1` document; with `--transition`, one `autonomous.transition.v1` document; with `--persist`, one `autonomous.persist.v1` document                                               |
-| `--apply`                           | Let steps write. Without it a run has no side effects beyond the CLIs' own caches and the run lock. Required by `--answer`, `--discard`, `--transition` and `--persist`                                                                                                                                                                                                                                                      |
-| `--no-handoff`                      | Emit no handoff; the questions stay in the step's report. For runs with no human present, such as a `/loop`. Not combined with `--bootstrap-labels`, `--answer`, `--transition` or `--persist`                                                                                                                                                                                                                               |
-| `--answer <id>=<value>[,<value>]`   | [Answer mode](#answer-mode): apply the answer to the question `<id>` and exit, running no step. Repeat it once per question. Only combines with `--apply` and `--json`                                                                                                                                                                                                                                                       |
-| `--bootstrap-labels`                | Run only the label bootstrap and exit. Only combines with `--json`                                                                                                                                                                                                                                                                                                                                                           |
-| `--task <source>:<id>`              | Give that task to `launch` instead of running `label-triage` and `select`. `<source>` is `linear`, `beads` or `github`, split at the first `:`. Given once. Not combined with `--bootstrap-labels`, `--answer`, `--discard`, `--transition` or `--persist`. See [The supplied task](#the-supplied-task)                                                                                                                      |
-| `--stage <stage>`                   | The stage `launch` runs for the supplied task. Requires `--task`. Given once. Its name is checked when the arguments are parsed: a stage that is not registered is a usage error (exit 1) that names the registered stages                                                                                                                                                                                                   |
-| `--discard <attempt-id\|source:id>` | [Discard mode](#discard-mode): discard that attempt, or the one open attempt of that task, and exit, running no step. Requires `--apply`. Only combines with `--apply`, `--json` and `--release-workspace`. Given once                                                                                                                                                                                                       |
-| `--release-workspace`               | With `--discard`, also release the attempt's worktree. Requires `--discard`                                                                                                                                                                                                                                                                                                                                                  |
-| `--transition <source>:<task>`      | [Transition mode](#transition-mode): read the task, which must carry `grill-me`, and hand off the question that moves it to `proposal`, running no step. `<source>` is `linear`, `beads` or `github`, split at the first `:`. Requires `--apply`. Only combines with `--apply` and `--json`. Given once. Not combined with `--no-handoff`, `--answer`, `--task`, `--stage`, `--discard`, `--persist` or `--bootstrap-labels` |
-| `--persist <attempt-id>`            | [Persist mode](#persist-mode): save the definition and the stage summary of that open grill-me attempt to its task and write the receipt, running no step. `<attempt-id>` is `<source>:<task>:<stage>:<n>`. Requires `--apply`. Only combines with `--apply` and `--json`. Given once                                                                                                                                        |
+| Flag                                | Effect                                                                                                                                                                                                                                                                                                                                                                                                                                                                                           |
+| ----------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `--account <provider-key>`          | Claude account to evaluate (`claude` or `claude@<id>`). Required when several Claude accounts are present                                                                                                                                                                                                                                                                                                                                                                                        |
+| `--force`                           | Ask OpenUsage to bypass its shared cache                                                                                                                                                                                                                                                                                                                                                                                                                                                         |
+| `--json`                            | Print one `autonomous.run.v2` JSON document instead of the text report; with `--bootstrap-labels`, one `autonomous.bootstrap.v1` document; with `--answer`, one `autonomous.answers.v1` document; with `--discard`, one `autonomous.discard.v1` document; with `--transition`, one `autonomous.transition.v1` document; with `--persist`, one `autonomous.persist.v1` document; with `--pull-request`, one `autonomous.pull-request.v1` document; with `--log`, one `autonomous.log.v1` document |
+| `--apply`                           | Let steps write. Without it a run has no side effects beyond the CLIs' own caches and the run lock. Required by `--answer`, `--discard`, `--transition`, `--persist`, `--pull-request` and `--log`                                                                                                                                                                                                                                                                                               |
+| `--no-handoff`                      | Emit no handoff; the questions stay in the step's report. For runs with no human present, such as a `/loop`. Not combined with `--bootstrap-labels`, `--answer`, `--transition` or `--persist`                                                                                                                                                                                                                                                                                                   |
+| `--answer <id>=<value>[,<value>]`   | [Answer mode](#answer-mode): apply the answer to the question `<id>` and exit, running no step. Repeat it once per question. Only combines with `--apply` and `--json`                                                                                                                                                                                                                                                                                                                           |
+| `--bootstrap-labels`                | Run only the label bootstrap and exit. Only combines with `--json`                                                                                                                                                                                                                                                                                                                                                                                                                               |
+| `--task <source>:<id>`              | Give that task to `launch` instead of running `label-triage` and `select`. `<source>` is `linear`, `beads` or `github`, split at the first `:`. Given once. Not combined with `--bootstrap-labels`, `--answer`, `--discard`, `--transition` or `--persist`. See [The supplied task](#the-supplied-task)                                                                                                                                                                                          |
+| `--stage <stage>`                   | The stage `launch` runs for the supplied task. Requires `--task`. Given once. Its name is checked when the arguments are parsed: a stage that is not registered is a usage error (exit 1) that names the registered stages                                                                                                                                                                                                                                                                       |
+| `--discard <attempt-id\|source:id>` | [Discard mode](#discard-mode): discard that attempt, or the one open attempt of that task, and exit, running no step. Requires `--apply`. Only combines with `--apply`, `--json` and `--release-workspace`. Given once                                                                                                                                                                                                                                                                           |
+| `--release-workspace`               | With `--discard`, also release the attempt's worktree. Requires `--discard`                                                                                                                                                                                                                                                                                                                                                                                                                      |
+| `--transition <source>:<task>`      | [Transition mode](#transition-mode): read the task, which must carry `grill-me`, and hand off the question that moves it to `proposal`, running no step. `<source>` is `linear`, `beads` or `github`, split at the first `:`. Requires `--apply`. Only combines with `--apply` and `--json`. Given once. Not combined with `--no-handoff`, `--answer`, `--task`, `--stage`, `--discard`, `--persist` or `--bootstrap-labels`                                                                     |
+| `--pull-request <attempt-id>`       | [Pull-request mode](#pull-request-mode): find or open the draft pull request of that open attempt's workspace branch and write its cover, running no step. `<attempt-id>` is `<source>:<task>:<stage>:<n>`. Requires `--apply`. Only combines with `--apply`, `--title` and `--json`. Given once                                                                                                                                                                                                 |
+| `--title <title>`                   | With `--pull-request`, the text of the pull request's title; the task id is appended. Required to open a pull request; replaces the title of one already open. Requires `--pull-request`. Given once                                                                                                                                                                                                                                                                                             |
+| `--log <attempt-id>`                | [Log mode](#log-mode): publish the attempt's [logbook entry](#the-logbook) on the pull request, read it back and write the receipt, running no step. `<attempt-id>` is `<source>:<task>:<stage>:<n>`. Requires `--apply`. Only combines with `--apply` and `--json`. Given once                                                                                                                                                                                                                  |
+| `--persist <attempt-id>`            | [Persist mode](#persist-mode): save the definition and the stage summary of that open grill-me attempt to its task and write the receipt, running no step. `<attempt-id>` is `<source>:<task>:<stage>:<n>`. Requires `--apply`. Only combines with `--apply` and `--json`. Given once                                                                                                                                                                                                            |
 
 The script can also be run directly, which is what a shell or `/loop` should
 branch on:
@@ -134,7 +142,8 @@ bun plugins/autonomous/src/run.ts --account claude --json --apply --no-handoff
 ```
 
 `--apply` and `--bootstrap-labels` are the only ways anything is written;
-answer mode, discard mode, transition mode and persist mode require `--apply`.
+answer mode, discard mode, transition mode, persist mode, pull-request mode and
+log mode require `--apply`.
 They are separate write paths that cannot be combined, and each must be typed
 explicitly: nothing adds either on its own. With `--apply`, `reconcile` and
 `launch` write attempt records, sessions, worktrees and the `taken` label.
@@ -192,6 +201,22 @@ For `/autonomous:run --apply --persist <attempt-id> [--json]`:
 | 0    | `advance` — the definition and the comment were written and read back, and the receipt was written                                       |
 | 3    | `not-evaluable` — a precondition failed, a write or a read-back failed, or the configuration could not be loaded; no receipt was written |
 | 1    | Invalid arguments or a failure of the runner itself                                                                                      |
+
+For `/autonomous:run --apply --pull-request <attempt-id> [--title <title>] [--json]`:
+
+| Code | Outcome                                                                                                                                                                         |
+| ---- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 0    | `advance` — a pull request is reported, opened or reused, or the task needs none (the parent of a split with no commit ahead)                                                   |
+| 3    | `not-evaluable` — a precondition failed, the title is missing for a pull request to open, a command failed (a rejected push included), or the configuration could not be loaded |
+| 1    | Invalid arguments or a failure of the runner itself                                                                                                                             |
+
+For `/autonomous:run --apply --log <attempt-id> [--json]`:
+
+| Code | Outcome                                                                                                                                                                                   |
+| ---- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 0    | `advance` — the entry was published and read back, or already existed, and the receipt was written                                                                                        |
+| 3    | `not-evaluable` — no pull request, the body is missing or rejected, a publish or read-back failed, a precondition failed or the configuration could not be loaded; no receipt was written |
+| 1    | Invalid arguments or a failure of the runner itself                                                                                                                                       |
 
 For `/autonomous:run --apply --discard <attempt-id|source:id> [--release-workspace] [--json]`:
 
@@ -497,6 +522,24 @@ validates it and reports one status for it:
 `Later` has a null value, which the command never passes back, so it writes
 nothing and the task stays in `grill-me`.
 
+When an answer is applied and read back, and the task has an open attempt (the
+same lookup as for the persistence receipt), answer mode writes
+`transition.json` in that attempt's directory:
+
+```json
+{
+    "schema": "autonomous.transitioned.v1",
+    "answer": ["HITL"],
+    "at": "2026-11-13T10:38:00.000Z"
+}
+```
+
+`answer` is the labels answered and `at` the time the file is written, after
+the read-back. A failure to write the file
+is added to the answer's detail and leaves the answer `applied`. A task with no
+open attempt, such as one transitioned by hand, leaves no file. `Later` leaves
+none either. The [logbook entry](#the-logbook) reads it for its header.
+
 The transition runs in phases, and reads the task back after each write phase:
 
 1. **Check.** The tracker must have the answered autonomy and `proposal`, as in
@@ -797,6 +840,332 @@ is printed on stderr and, with `--json`, the document holds `config`, a null
 task, no reasons and no notes; without `--json`, the error is on stderr only,
 as in answer mode. The persist report never carries a handoff. The exit codes
 are in [Exit codes](#exit-codes).
+
+## Pull-request mode
+
+```text
+/autonomous:run --apply --pull-request <attempt-id> [--title <title>] [--json]
+```
+
+Pull-request mode gives a task its draft pull request. It finds the open pull
+request of the attempt's workspace branch and reuses it, or pushes the branch
+and opens one. It runs no step, so it needs no quota and no judgement. The
+[grill-me session](#what-the-session-does) runs it as step 7 of its closing, and
+it can be run from a shell. Quote a GitHub attempt id, because the task id
+contains `#`:
+
+```bash
+bun plugins/autonomous/src/run.ts --apply --pull-request linear:DOT-121:grill-me:1 --title 'feat(autonomous): read GitHub blockers'
+```
+
+These are usage errors (exit 1):
+
+- `--pull-request` without `--apply`;
+- `--pull-request` with any flag other than `--apply`, `--title` and `--json`;
+- `--title` without `--pull-request`;
+- a value that is not an attempt id, `<source>:<task>:<stage>:<n>`, or no value;
+- `--pull-request` or `--title` given twice.
+
+Pull-request mode takes no [run lock](#the-run-lock). It never writes the
+attempt's record.
+
+### What pull-request mode requires
+
+The mode writes nothing, reports the reasons and exits 3 unless all of these
+hold:
+
+- the attempt has a record, which can be read;
+- the attempt is open: `pending`, `created`, `started` or `retained`;
+- the attempt's source is enabled;
+- `gh` is installed and authenticated, and the repository's remote is on GitHub.
+  This holds for every source, not only for GitHub tasks: a Linear or a Beads
+  task gets its pull request through `gh` too.
+
+### What it does
+
+Every command runs in the attempt's worktree. The mode never marks a pull
+request ready, never merges it and never closes it, and it never forces a push
+or skips a hook. In this order:
+
+1. **Find.** `gh` lists the open pull requests of the workspace branch. When one
+   exists, it is reused and nothing is pushed or opened. Only an open pull
+   request counts: a branch whose earlier pull request was merged or closed
+   gets a new one.
+2. **Nothing to show.** The branch is compared with the repository's default
+   branch. When it has no commit ahead of it, the mode adds one empty commit,
+   `chore: open the pull request of <task id>`, so the pull request can exist.
+   The exception is the parent of a split, a task with at least one open
+   subtask: it gets no commit and no pull request. The mode reports
+   `needed: false` with the reason and exits 0. A parent whose grill committed
+   documentation has commits ahead and gets its pull request as any task does.
+3. **Push.** `git push -u origin <branch>`. The repository's hooks run, and a
+   rejected push opens nothing: the report names the failed command and the mode
+   exits 3.
+4. **Open.** A **draft** pull request against the default branch, with the
+   title and the cover.
+5. **Cover.** The description is written again on every run, whether the pull
+   request was opened or reused.
+
+### The title
+
+The title is the text of `--title` followed by a space and `(<task id>)`, unless the text
+already ends with it: `feat(autonomous): read GitHub blockers` becomes
+`feat(autonomous): read GitHub blockers (DOT-121)`. The agent writes the text in
+the repository's own conventions. A title is required to open a pull request:
+without one, nothing is pushed or opened and the mode exits 3, naming the
+missing title. The parent of a split with no commit ahead needs no title,
+because the mode checks it first and opens nothing. When a title is passed for a pull request that is already open,
+the mode replaces its title, which lets a later stage correct it. When none is
+passed, the title stays as it is.
+
+### The cover
+
+The pull request's description is its cover, written by code from the task as
+its tracker holds it:
+
+```markdown
+Task: [DOT-121](https://linear.app/example/issue/DOT-121)
+Parent: [DOT-120](https://linear.app/example/issue/DOT-120)
+
+### Problem
+
+…
+
+### Solution
+
+…
+```
+
+- `Task:` links the task. `Parent:` appears for a subtask and links its parent.
+  A link is `[id](url)`, or the id in code when the tracker gives no URL, as
+  Beads does.
+- When the task's description holds a definition (see
+  [The description layout](#the-description-layout)), the cover carries its
+  `### Problem` and `### Solution` sections and none of the others.
+- A task with no definition gets, in their place, the first paragraph of its
+  description, cut to 500 characters.
+- A task with no description gets the links only.
+
+Code owns the description. The cover is rewritten on every run of the mode, so a
+person's edit to the description is lost at the next stage. Edit the task
+instead: that is where the cover comes from.
+
+### The pull-request report
+
+Without `--json`, the report is text: the header lines (`outcome`, `attempt`),
+then `task`, `branch`, `base`, the pull request (`#<n> opened` or `reused`, its
+URL and its title, or `none`, or `not needed`), `empty commit: added` or `none`,
+and a `reasons:` block when there are reasons.
+
+With `--json` it is one document identified by
+`schema: "autonomous.pull-request.v1"`:
+
+```json
+{
+    "schema": "autonomous.pull-request.v1",
+    "startedAt": "2026-11-13T10:40:00.000Z",
+    "outcome": "advance",
+    "attempt": "linear:DOT-121:grill-me:1",
+    "task": { "source": "linear", "id": "DOT-121", "title": "Fix the login" },
+    "branch": "example-dot-121",
+    "base": "main",
+    "needed": true,
+    "pullRequest": {
+        "number": 42,
+        "url": "https://github.com/example/repo/pull/42",
+        "title": "feat(autonomous): read GitHub blockers (DOT-121)",
+        "action": "opened"
+    },
+    "emptyCommit": true,
+    "reasons": []
+}
+```
+
+| Field         | Content                                                                                          |
+| ------------- | ------------------------------------------------------------------------------------------------ |
+| `schema`      | `autonomous.pull-request.v1`                                                                     |
+| `startedAt`   | The start time of the run                                                                        |
+| `outcome`     | `advance` when a pull request is reported or none is needed, `not-evaluable` otherwise           |
+| `attempt`     | The attempt id that was given                                                                    |
+| `task`        | `{ source, id, title }`, or `null` when the task was not read                                    |
+| `branch`      | The attempt's workspace branch                                                                   |
+| `base`        | The repository's default branch                                                                  |
+| `needed`      | `false` only for the parent of a split with no commit ahead of the base                          |
+| `pullRequest` | `{ number, url, title, action }`, with `action` `opened` or `reused`, or `null` when none exists |
+| `emptyCommit` | Whether the mode added the empty commit                                                          |
+| `reasons`     | Why it stopped or opened nothing, in order                                                       |
+| `config`      | `{ path, error }`, only when the configuration could not be loaded                               |
+
+When the configuration cannot be loaded, the error is printed on stderr and,
+with `--json`, the document holds `config`, as in answer mode. The report never
+carries a handoff. The exit codes are in [Exit codes](#exit-codes).
+
+## The logbook
+
+Each attempt of a stage leaves one logbook entry: a comment on the task's pull
+request, short enough to catch up on the story without reading the work. It
+differs from the stage summary. The summary is for the next agent and is saved
+in the task's tracker. The entry is for a person reading the pull request: what
+the agent did, what was decided and by whom, what it assumed, and what comes
+next.
+
+The agent writes the body, and code writes everything else. The entry is
+published by [log mode](#log-mode), and discard mode publishes a short one of
+its own (see [Discard mode](#discard-mode)).
+
+### The body
+
+The agent writes the body to `logbook-entry.md` in the attempt's directory. It
+holds these sections, each as a level-3 heading (`###`) at the start of a line, and a
+stage may add sections of its own:
+
+```markdown
+### What I did
+
+### Decisions
+
+### Assumptions
+
+### Next stage
+```
+
+`none` is fine for Decisions or Assumptions. The grill-me prompt asks the agent
+to mark each decision as the agent's or the human's and to link the stage
+summary from Next stage without repeating it. Code checks the body and does not
+check who took a decision. It rejects the body, and publishes nothing, when:
+
+- a required section is missing;
+- What I did is empty;
+- the body has more than 300 words, counting every whitespace-separated token
+  of the file, headings included;
+- the body names the home directory of the machine, because the entry is public
+  in a public repository.
+
+A rejection names every rule the body breaks at once, so one correction fixes
+them all.
+
+### The header
+
+The agent never writes the header. Code writes it from the attempt's record and
+its files, and puts it above the body:
+
+```markdown
+<!-- autonomous:logbook linear:DOT-121:grill-me:1 -->
+
+### 🔥 grill-me · attempt 1
+
+`HITL` · `--model opus --effort high` · 2026-11-13 10:02 → 10:40 UTC (38 min) · answered `HITL` · 1 commit (`a1b2c3d`)
+```
+
+The first line is the marker, `<!-- autonomous:logbook <attempt-id> -->`, which
+GitHub does not show. The heading carries the stage's emoji, its name and the
+attempt number. The facts line holds, in this order, and leaves out a value that
+is not recorded:
+
+- the task's autonomy label, read from its tracker when the mode runs;
+- the agent arguments of the launch, from the record's `agentArgs` (a record
+  from before the field has none);
+- the start, the first `started` entry of the record, then the end, the time of
+  the run, in UTC, and the duration;
+- `answered <labels>`, from `transition.json`;
+- the commits made on the branch since the start, as short ids, or `no commits`.
+  The empty commit pull-request mode adds is not counted. The count is an
+  approximation by time: a commit made by hand in the worktree during the
+  attempt is counted too.
+
+### The receipt
+
+Log mode publishes at most one entry per attempt, and the marker is how it
+knows. Before publishing, it reads the pull request's comments and skips the
+publish when one starts with the marker. After publishing, it reads the comments
+back, waiting out the read lag (see
+[Read-backs and tracker lag](#read-backs-and-tracker-lag)), and checks that the
+entry is among them. Only then does it write `logbook.json` in the attempt's
+directory, through a temporary file and a rename:
+
+```json
+{
+    "schema": "autonomous.logged.v1",
+    "attempt": "linear:DOT-121:grill-me:1",
+    "pullRequest": { "number": 42, "url": "https://github.com/example/repo/pull/42" },
+    "at": "2026-11-13T10:40:00.000Z"
+}
+```
+
+`at` is the start time of the run. `reconcile` looks for this file (see
+[What it does to each attempt](#what-it-does-to-each-attempt)), and discard mode
+publishes no entry when it exists.
+
+## Log mode
+
+```text
+/autonomous:run --apply --log <attempt-id> [--json]
+```
+
+Log mode publishes the attempt's [logbook entry](#the-logbook). It runs no step.
+The [grill-me session](#what-the-session-does) runs it as step 8 of its closing,
+after pull-request mode, and it can be run from a shell, for instance again
+after a rejected body. These are usage errors (exit 1):
+
+- `--log` without `--apply`;
+- `--log` with any flag other than `--apply` and `--json`;
+- a value that is not an attempt id, `<source>:<task>:<stage>:<n>`, or no value;
+- `--log` given twice.
+
+Log mode takes no [run lock](#the-run-lock). It writes nothing, reports the
+reasons and exits 3 unless the attempt has a readable record, is open and has an
+enabled source; the attempt's directory holds `logbook-entry.md`; the body
+passes the checks of [The body](#the-body); and the attempt's branch has an open
+pull request. Log mode never opens a pull request: run pull-request mode first.
+A failed publish or read-back leaves no receipt.
+
+Running it again after success publishes nothing new, reports `existing` and
+writes the receipt only if it is missing. A stage that is not registered is a
+reason too: the entry's heading needs the stage's emoji.
+
+### The log report
+
+Without `--json`, the report is text: the header lines, then `task`,
+`pull request`, `body` (the word count), `entry` (`published`, `already
+published` or `not published`), `receipt`, and `notes:` and `reasons:` blocks
+when there are any.
+
+With `--json` it is one document identified by `schema: "autonomous.log.v1"`:
+
+```json
+{
+    "schema": "autonomous.log.v1",
+    "startedAt": "2026-11-13T10:40:00.000Z",
+    "outcome": "advance",
+    "attempt": "linear:DOT-121:grill-me:1",
+    "task": { "source": "linear", "id": "DOT-121", "title": "Fix the login" },
+    "pullRequest": { "number": 42, "url": "https://github.com/example/repo/pull/42" },
+    "entry": "published",
+    "words": 187,
+    "notes": [],
+    "reasons": [],
+    "receipt": "/home/me/.local/state/autonomous/attempts/linear/DOT-121/grill-me/1/logbook.json"
+}
+```
+
+| Field         | Content                                                                                                                   |
+| ------------- | ------------------------------------------------------------------------------------------------------------------------- |
+| `schema`      | `autonomous.log.v1`                                                                                                       |
+| `startedAt`   | The start time of the run                                                                                                 |
+| `outcome`     | `advance` exactly when the receipt was written, `not-evaluable` otherwise                                                 |
+| `attempt`     | The attempt id that was given                                                                                             |
+| `task`        | `{ source, id, title }` once the attempt was read, or `null` when it was not                                              |
+| `pullRequest` | `{ number, url }`, or `null` when the branch has no open pull request                                                     |
+| `entry`       | `published` now, `existing` when an earlier run published it, or `none`                                                   |
+| `words`       | The word count of the body, as the limit counts it; `null` when the body was not read                                     |
+| `notes`       | What happened without stopping the mode, such as an unreadable `transition.json`, whose answer the header then leaves out |
+| `reasons`     | Why it stopped, in order, every broken rule of the body included; empty when the receipt was written                      |
+| `receipt`     | The path of `logbook.json` once written, otherwise `null`                                                                 |
+| `config`      | `{ path, error }`, only when the configuration could not be loaded                                                        |
+
+A rejected body for its length gives `entry: "none"`, the word count, a reason
+that names the limit of 300 and no receipt. The exit codes are in
+[Exit codes](#exit-codes).
 
 ## Configuration
 
@@ -1521,6 +1890,17 @@ directory, nested by source, task, stage and attempt number:
     capture.txt    the last lines of the session, when one was taken
 ```
 
+The record holds the `agentArgs` the attempt's stage declared when it was
+launched, for instance `["--model", "opus", "--effort", "high"]`, so a later
+change to the stage does not change what the attempt reports. A record written
+before the field existed has none: it still parses and reads `agentArgs` as
+`null`, which means not recorded. The schema id stays `autonomous.attempt.v1`.
+
+An answered transition leaves `transition.json` in the directory of the task's
+open attempt (see [The transition answer](#the-transition-answer)).
+[Log mode](#log-mode) reads the agent's `logbook-entry.md` there and writes
+`logbook.json`.
+
 A grill-me attempt's directory also holds `definition.md` and
 `stage-summary.md`, which the agent writes, and `description.md`, `comment.md`,
 `description.read.md` and `persisted.json`, which [persist mode](#persist-mode)
@@ -1597,6 +1977,12 @@ as `completing`. Finalising, in this order:
 
 The attempt's directory and the workspace are kept. A session that is already
 `gone` needs neither the capture nor the removal.
+
+A finalised attempt whose directory holds no `logbook.json` (see
+[The logbook](#the-logbook)) is finalised as before, and its `detail` notes
+`attempt <id> left no logbook entry (no logbook.json)`. The note does not change
+the step's outcome. Two endings leave no entry legitimately: a task the human
+closed in the grill, and the parent of a split with no pull request.
 
 **Retention.** A `started` attempt whose session is `exited` or `gone` while
 the proofs do not hold becomes `retained`, with the reason and the time; the
@@ -1853,7 +2239,9 @@ The grill-me stage 🔥 refines one task with the human. A managed `claude`
 session grills them, saves the confirmed definition and a stage summary in the
 task's own tracker, and moves the task from `grill-me` to `proposal`. It
 prepares no proposal: that is a later stage, and the prompt forbids it in the
-same session.
+same session. It does open the task's draft pull request and leaves a logbook
+entry on it (see [Pull-request mode](#pull-request-mode) and
+[The logbook](#the-logbook)).
 
 Selected `grill-me` units launch like those of any registered stage, and
 `--task <source>:<id> --stage grill-me` supplies one by hand (see
@@ -1912,20 +2300,34 @@ or reorder a step:
 6. Run `/autonomous:run --apply --transition <source>:<task>`, which is
    [transition mode](#transition-mode): it asks the human for the task's
    autonomy and applies the answer.
-7. Write the result marker, only once the transition is applied.
+7. Run `/autonomous:run --apply --pull-request <attempt-id> --title "<title>"`,
+   which is [pull-request mode](#pull-request-mode). The agent writes the title
+   in the repository's own conventions, read from its contributor instructions
+   and recent commit subjects, without the task id, which the mode appends.
+8. Write `logbook-entry.md` in the attempt's directory and run
+   `/autonomous:run --apply --log <attempt-id>`, which is
+   [log mode](#log-mode). If it rejects the body, the agent corrects the file
+   and runs it again. Step 8 is skipped when pull-request mode reported that the
+   task needs no pull request.
+9. Write the result marker, only once the entry is published (or step 8 was
+   skipped).
 
 The prompt names one exception. If the human decides to close the task instead
 of defining it, the human closes it in its tracker, or tells the agent to and
-the agent closes it there. The agent then skips steps 2 to 6 (no documentation
-commit, no definition, no persist, no transition), writes the result marker
-with a summary saying the task was closed, and stops. `reconcile` finalises
+the agent closes it there. The agent then skips steps 2 to 8 (no documentation
+commit, no definition, no persist, no transition, no pull request, no logbook
+entry), writes the result marker with a summary saying the task was closed, and
+stops. `reconcile` finalises
 the attempt because the task is closed (see [Completion](#completion)).
 
 Code enforces the order that matters. The transition refuses without the
 receipt that persist mode writes (see
 [The persistence receipt](#the-persistence-receipt)), so the labels alone prove
 the definition was saved. A marker written before the transition fails the
-stage's completion check, and `reconcile` does not remove the session.
+stage's completion check, and `reconcile` does not remove the session. The
+logbook is not enforced that way: `reconcile` finalises an attempt that left no
+entry and notes it (see
+[What it does to each attempt](#what-it-does-to-each-attempt)).
 
 The prompt gives the agent the template of `definition.md`. Its first line is
 `## Definition`, followed by the sections Problem, Solution, Acceptance
@@ -1945,8 +2347,12 @@ When the human confirms a split, the agent creates each subtask through the
 `labelling-new-tasks` skill, as a native subtask of the task in the same
 tracker, using that tracker's parent option. Each subtask carries its own
 definition in its description, in the same template, and its own autonomy. The
-parent keeps the overall definition and still goes through its own persist and
-transition, steps 4 to 6. Before a Linear split the agent tells the human how
+parent keeps the overall definition and still goes through its own persist,
+transition and pull-request mode, steps 4 to 7. Pull-request mode opens a pull
+request for the parent only when the grill committed documentation: with no
+commit ahead of the default branch, the parent has nothing to show, and the mode
+reports that it needs no pull request. The agent then skips step 8, publishes no
+entry and writes the result marker. Before a Linear split the agent tells the human how
 many Linear issues it creates, because each one counts against the free plan's
 issue limit.
 
@@ -1955,28 +2361,32 @@ issue limit.
 The transition question offers `AFK`, `HITL` and `Later` (see
 [The transition question](#the-transition-question)). When the human answers
 `Later`, or the answer is not applied, the agent writes no result marker and
-leaves the session open. The task keeps `grill-me` and the receipt stays in the
-attempt's directory.
+leaves the session open. It runs neither pull-request mode nor log mode: no pull
+request is opened, no entry is published and no marker is written. The task
+keeps `grill-me` and the receipt stays in the attempt's directory.
 
 ### Documentation commits
 
 The prompt lets the agent commit and push only the glossary and ADR files the
-grill changed, on the workspace's branch. It opens no pull request, never
+grill changed, on the workspace's branch. It opens no pull request itself, never
 forces a push and never skips a hook (`--no-verify`). When the grill changed no
-such file, it commits and pushes nothing. A failed push, for instance one that
-a pre-push hook rejects, goes to the human, who decides whether the stage
+such file, it commits and pushes nothing, and pull-request mode alone pushes the
+branch. A failed push, the agent's or the mode's, for instance one that a
+pre-push hook rejects, goes to the human, who decides whether the stage
 continues.
 
-### GitHub tasks
+### Public content
 
 An issue in a public repository is public, and both the definition (it becomes
 the issue's description) and the stage summary (it becomes a comment) land in
-it. For a GitHub task, the constraints section of the prompt adds a rule: no
-absolute path and no other detail of the machine, such as the user name, the
-home directory and the host name, in the definition or in the stage summary,
-and repository-relative paths and URLs instead. The rule keys on the task's
-source, not on the repository's visibility, so it needs no API call. A Linear
-or a Beads task carries no such restriction.
+it. So do the pull request's cover and the logbook entry, in a public
+repository. The constraints section of the prompt carries a rule for every
+source: no absolute path and no other detail of the machine, such as the user
+name, the home directory and the host name, in the definition, the stage summary
+or the logbook entry, and repository-relative paths and URLs instead. The rule
+no longer keys on the task's source, because the pull request is on GitHub
+whatever the tracker is, and it needs no API call. Log mode also rejects an
+entry that names the home directory (see [The logbook](#the-logbook)).
 
 ### The description layout
 
@@ -2055,6 +2465,17 @@ It does these, in this order, and stops at the first failure:
    [The `taken` label](#the-taken-label)).
 3. Marks the attempt `discarded`, keeping its directory.
 4. With `--release-workspace`, releases the worktree. The branch is kept.
+5. Publishes a short [logbook entry](#the-logbook), when the branch has an open
+   pull request and the attempt has no `logbook.json`.
+
+The entry is written entirely by code: the marker of the attempt's logbook
+entry, the heading `### <emoji> <stage> · attempt <n> · discarded` and the time
+of the discard, as `Discarded at YYYY-MM-DD HH:MM UTC.`. It carries the same marker as any other entry, so a discarded
+attempt never has two. A branch with no pull request gets no entry. A failure to
+find the pull request or to publish the entry is a note in the report
+(`notes`, always present in the JSON, `[]` by default; the text report prints a
+`notes:` block only when there is one) and never fails the
+discard: the outcome stays `advance`.
 
 Without `--release-workspace` the worktree is kept, so the next attempt of that
 task reuses it. A failure stops the run with exit 3 and names the error. What

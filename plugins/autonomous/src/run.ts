@@ -33,10 +33,20 @@ import {
 } from "./label-contract/bootstrap.ts";
 import { claudeJudgement, type JudgementExec } from "./label-triage/judgement.ts";
 import { labelTriageStep } from "./label-triage/step.ts";
+import { runLog } from "./logbook/logbook.ts";
+import { renderLogJson, renderLogText, unconfiguredLog } from "./logbook/report.ts";
 import { cliTrackers } from "./label-triage/trackers/cli.ts";
 import type { TrackerFactory } from "./label-triage/trackers/tracker.ts";
 import { runPersist } from "./persist/persist.ts";
 import { renderPersistJson, renderPersistText, unconfiguredPersist } from "./persist/report.ts";
+import { ghPullRequests } from "./pull-request/github.ts";
+import { runPullRequest } from "./pull-request/mode.ts";
+import type { PullRequestsFactory } from "./pull-request/port.ts";
+import {
+    renderPullRequestJson,
+    renderPullRequestText,
+    unconfiguredPullRequest,
+} from "./pull-request/report.ts";
 import { execOpenUsage, type OpenUsageExec } from "./quota-gate/openusage.ts";
 import { quotaGateStep } from "./quota-gate/step.ts";
 import {
@@ -89,6 +99,7 @@ export interface MainDeps {
     sessions: SessionManagerFactory;
     workspace: WorkspaceManagerFactory;
     naming: Exec;
+    pullRequests: PullRequestsFactory;
     stdout: (text: string) => void;
     stderr: (text: string) => void;
     steps?: readonly Step[];
@@ -121,6 +132,12 @@ function dispatch(args: RunArgs, steps: readonly Step[], deps: MainDeps): Promis
     }
     if (args.persist !== undefined) {
         return runPersistMode(args.persist, args, deps);
+    }
+    if (args.pullRequest !== undefined) {
+        return runPullRequestMode(args.pullRequest, args, deps);
+    }
+    if (args.log !== undefined) {
+        return runLogMode(args.log, args, deps);
     }
     if (args.answers.length > 0) {
         return runAnswers(args, steps, deps);
@@ -298,6 +315,54 @@ async function runPersistMode(attempt: AttemptId, args: RunArgs, deps: MainDeps)
     return exitCodeFor(report.outcome);
 }
 
+// No run lock: the only state it writes is the cover beside the attempt record.
+async function runPullRequestMode(
+    attempt: AttemptId,
+    args: RunArgs,
+    deps: MainDeps,
+): Promise<number> {
+    const startedAt = deps.now();
+    const load = modeConfig(args, deps, (path, error) =>
+        renderPullRequestJson(unconfiguredPullRequest(attempt, path, error, startedAt)),
+    );
+    if (load === null) {
+        return exitCodeFor("not-evaluable");
+    }
+    const { config } = load;
+    const pullRequestDeps = {
+        config,
+        state: resolveStateDir(deps.env),
+        work: deps.work(config),
+        pullRequests: deps.pullRequests,
+    };
+    const report = await runPullRequest(attempt, args.title, pullRequestDeps, startedAt);
+    deps.stdout(args.json ? renderPullRequestJson(report) : renderPullRequestText(report));
+    return exitCodeFor(report.outcome);
+}
+
+// No run lock: it writes only the entry and its receipt beside the attempt record, never the
+// record.
+async function runLogMode(attempt: AttemptId, args: RunArgs, deps: MainDeps): Promise<number> {
+    const startedAt = deps.now();
+    const load = modeConfig(args, deps, (path, error) =>
+        renderLogJson(unconfiguredLog(attempt, path, error, startedAt)),
+    );
+    if (load === null) {
+        return exitCodeFor("not-evaluable");
+    }
+    const { config } = load;
+    const logDeps = {
+        config,
+        state: resolveStateDir(deps.env),
+        trackers: deps.trackers(config),
+        pullRequests: deps.pullRequests,
+        home: deps.env.HOME ?? homedir(),
+    };
+    const report = await runLog(attempt, logDeps, startedAt);
+    deps.stdout(args.json ? renderLogJson(report) : renderLogText(report));
+    return exitCodeFor(report.outcome);
+}
+
 // Design D11: discard mode, like answer mode, runs no step; unlike it, it
 // rewrites an attempt, so it holds the run lock.
 async function runDiscard(args: RunArgs, deps: MainDeps): Promise<number> {
@@ -324,6 +389,7 @@ async function runDiscard(args: RunArgs, deps: MainDeps): Promise<number> {
                 workspace: deps.workspace(config),
                 trackers: deps.trackers(config),
                 now: deps.now,
+                pullRequests: deps.pullRequests,
             };
             return print(await discardAttempt(args, discardDeps, startedAt));
         },
@@ -341,6 +407,7 @@ function lockedDiscard(error: string, startedAt: Date): DiscardReport {
         found: [],
         removed: { session: false, taken: false, workspace: false },
         reasons: [error],
+        notes: [],
     };
 }
 
@@ -357,6 +424,7 @@ if (import.meta.main) {
         sessions: aoeSessions,
         workspace: worktrunkWorkspace,
         naming: execCommand("claude", NAMING_TIMEOUT_MS),
+        pullRequests: ghPullRequests,
         stdout: (text) => process.stdout.write(`${text}\n`),
         stderr: (text) => process.stderr.write(`${text}\n`),
     });

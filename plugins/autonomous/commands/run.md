@@ -1,6 +1,6 @@
 ---
-description: Run the autonomous loop's reconcile, gate, triage, select and launch steps, or launch a supplied task, or discard an attempt, or bootstrap the label contract, or hand off the transition question of a task in grill-me, or save a grill-me attempt's definition and stage summary to its task, report the outcome, and ask the user the questions the run hands off
-argument-hint: "[--task <source>:<id> [--stage <stage>]] [--account <provider-key>] [--force] [--json] [--apply] [--no-handoff] | --apply --discard <attempt> [--release-workspace] [--json] | --bootstrap-labels [--json] | --apply --transition <source>:<task> [--json] | --apply --persist <attempt> [--json]"
+description: Run the autonomous loop's reconcile, gate, triage, select and launch steps, or launch a supplied task, or discard an attempt, or bootstrap the label contract, or hand off the transition question of a task in grill-me, or save a grill-me attempt's definition and stage summary to its task, or open the pull request of an attempt's branch, or publish an attempt's logbook entry, report the outcome, and ask the user the questions the run hands off
+argument-hint: "[--task <source>:<id> [--stage <stage>]] [--account <provider-key>] [--force] [--json] [--apply] [--no-handoff] | --apply --discard <attempt> [--release-workspace] [--json] | --bootstrap-labels [--json] | --apply --transition <source>:<task> [--json] | --apply --persist <attempt> [--json] | --apply --pull-request <attempt> [--title <title>] [--json] | --apply --log <attempt> [--json]"
 allowed-tools: Bash(bun:*)
 ---
 
@@ -18,7 +18,11 @@ suppresses; `--bootstrap-labels` creates missing labels on every enabled
 tracker and exits instead of running the steps. `--transition` reads a task in
 `grill-me` and hands off its autonomy question, running no step. `--persist`
 saves a `grill-me` attempt's definition and stage summary to its task and
-writes the receipt the transition waits for, running no step. `--apply` can
+writes the receipt the transition waits for, running no step. `--pull-request`
+finds or opens the draft pull request of an attempt's workspace branch and
+writes its cover, running no step; `--title` gives its title. `--log` publishes
+the attempt's logbook entry on that pull request and writes its receipt,
+running no step. `--apply` can
 now also create sessions and worktrees and write `taken`.
 
 ## Steps
@@ -44,15 +48,20 @@ now also create sessions and worktrees and write `taken`.
    configuration could not be loaded. With `--persist`, 0 means the receipt was
    written and 3 means it was not: the attempt is unknown, not open or not a
    `grill-me` attempt, a file is missing or empty, a tracker call or read-back
-   failed, or the configuration could not be loaded. Write nothing else around
-   it.
+   failed, or the configuration could not be loaded. With `--pull-request`, 0
+   means a pull request is reported or the task needs none, and 3 means the
+   attempt is unknown or not open, a title is missing for a pull request to
+   open, a command failed or the configuration could not be loaded. With
+   `--log`, 0 means the receipt was written and 3 means it was not: there is no
+   pull request, the body is missing or rejected, a publish or read-back failed
+   or the configuration could not be loaded. Write nothing else around it.
 
 3. Find the handoff. With `--json`, it is the `handoff` field of the JSON
    document on stdout. Without `--json`, it is the last line of stdout when
    that line starts with `handoff:` and a space; the rest of the line after
    that space is the handoff as JSON. A transition report carries its handoff
-   in the same place and in the same form. A persist report carries none, so
-   the command ends here. If there is no handoff, or the AskUserQuestion tool
+   in the same place and in the same form. A persist report carries none, and so
+   do a pull-request and a log report, so the command ends here. If there is no handoff, or the AskUserQuestion tool
    is not available (for example under `claude -p`), end the command.
 
 4. Call AskUserQuestion once, with every question in the handoff's
@@ -94,7 +103,7 @@ now also create sessions and worktrees and write `taken`.
 - Do not retry with different arguments; the answer invocation of step 6 is
   not a retry. If the report says an account must be chosen, show it and stop;
   the user picks the account.
-- Never add `--apply`, `--bootstrap-labels` or `--persist` on your own. In
+- Never add `--apply`, `--bootstrap-labels`, `--persist`, `--pull-request` or `--log` on your own. In
   step 1, pass exactly what the user typed, no more and no less. Step 6 is the
   one exception: it passes `--apply` again, because there is no handoff
   without it, so the user already typed it.

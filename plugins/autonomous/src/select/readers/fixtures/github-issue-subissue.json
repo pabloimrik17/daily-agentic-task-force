@@ -1,0 +1,14 @@
+{
+    "parent": {
+        "id": "I_kwDOVQf0Nc8AAAABYd7ozw",
+        "number": 9,
+        "state": "OPEN",
+        "title": "Parent issue with sub-issues",
+        "url": "https://github.com/ghrecon-ec0359/sv-issues/issues/9"
+    },
+    "subIssues": {
+        "nodes": [],
+        "totalCount": 0
+    },
+    "url": "https://github.com/ghrecon-ec0359/sv-issues/issues/10"
+}

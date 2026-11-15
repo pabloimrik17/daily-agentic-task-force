@@ -31,6 +31,7 @@ function attempt(): AttemptRecord {
         observed: null,
         cleanup: null,
         retained: null,
+        agentArgs: null,
     };
 }
 

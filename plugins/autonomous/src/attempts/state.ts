@@ -17,6 +17,7 @@ import {
     ParseError,
     rejectUnknownKeys,
     string,
+    stringArray,
 } from "../validate.ts";
 import {
     ATTEMPT_SCHEMA,
@@ -86,6 +87,22 @@ export function stageSummaryPath(dir: string): string {
 
 export function receiptPath(dir: string): string {
     return join(dir, "persisted.json");
+}
+
+export function transitionedPath(dir: string): string {
+    return join(dir, "transition.json");
+}
+
+export function logbookEntryPath(dir: string): string {
+    return join(dir, "logbook-entry.md");
+}
+
+export function logbookReceiptPath(dir: string): string {
+    return join(dir, "logbook.json");
+}
+
+export function logbookLockPath(dir: string): string {
+    return join(dir, "logbook.lock");
 }
 
 // A temporary file and a rename, so a reader never sees a partial file.
@@ -236,7 +253,15 @@ const RECORD_KEYS = [
     "observed",
     "cleanup",
     "retained",
+    "agentArgs",
 ];
+
+// Absent in records written before the field existed; read as not recorded.
+function agentArgs(root: Json, path: string): string[] | null {
+    return root.agentArgs === undefined || root.agentArgs === null
+        ? null
+        : stringArray(root, "agentArgs", path);
+}
 
 function requireObject(parent: Json, key: string, path: string): Json {
     return object(parent[key], `${path}.${key}`);
@@ -271,6 +296,7 @@ export function parseRecord(input: unknown): AttemptRecord {
         observed: nullable(root, "observed", "$", parseObservation),
         cleanup: nullable(root, "cleanup", "$", parseCleanup),
         retained: nullable(root, "retained", "$", parseRetained),
+        agentArgs: agentArgs(root, "$"),
     };
 }
 

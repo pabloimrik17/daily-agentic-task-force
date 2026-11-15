@@ -4,7 +4,7 @@
 
 import { randomUUID } from "node:crypto";
 import { mkdir, readFile, rename, rm, stat, writeFile } from "node:fs/promises";
-import { join } from "node:path";
+import { dirname, join } from "node:path";
 
 import { number, object, string } from "../validate.ts";
 
@@ -123,10 +123,9 @@ function releaser(file: string, pid: number): () => Promise<void> {
     };
 }
 
-async function acquire(state: string, pid: number, now: Date): Promise<LockResult> {
-    const file = lockFile(state);
+async function acquire(file: string, pid: number, now: Date): Promise<LockResult> {
     const owner = { pid, startedAt: now.toISOString() };
-    await mkdir(state, { recursive: true });
+    await mkdir(dirname(file), { recursive: true });
     if (await create(file, owner)) {
         return { ok: true, release: releaser(file, pid) };
     }
@@ -143,15 +142,19 @@ async function acquire(state: string, pid: number, now: Date): Promise<LockResul
     return heldBy(file, await look(file));
 }
 
-export async function acquireLock(
-    state: string,
+export async function acquireLockAt(
+    file: string,
     pid: number = process.pid,
     now: Date = new Date(),
 ): Promise<LockResult> {
     try {
-        return await acquire(state, pid, now);
+        return await acquire(file, pid, now);
     } catch (error) {
         const message = error instanceof Error ? error.message : String(error);
-        return { ok: false, error: `cannot take ${lockFile(state)}: ${message}` };
+        return { ok: false, error: `cannot take ${file}: ${message}` };
     }
+}
+
+export function acquireLock(state: string, pid?: number, now?: Date): Promise<LockResult> {
+    return acquireLockAt(lockFile(state), pid, now);
 }
