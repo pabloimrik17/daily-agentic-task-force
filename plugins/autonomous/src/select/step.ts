@@ -96,7 +96,7 @@ export const selectStep: Step<SelectData> = {
 };
 
 // Only an iteration of the loop binds the slots, and only when `capacity` could tell.
-function slots(ctx: RunContext): { full?: SlotsFull } {
+export function slots(ctx: RunContext): { full?: SlotsFull } {
     const capacity = ctx.results.find((r) => r.step === "capacity")?.data as
         | CapacityData
         | null

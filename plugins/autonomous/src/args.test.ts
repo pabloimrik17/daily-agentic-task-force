@@ -642,7 +642,9 @@ describe("parseArgs loop flags", () => {
     });
 
     it("names the loop in the usage text", () => {
-        expect(USAGE).toContain("--loop");
+        expect(USAGE).toContain("/autonomous:loop [");
+        expect(USAGE).not.toContain("/autonomous:run --loop");
+        expect(USAGE).not.toContain("/autonomous:run --notices");
         expect(USAGE).toContain("--notices <n>");
     });
 });

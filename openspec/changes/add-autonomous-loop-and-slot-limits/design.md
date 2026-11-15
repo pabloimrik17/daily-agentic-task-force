@@ -64,7 +64,7 @@ Alternative: pass the stage as a hint to the comparison. Rejected by the user: t
 
 Without `--apply`, `runLoop` runs one iteration, prints the report to standard output as a run does, and takes no loop lock.
 
-A stop request (SIGINT or SIGTERM) ends the wait at once. During an iteration it is honoured when the iteration ends, so a launch is never cut in the middle. A thrown error ends the loop with code 1 after the stop notice.
+A stop request (SIGINT or SIGTERM) ends the wait at once. During an iteration it is honoured when the iteration ends, so a launch is never cut in the middle. This holds for a signal sent to the loop's pid. Ctrl+C on a loop in the foreground of a shell also reaches the commands of the launch, which run in the loop's process group, so it can cut a launch; `reconcile` then recovers the pending attempt. A thrown error ends the loop with code 1 after the stop notice.
 
 ### D6 — The loop lock reuses the run lock code
 

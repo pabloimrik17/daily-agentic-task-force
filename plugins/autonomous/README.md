@@ -420,9 +420,15 @@ else `~/.local/state/autonomous`):
 ### Stopping it
 
 There is no stop command. Send SIGTERM or SIGINT to the pid in `loop.lock`; from
-an agent session, stop the background task instead. A stop during an iteration
-is honoured when the iteration ends, so a launch is never cut. A second
-identical signal kills the process, and the next loop reclaims the stale lock.
+an agent session, stop the background task instead. A stop sent to that pid
+during an iteration is honoured when the iteration ends, so a launch is never
+cut. A second identical signal kills the process, and the next loop reclaims
+the stale lock.
+
+Ctrl+C on a loop in the foreground of a shell is different: the shell sends
+SIGINT to the commands of the launch too, so a launch in progress can be cut.
+The next `reconcile` with `--apply` recovers that attempt (see "Recovery of a
+pending attempt" in [The reconcile step](#the-reconcile-step)).
 
 ## Answer mode
 
@@ -2361,7 +2367,8 @@ The limits can be replaced for one loop with `--grills` and `--parallel`.
 
 **Only the loop is bound by the limits.** In an iteration (`--loop`), a launch
 goes only into a kind that has a free slot, as the
-[`select` step](#the-select-step) applies it. Outside the loop, a launch is
+[`select` step](#the-select-step) applies it and the `launch` step checks again
+on the task as it is then. Outside the loop, a launch is
 never refused because a kind is full, and it still occupies its slot: a run
 with `--apply --task linear:DOT-120` launches the grill even when the grill
 kind is full, and the grill kind then reads over its limit.

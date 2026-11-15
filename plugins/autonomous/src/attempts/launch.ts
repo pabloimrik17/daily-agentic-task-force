@@ -9,6 +9,7 @@ import type { Tracker } from "../label-triage/trackers/tracker.ts";
 import type { Result } from "../result.ts";
 import type { RunContext, Step, StepResult } from "../runner.ts";
 import { labelledThisRun, selectCandidates } from "../select/candidates.ts";
+import { slots } from "../select/step.ts";
 import type { Excluded, SelectData, WorkReader, WorkTask } from "../select/types.ts";
 import type { SessionManager } from "../sessions/manager.ts";
 import { type Naming, nameSession } from "../sessions/naming.ts";
@@ -224,6 +225,7 @@ async function readUnit(
         labelledThisRun: labelledThisRun(ctx.results),
         detail: (listed) => reader.detail(listed),
         stage: ctx.args.stage,
+        ...slots(ctx),
     });
     if (!checked.ok) {
         return broken(`${unit.source}: ${checked.error}`);

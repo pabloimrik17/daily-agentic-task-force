@@ -2,7 +2,7 @@ import { EventEmitter } from "node:events";
 
 import { describe, expect, it } from "vitest";
 
-import { sleep, stopOnSignals } from "./signals.ts";
+import { MAX_TIMER_MS, sleep, sleepWith, stopOnSignals } from "./signals.ts";
 
 describe("sleep", () => {
     it("resolves at once when the stop is already asked", async () => {
@@ -22,6 +22,30 @@ describe("sleep", () => {
 
     it("resolves after the time without a stop signal", async () => {
         await expect(sleep(1)).resolves.toBeUndefined();
+    });
+
+    it("splits a wait longer than one timer takes, and waits all of it", async () => {
+        const delays: number[] = [];
+        const wait = sleepWith((ms) => {
+            delays.push(ms);
+            return Promise.resolve();
+        });
+
+        await wait(2 * MAX_TIMER_MS + 5);
+
+        expect(delays).toEqual([MAX_TIMER_MS, MAX_TIMER_MS, 5]);
+    });
+
+    it("gives a wait that one timer takes to one timer", async () => {
+        const delays: number[] = [];
+        const wait = sleepWith((ms) => {
+            delays.push(ms);
+            return Promise.resolve();
+        });
+
+        await wait(600_000);
+
+        expect(delays).toEqual([600_000]);
     });
 });
 

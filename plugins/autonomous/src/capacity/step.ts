@@ -42,8 +42,13 @@ function kindOf(ids: readonly AttemptId[], { value, source }: Setting): KindCapa
 }
 
 // Spec "What occupies a slot": the open states, and a completed attempt whose cleanup is owed.
+// Without --apply `reconcile` leaves the state as it was, so its action tells which
+// attempts the real iteration would no longer find open.
+const LEAVING: ReadonlySet<string> = new Set(["finalised", "aborted"]);
+
 function openIds({ attempts, cleanups }: ReconcileData): AttemptId[] {
     return attempts
+        .filter(({ action }) => !LEAVING.has(action))
         .filter(({ id, state }) => OPEN_STATES.includes(state) || cleanups.includes(id))
         .map(({ id }) => id);
 }

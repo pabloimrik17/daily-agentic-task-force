@@ -60,6 +60,21 @@ describe("capacity: what occupies a slot", () => {
         );
         expect(result.data?.grill).toMatchObject({ occupied: 0, attempts: [] });
     });
+
+    it("counts none, without --apply, for attempts reconcile would finalise or abort", async () => {
+        const result = await capacityStep.run(
+            capacityContext({
+                attempts: [
+                    attempt(GRILL, "started", { action: "finalised" }),
+                    attempt(TEST, "pending", { action: "aborted" }),
+                    attempt(TEST_2, "started", { action: "observed" }),
+                ],
+                args: { loop: true },
+            }),
+        );
+        expect(result.data?.grill).toMatchObject({ occupied: 0, attempts: [] });
+        expect(result.data?.work).toMatchObject({ occupied: 1, attempts: [TEST_2] });
+    });
 });
 
 describe("capacity: two kinds of slot", () => {

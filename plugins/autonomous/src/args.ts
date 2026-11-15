@@ -46,8 +46,8 @@ export const USAGE = [
     "       /autonomous:run --apply --persist <attempt-id> [--json]",
     "       /autonomous:run --apply --pull-request <attempt-id> [--title <title>] [--json]",
     "       /autonomous:run --apply --log <attempt-id> [--json]",
-    "       /autonomous:run --loop [--account <provider-key>] [--force] [--json] [--apply] [--grills <n>] [--parallel <n>] [--interval <minutes>]",
-    "       /autonomous:run --notices <n>",
+    "       /autonomous:loop [--account <provider-key>] [--force] [--json] [--apply] [--grills <n>] [--parallel <n>] [--interval <minutes>]",
+    "       bun plugins/autonomous/src/run.ts --notices <n>",
 ].join("\n");
 
 const ANSWER_SHAPE = "--answer requires <id>=<value>[,<value>]";
