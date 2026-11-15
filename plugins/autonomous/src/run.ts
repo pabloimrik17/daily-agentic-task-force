@@ -35,6 +35,12 @@ import {
     unconfiguredBootstrap,
 } from "./label-contract/bootstrap.ts";
 import { claudeJudgement, type JudgementExec } from "./label-triage/judgement.ts";
+import {
+    renderTriageQuestionsJson,
+    renderTriageQuestionsText,
+    runTriageQuestions,
+    unconfiguredTriageQuestions,
+} from "./label-triage/questions-mode.ts";
 import { labelTriageStep } from "./label-triage/step.ts";
 import { runLog } from "./logbook/logbook.ts";
 import { renderLogJson, renderLogText, unconfiguredLog } from "./logbook/report.ts";
@@ -146,6 +152,9 @@ const looping = (args: RunArgs) => args.loop && args.apply;
 function dispatch(args: RunArgs, steps: readonly Step[], deps: MainDeps): Promise<number> {
     if (args.bootstrapLabels) {
         return runBootstrap(args, deps);
+    }
+    if (args.triageQuestions) {
+        return runTriageQuestionsMode(args, deps);
     }
     if (args.transition !== undefined) {
         return runTransitionMode(args.transition, args, deps);
@@ -316,6 +325,22 @@ async function runBootstrap(args: RunArgs, deps: MainDeps): Promise<number> {
     const { config } = load;
     const report = await bootstrapLabels(deps.trackers(config), config, deps.now());
     deps.stdout(args.json ? renderBootstrapJson(report) : renderBootstrapText(report));
+    return exitCodeFor(report.outcome);
+}
+
+// Design D7: like the bootstrap it needs the configuration and the trackers; it reads no
+// attempt and writes nothing, so it takes no lock, and it asks for no quota.
+async function runTriageQuestionsMode(args: RunArgs, deps: MainDeps): Promise<number> {
+    const startedAt = deps.now();
+    const load = modeConfig(args, deps, (path, error) =>
+        renderTriageQuestionsJson(unconfiguredTriageQuestions(path, error, startedAt)),
+    );
+    if (load === null) {
+        return exitCodeFor("not-evaluable");
+    }
+    const { config } = load;
+    const report = await runTriageQuestions({ config, trackers: deps.trackers(config) }, startedAt);
+    deps.stdout(args.json ? renderTriageQuestionsJson(report) : renderTriageQuestionsText(report));
     return exitCodeFor(report.outcome);
 }
 

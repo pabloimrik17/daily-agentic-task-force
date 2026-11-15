@@ -22,7 +22,7 @@
 
 - [x] 4.1 Run the full gate set and confirm each passes: `bun run typecheck`, `bun run test`, `bun run lint:eslint`, `bun run lint:knip`, `bun run lint:fallow`, `bun run fallow audit`, `bun run lint:oxfmt`, `bun run lint:markdownlint`, `bun run lint:marketplace` and `openspec validate read-openusage-limits-v2 --strict`.
 - [x] 4.2 Run `bun plugins/autonomous/src/run.ts` without `--apply` against the live OpenUsage 0.8.0, reading only the `[quota-gate]` section. With `--account claude@ec02e918` it advances. Record the redacted section in the evidence file.
-- [ ] 4.3 Run `/autonomous:run --account <id>` on this machine as the loop runs it, and confirm the quota gate passes with OpenUsage 0.8.
+- [x] 4.3 Run `/autonomous:run --account <id>` on this machine as the loop runs it, and confirm the quota gate passes with OpenUsage 0.8. Done on 2026-11-15 by the real loop of `add-autonomous-loop-and-slot-limits` (`evidence/7.3-real-loop.md`, "One real grill") and the dry run of `add-triage-me-label` (`evidence/8.3-dry-run.md`, `[quota-gate] advance`).
 
 ## Workflow follow-up
 

@@ -3,6 +3,7 @@
 
 import { type TaskKey, taskKey } from "../attempts/record.ts";
 import type { AutonomousConfig } from "../config.ts";
+import { TAKEN_LABEL, TRIAGE_LABEL } from "../label-contract/contract.ts";
 import { detect, isComplete } from "../label-contract/detect.ts";
 import { LABEL_TRIAGE } from "../label-triage/question-id.ts";
 import type { LabelTriageData } from "../label-triage/step.ts";
@@ -66,8 +67,11 @@ function exclusionBeforeDetail(task: WorkTask, deps: CandidateDeps): Exclusion |
     if (!isClassified(task, deps.config)) {
         return "classification";
     }
-    if (task.labels.includes("taken")) {
+    if (task.labels.includes(TAKEN_LABEL)) {
         return "taken";
+    }
+    if (task.labels.includes(TRIAGE_LABEL)) {
+        return "triage-me";
     }
     if (deps.labelledThisRun.has(taskKey(task.source, task.id))) {
         return "labelled-this-run";

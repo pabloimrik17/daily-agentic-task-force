@@ -1,6 +1,6 @@
 ---
-description: Run the autonomous loop's reconcile, gate, triage, select and launch steps, or launch a supplied task, or discard an attempt, or bootstrap the label contract, or hand off the transition question of a task in grill-me or proposal, or move an AFK task in proposal, or save a grill-me or proposal attempt's stage summary, and a grill's definition, to its task, or open the pull request of an attempt's branch, or publish an attempt's logbook entry, report the outcome, and ask the user the questions the run hands off
-argument-hint: "[--task <source>:<id> [--stage <stage>]] [--account <provider-key>] [--force] [--json] [--apply] [--no-handoff] | --apply --discard <attempt> [--release-workspace] [--json] | --bootstrap-labels [--json] | --apply --transition <source>:<task> [--json] | --apply --persist <attempt> [--json] | --apply --pull-request <attempt> [--title <title>] [--json] | --apply --log <attempt> [--json]"
+description: Run the autonomous loop's reconcile, gate, triage, select and launch steps, or launch a supplied task, or discard an attempt, or bootstrap the label contract, or hand off the transition question of a task in grill-me or proposal, or move an AFK task in proposal, or save a grill-me or proposal attempt's stage summary, and a grill's definition, to its task, or open the pull request of an attempt's branch, or publish an attempt's logbook entry, or list the questions of the tasks marked `triage-me`, report the outcome, and ask the user the questions the run hands off
+argument-hint: "[--task <source>:<id> [--stage <stage>]] [--account <provider-key>] [--force] [--json] [--apply] [--no-handoff] | --apply --discard <attempt> [--release-workspace] [--json] | --bootstrap-labels [--json] | --triage-questions [--json] | --apply --transition <source>:<task> [--json] | --apply --persist <attempt> [--json] | --apply --pull-request <attempt> [--title <title>] [--json] | --apply --log <attempt> [--json]"
 allowed-tools: Bash(bun:*)
 ---
 
@@ -30,8 +30,13 @@ for, running no step. `--pull-request`
 finds or opens the draft pull request of an attempt's workspace branch and
 writes its cover, running no step; `--title` gives its title. `--log` publishes
 the attempt's logbook entry on that pull request and writes its receipt,
-running no step. `--apply` can
-now also create sessions and worktrees and write `taken`.
+running no step. `--triage-questions` reads the tasks that carry `triage-me`
+and lists their questions, running no step, requesting no judgement and
+writing nothing; it takes no `--apply` and combines only with `--json`, and its
+answers are applied with `--apply --answer`. `--apply` can
+now also create sessions and worktrees and write `taken`; with it, a run marks
+the tasks it leaves for the human with `triage-me` and removes the mark from a
+task that is complete.
 
 ## Steps
 
@@ -64,14 +69,18 @@ now also create sessions and worktrees and write `taken`.
    open, a command failed or the configuration could not be loaded. With
    `--log`, 0 means the receipt was written and 3 means it was not: there is no
    pull request, the body is missing or rejected, a publish or read-back failed
-   or the configuration could not be loaded. Write nothing else around it.
+   or the configuration could not be loaded. With `--triage-questions`, 0 means
+   every enabled source was read, with or without a question, and 3 means a
+   source or the configuration could not be read. Write nothing else around it.
 
 3. Find the handoff. With `--json`, it is the `handoff` field of the JSON
    document on stdout. Without `--json`, it is the last line of stdout when
    that line starts with `handoff:` and a space; the rest of the line after
    that space is the handoff as JSON. A transition report carries its handoff
    in the same place and in the same form, whether it holds the autonomy
-   question or the approval question. A transition report with `applied` true
+   question or the approval question. A `--triage-questions` report carries
+   its handoff in the same place and in the same form, and, unlike a run's, it
+   carries it without `--apply`. A transition report with `applied` true
    and no handoff, the `AFK` path, is relayed and the command ends: nothing is
    asked. A persist report carries none, and so
    do a pull-request and a log report, so the command ends here. If there is no handoff, or the AskUserQuestion tool
@@ -116,10 +125,12 @@ now also create sessions and worktrees and write `taken`.
 - Do not retry with different arguments; the answer invocation of step 6 is
   not a retry. If the report says an account must be chosen, show it and stop;
   the user picks the account.
-- Never add `--apply`, `--bootstrap-labels`, `--persist`, `--pull-request` or `--log` on your own. In
+- Never add `--apply`, `--bootstrap-labels`, `--triage-questions`, `--persist`, `--pull-request` or `--log` on your own. In
   step 1, pass exactly what the user typed, no more and no less. Step 6 is the
-  one exception: it passes `--apply` again, because there is no handoff
-  without it, so the user already typed it.
+  one exception: it passes `--apply` because answer mode requires it. For a run
+  the user already typed it, because there is no handoff without it. After
+  `--triage-questions` the user did not, and the answers the user gave are the
+  request to write; step 6 then writes only those answers.
 - A first `--apply` with hundreds of rule writes, such as the clean-up of an
   existing backlog or the `proposal` labels after an upgrade, issues about a
   thousand CLI calls and exceeds the command's timeout. It must be run from a

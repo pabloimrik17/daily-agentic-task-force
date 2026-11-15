@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest";
 import type { TaskKey } from "../attempts/record.ts";
 import { type DecidedGroup, MEANINGS } from "../label-contract/contract.ts";
 import { detect } from "../label-contract/detect.ts";
+import { MARKED_REASON, markedRecords } from "./decide.ts";
 import { questionsFor } from "./questions.ts";
 import { labelTriageStep } from "./step.ts";
 import { config, task, trackers, triageContext } from "./test-fixtures.ts";
@@ -334,6 +335,68 @@ describe("label triage questions: Questions for the human", () => {
         expect(questions.map((q) => [q.id, q.header])).toEqual([
             ["label-triage:beads:agentic-task-8v0:autonomy", "autonomy"],
             ["label-triage:linear:DOT-104:autonomy", "DOT-104"],
+        ]);
+    });
+});
+
+// Spec label-triage, "Questions of marked tasks".
+describe("label triage questions: marked tasks", () => {
+    const markedTask = (id: string, labels: string[], overrides: Partial<TrackerTask> = {}) =>
+        task("beads", id, [...labels, "triage-me"], overrides);
+
+    function markedQuestions(listed: TrackerTask[]) {
+        const detections = listed.map((t) => detect(t, config().sources[t.source]));
+        return questionsFor(markedRecords(detections), [], detections, new Map());
+    }
+
+    it("Question without a judgement: AFK, HITL, grill-me and Later, the tier marked, no judged prefix and no confidence", () => {
+        const [autonomy] = markedQuestions([markedTask("B-1", ["personal"])]);
+        expect(autonomy?.id).toBe("label-triage:beads:B-1:autonomy");
+        expect(autonomy?.options.map((option) => option.label)).toEqual([
+            "AFK",
+            "HITL",
+            "grill-me",
+            "Later",
+        ]);
+        expect(autonomy?.options.map((option) => option.description.startsWith("judged"))).toEqual([
+            false,
+            false,
+            false,
+            false,
+        ]);
+        expect(autonomy?.question.split("\n")[1]).toBe(
+            `Seen: labels [personal, triage-me] → no label (marked) — ${MARKED_REASON}`,
+        );
+        expect(autonomy?.question).not.toMatch(/\d\.\d\d/);
+        expect(autonomy?.header).toBe("B-1");
+    });
+
+    it("composes the scope question of a marked task the same way", () => {
+        const [question] = markedQuestions([markedTask("B-1", [])]);
+        expect(question?.options.map((option) => option.label)).toEqual([
+            "work",
+            "personal",
+            "Later",
+        ]);
+        expect(question?.question).toContain("(marked)");
+        expect(question?.options.some((option) => option.description.startsWith("judged"))).toBe(
+            false,
+        );
+    });
+
+    it("Order among old and new doubts: the marked task with work evidence comes before an unmarked personal task judged in this run", () => {
+        const personal = task("beads", "P-1", ["personal"], { updatedAt: "2026-09-23T09:00:00Z" });
+        const work = markedTask("W-1", ["work"], { updatedAt: "2026-09-22T09:00:00Z" });
+        const detections = [personal, work].map((t) => detect(t, config().sources.beads));
+        const questions = questionsFor(
+            [asked(personal, "autonomy"), ...markedRecords(detections)],
+            [],
+            detections,
+            new Map(),
+        );
+        expect(questions.map((q) => q.id)).toEqual([
+            "label-triage:beads:W-1:autonomy",
+            "label-triage:beads:P-1:autonomy",
         ]);
     });
 });

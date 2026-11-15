@@ -1,7 +1,12 @@
-import { GROUPS, type Group } from "../label-contract/contract.ts";
+import { GROUPS, type Group, TRIAGE_LABEL } from "../label-contract/contract.ts";
 import type { StepResult } from "../runner.ts";
 import type { LabelTriageData, SourceCounts } from "./step.ts";
-import { READ_BACK_MISMATCH, type TriageRecord, type WriteFailure } from "./write.ts";
+import {
+    type MarkRecord,
+    READ_BACK_MISMATCH,
+    type TriageRecord,
+    type WriteFailure,
+} from "./write.ts";
 
 export function renderLabelTriage(result: StepResult<LabelTriageData>): string {
     const { sources, records, conflicts, notJudged, remainder, judgement, failures } = result.data;
@@ -14,6 +19,7 @@ export function renderLabelTriage(result: StepResult<LabelTriageData>): string {
             lines.push(`  ${status}:`, ...matching.map((record) => `    ${renderDerived(record)}`));
         }
     }
+    lines.push(...renderMarks(result.data));
 
     const asked = records.filter((record) => record.status === "asked");
     if (conflicts.length > 0 || asked.length > 0) {
@@ -47,6 +53,29 @@ export function renderLabelTriage(result: StepResult<LabelTriageData>): string {
     return lines.join("\n");
 }
 
+// One line per task this run marked or unmarked, then how many carried the label when read.
+function renderMarks({ marked, unmarked, markedRead }: LabelTriageData): string[] {
+    if (markedRead === 0 && marked.length === 0 && unmarked.length === 0) {
+        return [];
+    }
+    return [
+        "  triage-me:",
+        ...marked.map((mark) => `    ${renderMark(mark, "marked")}`),
+        ...unmarked.map((mark) => `    ${renderMark(mark, "unmarked")}`),
+        `    read with the label: ${plural(markedRead, "task")}`,
+    ];
+}
+
+function renderMark(mark: MarkRecord, done: "marked" | "unmarked"): string {
+    const state = {
+        applied: done,
+        proposed: `proposed ${done}`,
+        failed: done === "marked" ? "failed marking" : "failed unmarking",
+    }[mark.status];
+    const line = `${mark.source} → ${mark.taskId} → ${TRIAGE_LABEL} → ${state}`;
+    return mark.status === "applied" || mark.detail === null ? line : `${line} — ${mark.detail}`;
+}
+
 function renderCounts(s: SourceCounts): string {
     return (
         `  ${s.source.padEnd(9)} read ${String(s.read).padEnd(3)}  complete ${s.complete}` +
@@ -64,7 +93,8 @@ function renderDerived(record: TriageRecord): string {
 }
 
 function renderAsked(record: TriageRecord): string {
-    return `${record.source} → ${record.taskId} → ${record.group}: ${labels(record.labels)} ${tierOf(record)} → ${record.detail ?? ""} — ${record.reason}`;
+    const detail = record.detail === null ? "" : ` → ${record.detail}`;
+    return `${record.source} → ${record.taskId} → ${record.group}: ${labels(record.labels)} ${tierOf(record)}${detail} — ${record.reason}`;
 }
 
 function renderFailure(f: WriteFailure): string {
@@ -79,7 +109,10 @@ function renderFailure(f: WriteFailure): string {
 }
 
 function tierOf(record: TriageRecord): string {
-    return `(${record.tier}, ${record.confidence.toFixed(2)})`;
+    // A marked group was not judged, so it has no confidence.
+    return record.confidence === null
+        ? `(${record.tier})`
+        : `(${record.tier}, ${record.confidence.toFixed(2)})`;
 }
 
 function labels(names: string[]): string {

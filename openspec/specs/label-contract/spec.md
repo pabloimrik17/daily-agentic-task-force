@@ -143,7 +143,7 @@ The configuration MAY declare that every task of a source has a given scope. A s
 
 ### Requirement: User configuration file
 
-The per-user parts of the contract SHALL live in one JSON file outside the plugin, at `~/.config/autonomous/config.json` unless the environment variable `AUTONOMOUS_CONFIG` names another path. It SHALL be identified by `schema: "autonomous.config.v1"` and SHALL hold: per source, whether it is enabled, its aliases and structural rules, the Beads directory and the GitHub repository list; the judgement settings — model, effort, confidence threshold, tasks judged per run, tasks per batch; the selection settings — model and effort; and the optional session, workspace and naming settings. It SHALL carry no credentials. The file SHALL be validated strictly: a missing file, a missing required field, a mistyped field or an unknown field is an error naming the path, never a corrected value; an optional block or key that is absent takes its shipped default, and the run reports it. The plugin SHALL ship the format, the defaults and an example, and the error for a missing file SHALL point to the example.
+The per-user parts of the contract SHALL live in one JSON file outside the plugin, at `~/.config/autonomous/config.json` unless the environment variable `AUTONOMOUS_CONFIG` names another path. It SHALL be identified by `schema: "autonomous.config.v1"` and SHALL hold: per source, whether it is enabled, its aliases and structural rules, the Beads directory and the GitHub repository list; the judgement settings — model, effort, confidence threshold, tasks judged per run, tasks per batch; the selection settings — model and effort; and the optional session, workspace, naming and runner settings. It SHALL carry no credentials. The file SHALL be validated strictly: a missing file, a missing required field, a mistyped field or an unknown field is an error naming the path, never a corrected value; an optional block or key that is absent takes its shipped default, and the run reports it. The plugin SHALL ship the format, the defaults and an example, and the error for a missing file SHALL point to the example.
 
 #### Scenario: Missing file
 
@@ -167,7 +167,7 @@ The per-user parts of the contract SHALL live in one JSON file outside the plugi
 
 ### Requirement: Optional configuration blocks with shipped defaults
 
-The configuration file MAY omit the `sessions`, `workspace` and `naming` blocks or any key inside them. The plugin SHALL ship a defaults file for those blocks, and a key absent from the user's file SHALL take the shipped value, key by key. A key present in the user's file SHALL still be validated strictly, and an unknown key is still an error. Every run SHALL report the keys that took a shipped default.
+The configuration file MAY omit the `sessions`, `workspace`, `naming` and `runner` blocks or any key inside them. The plugin SHALL ship a defaults file for those blocks, and a key absent from the user's file SHALL take the shipped value, key by key. A key present in the user's file SHALL still be validated strictly, and an unknown key is still an error. Every run SHALL report the keys that took a shipped default.
 
 #### Scenario: Block omitted
 
@@ -183,6 +183,11 @@ The configuration file MAY omit the `sessions`, `workspace` and `naming` blocks 
 
 - **WHEN** the file sets `naming.effort` to `"fast"`
 - **THEN** the configuration is rejected with the path `naming.effort`
+
+#### Scenario: Runner block omitted
+
+- **WHEN** the file has no `runner` block
+- **THEN** every `runner` key takes the shipped default and the report lists them
 
 ### Requirement: Session, workspace and naming settings
 
@@ -322,3 +327,59 @@ The transition from `proposal` to `implement` SHALL be applied without a human's
 
 - **WHEN** the transition out of `proposal` is requested for a task carrying `personal` and `proposal` only
 - **THEN** nothing is written and the reason names the missing autonomy
+
+### Requirement: Runner settings
+
+The configuration SHALL hold, under `runner`: `grills`, the limit of grill slots; `parallel`, the limit of work slots; and `intervalMinutes`, the time between two iterations of the loop. `grills` and `parallel` SHALL be integers of 0 or more and `intervalMinutes` an integer of 1 or more. The shipped defaults SHALL be 1, 2 and 10.
+
+#### Scenario: Shipped defaults
+
+- **WHEN** the file carries no `runner` block
+- **THEN** the limits are 1 grill slot and 2 work slots, and the interval is 10 minutes
+
+#### Scenario: Negative limit
+
+- **WHEN** the file sets `runner.parallel` to `-1`
+- **THEN** the configuration is rejected with the path `runner.parallel`
+
+#### Scenario: Fractional interval
+
+- **WHEN** the file sets `runner.intervalMinutes` to `2.5`
+- **THEN** the configuration is rejected with the path `runner.intervalMinutes`
+
+### Requirement: The triage label
+
+The contract SHALL include a `triage-me` label that belongs to no group. It is never required, never missing and never in conflict. It SHALL mean that the task's scope or autonomy could not be decided without the human, and that the task is neither judged again nor selected until the label is removed. The label names no group: the group in doubt SHALL be the scope or autonomy group that has no label on the task.
+
+#### Scenario: Task without the label
+
+- **WHEN** a task carries `work`, `AFK` and `proposal` and no `triage-me`
+- **THEN** it is complete for every group and nothing reports `triage-me` as missing
+
+#### Scenario: Group in doubt
+
+- **WHEN** a task carries `personal` and `triage-me` and no autonomy or stage label
+- **THEN** its group in doubt is autonomy
+
+### Requirement: Who sets the triage label
+
+Only `label-triage` and the answers to its questions SHALL add or remove `triage-me` on behalf of the runner. A person MAY add or remove it in the tracker, and the runner SHALL treat the label the same whoever set it.
+
+#### Scenario: Label set by a person
+
+- **WHEN** a person adds `triage-me` in the tracker to a task that lacks a scope label
+- **THEN** the task is treated as marked, as if a run had added the label
+
+### Requirement: The triage label has no aliases and is bootstrapped
+
+The configuration SHALL NOT declare aliases for `triage-me`. The label bootstrap SHALL create `triage-me` like every other contract label, with colour `#f2c94c`.
+
+#### Scenario: Alias for the triage label
+
+- **WHEN** the configuration declares a Beads alias for `triage-me`
+- **THEN** the configuration is rejected with the alias's path
+
+#### Scenario: Bootstrap on Linear
+
+- **WHEN** Linear lacks `triage-me` and the bootstrap runs
+- **THEN** `triage-me` is created at workspace level with colour `#f2c94c` and reported as created

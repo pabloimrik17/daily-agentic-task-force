@@ -26,7 +26,9 @@ that moves it to its next stage, or, for an `AFK` task in `proposal`, moves it
 itself (see [Transition mode](#transition-mode)). Another, `--persist`, runs no
 step either: it saves a grill-me or proposal attempt's stage summary, and the
 definition of a grill, to the task and writes the receipt the transition waits
-for (see [Persist mode](#persist-mode)).
+for (see [Persist mode](#persist-mode)). A third, `--triage-questions`, runs no
+step and writes nothing: it lists the questions of the tasks marked `triage-me`
+(see [Triage questions mode](#triage-questions-mode)).
 
 **The contracts are provisional.** The step contract, the run report and the
 runner shape are a first iteration and are expected to change as further steps
@@ -121,6 +123,7 @@ adding the Linear CLI there is tracked as DOT-82 sub-issue 7.
 /autonomous:run [--account <provider-key>] [--force] [--json] [--apply] [--no-handoff]
 /autonomous:run --task <source>:<id> [--stage <stage>] [--account <provider-key>] [--force] [--json] [--apply] [--no-handoff]
 /autonomous:run --bootstrap-labels [--json]
+/autonomous:run --triage-questions [--json]
 /autonomous:run --apply --answer <id>=<value>[,<value>]... [--json]
 /autonomous:run --apply --discard <attempt-id|source:id> [--release-workspace] [--json]
 /autonomous:run --apply --transition <source>:<task> [--json]
@@ -131,29 +134,30 @@ adding the Linear CLI there is tracked as DOT-82 sub-issue 7.
 bun src/run.ts --notices <n>
 ```
 
-| Flag                                | Effect                                                                                                                                                                                                                                                                                                                                                                                                                                                                                             |
-| ----------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `--account <provider-key>`          | Claude account to evaluate, by its OpenUsage account id (`claude@<id>`, such as `claude@1a2b3c4d`). Required when several Claude accounts are present                                                                                                                                                                                                                                                                                                                                              |
-| `--force`                           | Accepted, and does nothing: OpenUsage 0.8 prints what its app last fetched and refreshes on its own schedule                                                                                                                                                                                                                                                                                                                                                                                       |
-| `--json`                            | Print one `autonomous.run.v2` JSON document instead of the text report; with `--bootstrap-labels`, one `autonomous.bootstrap.v1` document; with `--answer`, one `autonomous.answers.v1` document; with `--discard`, one `autonomous.discard.v1` document; with `--transition`, one `autonomous.transition.v1` document; with `--persist`, one `autonomous.persist.v1` document; with `--pull-request`, one `autonomous.pull-request.v1` document; with `--log`, one `autonomous.log.v1` document   |
-| `--apply`                           | Let steps write. Without it a run has no side effects beyond the CLIs' own caches and the run lock. Required by `--answer`, `--discard`, `--transition`, `--persist`, `--pull-request` and `--log`                                                                                                                                                                                                                                                                                                 |
-| `--no-handoff`                      | Emit no handoff; the questions stay in the step's report. For runs with no human present; the unattended way is the [loop](#the-loop). Not combined with `--bootstrap-labels`, `--answer`, `--transition` or `--persist`                                                                                                                                                                                                                                                                           |
-| `--answer <id>=<value>[,<value>]`   | [Answer mode](#answer-mode): apply the answer to the question `<id>` and exit, running no step. Repeat it once per question. Only combines with `--apply` and `--json`                                                                                                                                                                                                                                                                                                                             |
-| `--bootstrap-labels`                | Run only the label bootstrap and exit. Only combines with `--json`                                                                                                                                                                                                                                                                                                                                                                                                                                 |
-| `--task <source>:<id>`              | Give that task to `launch` instead of running `label-triage` and `select`. `<source>` is `linear`, `beads` or `github`, split at the first `:`. Given once. Not combined with `--bootstrap-labels`, `--answer`, `--discard`, `--transition` or `--persist`. See [The supplied task](#the-supplied-task)                                                                                                                                                                                            |
-| `--stage <stage>`                   | The stage `launch` runs for the supplied task. Requires `--task`. Given once. Its name is checked when the arguments are parsed: a stage that is not registered is a usage error (exit 1) that names the registered stages                                                                                                                                                                                                                                                                         |
-| `--discard <attempt-id\|source:id>` | [Discard mode](#discard-mode): discard that attempt, or the one open attempt of that task, and exit, running no step. Requires `--apply`. Only combines with `--apply`, `--json` and `--release-workspace`. Given once                                                                                                                                                                                                                                                                             |
-| `--release-workspace`               | With `--discard`, also release the attempt's worktree. Requires `--discard`                                                                                                                                                                                                                                                                                                                                                                                                                        |
-| `--transition <source>:<task>`      | [Transition mode](#transition-mode): read the task, which must carry `grill-me` or `proposal`, and hand off the question that moves it to its next stage, or move an `AFK` task in `proposal` to `implement`, running no step. `<source>` is `linear`, `beads` or `github`, split at the first `:`. Requires `--apply`. Only combines with `--apply` and `--json`. Given once. Not combined with `--no-handoff`, `--answer`, `--task`, `--stage`, `--discard`, `--persist` or `--bootstrap-labels` |
-| `--pull-request <attempt-id>`       | [Pull-request mode](#pull-request-mode): find or open the draft pull request of that open attempt's workspace branch and write its cover, running no step. `<attempt-id>` is `<source>:<task>:<stage>:<n>`. Requires `--apply`. Only combines with `--apply`, `--title` and `--json`. Given once                                                                                                                                                                                                   |
-| `--title <title>`                   | With `--pull-request`, the text of the pull request's title; the task id is appended. Required to open a pull request; replaces the title of one already open. Requires `--pull-request`. Given once                                                                                                                                                                                                                                                                                               |
-| `--log <attempt-id>`                | [Log mode](#log-mode): publish the attempt's [logbook entry](#the-logbook) on the pull request, read it back and write the receipt, running no step. `<attempt-id>` is `<source>:<task>:<stage>:<n>`. Requires `--apply`. Only combines with `--apply` and `--json`. Given once                                                                                                                                                                                                                    |
-| `--persist <attempt-id>`            | [Persist mode](#persist-mode): save the definition and the stage summary of that open grill-me attempt, or the stage summary of that open proposal attempt, to its task and write the receipt, running no step. `<attempt-id>` is `<source>:<task>:<stage>:<n>`. Requires `--apply`. Only combines with `--apply` and `--json`. Given once                                                                                                                                                         |
-| `--loop`                            | Run an iteration of the loop, where the [slot limits](#slots-and-the-capacity-step) bind. Only combines with `--apply`, `--account`, `--force`, `--json`, `--grills`, `--parallel` and `--interval`. Not combined with `--no-handoff`, `--bootstrap-labels`, `--answer`, `--task`, `--stage`, `--discard`, `--release-workspace`, `--transition`, `--persist`, `--pull-request`, `--title`, `--log` or `--notices`                                                                                 |
-| `--grills <n>`                      | The limit of grill slots for this loop, an integer of 0 or more. Replaces `runner.grills`. Requires `--loop`. Given once                                                                                                                                                                                                                                                                                                                                                                           |
-| `--parallel <n>`                    | The limit of work slots for this loop, an integer of 0 or more. Replaces `runner.parallel`. Requires `--loop`. Given once                                                                                                                                                                                                                                                                                                                                                                          |
-| `--interval <minutes>`              | The time between two iterations, an integer of 1 or more. Replaces `runner.intervalMinutes`. Requires `--loop`. Given once                                                                                                                                                                                                                                                                                                                                                                         |
-| `--notices <n>`                     | The count of notices already shown, an integer of 0 or more. Cannot be combined with any other flag. Given once                                                                                                                                                                                                                                                                                                                                                                                    |
+| Flag                                | Effect                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                     |
+| ----------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `--account <provider-key>`          | Claude account to evaluate, by its OpenUsage account id (`claude@<id>`, such as `claude@1a2b3c4d`). Required when several Claude accounts are present                                                                                                                                                                                                                                                                                                                                                                                                                      |
+| `--force`                           | Accepted, and does nothing: OpenUsage 0.8 prints what its app last fetched and refreshes on its own schedule                                                                                                                                                                                                                                                                                                                                                                                                                                                               |
+| `--json`                            | Print one `autonomous.run.v2` JSON document instead of the text report; with `--bootstrap-labels`, one `autonomous.bootstrap.v1` document; with `--answer`, one `autonomous.answers.v1` document; with `--discard`, one `autonomous.discard.v1` document; with `--transition`, one `autonomous.transition.v1` document; with `--persist`, one `autonomous.persist.v1` document; with `--pull-request`, one `autonomous.pull-request.v1` document; with `--log`, one `autonomous.log.v1` document; with `--triage-questions`, one `autonomous.triage-questions.v1` document |
+| `--apply`                           | Let steps write. Without it a run has no side effects beyond the CLIs' own caches and the run lock. Required by `--answer`, `--discard`, `--transition`, `--persist`, `--pull-request` and `--log`                                                                                                                                                                                                                                                                                                                                                                         |
+| `--no-handoff`                      | Emit no handoff; the questions stay in the step's report. For runs with no human present; the unattended way is the [loop](#the-loop). Not combined with `--bootstrap-labels`, `--answer`, `--transition` or `--persist`                                                                                                                                                                                                                                                                                                                                                   |
+| `--answer <id>=<value>[,<value>]`   | [Answer mode](#answer-mode): apply the answer to the question `<id>` and exit, running no step. Repeat it once per question. Only combines with `--apply` and `--json`                                                                                                                                                                                                                                                                                                                                                                                                     |
+| `--bootstrap-labels`                | Run only the label bootstrap and exit. Only combines with `--json`                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                         |
+| `--triage-questions`                | [Triage questions mode](#triage-questions-mode): read the tasks marked `triage-me` and list their questions, running no step and writing nothing. Only combines with `--json`                                                                                                                                                                                                                                                                                                                                                                                              |
+| `--task <source>:<id>`              | Give that task to `launch` instead of running `label-triage` and `select`. `<source>` is `linear`, `beads` or `github`, split at the first `:`. Given once. Not combined with `--bootstrap-labels`, `--answer`, `--discard`, `--transition` or `--persist`. See [The supplied task](#the-supplied-task)                                                                                                                                                                                                                                                                    |
+| `--stage <stage>`                   | The stage `launch` runs for the supplied task. Requires `--task`. Given once. Its name is checked when the arguments are parsed: a stage that is not registered is a usage error (exit 1) that names the registered stages                                                                                                                                                                                                                                                                                                                                                 |
+| `--discard <attempt-id\|source:id>` | [Discard mode](#discard-mode): discard that attempt, or the one open attempt of that task, and exit, running no step. Requires `--apply`. Only combines with `--apply`, `--json` and `--release-workspace`. Given once                                                                                                                                                                                                                                                                                                                                                     |
+| `--release-workspace`               | With `--discard`, also release the attempt's worktree. Requires `--discard`                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                |
+| `--transition <source>:<task>`      | [Transition mode](#transition-mode): read the task, which must carry `grill-me` or `proposal`, and hand off the question that moves it to its next stage, or move an `AFK` task in `proposal` to `implement`, running no step. `<source>` is `linear`, `beads` or `github`, split at the first `:`. Requires `--apply`. Only combines with `--apply` and `--json`. Given once. Not combined with `--no-handoff`, `--answer`, `--task`, `--stage`, `--discard`, `--persist` or `--bootstrap-labels`                                                                         |
+| `--pull-request <attempt-id>`       | [Pull-request mode](#pull-request-mode): find or open the draft pull request of that open attempt's workspace branch and write its cover, running no step. `<attempt-id>` is `<source>:<task>:<stage>:<n>`. Requires `--apply`. Only combines with `--apply`, `--title` and `--json`. Given once                                                                                                                                                                                                                                                                           |
+| `--title <title>`                   | With `--pull-request`, the text of the pull request's title; the task id is appended. Required to open a pull request; replaces the title of one already open. Requires `--pull-request`. Given once                                                                                                                                                                                                                                                                                                                                                                       |
+| `--log <attempt-id>`                | [Log mode](#log-mode): publish the attempt's [logbook entry](#the-logbook) on the pull request, read it back and write the receipt, running no step. `<attempt-id>` is `<source>:<task>:<stage>:<n>`. Requires `--apply`. Only combines with `--apply` and `--json`. Given once                                                                                                                                                                                                                                                                                            |
+| `--persist <attempt-id>`            | [Persist mode](#persist-mode): save the definition and the stage summary of that open grill-me attempt, or the stage summary of that open proposal attempt, to its task and write the receipt, running no step. `<attempt-id>` is `<source>:<task>:<stage>:<n>`. Requires `--apply`. Only combines with `--apply` and `--json`. Given once                                                                                                                                                                                                                                 |
+| `--loop`                            | Run an iteration of the loop, where the [slot limits](#slots-and-the-capacity-step) bind. Only combines with `--apply`, `--account`, `--force`, `--json`, `--grills`, `--parallel` and `--interval`. Not combined with `--no-handoff`, `--bootstrap-labels`, `--answer`, `--task`, `--stage`, `--discard`, `--release-workspace`, `--transition`, `--persist`, `--pull-request`, `--title`, `--log` or `--notices`                                                                                                                                                         |
+| `--grills <n>`                      | The limit of grill slots for this loop, an integer of 0 or more. Replaces `runner.grills`. Requires `--loop`. Given once                                                                                                                                                                                                                                                                                                                                                                                                                                                   |
+| `--parallel <n>`                    | The limit of work slots for this loop, an integer of 0 or more. Replaces `runner.parallel`. Requires `--loop`. Given once                                                                                                                                                                                                                                                                                                                                                                                                                                                  |
+| `--interval <minutes>`              | The time between two iterations, an integer of 1 or more. Replaces `runner.intervalMinutes`. Requires `--loop`. Given once                                                                                                                                                                                                                                                                                                                                                                                                                                                 |
+| `--notices <n>`                     | The count of notices already shown, an integer of 0 or more. Cannot be combined with any other flag. Given once                                                                                                                                                                                                                                                                                                                                                                                                                                                            |
 
 The script can also be run directly, which is what a shell should branch on:
 
@@ -195,6 +199,14 @@ For `/autonomous:run --bootstrap-labels [--json]`:
 | 0    | Every label is present, was created or was recoloured on every enabled source                                   |
 | 3    | The configuration could not be loaded, a source could not be evaluated, or a label failed to create or recolour |
 | 1    | Invalid arguments or a failure of the runner itself                                                             |
+
+For `/autonomous:run --triage-questions [--json]`:
+
+| Code | Outcome                                                                        |
+| ---- | ------------------------------------------------------------------------------ |
+| 0    | `advance` — every enabled source was read                                      |
+| 3    | `not-evaluable` — a source or the configuration could not be read; no question |
+| 1    | Invalid arguments or a failure of the runner itself                            |
 
 For `/autonomous:run --apply --answer <id>=<value>[,<value>]... [--json]`:
 
@@ -251,7 +263,9 @@ command: what the run asks it to do next. Its only kind today is a list of
 questions for the human. `label-triage` contributes them (see
 [Questions for the human](#questions-for-the-human)), and so does
 [transition mode](#transition-mode), which emits a handoff with one question
-through the same mechanism.
+through the same mechanism, and so does
+[triage questions mode](#triage-questions-mode), which emits it without
+`--apply`.
 
 A run emits a handoff only when all three hold:
 
@@ -335,9 +349,11 @@ From an agent session:
 /autonomous:loop --account claude@1a2b3c4d --apply
 ```
 
-The command starts the loop as a background task, waits for its notices in the
-background and shows each one verbatim. It shows nothing else and says nothing
-while no notice arrives.
+Before it starts the loop, the command asks the questions of the marked tasks
+(see [Questions before the loop starts](#questions-before-the-loop-starts)).
+Then it starts the loop as a background task, waits for its notices in the
+background and shows each one verbatim. Once the loop has started it shows
+nothing else and says nothing while no notice arrives.
 
 From a shell:
 
@@ -361,6 +377,29 @@ with `--notices <n>`: the notices stay on disk.
 wait between the end of one iteration and the start of the next. `--grills` and
 `--parallel` replace the slot limits for that loop.
 
+### Questions before the loop starts
+
+With `--apply`, `/autonomous:loop` runs
+`/autonomous:run --triage-questions --json` once before it starts the loop and
+takes the report's full list of questions, not only its handoff. It asks them
+with the question tool in the list's order, in rounds of at most 4, passing each
+question as `/autonomous:run` does (see [The round](#the-round)). After each
+round it applies that round's answers in answer mode, shows its output and asks
+the next round. It composes nothing: every question comes from the report.
+
+It starts the loop when no question is left, or as soon as every question of a
+round is answered `Later`: nothing is written for that round and the remaining
+questions are not asked. A question answered `Later` is not asked again in the
+same start, because the list is read once. When `--triage-questions` exits with
+code 3, the command shows its reason in a code block and starts the loop without
+asking. When it does not finish within the command's ten minutes, the command
+says so in one line and starts the loop without asking: the mode reads the
+description of each marked Linear task one by one, so a long queue of marks takes
+longer, and the questions wait for the next start.
+
+The loop's process asks nothing. A loop started from a shell starts without the
+rounds, and the dry iteration does not run `--triage-questions`.
+
 ### The dry iteration
 
 Without `--apply`, `--loop` runs exactly one iteration that writes nothing,
@@ -378,6 +417,13 @@ loop: an exhausted quota, an unreachable tracker, full slots or a run lock held
 by a manual run all end in the next iteration after the interval. The loop
 stops only on a runner error or when its process is asked to stop.
 
+An iteration never waits for an answer. When `label-triage` leaves a scope or
+autonomy group for the human, the iteration marks the task `triage-me` and goes
+on: a marked task is not judged again and is never selected, so the same doubt
+costs one judgement (see [Marking](#marking-the-tasks-left-for-the-human)). The
+questions of marked tasks wait for the next `/autonomous:loop --apply` or
+`/autonomous:run --triage-questions`.
+
 ### Notices
 
 A notice is one line, recorded only when:
@@ -385,6 +431,10 @@ A notice is one line, recorded only when:
 - an iteration finalises an attempt: `<source>:<task> <stage> → <stage now>`,
   where the last part is the stage label the task now carries, or `closed`;
 - an iteration newly retains an attempt: `retained <attempt>: <reason>`;
+- an iteration adds `triage-me` to one or more tasks:
+  `triage-me +<n>: <task>, <task>`, naming how many and at most five of
+  them, and ending with `…` when there are more. A task that already carried
+  `triage-me` produces no notice;
 - the loop stops: `loop stopped: received SIGINT`,
   `loop stopped: received SIGTERM` or `loop stopped: runner error: <message>`.
 
@@ -393,6 +443,7 @@ A session that waits for the person produces no notice. For example:
 ```text
 linear:DOT-98 grill-me → proposal
 retained linear:DOT-77:grill-me:1: <reason>
+triage-me +2: linear:DOT-130, beads:X-12
 ```
 
 `--notices <n>` prints the notices recorded after the first `n`, then
@@ -429,6 +480,43 @@ Ctrl+C on a loop in the foreground of a shell is different: the shell sends
 SIGINT to the commands of the launch too, so a launch in progress can be cut.
 The next `reconcile` with `--apply` recovers that attempt (see "Recovery of a
 pending attempt" in [The reconcile step](#the-reconcile-step)).
+
+## Triage questions mode
+
+```text
+/autonomous:run --triage-questions [--json]
+```
+
+Triage questions mode lists the questions of every task that carries
+`triage-me` and exits. It reads the open tasks of every enabled source as
+`label-triage` does and composes the questions of the marked tasks as that step
+does (see [Questions of marked tasks](#questions-of-marked-tasks)). A marked
+task with a question that its source lists without a description (Linear) is
+read for it; when that read fails, the question is listed without one. It runs no
+step, requests no judgement, needs no quota and takes no lock, and it writes
+nothing. It only combines with `--json`: any other flag is a usage error (exit
+1).
+
+The report carries the count of marked tasks read, every question in the order
+of the step, and a `handoff` of at most 4 questions with `remaining`, in the
+form of [The handoff](#the-handoff). The handoff is emitted without `--apply`
+and is absent when there is no question. With no marked task, the text report
+says `no marked task`. The answers are applied by
+[answer mode](#answer-mode): `--apply --answer <id>=<value>`.
+
+With `--json` the report is one JSON document identified by
+`schema: "autonomous.triage-questions.v1"`:
+`{ schema, startedAt, outcome, marked, questions, handoff?, reasons }`.
+`outcome` is `advance` or `not-evaluable`, `marked` is the count of marked tasks
+read, `questions` holds every question and `reasons` the error when the report
+is not evaluable. The exit code is 0 when every enabled source was read. It is 3
+when a source or the configuration could not be read: the report then gives the
+reason and prints no question.
+
+`/autonomous:run --triage-questions` runs the script once, relays its output,
+and asks the questions of its handoff as it does for a run's handoff (see
+[The round](#the-round)). `/autonomous:loop --apply` runs the mode before it
+starts the loop (see [Starting it](#starting-it)).
 
 ## Answer mode
 
@@ -771,7 +859,8 @@ or any other label: a Beads task that carries `nazaries`, `work` and `grill-me`
 ends with `nazaries`, `work`, the answered autonomy and `proposal`, and one that
 carries `personal`, `AFK` and `proposal` ends with `personal`, `AFK` and
 `implement`. This is the first exception to the rule that the loop never removes
-a label; the second is `taken`.
+a label; the second is `taken`, and the third is `triage-me`, removed by
+`label-triage` and its answers.
 
 A transition cut short reports `failed` with the label sets. A read-back that
 never holds them reads 6 times over 30 s and fails with
@@ -1560,6 +1649,14 @@ says where the task is, and a transition replaces it (see
 in conflict, and triage neither derives it nor asks about it. The runner writes
 it, at launch (see [The `taken` label](#the-taken-label)).
 
+`triage-me` belongs to no group either, with the same standing: never required,
+never missing, never in conflict. It marks a task whose scope or autonomy could
+not be decided without the human. The label names no group: the group in doubt
+is the scope or autonomy group that has no label on the task. `label-triage`
+sets it, or a person does in the tracker, and the runner treats it the same
+either way. While a task carries it, the task is not judged again and is never
+selected (see [Marking the tasks left for the human](#marking-the-tasks-left-for-the-human)).
+
 `personal` is the user's own work. No scope has priority over the other in the
 contract: which scope to prefer is the job of the
 [`select` step](#the-select-step), by machine. `AFK` means an agent may
@@ -1570,19 +1667,21 @@ autonomy, when it has one, is provisional until the grill confirms it.
 `proposal` means the task is ready for proposal preparation, its autonomy
 decided and any grill it needed over. `implement` means the task has a
 proposal and is ready to implement; the loop runs no stage for it yet. `taken` means an agent or a person is
-advancing the task now.
+advancing the task now. `triage-me` means the task is waiting for a person to
+decide its scope or autonomy.
 
 Add `taken` to a task you work on by hand. It is the only evidence that a task
 is taken: a tracker status such as Beads `in_progress` does not count, so work
 done by hand without `taken` can still be selected. A configuration that
-declares aliases for `taken` is rejected. The runner adds and removes `taken`
+declares aliases for `taken` or `triage-me` is rejected. The runner adds and removes `taken`
 only for the attempts it launches (see [The `taken` label](#the-taken-label));
 `label-triage` never does, and a `taken` you added by hand stays until you
 remove it.
 
-The loop never removes a label, with two exceptions: a transition removes the
-stage it leaves and the autonomy labels its answer replaces, and the runner
-removes `taken`. Triage and its answers stay additive. Nothing removes an alias
+The loop never removes a label, with three exceptions: a transition removes the
+stage it leaves and the autonomy labels its answer replaces, the runner
+removes `taken`, and `label-triage` and its answers remove `triage-me`. Triage
+and its answers add every other label and remove none. Nothing removes an alias
 or any other label outside the contract.
 
 Spelling is exact and case-sensitive: `Grill Me` is not `grill-me`, and
@@ -1598,9 +1697,10 @@ Spelling is exact and case-sensitive: `Grill Me` is not `grill-me`, and
 | `work`      | `#2f80ed` |
 | `personal`  | `#27ae60` |
 | `taken`     | `#95a2b3` |
+| `triage-me` | `#f2c94c` |
 
 The loop never creates labels on its own. `--bootstrap-labels` does, `proposal`,
-`implement` and `taken` included: at workspace level on Linear (a same-name label in any
+`implement`, `taken` and `triage-me` included: at workspace level on Linear (a same-name label in any
 team counts as present), per repo on GitHub, and not at all on Beads, where
 labels exist only by use.
 
@@ -1749,7 +1849,8 @@ configured `threshold`, and valid under the contract, is written, and only
 with `--apply`: writes are additive, read back to confirm (a read that does not
 show the write yet is read again, see
 [Read-backs and tracker lag](#read-backs-and-tracker-lag)), and a source stops
-writing on the first mismatch — nothing is ever removed. An unreadable source
+writing on the first mismatch — nothing is removed but the `triage-me` mark (see
+[Marking the tasks left for the human](#marking-the-tasks-left-for-the-human)). An unreadable source
 makes the whole run `not-evaluable`; a failed judgement only drops the LLM's
 contribution, and the step itself never blocks the run (`advance`) —
 everything else is still listed for a human.
@@ -1757,7 +1858,9 @@ everything else is still listed for a human.
 The report carries, per source and group, counts and
 `source → task → labels → reason` lines (whether applied or only proposed,
 the tier, the confidence), the tasks left for a human, and any write failure.
-The counts are keyed by group, `scope`, `autonomy` and `stage`, and each JSON
+With `--apply` the step also marks the tasks it leaves for the human and
+unmarks the tasks it finds complete, and the report lists both (see
+[Marks in the report](#marks-in-the-report)). The counts are keyed by group, `scope`, `autonomy` and `stage`, and each JSON
 record names its group. A source's line in the reasons reads
 `<source>: N read, N complete, N missing scope, N missing autonomy, N missing stage, N in conflict`.
 A deferred autonomy counts as complete. The JSON form carries one record per
@@ -1830,6 +1933,70 @@ first, then run that `--apply` from a shell
 (`bun plugins/autonomous/src/run.ts --account <key> --apply`), because the
 command's timeout cannot hold it.
 
+### Marking the tasks left for the human
+
+`triage-me` (see [The label contract](#the-label-contract)) is the step's only
+memory between runs, and it lives in the tracker. A run with `--apply` adds it,
+as an additive write with its read-back, to every unmarked task for which the
+run lists a scope or autonomy group for the human as `asked`. It is the last
+write to that task, after the task's other labels, so a task that gains `work`
+by rule and whose autonomy is judged at 0.70 ends with `work` and `triage-me`.
+This holds in a run and in an iteration of the loop. Without `--apply` the mark
+is reported as proposed and nothing is written.
+
+The step does not mark:
+
+- a task whose present labels conflict, when no other group is in doubt;
+- a task not judged, such as one whose judgement failed;
+- a task beyond the judgement cap;
+- a task of a source whose writes stopped during the run.
+
+A task the step left unmarked is judged again by the next run. When the tracker
+lacks `triage-me`, the mark is not written: it is reported as proposed with the
+detail `triage-me is missing on <source>; run --bootstrap-labels`, and the
+task's other writes continue (see
+[Labels the tracker lacks](#labels-the-tracker-lacks)).
+
+A marked task is not judged again and does not count against the cap of judged
+tasks. Rules and aliases still apply to it, and what they derive is written as
+for any other task: a marked task that a person gave `AFK` gets `proposal` by
+rule. A scope or autonomy group that no rule decides is listed for the human
+with tier `marked` and no confidence, and `select` never takes the task (see
+[The `select` step](#the-select-step)).
+
+The mark comes off when the task is complete: it has a scope label, and either
+an autonomy label with a stage label or the stage `grill-me`, and no group in
+conflict, counting the labels the run wrote to it. It comes off in any of three
+ways:
+
+- a run with `--apply` finds the task complete, whether a person added the
+  missing label in the tracker or a rule completed it in that run, and removes
+  `triage-me` after the run's additive writes to the task succeeded;
+- the answer that completes the task removes it (see
+  [Applying an answer](#applying-an-answer));
+- the person adds the missing label, and the next run with `--apply` removes it.
+
+A marked task that is not complete keeps the label. Without `--apply` the removal
+is reported as proposed. `triage-me` is the only label triage ever removes, and
+it removes it through the tracker's own label removal with a read-back. A
+removal that is not confirmed is reported as failed with the labels found, leaves
+the step's outcome unchanged and stops no source: the next run tries again.
+
+A person who removes `triage-me` without adding the missing label asks for a new
+judgement: the next run judges the task again and marks it again if the doubt
+stands.
+
+### Marks in the report
+
+After the derived labels, the text report shows one line per task marked or
+unmarked by the run, as `source → task → triage-me` with the status `marked`,
+`unmarked` or `proposed`, and under `triage-me:` the count of tasks that carried
+`triage-me` when the run read them. The JSON data of the step carries the same
+information as `marked` and `unmarked`, lists of
+`{ source, taskId, status, detail }` with the status `applied`, `proposed` or
+`failed`, and `markedRead`, the count. A record of a group listed with tier
+`marked` has the status `asked`.
+
 ### Questions for the human
 
 The step contributes one question to the [handoff](#the-handoff) for each
@@ -1846,6 +2013,9 @@ These are not `asked` and become no question; they stay only in the report:
   `personal`;
 - a task not judged;
 - a task beyond the cap.
+
+Those three do not mark the task either (see
+[Marking the tasks left for the human](#marking-the-tasks-left-for-the-human)).
 
 Questions are ordered like the judgement:
 
@@ -1933,6 +2103,19 @@ An autonomy question for a Beads task with no stage label, judged `HITL` at
 }
 ```
 
+### Questions of marked tasks
+
+A missing scope or autonomy group of a marked task that no rule or alias decides
+is listed for the human as `asked`, with tier `marked`, no confidence and a
+reason that names `triage-me`. It becomes a question under the same rules, order
+and form as every other asked group, so a marked task with `work` evidence is
+asked before an unmarked `personal` task judged in the same run. The question
+shows the tier `marked` and no confidence on its second line, and no option
+carries the `judged` prefix. A marked task's question for autonomy offers `AFK`,
+`HITL`, `grill-me` and `Later`, in that order, when the task has no stage label.
+The answer is routed and validated as any other (see
+[Applying an answer](#applying-an-answer)).
+
 ### Applying an answer
 
 In [answer mode](#answer-mode), the step applies an answer to one of its
@@ -1954,11 +2137,19 @@ labels found, and nothing is written; so is a `grill-me` answer once the task
 carries a stage label, naming it. One whose task cannot be read is `failed`,
 naming the command that failed.
 
+After an applied answer, the step removes `triage-me` when the task carried it
+and, read back, is complete (see
+[Marking the tasks left for the human](#marking-the-tasks-left-for-the-human)).
+The answer is `applied` whether or not the removal succeeded, and a removal that
+is not confirmed is named in its detail. An answer that leaves another group in
+doubt keeps the label; `Later`, and an answer that is `skipped`, `rejected` or
+`failed`, leave it too.
+
 The remaining answers go through the same additive write, read-back (which
 waits out read lag in the same way) and per-source stop as the step's own
 writes, with the same check that the tracker has each label (see
 [Labels the tracker lacks](#labels-the-tracker-lacks)).
-Nothing is removed. A label the tracker lacks makes that answer `failed`, naming
+Nothing is removed except `triage-me`, below. A label the tracker lacks makes that answer `failed`, naming
 the label and `--bootstrap-labels`, without stopping the source. A
 write error or a read-back mismatch, which ends with `(read 6 times over 30 s)`,
 makes that answer `failed`, with the label sets, and stops further answers to
@@ -2016,11 +2207,12 @@ In order, the step:
     | ----- | ----------------- | ----------------------------------------------------------------------------------------------------------------- |
     | 1     | classification    | A scope, autonomy or stage group is missing or in conflict; autonomy is not missing while the stage is `grill-me` |
     | 2     | taken             | The task carries `taken`                                                                                          |
-    | 3     | labelled this run | `label-triage` applied a label to it in this run, or a write to it failed in this run                             |
-    | 4     | unsupported stage | Its next stage is not supported                                                                                   |
-    | 5     | blocked           | It has an open blocker                                                                                            |
-    | 6     | split             | It has an open child, or its next stage is `proposal` and it has any child, open or closed                        |
-    | 7     | no free slot      | Only in an iteration of the loop: the slot kind of its next stage is full                                         |
+    | 3     | triage-me         | The task carries `triage-me`                                                                                      |
+    | 4     | labelled this run | `label-triage` applied a label to it in this run, or a write to it failed in this run                             |
+    | 5     | unsupported stage | Its next stage is not supported                                                                                   |
+    | 6     | blocked           | It has an open blocker                                                                                            |
+    | 7     | split             | It has an open child, or its next stage is `proposal` and it has any child, open or closed                        |
+    | 8     | no free slot      | Only in an iteration of the loop: the slot kind of its next stage is full                                         |
 
     Classification counts present contract labels only: an alias or a
     structural rule does not rescue a task here. A task in `grill-me` without an
@@ -2030,6 +2222,12 @@ In order, the step:
     `label-triage` only proposed or asked about is not excluded, and neither is
     one whose label was skipped because its tracker lacks it. Tracker status does
     not exclude a task; only `taken` does.
+
+    A marked task is excluded as `triage-me` even when its labels are complete
+    and the mark is only stale, as in a run without `--apply`. A marked task that
+    is also incomplete is excluded under classification. A task from which this
+    run's `label-triage` removed `triage-me` is not excluded for it. The
+    selection report names the exclusion `triage-me`, after `taken`.
 
     **No free slot** comes last, so a task that is blocked, split or otherwise
     excluded keeps that reason. It applies only in an iteration of the loop
@@ -3240,6 +3438,7 @@ tiering:
 | autonomy (and scope without evidence) by judgement | llm  |
 | threshold, validity, ordering, cap                 | code |
 | writes, label check and read-back                  | code |
+| marking and unmarking, the completeness check      | code |
 | report                                             | code |
 | questions: selection, order, text, options         | code |
 | answers: validation, writes and read-back          | code |

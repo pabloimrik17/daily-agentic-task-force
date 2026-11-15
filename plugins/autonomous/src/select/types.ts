@@ -36,6 +36,7 @@ export type StageName = StageLabel;
 export type Exclusion =
     | "classification"
     | "taken"
+    | "triage-me"
     | "labelled-this-run"
     | "unsupported-stage"
     | "blocked"

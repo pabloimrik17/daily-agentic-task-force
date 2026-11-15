@@ -227,6 +227,13 @@ attempt is finalised or discarded, or when no session was ever created; a
 retained attempt keeps it. It is neither a property nor a stage.
 _Avoid_: lock
 
+**Triage label**:
+`triage-me`: marks a task whose scope or autonomy could not be decided without
+the human. While a task carries it, the task is not judged again and is never a
+candidate. It is removed once the missing labels are on the task. Like the
+taken label, it is neither a property nor a stage.
+_Avoid_: undecided, needs-triage
+
 **Stage prompt**:
 The instructions the runner gives the agent session it opens for a task's
 stage. The runner writes them to a prompt file in the attempt's directory, and

@@ -32,6 +32,7 @@ const detection = (
     overrides: Partial<TrackerTask> = {},
 ): Detection => ({
     task: task(overrides),
+    marked: false,
     groups: { scope, autonomy, stage },
 });
 
