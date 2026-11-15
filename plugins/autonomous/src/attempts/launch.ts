@@ -315,7 +315,7 @@ function stageEnv(
         repository,
         branch: branchOf(records, task),
         readers: {
-            context: io.context(config, io.trackers(config))[task.source],
+            context: io.context(config)[task.source],
             pullRequests: io.pullRequests(repository),
             openspec: io.openspec,
         },

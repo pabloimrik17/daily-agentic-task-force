@@ -1,6 +1,6 @@
 import type { AutonomousConfig, Source } from "../config.ts";
 import type { AuthoredComment } from "../label-triage/trackers/cli-json.ts";
-import type { Trackers, TrackerResult } from "../label-triage/trackers/tracker.ts";
+import type { TrackerResult } from "../label-triage/trackers/tracker.ts";
 import type { WorkTask } from "../select/types.ts";
 
 export interface RelatedTask {
@@ -36,4 +36,4 @@ export interface ContextReader {
 
 export type ContextReaders = Record<Source, ContextReader>;
 
-export type ContextReaderFactory = (config: AutonomousConfig, trackers: Trackers) => ContextReaders;
+export type ContextReaderFactory = (config: AutonomousConfig) => ContextReaders;
