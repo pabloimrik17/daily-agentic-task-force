@@ -78,7 +78,7 @@ describe("beadsWorkReader", () => {
         exec.mockResolvedValueOnce({ ok: true, stdout: "[]" });
         expect(await work.detail(task)).toEqual({
             ok: true,
-            value: { ...task, url: null, parent: null, childCount: 0 },
+            value: { ...task, url: null, parent: null, children: [], childCount: 0 },
         });
     });
     it("leaves the child count unread in the listing", async () => {
@@ -89,11 +89,15 @@ describe("beadsWorkReader", () => {
         const { exec, work } = reader();
         const listed = await work.list();
         if (!listed.ok) throw new Error(listed.error);
-        exec.mockResolvedValueOnce({ ok: true, stdout: JSON.stringify(closedChildren) });
+        const open = listing.filter((entry) => entry.parent === "demo-a");
+        exec.mockResolvedValueOnce({
+            ok: true,
+            stdout: JSON.stringify([...open, ...closedChildren]),
+        });
         const result = await work.detail(listed.value[0]!);
         expect(result.ok && [result.value.children, result.value.childCount]).toEqual([
             ["demo-c", "demo-d"],
-            2,
+            4,
         ]);
         expect(exec.mock.calls[2]).toEqual([
             [
@@ -107,6 +111,21 @@ describe("beadsWorkReader", () => {
                 "--parent",
                 "demo-a",
             ],
+        ]);
+    });
+    it("reads a child reopened since the listing as open", async () => {
+        const { exec, work } = reader();
+        const listed = await work.list();
+        if (!listed.ok) throw new Error(listed.error);
+        const [first, ...rest] = closedChildren;
+        exec.mockResolvedValueOnce({
+            ok: true,
+            stdout: JSON.stringify([{ ...first, status: "open" }, ...rest]),
+        });
+        const result = await work.detail(listed.value[1]!);
+        expect(result.ok && [result.value.children, result.value.childCount]).toEqual([
+            [first!.id],
+            closedChildren.length,
         ]);
     });
     it("counts no children for a task that was never a parent", async () => {

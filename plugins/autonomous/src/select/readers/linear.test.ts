@@ -101,7 +101,7 @@ describe("linearWorkReader", () => {
                 ...query,
                 nodes: query.nodes.map((node) =>
                     node.identifier === "DEMO-201"
-                        ? { ...node, state: { ...node.state, type: "completed" } }
+                        ? { ...node, state: { ...node.state, name: "Done", type: "completed" } }
                         : node,
                 ),
             },
@@ -111,6 +111,18 @@ describe("linearWorkReader", () => {
         if (!listed.ok) throw new Error(listed.error);
         const result = await work.detail(listed.value.find((task) => task.id === "DEMO-82")!);
         expect(result.ok && [result.value.children, result.value.childCount]).toEqual([[], 3]);
+    });
+    it("reads a child whose state name changed since the listing as open", async () => {
+        const reopened = detail.children.nodes.map((child) =>
+            child.identifier === "DEMO-200"
+                ? { ...child, state: { ...child.state, name: "Backlog" } }
+                : child,
+        );
+        const result = await detailOf({ ...detail, children: { nodes: reopened } });
+        expect(result.ok && [result.value.children, result.value.childCount]).toEqual([
+            ["DEMO-108", "DEMO-200", "DEMO-999"],
+            4,
+        ]);
     });
     it("counts no children for an issue without sub-issues", async () => {
         const result = await detailOf({ ...detail, children: { nodes: [] } });

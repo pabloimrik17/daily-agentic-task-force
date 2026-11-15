@@ -53,13 +53,13 @@ export interface TransitionedIn {
     at: Date;
 }
 
-// The record goes to the task's open attempt of the stage left, else to its first open attempt
-// of any stage; none leaves no record. Returns why it could not be written, or null.
+// The record goes to the task's open attempt of the stage left; none leaves no record. Returns
+// why it could not be written, or null.
 export async function recordTransition(input: TransitionedIn): Promise<string | null> {
     const { state, ref, from, answer, by, at } = input;
     try {
         const open = (await listRecords(state)).filter((record) => opens(record, ref));
-        const chosen = open.find((record) => record.stage === from) ?? open[0];
+        const chosen = open.find((record) => record.stage === from);
         if (chosen !== undefined) {
             await writeTransitioned(attemptDir(state, chosen.id), answer, at, by);
         }

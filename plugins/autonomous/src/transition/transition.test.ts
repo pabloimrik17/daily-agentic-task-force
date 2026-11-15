@@ -1715,7 +1715,7 @@ describe("transition record: An applied transition leaves a record in the open a
         );
     });
 
-    it("an open attempt of another stage holds it too", async () => {
+    it("an open attempt of another stage is left without a record", async () => {
         const state = tempState();
         states.push(state);
         const proposal = attemptId(TASK, "proposal", 1);
@@ -1724,10 +1724,7 @@ describe("transition record: An applied transition leaves a record in the open a
         const settled = await answered(state, ["work", "grill-me"]);
 
         expect(settled.status).toBe("applied");
-        expect(await recordIn(state, proposal)).toMatchObject({
-            ok: true,
-            value: { answer: ["HITL"] },
-        });
+        expect(existsSync(transitionedPath(attemptDir(state, proposal)))).toBe(false);
     });
 
     it("several open attempts: the first of the sorted list gets it", async () => {

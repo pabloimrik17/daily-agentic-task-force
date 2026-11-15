@@ -529,10 +529,10 @@ the JSON document `applied` is `true` and `handoff` is null:
 autonomous transition — started 2026-11-01T09:00:00.000Z
 outcome: advance
 applied: true
-task: linear DOT-110 → "Grill-me stage" → labels [personal, AFK, proposal]
+task: linear DOT-110 → "Grill-me stage" → labels [personal, AFK, implement]
 ```
 
-The task's labels are those read before the write. A failure to write
+The task's labels are those read back after the move. A failure to write
 `transition.json` after an applied transition is added to the reasons and does
 not change the outcome or `applied`.
 
@@ -595,12 +595,12 @@ missing or in conflict is not transitioned: the answer is `rejected` with the
 reason transition mode gives. An `implement` answer for an `AFK` task is
 applied, because the human approving is enough.
 
-When a transition is applied and read back, and the task has an open attempt
-(the same lookup as for the persistence receipt), `transition.json` is written
-in that attempt's directory. The attempt is the task's open attempt of the stage
-being left, or, failing that, its first open attempt: a grill attempt that still
-holds the task, for instance with a cleanup pending, must not have its record
-overwritten by the proposal's.
+When a transition is applied and read back, and the task has an open attempt of
+the stage being left (the same lookup as for the persistence receipt),
+`transition.json` is written in that attempt's directory. An open attempt of
+another stage gets no record: a grill attempt that still holds the task, for
+instance with a cleanup pending, must not have its record overwritten by the
+proposal's.
 
 ```json
 {
