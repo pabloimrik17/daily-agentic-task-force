@@ -34,6 +34,7 @@ None.
 ### Modified Capabilities
 
 - `quota-gate`: reads `openusage.limits.v2` from `openusage claude`, never passes `--force`, counts accounts only from `providers`, reads a failing account as stale, and reads no output after a non-zero exit. A v1 document names OpenUsage 0.8 or later. Two requirements are split for length; their rules are unchanged.
+- `autonomous-run`: the examples of two requirements pass an OpenUsage 0.8 account id to `--account`. Their rules are unchanged.
 
 ## Impact
 
