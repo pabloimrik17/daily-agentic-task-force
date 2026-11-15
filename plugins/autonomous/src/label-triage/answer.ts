@@ -3,10 +3,12 @@
 // options for the task's stage, so only a group still missing is written, through
 // the step's own additive write. The answer wins over the evidence and the
 // judgement the run had, and whether the task is still open is never checked.
+// A marked task the answer completes loses `triage-me` in the same write (spec
+// label-triage, "An answer removes the mark").
 
 import type { Answer } from "../args.ts";
 import { type TaskKey, taskKey } from "../attempts/record.ts";
-import { type Group, isValidDecision } from "../label-contract/contract.ts";
+import { type Group, isValidDecision, TRIAGE_LABEL } from "../label-contract/contract.ts";
 import { detect, type Detection, type GroupState } from "../label-contract/detect.ts";
 import type { AnswerContext, AnswerRecord, AnswerStatus } from "../runner.ts";
 import { violation } from "./decide.ts";
@@ -15,6 +17,7 @@ import { type Derivation, recordsForAutonomy } from "./rules.ts";
 import type { TrackerTask } from "./trackers/tracker.ts";
 import {
     applyDerivations,
+    type MarkRecord,
     READ_BACK_MISMATCH,
     type TriageRecord,
     type WriteFailure,
@@ -29,6 +32,7 @@ interface Writes {
     byKey: ReadonlyMap<string, TriageRecord>;
     failures: readonly WriteFailure[];
     missing: readonly string[];
+    unmarked: ReadonlyMap<TaskKey, MarkRecord>;
 }
 
 export async function answerLabelTriage(
@@ -54,6 +58,9 @@ export async function answerLabelTriage(
         byKey: new Map(written.records.map((record) => [recordKey(record), record])),
         failures: written.failures,
         missing: written.missing,
+        unmarked: new Map(
+            written.unmarked.map((record) => [taskKey(record.source, record.taskId), record]),
+        ),
     };
     return checked.map((entry) => ("record" in entry ? entry.record : fromWrites(entry, writes)));
 }
@@ -144,13 +151,24 @@ function fromWrites(
     const unapplied = records.find((record) => record.status !== "applied");
     if (unapplied === undefined) {
         const added = records.flatMap((record) => record.labels).join(", ");
+        const unmarked = writes.unmarked.get(taskKey(entry.task.source, entry.task.id));
         return {
             ...base,
             status: "applied",
-            detail: `added ${added} to ${entry.task.source} ${entry.task.id}, read back`,
+            detail: `added ${added} to ${entry.task.source} ${entry.task.id}, read back${unmarkedDetail(unmarked)}`,
         };
     }
     return { ...base, status: "failed", detail: unappliedDetail(unapplied, writes) };
+}
+
+// The answer stays applied whatever the removal of `triage-me` did; the next run retries it.
+function unmarkedDetail(record: MarkRecord | undefined): string {
+    if (record === undefined) {
+        return "";
+    }
+    return record.status === "applied"
+        ? `, removed ${TRIAGE_LABEL}`
+        : `; ${TRIAGE_LABEL} not removed: ${record.detail ?? record.status}`;
 }
 
 // applyDerivations returns one record per derivation, so a missing one is a bug here.

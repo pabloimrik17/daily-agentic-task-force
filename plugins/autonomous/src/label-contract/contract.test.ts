@@ -24,7 +24,7 @@ function normalise(text: string): string {
 }
 
 describe("LABELS, GROUPS and COLOURS", () => {
-    it("lists exactly the eight contract labels", () => {
+    it("lists exactly the nine contract labels", () => {
         expect(LABELS).toEqual([
             "work",
             "personal",
@@ -34,6 +34,7 @@ describe("LABELS, GROUPS and COLOURS", () => {
             "proposal",
             "implement",
             "taken",
+            "triage-me",
         ]);
     });
 
@@ -59,6 +60,7 @@ describe("LABELS, GROUPS and COLOURS", () => {
             work: "#2f80ed",
             personal: "#27ae60",
             taken: "#95a2b3",
+            "triage-me": "#f2c94c",
         });
     });
 
@@ -91,6 +93,16 @@ describe("LABELS, GROUPS and COLOURS", () => {
         expect(MEANINGS["grill-me"]).toBe(
             "The task must be refined with a human in a grill before anyone works on it.",
         );
+    });
+
+    it("keeps triage-me in the vocabulary, in no group, with its colour and a meaning", () => {
+        expect(LABELS).toContain("triage-me");
+        expect(isContractLabel("triage-me")).toBe(true);
+        for (const labels of Object.values(GROUPS)) {
+            expect(labels).not.toContain("triage-me");
+        }
+        expect(COLOURS["triage-me"]).toBe("#f2c94c");
+        expect(MEANINGS["triage-me"]).toBeTruthy();
     });
 
     it("states that taken means someone is advancing the task now", () => {

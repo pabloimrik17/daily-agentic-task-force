@@ -154,6 +154,16 @@ describe("parseConfig", () => {
         });
     });
 
+    it("rejects an alias for triage-me with the alias's path", () => {
+        const input = valid();
+        (input.sources.beads.aliases as Record<string, string[]>)["triage-me"] = ["needs-human"];
+        const result = parseConfig(input);
+        expect(result).toEqual({
+            ok: false,
+            error: "configuration does not match autonomous.config.v1: $.sources.beads.aliases.triage-me is not a recognised field",
+        });
+    });
+
     it("returns the selection settings", () => {
         const result = parseConfig(valid());
         expect(result.ok && result.value.selection).toEqual({ model: "sonnet", effort: "high" });

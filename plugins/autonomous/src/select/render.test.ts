@@ -313,6 +313,27 @@ describe("renderSelect: candidates set aside", () => {
         expect(text).not.toContain("set aside");
     });
 
+    it("names the triage-me exclusion after taken", () => {
+        const text = selectStep.render({
+            step: "select",
+            tier: "code",
+            outcome: "advance",
+            reasons: [],
+            data: {
+                ...data,
+                excluded: [
+                    { source: "linear", id: "M-1", title: "Doubtful", reason: "triage-me" },
+                    { source: "linear", id: "T-1", title: "Busy", reason: "taken" },
+                    { source: "linear", id: "L-1", title: "Done now", reason: "labelled-this-run" },
+                ],
+            },
+        });
+
+        expect(text).toContain("    triage-me: 1\n      linear → M-1 → Doubtful");
+        expect(text.indexOf("triage-me: 1")).toBeGreaterThan(text.indexOf("taken: 1"));
+        expect(text.indexOf("triage-me: 1")).toBeLessThan(text.indexOf("labelled this run: 1"));
+    });
+
     it("names the no-free-slot exclusion last", () => {
         const text = selectStep.render({
             step: "select",

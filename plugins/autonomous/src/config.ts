@@ -14,6 +14,7 @@ import { fileURLToPath } from "node:url";
 import {
     type ContractLabel,
     isContractLabel,
+    isUngroupedLabel,
     isScope,
     type Scope,
 } from "./label-contract/contract.ts";
@@ -382,8 +383,9 @@ function aliasesValue(
     const aliasPath = `${path}.${key}`;
     const result: Partial<Record<ContractLabel, string[]>> = {};
     for (const label of Object.keys(entry)) {
-        // taken is set by hand or by an agent, never inferred, so it has no aliases.
-        if (!isContractLabel(label) || label === "taken") {
+        // A label outside the groups is set by a person or by the runner, never inferred,
+        // so it has no aliases.
+        if (!isContractLabel(label) || isUngroupedLabel(label)) {
             throw new ParseError(`${aliasPath}.${label} is not a recognised field`);
         }
         const values = stringArray(entry, label, aliasPath);

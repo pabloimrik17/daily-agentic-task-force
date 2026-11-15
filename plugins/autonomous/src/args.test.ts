@@ -24,6 +24,7 @@ const DEFAULTS: RunArgs = {
     parallel: undefined,
     interval: undefined,
     notices: undefined,
+    triageQuestions: false,
 };
 
 const REQUIRE_LOOP = "--grills, --parallel and --interval require --loop";
@@ -646,5 +647,42 @@ describe("parseArgs loop flags", () => {
         expect(USAGE).not.toContain("/autonomous:run --loop");
         expect(USAGE).not.toContain("/autonomous:run --notices");
         expect(USAGE).toContain("--notices <n>");
+    });
+});
+
+describe("parseArgs --triage-questions", () => {
+    const TRIAGE_ONLY = "--triage-questions can only be combined with --json";
+
+    it("reads --triage-questions alone", () => {
+        expect(parseArgs(["--triage-questions"])).toEqual(accepted({ triageQuestions: true }));
+    });
+
+    it("reads --triage-questions combined with --json", () => {
+        expect(parseArgs(["--json", "--triage-questions"])).toEqual(
+            accepted({ triageQuestions: true, json: true }),
+        );
+    });
+
+    it.each([
+        [["--triage-questions", "--apply"]],
+        [["--triage-questions", "--task", "linear:DOT-120"]],
+        [["--triage-questions", "--account", "claude"]],
+        [["--triage-questions", "--force"]],
+        [["--triage-questions", "--loop"]],
+        [["--triage-questions", "--answer", "linear:DOT-1:scope=personal"]],
+        [["--apply", "--triage-questions", "--answer", "linear:DOT-1:scope=personal"]],
+        [["--triage-questions", "--no-handoff"]],
+        [["--triage-questions", "--bootstrap-labels"]],
+        [["--triage-questions", "--notices", "0"]],
+        [["--triage-questions", "--stage", "grill-me", "--task", "linear:DOT-120"]],
+        [["--apply", "--triage-questions", "--discard", "linear:DOT-120"]],
+        [["--loop", "--triage-questions", "--grills", "1"]],
+        [["--apply", "--transition", "linear:DOT-110", "--triage-questions"]],
+    ])("rejects %j", (argv) => {
+        expect(parseArgs(argv)).toEqual({ ok: false, error: TRIAGE_ONLY });
+    });
+
+    it("names the mode in the usage text", () => {
+        expect(USAGE).toContain("/autonomous:run --triage-questions [--json]");
     });
 });

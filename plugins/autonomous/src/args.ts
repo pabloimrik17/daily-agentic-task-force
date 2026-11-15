@@ -32,6 +32,7 @@ export interface RunArgs {
     parallel: number | undefined; // only with --loop
     interval: number | undefined; // minutes; only with --loop
     notices: number | undefined; // the count of notices already shown
+    triageQuestions: boolean; // combinable with --json only
 }
 
 export type ParseArgsResult = { ok: true; args: RunArgs } | { ok: false; error: string };
@@ -39,6 +40,7 @@ export type ParseArgsResult = { ok: true; args: RunArgs } | { ok: false; error: 
 export const USAGE = [
     "Usage: /autonomous:run [--account <provider-key>] [--force] [--json] [--apply] [--no-handoff]",
     "       /autonomous:run --bootstrap-labels [--json]",
+    "       /autonomous:run --triage-questions [--json]",
     "       /autonomous:run --apply --answer <id>=<value>[,<value>]... [--json]",
     "       /autonomous:run --task <source>:<id> [--stage <stage>] [--account <provider-key>] [--force] [--json] [--apply] [--no-handoff]",
     "       /autonomous:run --apply --discard <attempt-id|source:id> [--release-workspace] [--json]",
@@ -62,6 +64,7 @@ const SWITCHES = new Map<string, (args: RunArgs) => void>([
     ["--no-handoff", (args) => (args.noHandoff = true)],
     ["--release-workspace", (args) => (args.releaseWorkspace = true)],
     ["--loop", (args) => (args.loop = true)],
+    ["--triage-questions", (args) => (args.triageQuestions = true)],
 ]);
 
 // Flags that take the next argument as their value; each returns an error or null.
@@ -105,6 +108,7 @@ export function parseArgs(argv: readonly string[]): ParseArgsResult {
         parallel: undefined,
         interval: undefined,
         notices: undefined,
+        triageQuestions: false,
     };
     for (let i = 0; i < argv.length; i++) {
         const arg = argv[i] ?? "";
@@ -315,6 +319,17 @@ const modeFlags = (args: RunArgs) =>
         logging(args),
     ].some(Boolean);
 
+// Every flag other than --json, for the mode that accepts only that.
+const otherThanJson = (args: RunArgs) =>
+    [
+        args.apply,
+        args.loop,
+        args.notices !== undefined,
+        limited(args),
+        accountOrForce(args),
+        modeFlags(args),
+    ].some(Boolean);
+
 // Every flag other than --apply and --json, for the modes that accept only those.
 const otherFlags = (args: RunArgs) =>
     [
@@ -335,6 +350,10 @@ const otherModes = (args: RunArgs, ...modes: ((args: RunArgs) => boolean)[]) =>
 
 // Flag combinations that are usage errors, checked in order.
 const COMBINATIONS: readonly (readonly [(args: RunArgs) => boolean, string])[] = [
+    [
+        (args) => args.triageQuestions && otherThanJson(args),
+        "--triage-questions can only be combined with --json",
+    ],
     [
         (args) =>
             args.noHandoff && (args.bootstrapLabels || answering(args) || transitioning(args)),

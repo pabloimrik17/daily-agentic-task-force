@@ -2,19 +2,19 @@ import { readFileSync } from "node:fs";
 
 import { describe, expect, it } from "vitest";
 
-import { LABELS } from "../label-contract/contract.ts";
+import { isUngroupedLabel, LABELS } from "../label-contract/contract.ts";
 
 // criteria.md is the single text the judgement prompt and the creation helper print;
-// it covers the grouped labels only, since triage never decides taken.
+// it covers the grouped labels only, since triage never decides taken or triage-me.
 const CRITERIA = readFileSync(new URL("./criteria.md", import.meta.url), "utf8");
 
 describe("criteria.md", () => {
-    it.each(LABELS.filter((label) => label !== "taken"))("names %s", (label) => {
+    it.each(LABELS.filter((label) => !isUngroupedLabel(label)))("names %s", (label) => {
         expect(CRITERIA).toContain(`\`${label}\``);
     });
 
-    it("says nothing about taken", () => {
-        expect(CRITERIA).not.toContain("`taken`");
+    it.each(LABELS.filter(isUngroupedLabel))("says nothing about %s", (label) => {
+        expect(CRITERIA).not.toContain(`\`${label}\``);
     });
 
     it("never says entry group", () => {

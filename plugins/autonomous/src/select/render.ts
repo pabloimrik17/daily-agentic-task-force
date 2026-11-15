@@ -6,6 +6,7 @@ import type { Excluded, Exclusion, SelectData, SelectedUnit } from "./types.ts";
 const EXCLUSION_NAMES: Record<Exclusion, string> = {
     classification: "classification",
     taken: "taken",
+    "triage-me": "triage-me",
     "labelled-this-run": "labelled this run",
     "unsupported-stage": "unsupported stage",
     blocked: "blocked",

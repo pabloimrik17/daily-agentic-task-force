@@ -60,6 +60,9 @@ function triageResult(records: TriageRecord[]): StepResult<LabelTriageData> {
             remainder: 0,
             judgement: null,
             failures: [],
+            marked: [],
+            unmarked: [],
+            markedRead: 0,
         },
     };
 }
@@ -103,6 +106,63 @@ describe("selectCandidates", () => {
                 candidates: [],
                 excluded: [{ source: "linear", id: "TEST-1", title: task.title, reason: "taken" }],
             },
+        });
+    });
+
+    // spec work-selection, "A marked task is excluded"
+    it("excludes a task carrying triage-me as triage-me (stale mark)", async () => {
+        const task = workTask("linear", "TEST-1", ["personal", "grill-me", "triage-me"]);
+
+        expect(await evaluate([task])).toMatchObject({
+            ok: true,
+            value: {
+                candidates: [],
+                excluded: [
+                    { source: "linear", id: "TEST-1", title: task.title, reason: "triage-me" },
+                ],
+            },
+        });
+    });
+
+    it("excludes a marked task without autonomy or stage under classification (marked and incomplete)", async () => {
+        const task = workTask("linear", "TEST-1", ["personal", "triage-me"]);
+
+        expect(await evaluate([task])).toMatchObject({
+            ok: true,
+            value: { candidates: [], excluded: [{ reason: "classification" }] },
+        });
+    });
+
+    it("excludes a taken and marked task as taken", async () => {
+        const task = workTask("linear", "TEST-1", ["personal", "grill-me", "taken", "triage-me"]);
+
+        expect(await evaluate([task])).toMatchObject({
+            ok: true,
+            value: { candidates: [], excluded: [{ reason: "taken" }] },
+        });
+    });
+
+    it("excludes a marked task as triage-me before labelled this run and detail", async () => {
+        const task = workTask("linear", "TEST-1", ["personal", "AFK", "implement", "triage-me"], {
+            blockedBy: ["TEST-0"],
+        });
+        const detail = vi.fn(() => Promise.reject(new Error("detail must not be read")));
+
+        expect(
+            await evaluate([task], { detail, labelledThisRun: new Set(["linear:TEST-1"]) }),
+        ).toMatchObject({
+            ok: true,
+            value: { candidates: [], excluded: [{ reason: "triage-me" }] },
+        });
+        expect(detail).not.toHaveBeenCalled();
+    });
+
+    it("does not exclude a task read without the mark, nothing written to it (mark removed in this run)", async () => {
+        const task = workTask("linear", "TEST-1", ["work", "HITL", "proposal"]);
+
+        expect(await evaluate([task])).toMatchObject({
+            ok: true,
+            value: { candidates: [{ task, stage: "proposal" }], excluded: [] },
         });
     });
 

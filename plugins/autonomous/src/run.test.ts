@@ -27,6 +27,7 @@ import { capacityStep } from "./capacity/step.ts";
 import { type AutonomousConfig, CONFIG_SCHEMA, EXAMPLE_PATH } from "./config.ts";
 import type { ContextReader } from "./context/types.ts";
 import { COLOURS, LABELS } from "./label-contract/contract.ts";
+import type { TriageQuestionsReport } from "./label-triage/questions-mode.ts";
 import {
     config,
     fakeJudgement,
@@ -38,6 +39,7 @@ import type {
     Tracker,
     TrackerLabel,
     TrackerResult,
+    TrackerTask,
     Trackers,
 } from "./label-triage/trackers/tracker.ts";
 import {
@@ -381,7 +383,7 @@ describe("main --bootstrap-labels", () => {
             [
                 `label bootstrap — started ${NOW.toISOString()}`,
                 "outcome: advance",
-                "  linear    workspace: created work, personal, AFK, HITL, grill-me, proposal, implement, taken",
+                "  linear    workspace: created work, personal, AFK, HITL, grill-me, proposal, implement, taken, triage-me",
             ].join("\n"),
         ]);
     });
@@ -416,7 +418,7 @@ describe("main --bootstrap-labels", () => {
             [
                 `label bootstrap — started ${NOW.toISOString()}`,
                 "outcome: not-evaluable",
-                `  linear    workspace: present work, personal, AFK, HITL, grill-me, implement, taken; failed proposal (${error})`,
+                `  linear    workspace: present work, personal, AFK, HITL, grill-me, implement, taken, triage-me; failed proposal (${error})`,
             ].join("\n"),
         ]);
     });
@@ -429,7 +431,7 @@ describe("main --bootstrap-labels", () => {
             [
                 `label bootstrap — started ${NOW.toISOString()}`,
                 "outcome: advance",
-                "  linear    workspace: recoloured AFK (was #000000); present work, personal, HITL, grill-me, proposal, implement, taken",
+                "  linear    workspace: recoloured AFK (was #000000); present work, personal, HITL, grill-me, proposal, implement, taken, triage-me",
             ].join("\n"),
         ]);
     });
@@ -458,7 +460,7 @@ describe("main --bootstrap-labels", () => {
             [
                 `label bootstrap — started ${NOW.toISOString()}`,
                 "outcome: not-evaluable",
-                `  linear    workspace: present work, personal, HITL, grill-me, proposal, implement, taken; failed AFK (${error})`,
+                `  linear    workspace: present work, personal, HITL, grill-me, proposal, implement, taken, triage-me; failed AFK (${error})`,
             ].join("\n"),
         ]);
     });
@@ -505,6 +507,158 @@ describe("main --bootstrap-labels", () => {
         const broken = { ...linear([]), listLabels: () => Promise.reject(new Error("boom")) };
         const { d, err } = bootstrapDeps(broken);
         expect(await main(["--bootstrap-labels"], d)).toBe(1);
+        expect(err).toEqual(["autonomous run failed: boom"]);
+    });
+});
+
+describe("main --triage-questions", () => {
+    const dir = mkdtempSync(join(tmpdir(), "autonomous-triage-questions-"));
+    const configPath = join(dir, "config.json");
+    writeFileSync(
+        configPath,
+        JSON.stringify({
+            schema: CONFIG_SCHEMA,
+            sources: {
+                linear: { enabled: true },
+                beads: { enabled: false, directory: "/repo" },
+                github: { enabled: false, repos: [] },
+            },
+            judgement: {
+                model: "claude-sonnet-5",
+                effort: "medium",
+                threshold: 0.95,
+                cap: 25,
+                batch: 20,
+            },
+            selection: { model: "sonnet", effort: "high" },
+        }),
+    );
+    afterAll(() => rmSync(dir, { recursive: true, force: true }));
+
+    // Six marked Linear tasks, each lacking the scope, and an unmarked one with a doubt.
+    const sixMarked = [1, 2, 3, 4, 5, 6].map((n) =>
+        task("linear", `DOT-${n}`, ["triage-me", "AFK", "proposal"]),
+    );
+
+    function questionsDeps(
+        listing: TrackerTask[] | string,
+        env: Record<string, string> = { AUTONOMOUS_CONFIG: configPath },
+    ) {
+        const calls: string[] = [];
+        const judged = fakeJudgement(() => ({ ok: false, error: "judgement was not expected" }));
+        const counts = { steps: 0, openUsage: 0 };
+        const step: Step = {
+            id: "counted",
+            run: () => {
+                counts.steps++;
+                return Promise.reject(new Error("a step ran"));
+            },
+            render: () => "",
+        };
+        const result = deps([step], {
+            env,
+            openUsage: () => {
+                counts.openUsage++;
+                return Promise.resolve({ ok: false, error: "unused" });
+            },
+            judgement: judged,
+            trackers: () => trackers(calls, { linear: listing }),
+        });
+        return { ...result, calls, counts, judged };
+    }
+
+    it("Marked tasks waiting: runs no step, judges nothing, writes nothing and lists six questions", async () => {
+        const { d, out, calls, counts, judged } = questionsDeps([
+            ...sixMarked,
+            task("linear", "DOT-9", []),
+        ]);
+        expect(await main(["--triage-questions"], d)).toBe(0);
+        expect(counts).toEqual({ steps: 0, openUsage: 0 });
+        expect(judged.requests).toEqual([]);
+        expect(calls).toEqual(["linear:listTasks"]);
+        expect(out[0]).toContain("marked: 6 tasks");
+        expect(out[0]?.match(/^question /gm)).toHaveLength(6);
+        expect(out[0]?.split("\n").at(-1)).toMatch(/^handoff: /);
+    });
+
+    it("Nothing marked: says there is no marked task and exits 0", async () => {
+        const { d, out } = questionsDeps([task("linear", "DOT-1", ["AFK", "proposal"])]);
+        expect(await main(["--triage-questions"], d)).toBe(0);
+        expect(out).toEqual([
+            [
+                `triage questions — started ${NOW.toISOString()}`,
+                "outcome: advance",
+                "no marked task",
+            ].join("\n"),
+        ]);
+    });
+
+    it("prints one autonomous.triage-questions.v1 document with --json and a handoff of 4 with remaining 2", async () => {
+        const { d, out } = questionsDeps(sixMarked);
+        expect(await main(["--triage-questions", "--json"], d)).toBe(0);
+        expect(out).toHaveLength(1);
+        const report = JSON.parse(out[0] ?? "") as TriageQuestionsReport;
+        expect(report).toMatchObject({
+            schema: "autonomous.triage-questions.v1",
+            outcome: "advance",
+            marked: 6,
+        });
+        expect(report.questions).toHaveLength(6);
+        expect(report.handoff?.questions).toHaveLength(4);
+        expect(report.handoff?.remaining).toBe(2);
+    });
+
+    it("Source unreachable: the reason names Linear and the command, no question, exit 3", async () => {
+        const { d, out } = questionsDeps("linear issue query --json: linear failed: unreachable");
+        expect(await main(["--triage-questions"], d)).toBe(3);
+        expect(out[0]).toContain("outcome: not-evaluable");
+        expect(out[0]).toContain("reason: linear: linear issue query --json");
+        expect(out[0]).not.toContain("question ");
+    });
+
+    it("exits 3 with the error on stderr when the configuration cannot be loaded", async () => {
+        const missing = join(dir, "absent.json");
+        const { d, out, err, calls } = questionsDeps([], { AUTONOMOUS_CONFIG: missing });
+        expect(await main(["--triage-questions"], d)).toBe(3);
+        expect(err).toHaveLength(1);
+        expect(err[0]).toContain(missing);
+        expect(out).toEqual([]);
+        expect(calls).toEqual([]);
+    });
+
+    it("prints the missing configuration as one autonomous.triage-questions.v1 document with --json", async () => {
+        const missing = join(dir, "absent.json");
+        const { d, out } = questionsDeps([], { AUTONOMOUS_CONFIG: missing });
+        expect(await main(["--triage-questions", "--json"], d)).toBe(3);
+        expect(JSON.parse(out[0] ?? "")).toMatchObject({
+            schema: "autonomous.triage-questions.v1",
+            outcome: "not-evaluable",
+            questions: [],
+        });
+    });
+
+    it("takes no lock: another run holding it does not stop the mode", async () => {
+        const { dir: held } = heldLock();
+        const { d } = questionsDeps(sixMarked, {
+            AUTONOMOUS_CONFIG: configPath,
+            AUTONOMOUS_STATE: held,
+        });
+        expect(await main(["--triage-questions"], d)).toBe(0);
+    });
+
+    it("Combined with apply: prints a usage message and exits 1 without reading a tracker", async () => {
+        const { d, err, calls } = questionsDeps(sixMarked);
+        expect(await main(["--triage-questions", "--apply"], d)).toBe(1);
+        expect(err[0]).toContain("--triage-questions can only be combined with --json");
+        expect(calls).toEqual([]);
+    });
+
+    it("exits 1 when the mode itself fails", async () => {
+        const { d, err } = questionsDeps([]);
+        d.trackers = () => {
+            throw new Error("boom");
+        };
+        expect(await main(["--triage-questions"], d)).toBe(1);
         expect(err).toEqual(["autonomous run failed: boom"]);
     });
 });
