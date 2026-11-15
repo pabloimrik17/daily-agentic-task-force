@@ -34,6 +34,11 @@ describe("findOutsideFences", () => {
         expect(find("```\n``` js\n## Heading\n```\n## Heading")).toBe(4);
     });
 
+    it("does not open a fence on a code span that starts a line", () => {
+        expect(find("```example```\n## Heading")).toBe(1);
+        expect(find("~~~ a ` b\n## Heading\n~~~")).toBe(-1);
+    });
+
     it("treats an unclosed fence as running to the end", () => {
         expect(find("```\n## Heading\n\n## Heading")).toBe(-1);
     });

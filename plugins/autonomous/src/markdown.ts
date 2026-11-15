@@ -1,4 +1,5 @@
-const FENCE = /^ {0,3}(`{3,}|~{3,})/;
+// A backtick fence opens only when the rest of its line holds no backtick: ```code``` is a code span.
+const FENCE = /^ {0,3}(`{3,}(?!.*`)|~{3,})/;
 
 function closes(line: string, open: string): boolean {
     const run = line.trim();
