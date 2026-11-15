@@ -67,7 +67,11 @@ function renderMarks({ marked, unmarked, markedRead }: LabelTriageData): string[
 }
 
 function renderMark(mark: MarkRecord, done: "marked" | "unmarked"): string {
-    const state = { applied: done, proposed: `proposed ${done}`, failed: "failed" }[mark.status];
+    const state = {
+        applied: done,
+        proposed: `proposed ${done}`,
+        failed: done === "marked" ? "failed marking" : "failed unmarking",
+    }[mark.status];
     const line = `${mark.source} → ${mark.taskId} → ${TRIAGE_LABEL} → ${state}`;
     return mark.status === "applied" || mark.detail === null ? line : `${line} — ${mark.detail}`;
 }

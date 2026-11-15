@@ -210,7 +210,7 @@ When `--notices <n>` finds no live loop, it SHALL first wait up to 10 seconds fo
 
 ### Requirement: Questions before the loop starts
 
-Before it starts the loop, `/autonomous:loop --apply` SHALL execute the step runner with `--triage-questions` once and ask every question the report lists, in the report's order, in rounds of at most 4, as `/autonomous:run` asks a run's handoff. After each round it SHALL apply that round's answers through answer mode. It SHALL start the loop when no question is left, or as soon as every question of a round is answered `Later`.
+Before it starts the loop, `/autonomous:loop --apply` SHALL execute the step runner with `--triage-questions` once and ask every question the report lists, in the report's order, in rounds of at most 4, as `/autonomous:run` asks a run's handoff. After each round it SHALL apply that round's answers through answer mode. It SHALL start the loop when no question is left, or as soon as every question of a round is answered `Later`. When `--triage-questions` does not finish within the command's time limit, the command SHALL say so and start the loop without asking.
 
 #### Scenario: Marked tasks when the loop starts
 
@@ -236,6 +236,11 @@ Before it starts the loop, `/autonomous:loop --apply` SHALL execute the step run
 
 - **WHEN** `--triage-questions` reports no marked task
 - **THEN** the command starts the loop without asking anything
+
+#### Scenario: The questions are not read in time
+
+- **WHEN** `--triage-questions` is still running when the command's time limit ends
+- **THEN** the command says the questions could not be read in time, does not run the mode again, and starts the loop without asking anything
 
 ### Requirement: The loop's process never asks
 

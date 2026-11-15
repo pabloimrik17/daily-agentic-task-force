@@ -38,6 +38,9 @@ command.
 
     - Exit code 3: show its output in a code block and go to step 2 without
       asking anything.
+    - The Bash tool stops it at the timeout: say in one line that the triage
+      questions could not be read in time, and go to step 2 without asking
+      anything. Never run it again.
     - No question in the report's `questions`: go to step 2.
     - Otherwise take the report's full `questions` list, not only its
       `handoff`, and ask it in rounds of at most 4, in the list's order. For

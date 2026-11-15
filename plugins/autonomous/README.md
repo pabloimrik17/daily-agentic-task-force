@@ -392,7 +392,10 @@ round is answered `Later`: nothing is written for that round and the remaining
 questions are not asked. A question answered `Later` is not asked again in the
 same start, because the list is read once. When `--triage-questions` exits with
 code 3, the command shows its reason in a code block and starts the loop without
-asking.
+asking. When it does not finish within the command's ten minutes, the command
+says so in one line and starts the loop without asking: the mode reads the
+description of each marked Linear task one by one, so a long queue of marks takes
+longer, and the questions wait for the next start.
 
 The loop's process asks nothing. A loop started from a shell starts without the
 rounds, and the dry iteration does not run `--triage-questions`.
