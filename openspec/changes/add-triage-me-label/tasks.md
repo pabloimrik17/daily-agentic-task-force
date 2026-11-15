@@ -44,7 +44,7 @@ Implement after `add-autonomous-loop-and-slot-limits`. Groups 1 to 5 touch only 
 ## 8. Integration
 
 - [x] 8.1 Run `bun run lint:oxfmt`, `bun run lint:eslint`, `bun run lint:knip`, `bun run lint:fallow`, `bun run lint:marketplace`, `bun run typecheck` and `bun run test`. Verify that all pass.
-- [ ] 8.2 On the real trackers, with the user's go-ahead, run `/autonomous:run --bootstrap-labels` and check that `triage-me` exists on Linear and on each configured GitHub repository. Keep the report as evidence in the change folder.
+- [x] 8.2 On the real trackers, with the user's go-ahead, run `/autonomous:run --bootstrap-labels` and check that `triage-me` exists on Linear and on each configured GitHub repository. Keep the report as evidence in the change folder.
 - [x] 8.3 On the real trackers, run `/autonomous:run` without `--apply` and check the marks it proposes against the tasks it leaves for the human. Keep the report as evidence.
 - [ ] 8.4 On the real trackers, with the user's go-ahead, run `/autonomous:run --apply` once, then `--triage-questions`, answer one question and check that its task loses `triage-me`. Run again and check that no marked task is judged. Keep the evidence in the change folder.
 
