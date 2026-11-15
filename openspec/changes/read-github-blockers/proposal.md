@@ -8,9 +8,9 @@ The `select` step's GitHub reader sets `blockedBy` to `null`, so a GitHub task i
 - **Only an open blocker blocks, wherever it lives.** A closed blocker never blocks, whether it was closed as completed or as not planned. An open blocker in a repository outside `sources.github.repos` still blocks. This is the glossary's **Open blocker**, and it matches Linear, where a canceled blocker does not count and blockers are read across all teams.
 - **A cut-short list fails the read.** gh asks for the first 50 nodes of each list. When `totalCount` is higher than the nodes returned, for either list, the read fails and the step is `not-evaluable`, with a reason that names the task. A blocker the token cannot see, which counts in `totalCount` without a node, fails the read the same way.
 - **The order of checks does not change.** The `blocked` exclusion still runs before `detail()`, for every source, and reading blockers adds no `gh` call per task.
-- **The "not evaluated" note is removed.** GitHub was its only user. The `notEvaluated` field of the step's data and the report's `not evaluated:` line go away. **BREAKING** for a consumer of `--json` that reads `notEvaluated`; nothing in the plugin does.
+- **The "not evaluated" note is removed.** GitHub was its only user. The `notEvaluated` field of the step's data and the report's `not evaluated:` line go away. Nothing in the plugin reads that field.
 - **Docs.** The plugin README describes the GitHub blocker read and drops the note. The glossary's **Open blocker** entry, written during the DOT-121 grill, ships with this change.
-- **Release.** A `feat(autonomous):` minor release. The configuration is unchanged.
+- **Release.** A `feat(autonomous):` minor release, with no `!` and no `BREAKING CHANGE` footer: an autonomous feature is never a major release. The configuration is unchanged.
 
 **Out of scope**:
 

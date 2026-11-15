@@ -58,7 +58,7 @@ With blockers and children both read for GitHub, nothing is left unevaluated. `S
 
 - [A task with more than 50 blockers or blocked tasks fails every run] → The reason names the task, so the person can fix it; no configured repository is close to that today.
 - [A blocker in a private repository the token cannot read counts in `totalCount` without a node, and fails the read] → Every configured repository belongs to the user today. When it happens, the reason names the task, which is better than treating it as blocking or ignoring it silently.
-- [A consumer of `--json` that reads `notEvaluated` breaks] → Nothing in the plugin reads it; the README drops it and the release notes say so.
+- [A consumer of `--json` that reads `notEvaluated` no longer finds it] → Nothing in the plugin reads it, and the README drops it. The release stays minor.
 - [Older gh rejects the two fields] → The README already requires gh 2.100.0 or later; it gains the two fields beside `subIssues`. With an older gh the listing fails and the step is `not-evaluable`, as it does for `subIssues` today.
 
 ## Migration Plan
