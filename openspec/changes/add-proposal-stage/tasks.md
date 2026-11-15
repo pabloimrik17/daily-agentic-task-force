@@ -15,7 +15,7 @@
 
 ## 4. Task context
 
-- [x] 4.1 Record the real output of each context read as a fixture, with read-only commands on existing tasks: `linear issue view --json` for an issue with relations and an attachment, `bd show --json --include-comments --include-dependents`, and `gh issue view --json comments,subIssues,parent,closedByPullRequestsReferences`. Verify that each fixture is committed under `src/context/fixtures/` and that the fields design D4 names are present, or note in the design which are not.
+- [x] 4.1 Record the real output of each context read as a fixture, with read-only commands on existing tasks: `linear issue view --json` for an issue with relations and an attachment (it prints no relations, so the fixtures are of the `linear api` query, see design D4), `bd show --json --include-comments --include-dependents`, and `gh issue view --json comments,subIssues,parent,closedByPullRequestsReferences`. Verify that each fixture is committed under `src/context/fixtures/` and that the fields design D4 names are present, or note in the design which are not.
 - [x] 4.2 Implement the `ContextReader` port and its three implementations in `src/context/` (design D4). Verify with one test file per source on the fixtures, one test per scenario of "The run gathers the task's context" and "Context that only some trackers have", plus a missing field that yields an empty list and a note.
 - [x] 4.3 Render the Context section as a pure function in `src/context/render.ts`. Verify with `render.test.ts`: a full context, an empty one that renders no empty list, and comments in order.
 

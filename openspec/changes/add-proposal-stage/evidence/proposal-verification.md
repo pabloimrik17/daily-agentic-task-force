@@ -834,7 +834,8 @@ pull request either way.
 **F4. The transition report lists the labels from before the move.** Its task line
 shows `proposal` and no `implement` although `applied: true`. The labels are read
 before the transition is applied. The task's labels afterwards, read separately,
-have `implement`.
+have `implement`. Fixed after this verification: an applied transition now reports
+the labels after the move.
 
 **F5. A task in `implement` is excluded as unsupported, not as taken.** After the
 reconcile of case 1 the launch step of the same command waits with

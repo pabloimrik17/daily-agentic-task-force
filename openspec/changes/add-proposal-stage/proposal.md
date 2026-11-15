@@ -49,7 +49,7 @@ A task whose grill is over, or that needed none, carries `proposal` and stops th
     - the contract: `label-contract/contract.ts`;
     - the stage contract, the registry and launch: `stages/{stage,registry}.ts`, `attempts/launch.ts`;
     - the new stage: `stages/proposal/` (stage, prompt, prerequisites, context rendering);
-    - the context reads: `select/readers/{linear,beads,github}.ts` and their types;
+    - the context reads: `context/{linear,beads,github}.ts` and their types, and the child count in `select/readers/{linear,beads,github}.ts`;
     - selection: `select/{stage,candidates,render}.ts`;
     - the transition: `transition/{mode,answer,receipt}.ts`;
     - persist mode: `persist/persist.ts`;
