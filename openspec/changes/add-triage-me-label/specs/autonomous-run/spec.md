@@ -4,7 +4,7 @@
 
 ### Requirement: Triage questions mode
 
-With `--triage-questions`, the run SHALL read the open tasks of every enabled source as `label-triage` does, compose the questions of the marked tasks as that step does, print them and exit. No step SHALL run, no judgement SHALL be requested and nothing SHALL be written. It needs no quota and takes no lock.
+With `--triage-questions`, the run SHALL read the open tasks of every enabled source as `label-triage` does, compose the questions of the marked tasks as that step does, print them and exit. For a marked task with a question whose listing carries no description, it SHALL read the task for its description; a read that fails SHALL leave the question without one. No step SHALL run, no judgement SHALL be requested and nothing SHALL be written. It needs no quota and takes no lock.
 
 #### Scenario: Marked tasks waiting
 
@@ -15,6 +15,16 @@ With `--triage-questions`, the run SHALL read the open tasks of every enabled so
 
 - **WHEN** the run is invoked with `--triage-questions` and no task carries `triage-me`
 - **THEN** the report says there is no marked task and the process exits with code 0
+
+#### Scenario: Description not listed
+
+- **WHEN** the run is invoked with `--triage-questions` and a marked Linear task lacks an autonomy label
+- **THEN** the task is read and its question includes the first 300 characters of its description
+
+#### Scenario: Description unreadable
+
+- **WHEN** the description of a marked Linear task cannot be read
+- **THEN** its question is listed without a description and the exit code is 0
 
 ### Requirement: Triage questions report
 

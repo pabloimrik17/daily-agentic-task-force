@@ -57,7 +57,7 @@ Alternative considered: mark only what the round left unanswered. Rejected: the 
 A pure function decides completeness from a label set: a scope label, and either an autonomy label with a stage label or the stage `grill-me`, with no group in conflict. Two callers use it:
 
 - The step, after the additive writes of a marked task succeeded, on the task's labels plus the labels just written.
-- `answer.ts`, after an answer was applied, on the labels the read-back returned.
+- `answer.ts`, after an answer was applied, on the labels it read from the task plus the labels the answer wrote, each confirmed by its read-back.
 
 Both remove `triage-me` through the tracker's removal. A failed removal is reported and stops nothing: the next run tries again.
 
@@ -67,7 +67,7 @@ Both remove `triage-me` through the tracker's removal. A failed removal is repor
 
 ### D7. `--triage-questions` is a mode, not a step
 
-A new mode in `run.ts`, beside `--bootstrap-labels`: it loads the configuration, reads the sources with the readers of `label-triage`, keeps the marked tasks, runs detection and rules without writing, and passes the `asked` records to `questionsFor`. The report builder of the handoff is reused. It takes no lock, because it reads no attempt and writes nothing.
+A new mode in `run.ts`, beside `--bootstrap-labels`: it loads the configuration, reads the sources with the readers of `label-triage`, keeps the marked tasks, runs detection and rules without writing, and passes the `asked` records to `questionsFor`. The report builder of the handoff is reused. It takes no lock, because it reads no attempt and writes nothing. A marked task is never judged, so nothing has read the description of one that Linear lists without it: the mode reads those tasks one by one, only when they have a question, and lists the question without a description when the read fails. The step does not, because it runs in every iteration of the loop and hands off at most four questions.
 
 Alternative considered: have the loop command run `/autonomous:run --apply` once before the loop. Rejected: that run would also judge, write and launch a session.
 
