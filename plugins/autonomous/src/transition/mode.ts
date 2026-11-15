@@ -227,7 +227,12 @@ async function leaveProposal(
     });
     // A record that cannot be written costs the logbook its answer, not the transition.
     const reasons = failure === null ? [] : [failure];
-    return { ...report, outcome: "advance", applied: true, reasons };
+    // The read-back confirmed exactly these labels, so the report shows the task as it is now.
+    const labels = [
+        ...task.labels.filter((label) => label !== row.from && label !== row.to),
+        row.to,
+    ];
+    return { ...report, task: { ...task, labels }, outcome: "advance", applied: true, reasons };
 }
 
 // With --json a configuration that fails to load still yields one document;

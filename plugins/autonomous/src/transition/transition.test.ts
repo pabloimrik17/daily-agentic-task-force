@@ -332,6 +332,7 @@ describe("transition mode: Transition mode", () => {
         );
 
         expect(report).toMatchObject({ outcome: "advance", applied: true, reasons: [] });
+        expect(report.task?.labels).toEqual(["personal", "AFK", "implement"]);
         expect(report).not.toHaveProperty("handoff");
         expect(exitCodeFor(report.outcome)).toBe(0);
         expect(writes(calls)).toEqual([
@@ -617,7 +618,7 @@ describe("transition mode: Transition report", () => {
                 "autonomous transition — started 2026-11-01T09:00:00.000Z",
                 "outcome: advance",
                 "applied: true",
-                'task: linear DOT-110 → "Grill-me stage" → labels [personal, AFK, proposal]',
+                'task: linear DOT-110 → "Grill-me stage" → labels [personal, AFK, implement]',
             ].join("\n"),
         );
         expect(JSON.parse(renderTransitionJson(report))).toMatchObject({ applied: true });

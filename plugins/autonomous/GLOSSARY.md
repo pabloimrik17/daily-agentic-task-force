@@ -7,8 +7,10 @@ attempt to advance a stage.
 Labels come in three groups: scope, autonomy and stage. Scope and autonomy are
 properties that persist, and each transition replaces the stage
 ([ADR 0001](docs/adr/0001-properties-persist-stages-replace.md)). The grill
-stage is implemented (see [the README](README.md#the-grill-me-stage)); the
-prompts of the stages after it are not.
+and proposal preparation are implemented (see the README's
+[grill-me stage](README.md#the-grill-me-stage) and
+[proposal stage](README.md#the-proposal-stage)); the stage that implements a
+proposal is not.
 
 ## Language
 

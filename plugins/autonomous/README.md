@@ -421,7 +421,9 @@ bun plugins/autonomous/src/run.ts --apply --answer 'transition:linear:DOT-121=im
 The report holds the start time, the outcome, the task (its source, id, title
 and labels, or null when it was not read), `applied`, the reasons and the
 handoff. `applied` is `true` only when the mode itself moved the task, which
-only the `AFK` path does, and `false` otherwise. The outcome is `advance`
+only the `AFK` path does, and `false` otherwise. The task's labels are the ones
+read before the mode acted, except when `applied` is `true`: they are then the
+labels after the move, as read back. The outcome is `advance`
 exactly when a handoff is emitted or the transition was applied, and
 `not-evaluable` otherwise, with the reason:
 
