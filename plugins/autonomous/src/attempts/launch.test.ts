@@ -284,16 +284,19 @@ describe("launch: the unit", () => {
 });
 
 describe("launch: preconditions", () => {
-    // parseArgs refuses `--stage proposal` and selection supports grill-me only, so the args are set here.
+    // Every stage id is registered and selection excludes `implement` as unsupported, so no
+    // input reaches launch with a stage that has no implementation; the args force one here.
     it("waits naming a stage without implementation, before any workspace", async () => {
-        const { ctx, workspace, sessions } = setup({ args: { stage: "proposal" } });
+        const { ctx, workspace, sessions } = setup({
+            args: { stage: "implement" as RunArgs["stage"] },
+        });
 
         expect(await launchStep.run(ctx)).toMatchObject({
             step: "launch",
             tier: "code",
             outcome: "wait",
-            reasons: ["stage proposal has no implementation"],
-            data: { stage: "proposal", repository: null },
+            reasons: ["stage implement has no implementation"],
+            data: { stage: "implement", repository: null },
         });
         expect(workspace.calls).toEqual([]);
         expect(sessionCalls(sessions.calls)).toEqual([]);

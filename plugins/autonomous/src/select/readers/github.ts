@@ -7,11 +7,11 @@ import type { TaskLink, WorkReader, WorkTask } from "../types.ts";
 
 // gh 2.100 gives a sub-issue node no repository field: its `url` is the only place a cross-repo
 // sub-issue names its own.
-const ISSUE_URL = /^https?:\/\/[^/]+\/([^/]+\/[^/]+)\/issues\/\d+$/;
+export const ISSUE_URL = /^https?:\/\/[^/]+\/([^/]+\/[^/]+)\/issues\/\d+$/;
 
 const FIELDS = "subIssues,url,parent";
 
-function splitId(id: string): { repository: string; number: string } {
+export function splitId(id: string): { repository: string; number: string } {
     const hash = id.lastIndexOf("#");
     return { repository: id.slice(0, hash), number: id.slice(hash + 1) };
 }

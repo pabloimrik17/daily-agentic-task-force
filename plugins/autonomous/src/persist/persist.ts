@@ -62,7 +62,6 @@ const DOCUMENT_PATHS: Readonly<Record<Document, (dir: string) => string>> = {
     summary: stageSummaryPath,
 };
 
-// What persist mode does for a stage: the files it requires, its steps and its comment's wording.
 interface Plan {
     requires: readonly Document[];
     steps: readonly PersistStep[];

@@ -105,7 +105,6 @@ function excluding(task: WorkTask, reason: Exclusion): Excluded {
     return { source: task.source, id: task.id, title: task.title, reason };
 }
 
-// What a task that survived every check before detail still is once detail has filled it in.
 function afterDetail(task: WorkTask): { candidate: Candidate } | { reason: Exclusion } {
     if (isSplit(task)) {
         return { reason: "split" };

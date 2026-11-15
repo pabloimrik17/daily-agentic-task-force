@@ -34,17 +34,17 @@ describe("renderContext", () => {
         );
         expect(text).toBe(
             [
-                "### Comments\n\n#### Comment 1\n\nFirst comment.\n\n#### Comment 2\n\nSecond comment.",
-                "### Parent\n\nDEMO-82: Synthetic parent (In Progress), https://linear.app/demo/issue/DEMO-82/synthetic\n\n#### Parent description\n\nThe parent's goal.",
-                "### Children\n\n- DEMO-1: Synthetic blocker (Done), https://linear.app/demo/issue/DEMO-109/synthetic",
-                "### Blocked by\n\n- DEMO-109: Synthetic blocker (Done), https://linear.app/demo/issue/DEMO-109/synthetic",
-                "### Blocks\n\n- demo-8: No url (open)",
-                "### Related\n\n- DEMO-2: Synthetic blocker (Done), https://linear.app/demo/issue/DEMO-109/synthetic",
-                "### Duplicates\n\n- DEMO-3: Synthetic blocker (Done), https://linear.app/demo/issue/DEMO-109/synthetic",
-                "### Project\n\nSynthetic project",
-                "### Attachments\n\n- [A link](https://example.com/a)",
-                "### Pull requests\n\n- [demo/one#4](https://github.com/demo/one/pull/4)",
-                "### Not read\n\n- github: dependencies were not read",
+                "#### Comments\n\n##### Comment 1\n\nFirst comment.\n\n##### Comment 2\n\nSecond comment.",
+                "#### Parent\n\nDEMO-82: Synthetic parent (In Progress), https://linear.app/demo/issue/DEMO-82/synthetic\n\n##### Parent description\n\nThe parent's goal.",
+                "#### Children\n\n- DEMO-1: Synthetic blocker (Done), https://linear.app/demo/issue/DEMO-109/synthetic",
+                "#### Blocked by\n\n- DEMO-109: Synthetic blocker (Done), https://linear.app/demo/issue/DEMO-109/synthetic",
+                "#### Blocks\n\n- demo-8: No url (open)",
+                "#### Related\n\n- DEMO-2: Synthetic blocker (Done), https://linear.app/demo/issue/DEMO-109/synthetic",
+                "#### Duplicates\n\n- DEMO-3: Synthetic blocker (Done), https://linear.app/demo/issue/DEMO-109/synthetic",
+                "#### Project\n\nSynthetic project",
+                "#### Attachments\n\n- [A link](https://example.com/a)",
+                "#### Pull requests\n\n- [demo/one#4](https://github.com/demo/one/pull/4)",
+                "#### Not read\n\n- github: dependencies were not read",
             ].join("\n\n"),
         );
     });
@@ -58,7 +58,7 @@ describe("renderContext", () => {
     it("keeps the notes of an otherwise empty context", () => {
         expect(renderContext(context({ notes: ["github: dependencies were not read"] }))).toBe(
             "The task has no comments, relations, project, attachments or linked pull requests." +
-                "\n\n### Not read\n\n- github: dependencies were not read",
+                "\n\n#### Not read\n\n- github: dependencies were not read",
         );
     });
 
@@ -66,13 +66,13 @@ describe("renderContext", () => {
         const text = renderContext(context({ comments: ["alpha", "beta"], blockedBy: [BLOCKER] }));
         expect(text.indexOf("alpha")).toBeLessThan(text.indexOf("beta"));
         expect(text.indexOf("beta")).toBeLessThan(text.indexOf("DEMO-109"));
-        expect(text).not.toContain("### Children");
+        expect(text).not.toContain("#### Children");
     });
 
     it("renders a parent without a description as one line", () => {
         const text = renderContext(context({ parent: { ...BLOCKER, description: null } }));
         expect(text).toBe(
-            "### Parent\n\nDEMO-109: Synthetic blocker (Done), https://linear.app/demo/issue/DEMO-109/synthetic",
+            "#### Parent\n\nDEMO-109: Synthetic blocker (Done), https://linear.app/demo/issue/DEMO-109/synthetic",
         );
     });
 });

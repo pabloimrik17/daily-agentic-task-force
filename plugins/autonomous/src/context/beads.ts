@@ -1,6 +1,3 @@
-// Beads context (spec proposal-stage, "The run gathers the task's context"): one
-// `bd show --json --include-comments --include-dependents` carries the comments, the
-// dependencies with their type (the parent among them, with its description) and the dependents.
 // An issue without relations omits the lists, so an absent list is an empty one.
 
 import type { BeadsConfig } from "../config.ts";

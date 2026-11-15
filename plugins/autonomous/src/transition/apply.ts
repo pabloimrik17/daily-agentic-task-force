@@ -33,7 +33,6 @@ interface Moving {
     wait?: Wait;
 }
 
-// A phase returns why it failed, or null when it did its part.
 type Phase = (moving: Moving) => Promise<string | null>;
 
 const NOTHING_REMOVED = "; nothing was removed";

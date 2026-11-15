@@ -1,6 +1,4 @@
-// The body of the proposal prompt's Context section (spec proposal-stage, "The proposal prompt"):
-// what the run read about the task, in the order the agent should weigh it. A list with nothing in
-// it is not rendered, and neither is its heading.
+// The headings start one level below the Context section's own, which the prompt renders at the third.
 
 import type { ContextLink, RelatedTask, TaskContext } from "./types.ts";
 
@@ -15,7 +13,7 @@ function bullets(lines: string[]): string {
 }
 
 function section(heading: string, body: string): string {
-    return `### ${heading}\n\n${body}`;
+    return `#### ${heading}\n\n${body}`;
 }
 
 function tasks(heading: string, list: RelatedTask[]): string[] {
@@ -28,14 +26,14 @@ function links(heading: string, list: ContextLink[]): string[] {
 }
 
 function comments(list: string[]): string[] {
-    const entries = list.map((body, index) => `#### Comment ${index + 1}\n\n${body}`);
+    const entries = list.map((body, index) => `##### Comment ${index + 1}\n\n${body}`);
     return list.length === 0 ? [] : [section("Comments", entries.join("\n\n"))];
 }
 
 function parent(value: TaskContext["parent"]): string[] {
     if (value === null) return [];
     const description =
-        value.description === null ? "" : `\n\n#### Parent description\n\n${value.description}`;
+        value.description === null ? "" : `\n\n##### Parent description\n\n${value.description}`;
     return [section("Parent", `${relatedLine(value)}${description}`)];
 }
 

@@ -1,19 +1,14 @@
-// GitHub context (spec proposal-stage, "The run gathers the task's context" and "Context that
-// only some trackers have"): one `gh issue view --json` carries the comments, the sub-issues, the
-// parent and the pull requests that close the issue. Its parent has no body, and GitHub
-// dependencies are not read, so each leaves a note.
+// The parent in `gh issue view --json` has no body, so a second call reads it.
 
 import type { Exec } from "../exec.ts";
+import type { TrackerResult } from "../label-triage/trackers/tracker.ts";
 import { commentBodies, runJson } from "../label-triage/trackers/cli-json.ts";
 import { array, type Json, number, object, string } from "../validate.ts";
-import { absent, emptyContext, splitGithubId } from "./shared.ts";
+import { ISSUE_URL, splitId } from "../select/readers/github.ts";
+import { absent, emptyContext } from "./shared.ts";
 import type { ContextLink, ContextReader, RelatedTask, TaskContext } from "./types.ts";
 
 const FIELDS = "comments,subIssues,parent,closedByPullRequestsReferences";
-
-// gh gives an issue node no repository, so a cross-repository sub-issue or parent names its own in
-// its url.
-const ISSUE_URL = /^https?:\/\/[^/]+\/([^/]+\/[^/]+)\/issues\/\d+$/;
 
 function relatedTask(value: unknown, path: string, repository: string): RelatedTask {
     const entry = object(value, path);
@@ -35,9 +30,8 @@ function children(root: Json, repository: string, notes: string[]): RelatedTask[
     return nodes.map((item, index) => relatedTask(item, `$.subIssues.nodes[${index}]`, repository));
 }
 
-function parent(root: Json, repository: string, notes: string[]): TaskContext["parent"] {
+function parent(root: Json, repository: string): TaskContext["parent"] {
     if (absent(root.parent)) return null;
-    notes.push("github: the parent's description was not read");
     return { ...relatedTask(root.parent, "$.parent", repository), description: null };
 }
 
@@ -75,7 +69,7 @@ function parseContext(repository: string): (value: unknown) => TaskContext {
         return {
             ...emptyContext(),
             comments: comments(root),
-            parent: parent(root, repository, notes),
+            parent: parent(root, repository),
             children: children(root, repository, notes),
             pullRequests: pullRequests(root, notes),
             notes,
@@ -83,17 +77,37 @@ function parseContext(repository: string): (value: unknown) => TaskContext {
     };
 }
 
+async function withParentBody(
+    exec: Exec,
+    context: TaskContext,
+): Promise<TrackerResult<TaskContext>> {
+    if (context.parent === null) return { ok: true, value: context };
+    const { repository, number: issue } = splitId(context.parent.id);
+    const result = await runJson(
+        exec,
+        `gh issue view ${issue} --repo ${repository} --json body`,
+        ["issue", "view", issue, "--repo", repository, "--json", "body"],
+        (value) => string(object(value, "$"), "body", "$"),
+    );
+    if (!result.ok) return result;
+    return {
+        ok: true,
+        value: { ...context, parent: { ...context.parent, description: result.value } },
+    };
+}
+
 export function githubContext(exec: Exec): ContextReader {
     return {
         source: "github",
-        read(task) {
-            const { repository, number: issue } = splitGithubId(task.id);
-            return runJson(
+        async read(task) {
+            const { repository, number: issue } = splitId(task.id);
+            const result = await runJson(
                 exec,
                 `gh issue view ${issue} --repo ${repository} --json ${FIELDS}`,
                 ["issue", "view", issue, "--repo", repository, "--json", FIELDS],
                 parseContext(repository),
             );
+            return result.ok ? withParentBody(exec, result.value) : result;
         },
     };
 }

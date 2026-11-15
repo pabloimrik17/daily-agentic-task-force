@@ -83,8 +83,7 @@ export function beadsWorkReader(exec: Exec, config: BeadsConfig): WorkReader {
                 }));
             return { ok: true, value: tasks };
         },
-        // The listing already holds the parent; closed children are not in it, so they are counted
-        // by listing the task's children of every status.
+        // Closed children are not in the listing, so count them by listing every status.
         detail(task) {
             return runJson(
                 exec,

@@ -192,7 +192,6 @@ function asking(
     return { ...report, outcome: "advance", task, handoff: buildHandoff([question]) };
 }
 
-// The autonomy decides: HITL waits for the human's approval, AFK moves on now.
 async function leaveProposal(
     report: TransitionReport,
     ref: TaskRef,

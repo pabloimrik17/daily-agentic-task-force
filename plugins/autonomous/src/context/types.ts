@@ -1,6 +1,3 @@
-// The context a stage's prompt carries about its task, one level deep (spec proposal-stage,
-// "The run gathers the task's context"; design D4).
-
 import type { AutonomousConfig, Source } from "../config.ts";
 import type { Trackers, TrackerResult } from "../label-triage/trackers/tracker.ts";
 import type { WorkTask } from "../select/types.ts";

@@ -1,7 +1,8 @@
 import { existsSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { mkdir } from "node:fs/promises";
 
-import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { STAGES } from "../stages/registry.ts";
 
 import type { ConfigLoad } from "../config.ts";
 import { task, trackers, triageContext } from "../label-triage/test-fixtures.ts";
@@ -43,6 +44,7 @@ beforeEach(() => {
 });
 
 afterEach(() => {
+    vi.restoreAllMocks();
     rmSync(state, { recursive: true, force: true });
 });
 
@@ -340,6 +342,8 @@ describe("reconcile: completion needs two proofs", () => {
 
     it("does not complete a stage without an implementation", async () => {
         const unknown = record({ id: "linear:DOT-109:proposal:1", stage: "proposal" });
+        // Every stage id is registered, so the registry is made to lack this one.
+        vi.spyOn(STAGES, "get").mockReturnValue(undefined);
         await given(unknown);
         await marker(unknown.id);
         const sessions = fakeSessions({

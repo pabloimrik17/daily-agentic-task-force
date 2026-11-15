@@ -1,7 +1,5 @@
-// Linear context (spec proposal-stage, "The run gathers the task's context" and "Context that
-// only some trackers have"): linear-cli 2.6.0's `issue view --json` prints neither relations nor
-// the parent's url and description, so one read-only `linear api` query reads them, and the
-// tracker's own `readComments` reads the comments.
+// linear-cli 2.6.0's `issue view --json` prints neither relations nor the parent's url and
+// description, so one read-only `linear api` query reads them.
 
 import type { Exec } from "../exec.ts";
 import { runJson } from "../label-triage/trackers/cli-json.ts";
@@ -36,8 +34,6 @@ function relatedTask(value: unknown, path: string): RelatedTask {
     };
 }
 
-// A connection the response lacks is a list not read, and a full page a list cut short; each
-// leaves a note beside the entries that were read.
 function connection(issue: Json, key: string, notes: string[]): unknown[] {
     const path = `$.data.issue.${key}`;
     if (absent(issue[key])) {
