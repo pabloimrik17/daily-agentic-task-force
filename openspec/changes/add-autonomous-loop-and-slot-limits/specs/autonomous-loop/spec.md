@@ -12,8 +12,8 @@ The plugin SHALL expose `/autonomous:loop`, which runs the step runner with `--l
 
 #### Scenario: Loop started
 
-- **WHEN** the user runs `/autonomous:loop --account claude --apply`
-- **THEN** the step runner is executed with `--loop --account claude --apply` and iterations start
+- **WHEN** the user runs `/autonomous:loop --account claude@1a2b3c4d --apply`
+- **THEN** the step runner is executed with `--loop --account claude@1a2b3c4d --apply` and iterations start
 
 #### Scenario: Loop from a shell
 

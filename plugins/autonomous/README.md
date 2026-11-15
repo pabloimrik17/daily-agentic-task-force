@@ -332,7 +332,7 @@ launches at most one session. The loop is the only thing the limits bind.
 From an agent session:
 
 ```text
-/autonomous:loop --account claude --apply
+/autonomous:loop --account claude@1a2b3c4d --apply
 ```
 
 The command starts the loop as a background task, waits for its notices in the
@@ -342,7 +342,7 @@ while no notice arrives.
 From a shell:
 
 ```bash
-bun plugins/autonomous/src/run.ts --loop --apply --account claude
+bun plugins/autonomous/src/run.ts --loop --apply --account claude@1a2b3c4d
 ```
 
 The loop prints nothing to standard output. It exits with 0 when stopped, 1 on
@@ -368,7 +368,7 @@ prints its report as a run does, and exits with the code of its outcome (see
 [Exit codes](#exit-codes)). It takes no loop lock and writes no log or notice.
 
 ```bash
-bun plugins/autonomous/src/run.ts --loop --account claude
+bun plugins/autonomous/src/run.ts --loop --account claude@1a2b3c4d
 ```
 
 ### What keeps it going

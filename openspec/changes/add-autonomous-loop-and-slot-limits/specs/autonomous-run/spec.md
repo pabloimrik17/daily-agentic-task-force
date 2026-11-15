@@ -8,8 +8,8 @@ The `autonomous` plugin SHALL expose two commands: `/autonomous:run`, which adva
 
 #### Scenario: Command invocation
 
-- **WHEN** the user runs `/autonomous:run --account claude`
-- **THEN** the step runner is executed with `--account claude`
+- **WHEN** the user runs `/autonomous:run --account claude@1a2b3c4d`
+- **THEN** the step runner is executed with `--account claude@1a2b3c4d`
 
 #### Scenario: Two commands
 
