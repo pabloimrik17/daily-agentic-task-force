@@ -1,7 +1,10 @@
 // Triage questions mode (spec autonomous-run, "Triage questions mode" and "Triage questions
 // report"): the questions of the marked tasks, composed as the label-triage step does, with no
 // judgement, no write and no lock, so the loop command can ask them all before it starts.
+// A task listed without its description (Linear) is read for it, so the person does not
+// answer from the title alone.
 
+import { type TaskKey, taskKey } from "../attempts/record.ts";
 import type { AutonomousConfig } from "../config.ts";
 import type { Detection } from "../label-contract/detect.ts";
 import { buildHandoff, type Handoff, renderHandoffLine } from "../report.ts";
@@ -40,11 +43,12 @@ export async function runTriageQuestions(
         return notEvaluable(read.error, startedAt);
     }
     const marked = read.value.filter((detection) => detection.marked);
+    const asked = askedRecords(marked, deps.config.judgement.threshold);
     const questions = questionsFor(
-        askedRecords(marked, deps.config.judgement.threshold),
+        asked,
         [],
         marked,
-        new Map(),
+        await descriptionsOf(asked, marked, deps.trackers),
     );
     return {
         schema: TRIAGE_QUESTIONS_SCHEMA,
@@ -87,6 +91,29 @@ function askedRecords(marked: readonly Detection[], threshold: number): TriageRe
         ),
     );
     return [...fromRules, ...markedRecords(marked)];
+}
+
+// The descriptions the listing left out, for the tasks with a question. A read that fails
+// leaves its question without one: the mode still lists it.
+async function descriptionsOf(
+    asked: readonly TriageRecord[],
+    marked: readonly Detection[],
+    trackers: Trackers,
+): Promise<Map<TaskKey, string>> {
+    const keys = new Set(asked.map((record) => taskKey(record.source, record.taskId)));
+    const descriptions = new Map<TaskKey, string>();
+    for (const { task } of marked) {
+        const key = taskKey(task.source, task.id);
+        if (task.description !== null || !keys.has(key)) {
+            continue;
+        }
+        const read = await trackers[task.source].readTask(task.id);
+        const description = read.ok ? read.value.description : null;
+        if (description !== null) {
+            descriptions.set(key, description);
+        }
+    }
+    return descriptions;
 }
 
 function askedRecord(

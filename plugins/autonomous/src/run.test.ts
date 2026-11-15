@@ -575,7 +575,12 @@ describe("main --triage-questions", () => {
         expect(await main(["--triage-questions"], d)).toBe(0);
         expect(counts).toEqual({ steps: 0, openUsage: 0 });
         expect(judged.requests).toEqual([]);
-        expect(calls).toEqual(["linear:listTasks"]);
+        // Linear lists no description, so each marked task is read for its own; the unmarked
+        // one is not, and nothing is written.
+        expect(calls).toEqual([
+            "linear:listTasks",
+            ...sixMarked.map(({ id }) => `linear:readTask:${id}`),
+        ]);
         expect(out[0]).toContain("marked: 6 tasks");
         expect(out[0]?.match(/^question /gm)).toHaveLength(6);
         expect(out[0]?.split("\n").at(-1)).toMatch(/^handoff: /);

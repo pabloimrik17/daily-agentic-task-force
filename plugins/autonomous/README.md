@@ -487,7 +487,9 @@ pending attempt" in [The reconcile step](#the-reconcile-step)).
 Triage questions mode lists the questions of every task that carries
 `triage-me` and exits. It reads the open tasks of every enabled source as
 `label-triage` does and composes the questions of the marked tasks as that step
-does (see [Questions of marked tasks](#questions-of-marked-tasks)). It runs no
+does (see [Questions of marked tasks](#questions-of-marked-tasks)). A marked
+task with a question that its source lists without a description (Linear) is
+read for it; when that read fails, the question is listed without one. It runs no
 step, requests no judgement, needs no quota and takes no lock, and it writes
 nothing. It only combines with `--json`: any other flag is a usage error (exit
 1).

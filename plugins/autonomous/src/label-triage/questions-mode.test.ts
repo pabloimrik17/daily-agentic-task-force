@@ -38,11 +38,15 @@ function readOnly(inner: Trackers, writes: string[]): Trackers {
     return { beads: guard("beads"), github: guard("github"), linear: guard("linear") };
 }
 
-async function run(listings: Parameters<typeof trackers>[1], cfg = config()) {
+async function run(
+    listings: Parameters<typeof trackers>[1],
+    cfg = config(),
+    options: Parameters<typeof trackers>[2] = {},
+) {
     const calls: string[] = [];
     const writes: string[] = [];
     const report = await runTriageQuestions(
-        { config: cfg, trackers: readOnly(trackers(calls, listings), writes) },
+        { config: cfg, trackers: readOnly(trackers(calls, listings, options), writes) },
         NOW,
     );
     return { report, calls, writes };
@@ -73,8 +77,8 @@ describe("runTriageQuestions", () => {
             ["bd-1", "bd-2", "bd-3", "gh-1", "gh-2", "gh-3"].toSorted(),
         );
         expect(writes).toEqual([]);
-        // Reading the open tasks is the only thing the mode asks of a tracker: no readTask,
-        // no listLabels, no write.
+        // Every task was listed with its description, so reading the open tasks is the only
+        // thing the mode asks of a tracker: no readTask, no listLabels, no write.
         expect(calls.toSorted()).toEqual(
             ["beads:listTasks", "github:listTasks", "linear:listTasks"].toSorted(),
         );
@@ -112,6 +116,39 @@ describe("runTriageQuestions", () => {
         expect(report.questions).toEqual([]);
         expect(report.handoff).toBeUndefined();
         expect(renderTriageQuestionsText(report)).toContain("marked: 1 task");
+    });
+
+    it("Description not listed: a marked Linear task with a question is read for its description", async () => {
+        const { report, calls, writes } = await run(
+            {
+                linear: [
+                    task("linear", "DOT-1", ["triage-me", "personal"]),
+                    task("linear", "DOT-2", ["triage-me", "personal", "AFK", "proposal"]),
+                    task("linear", "DOT-3", []),
+                ],
+            },
+            config(),
+            { linear: { descriptions: { "DOT-1": "Rework the importer" } } },
+        );
+        expect(report.questions.map((q) => q.question.split("\n").at(-1))).toEqual([
+            "Description: Rework the importer",
+        ]);
+        // Only the task with a question is read: not the complete one, not the unmarked one.
+        expect(calls.filter((call) => call.includes("readTask"))).toEqual([
+            "linear:readTask:DOT-1",
+        ]);
+        expect(writes).toEqual([]);
+    });
+
+    it("Description unreadable: the question is listed without it and the mode still advances", async () => {
+        const { report } = await run(
+            { linear: [task("linear", "DOT-1", ["triage-me", "personal"])] },
+            config(),
+            { linear: { readErrors: { "DOT-1": "linear failed" } } },
+        );
+        expect(report.outcome).toBe("advance");
+        expect(report.questions).toHaveLength(1);
+        expect(report.questions[0]?.question).not.toContain("Description:");
     });
 
     it("an unmarked task with a doubt contributes no question", async () => {

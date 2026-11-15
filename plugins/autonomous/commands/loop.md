@@ -63,6 +63,9 @@ command.
         `<value>` is its kept value, or its kept values joined with `,`. Add
         nothing else. A `Later` answer has a null value and is never passed.
 
+    - When a round keeps no answer and not every question of it was answered
+      `Later`, run nothing and ask the next round.
+
     - Stop asking when the list is empty, or as soon as every question of a
       round is answered `Later`: nothing is written for that round and the
       remaining questions are not asked. A question answered `Later` is not
