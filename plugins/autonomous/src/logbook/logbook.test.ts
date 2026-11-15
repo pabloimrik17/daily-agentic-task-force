@@ -140,6 +140,7 @@ interface Arrangement {
     record?: AttemptRecord;
     body?: string | null;
     answer?: string[] | "malformed";
+    by?: "agent" | "human";
     labels?: string[];
     readError?: string;
     port?: PortScript;
@@ -157,7 +158,12 @@ async function arrange(options: Arrangement = {}) {
     if (options.answer === "malformed") {
         await writeFile(transitionedPath(dir), "{");
     } else if (options.answer !== undefined) {
-        await writeTransitioned(dir, options.answer, new Date("2026-11-13T10:38:00.000Z"));
+        await writeTransitioned(
+            dir,
+            options.answer,
+            new Date("2026-11-13T10:38:00.000Z"),
+            options.by,
+        );
     }
     const calls: string[] = [];
     const listed: TrackerTask[] = [
@@ -333,6 +339,26 @@ describe("log: Logbook entry header", () => {
             "",
             "`HITL` · `--model opus --effort high` · 2026-11-13 10:02 → 10:40 UTC (38 min) · answered `HITL` · 1 commit (`a1b2c3d`)",
         ]);
+    });
+
+    it("a transition the agent made: the header says no one answered", async () => {
+        const { run, fake } = await arrange({ answer: ["implement"], by: "agent" });
+        await run();
+        const facts = factsOf(fake.comments());
+        expect(facts).toContain("moved to `implement` by the agent, with no answer");
+        expect(facts).not.toContain("answered");
+    });
+
+    it("a transition a human answered: the header says answered", async () => {
+        const { run, fake } = await arrange({ answer: ["implement"], by: "human" });
+        await run();
+        expect(factsOf(fake.comments())).toContain("answered `implement`");
+    });
+
+    it("a transition record without by: the header says answered", async () => {
+        const { run, fake } = await arrange({ answer: ["HITL"] });
+        await run();
+        expect(factsOf(fake.comments())).toContain("answered `HITL`");
     });
 
     it("Record from before this capability: the entry is published without agent arguments", async () => {

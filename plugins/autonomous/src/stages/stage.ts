@@ -2,7 +2,10 @@
 // written, and what it reads reaches the synchronous `prompt` as `context`.
 
 import type { AttemptRecord } from "../attempts/record.ts";
+import type { ContextReader } from "../context/types.ts";
+import type { Exec } from "../exec.ts";
 import type { TrackerTask } from "../label-triage/trackers/tracker.ts";
+import type { PullRequests } from "../pull-request/port.ts";
 import type { WorkTask } from "../select/types.ts";
 import type { SessionTool } from "../sessions/manager.ts";
 
@@ -15,9 +18,19 @@ export function isStageId(value: string): value is StageId {
     return (STAGE_IDS as readonly string[]).includes(value);
 }
 
+export interface StageReaders {
+    context: ContextReader; // of the task's source
+    pullRequests: PullRequests; // bound to the repository
+    openspec: Exec;
+}
+
 export interface StageEnv {
     tool: SessionTool;
     home: string;
+    task: WorkTask; // read again and detailed
+    repository: string; // absolute path
+    branch: string; // the workspace branch the attempt will use
+    readers: StageReaders;
 }
 
 export type StageContext = Readonly<Record<string, string>>;

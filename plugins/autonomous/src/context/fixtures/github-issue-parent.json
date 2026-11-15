@@ -1,0 +1,45 @@
+{
+    "closedByPullRequestsReferences": [],
+    "comments": [
+        {
+            "id": "IC_demo1",
+            "author": {
+                "login": "demo-user"
+            },
+            "authorAssociation": "OWNER",
+            "body": "Second synthetic comment.",
+            "createdAt": "2026-01-02T00:00:00Z",
+            "url": "https://github.com/demo/one/issues/9#issuecomment-2"
+        },
+        {
+            "id": "IC_demo2",
+            "author": {
+                "login": "demo-user"
+            },
+            "authorAssociation": "OWNER",
+            "body": "First synthetic comment.",
+            "createdAt": "2026-01-01T00:00:00Z",
+            "url": "https://github.com/demo/one/issues/9#issuecomment-1"
+        }
+    ],
+    "parent": null,
+    "subIssues": {
+        "nodes": [
+            {
+                "id": "I_demo0",
+                "number": 10,
+                "state": "OPEN",
+                "title": "Synthetic sub-issue A",
+                "url": "https://github.com/demo/one/issues/10"
+            },
+            {
+                "id": "I_demo1",
+                "number": 11,
+                "state": "CLOSED",
+                "title": "Synthetic sub-issue B",
+                "url": "https://github.com/demo/one/issues/11"
+            }
+        ],
+        "totalCount": 2
+    }
+}

@@ -22,7 +22,7 @@ import type { Result } from "../result.ts";
 import { stageFor } from "../stages/registry.ts";
 import { readTransitioned } from "../transition/transitioned.ts";
 import { checkBody } from "./body.ts";
-import { renderHeader } from "./header.ts";
+import { type HeaderInput, renderHeader } from "./header.ts";
 import { hasEntry, LOGGED_SCHEMA, logbookMarker } from "./marker.ts";
 import { blankLog, type LogReport } from "./report.ts";
 
@@ -199,7 +199,7 @@ async function buildHeader(logging: Logging): Promise<string | null> {
         agentArgs: record.agentArgs,
         start,
         end: report.startedAt,
-        answer: await readAnswer(logging),
+        ...(await readAnswer(logging)),
         commits: commits.value,
     });
     return null;
@@ -226,13 +226,19 @@ async function readCommits(port: PullRequests, start: string | null): Promise<Re
 }
 
 // A malformed transition.json costs the header its answer, not the entry.
-async function readAnswer({ dir, report }: Logging): Promise<string[] | null> {
+async function readAnswer({
+    dir,
+    report,
+}: Logging): Promise<Pick<HeaderInput, "answer" | "answeredBy">> {
     const read = await readTransitioned(dir);
     if (!read.ok) {
         report.notes.push(`${read.error}; the header leaves the answer out`);
-        return null;
+        return { answer: null };
     }
-    return read.value === null ? null : read.value.answer;
+    if (read.value === null) {
+        return { answer: null };
+    }
+    return { answer: read.value.answer, answeredBy: read.value.by ?? null };
 }
 
 async function postEntry(logging: Logging): Promise<string | null> {

@@ -1,0 +1,29 @@
+{
+    "closedByPullRequestsReferences": [
+        {
+            "id": "PR_demo1",
+            "number": 14845,
+            "repository": {
+                "id": "R_demo",
+                "name": "one",
+                "owner": {
+                    "id": "O_demo",
+                    "login": "demo"
+                }
+            },
+            "url": "https://github.com/demo/one/pull/14845"
+        }
+    ],
+    "comments": [],
+    "parent": {
+        "id": "I_demo9",
+        "number": 9,
+        "state": "OPEN",
+        "title": "Synthetic parent",
+        "url": "https://github.com/demo/one/issues/9"
+    },
+    "subIssues": {
+        "nodes": [],
+        "totalCount": 0
+    }
+}

@@ -273,8 +273,8 @@ describe("parseArgs", () => {
             "--stage given more than once",
         ],
         [
-            ["--task", "linear:A-1", "--stage", "proposal"],
-            "--stage proposal is not a registered stage (test, grill-me)",
+            ["--task", "linear:A-1", "--stage", "implement"],
+            "--stage implement is not a registered stage (test, grill-me, proposal)",
         ],
         [["--stage", "test"], "--stage requires --task"],
         [

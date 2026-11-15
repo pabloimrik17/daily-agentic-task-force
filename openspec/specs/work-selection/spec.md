@@ -88,7 +88,7 @@ For Beads and Linear, the step SHALL read each task's open blockers, the tasks i
 
 ### Requirement: Next stage of a task
 
-The next stage of a task SHALL be the stage label it carries: `grill-me` or `proposal`. A task without a stage label has no next stage and is excluded under classification. The only supported stage SHALL be `grill-me`.
+The next stage of a task SHALL be the stage label it carries: `grill-me`, `proposal` or `implement`. A task without a stage label has no next stage and is excluded under classification. The supported stages SHALL be `grill-me` and `proposal`.
 
 #### Scenario: grill-me task
 
@@ -98,7 +98,12 @@ The next stage of a task SHALL be the stage label it carries: `grill-me` or `pro
 #### Scenario: AFK task
 
 - **WHEN** a task carries `personal`, `AFK` and `proposal`
-- **THEN** its next stage is `proposal`, which is not supported
+- **THEN** its next stage is `proposal`, which is supported
+
+#### Scenario: Task ready to implement
+
+- **WHEN** a task carries `personal`, `AFK` and `implement`
+- **THEN** its next stage is `implement`, which is not supported
 
 ### Requirement: Candidates and exclusions
 
@@ -109,7 +114,7 @@ A task SHALL be a candidate, whatever its scope, unless an exclusion applies. Ea
 3. **labelled this run**: `label-triage` labelled it, or tried to, this run;
 4. **unsupported stage**: its next stage is not supported;
 5. **blocked**: an open blocker;
-6. **split**: an open child.
+6. **split**: an open child, or, for a task whose next stage is `proposal`, any child, open or closed.
 
 #### Scenario: Small task that unblocks others
 
@@ -124,7 +129,12 @@ A task SHALL be a candidate, whatever its scope, unless an exclusion applies. Ea
 #### Scenario: AFK task already taken
 
 - **WHEN** a task carries `personal`, `AFK`, `proposal` and `taken`
-- **THEN** it is excluded as taken, not as unsupported stage
+- **THEN** it is excluded as taken
+
+#### Scenario: Task ready to implement
+
+- **WHEN** a task carries `personal`, `AFK` and `implement`
+- **THEN** it is excluded as unsupported stage
 
 #### Scenario: Labelled by triage in this run
 
@@ -145,6 +155,16 @@ A task SHALL be a candidate, whatever its scope, unless an exclusion applies. Ea
 
 - **WHEN** a `grill-me` task in Linear has an open child
 - **THEN** it is excluded as split
+
+#### Scenario: Split parent whose subtasks are closed
+
+- **WHEN** a task carrying `personal`, `AFK` and `proposal` has two children, both closed
+- **THEN** it is excluded as split
+
+#### Scenario: Grill of a task whose subtasks are closed
+
+- **WHEN** a task carrying `personal` and `grill-me` has one child, closed
+- **THEN** it is not excluded as split
 
 #### Scenario: Missing scope
 
@@ -239,6 +259,7 @@ The text report SHALL show:
 - the machine-scope exception reason, when there is one;
 - the candidates compared;
 - the excluded tasks, grouped by reason, each with its source, id and title;
+- the tasks ready to close: each task excluded as split whose children are all closed;
 - the note that GitHub dependencies were not evaluated, when GitHub is enabled.
 
 #### Scenario: Selected task in the text report
@@ -251,6 +272,16 @@ The text report SHALL show:
 - **WHEN** a task carrying `personal` and `grill-me` only is selected
 - **THEN** the report gives its autonomy as `none`
 
+#### Scenario: Parent ready to close
+
+- **WHEN** a task in `proposal` is excluded as split and every one of its children is closed
+- **THEN** the report lists it as ready to close, and no tracker write is issued for it
+
+#### Scenario: Parent with an open subtask
+
+- **WHEN** a task excluded as split still has an open child
+- **THEN** the report does not list it as ready to close
+
 ### Requirement: Selection data in JSON
 
 The JSON data of the step SHALL carry the same information as the text report, plus the selection model and effort when the LLM was called.
@@ -259,3 +290,17 @@ The JSON data of the step SHALL carry the same information as the text report, p
 
 - **WHEN** the run is invoked with `--json`
 - **THEN** the step's data lists every excluded task with its source, id, title and exclusion reason
+
+### Requirement: Closed children are counted
+
+For every source, the step SHALL read how many children a task has in all, closed ones included, beside its open children. A task that never had a child has none. The JSON data of the step SHALL carry, for each task ready to close, its source, id and title.
+
+#### Scenario: Linear parent with closed sub-issues
+
+- **WHEN** a Linear issue has three sub-issues, all completed
+- **THEN** it has three children in all and no open child
+
+#### Scenario: Task without children
+
+- **WHEN** a Beads task was never a parent
+- **THEN** it has no children in all, and it is not excluded as split

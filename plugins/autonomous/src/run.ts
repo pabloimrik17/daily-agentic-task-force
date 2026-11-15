@@ -24,6 +24,8 @@ import type { AttemptId, TaskRef } from "./attempts/record.ts";
 import { resolveStateDir } from "./attempts/state.ts";
 import { PRINT_TIMEOUT_MS } from "./claude-print.ts";
 import { type ConfigLoad, loadConfig } from "./config.ts";
+import { cliContext } from "./context/cli.ts";
+import type { ContextReaderFactory } from "./context/types.ts";
 import { type Exec, execCommand } from "./exec.ts";
 import {
     bootstrapLabels,
@@ -100,6 +102,8 @@ export interface MainDeps {
     workspace: WorkspaceManagerFactory;
     naming: Exec;
     pullRequests: PullRequestsFactory;
+    context: ContextReaderFactory;
+    openspec: Exec;
     stdout: (text: string) => void;
     stderr: (text: string) => void;
     steps?: readonly Step[];
@@ -216,6 +220,9 @@ function context(
             sessions: deps.sessions,
             workspace: deps.workspace,
             naming: deps.naming,
+            context: deps.context,
+            pullRequests: deps.pullRequests,
+            openspec: deps.openspec,
             state,
             home: deps.env.HOME ?? homedir(),
         },
@@ -425,6 +432,8 @@ if (import.meta.main) {
         workspace: worktrunkWorkspace,
         naming: execCommand("claude", NAMING_TIMEOUT_MS),
         pullRequests: ghPullRequests,
+        context: cliContext,
+        openspec: execCommand("openspec"),
         stdout: (text) => process.stdout.write(`${text}\n`),
         stderr: (text) => process.stderr.write(`${text}\n`),
     });

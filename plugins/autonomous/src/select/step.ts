@@ -31,6 +31,7 @@ const EMPTY: SelectData = {
     selected: null,
     candidates: [],
     excluded: [],
+    readyToClose: [],
     notEvaluated: [],
     comparison: null,
 };
@@ -73,8 +74,8 @@ export const selectStep: Step<SelectData> = {
         if (!found.ok) {
             return result("not-evaluable", [found.error], known);
         }
-        const { candidates, excluded } = found.value;
-        const data = { ...known, candidates: candidates.map(summary), excluded };
+        const { candidates, excluded, readyToClose } = found.value;
+        const data = { ...known, candidates: candidates.map(summary), excluded, readyToClose };
         if (candidates.length === 0) {
             return result("wait", waitReasons(excluded), data);
         }

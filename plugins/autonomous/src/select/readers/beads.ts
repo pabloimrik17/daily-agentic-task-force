@@ -74,6 +74,7 @@ export function beadsWorkReader(exec: Exec, config: BeadsConfig): WorkReader {
                                 ),
                         )
                         .map(([id]) => id),
+                    childCount: null,
                     children: listed.value
                         .filter(
                             (entry) => entry.parent === task.id && entry.task.status !== "closed",
@@ -82,12 +83,38 @@ export function beadsWorkReader(exec: Exec, config: BeadsConfig): WorkReader {
                 }));
             return { ok: true, value: tasks };
         },
-        // The listing already holds everything detail fills elsewhere, the parent included.
+        // Closed children are not in the listing, so every status is listed; the open children
+        // come from the same response, so a child reopened since the listing is not missed.
         detail(task) {
-            return Promise.resolve({
-                ok: true,
-                value: { ...task, url: task.url ?? null, parent: task.parent ?? null },
-            });
+            return runJson(
+                exec,
+                `bd list --parent ${task.id} --all --json`,
+                [
+                    "-C",
+                    config.directory,
+                    "list",
+                    "--json",
+                    "--limit",
+                    "0",
+                    "--all",
+                    "--parent",
+                    task.id,
+                ],
+                (value) => {
+                    const all = array(value, "$").map((item, index) =>
+                        beadsTask(object(item, `$[${index}]`), `$[${index}]`),
+                    );
+                    return {
+                        ...task,
+                        children: all
+                            .filter((child) => child.status !== "closed")
+                            .map((child) => child.id),
+                        childCount: all.length,
+                        url: task.url ?? null,
+                        parent: task.parent ?? null,
+                    };
+                },
+            );
         },
     };
 }

@@ -23,7 +23,8 @@ export function byReason(excluded: readonly Excluded[]): { name: string; tasks: 
 }
 
 export function renderSelect(result: StepResult<SelectData>): string {
-    const { machineScope, selected, candidates, excluded, notEvaluated, comparison } = result.data;
+    const { machineScope, selected, candidates, excluded, readyToClose, notEvaluated, comparison } =
+        result.data;
     const lines = [`[${result.step}] ${result.outcome} (${result.tier})`];
 
     if (machineScope !== null) {
@@ -48,6 +49,12 @@ export function renderSelect(result: StepResult<SelectData>): string {
                 ...group.tasks.map((t) => `      ${t.source} → ${t.id} → ${t.title}`),
             );
         }
+    }
+    if (readyToClose.length > 0) {
+        lines.push(
+            `  ready to close: ${plural(readyToClose.length, "task")}`,
+            ...readyToClose.map((t) => `    ${t.source} → ${t.id} → ${t.title}`),
+        );
     }
     lines.push(...notEvaluated.map((part) => `  not evaluated: ${part}`));
     if (comparison !== null) {

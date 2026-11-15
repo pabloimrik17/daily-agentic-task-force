@@ -3,7 +3,7 @@ import { describe, expect, it } from "vitest";
 import type { LinearConfig } from "../../config.ts";
 import type { Exec, ExecResult } from "../../exec.ts";
 import comments from "./fixtures/linear-comments.json";
-import { linearTracker } from "./linear.ts";
+import { linearTracker, readAuthoredComments } from "./linear.ts";
 
 const CONFIG: LinearConfig = { enabled: true };
 
@@ -435,6 +435,28 @@ describe("linearTracker", () => {
             const result = await linearTracker(exec, CONFIG).readComments("DOT-82");
 
             expect(result.ok && result.value[0]).toBe("First comment body.");
+        });
+
+        it("names each comment's author: the user, else the external user or the bot, else none", async () => {
+            const [first, second] = comments.nodes;
+            const nodes = [
+                first,
+                { ...second, user: null, externalUser: { name: "Outside Person" } },
+                { ...second, id: "c3", user: null, botActor: { name: "A bot" } },
+                { ...second, id: "c4", user: null },
+            ];
+            const exec = fakeExec(() => ({
+                ok: true,
+                stdout: JSON.stringify({ ...comments, nodes }),
+            }));
+            const result = await readAuthoredComments(exec, "DOT-82");
+
+            expect(result.ok && result.value.map((comment) => comment.author)).toEqual([
+                "example-user",
+                "Outside Person",
+                "A bot",
+                null,
+            ]);
         });
 
         it("reads an issue without comments as an empty list", async () => {

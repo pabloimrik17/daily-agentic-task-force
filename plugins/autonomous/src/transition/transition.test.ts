@@ -38,7 +38,7 @@ import { readTransitioned, TRANSITIONED_SCHEMA } from "./transitioned.ts";
 
 const STARTED = new Date("2026-11-01T09:00:00.000Z");
 
-const CONTRACT = ["work", "personal", "AFK", "HITL", "grill-me", "proposal", "taken"];
+const CONTRACT = ["work", "personal", "AFK", "HITL", "grill-me", "proposal", "implement", "taken"];
 
 // Linear has every contract label at workspace level, as after --bootstrap-labels.
 const LINEAR_LABELS: TrackerLabel[] = CONTRACT.map((name) => ({
@@ -226,6 +226,7 @@ describe("transition mode: Transition mode", () => {
             schema: "autonomous.transition.v1",
             startedAt: "2026-11-01T09:00:00.000Z",
             outcome: "advance",
+            applied: false,
             task: {
                 source: "linear",
                 id: "DOT-110",
@@ -261,7 +262,66 @@ describe("transition mode: Transition mode", () => {
         expect(calls).toEqual(["linear:readTask:DOT-110"]);
     });
 
-    it("Task not in grill-me: the reason says so and there is no handoff", async () => {
+    it("Task not in grill-me: in neither grill-me nor proposal, no handoff and exit 3", async () => {
+        const calls: string[] = [];
+        const given = linear(calls, ["personal", "AFK", "implement"]);
+
+        const report = await runTransition(
+            { source: "linear", id: "DOT-110" },
+            modeDeps(given),
+            STARTED,
+        );
+
+        expect(report.outcome).toBe("not-evaluable");
+        expect(report.applied).toBe(false);
+        expect(report.task).toEqual({
+            source: "linear",
+            id: "DOT-110",
+            title: "Grill-me stage",
+            labels: ["personal", "AFK", "implement"],
+        });
+        expect(report.reasons).toEqual([
+            "linear DOT-110 is in neither grill-me nor proposal (labels [personal, AFK, implement])",
+        ]);
+        expect(report).not.toHaveProperty("handoff");
+        expect(exitCodeFor(report.outcome)).toBe(3);
+        expect(calls).toEqual(["linear:readTask:DOT-110"]);
+    });
+
+    it("HITL task in proposal: the approval question, nothing written and exit 0", async () => {
+        const calls: string[] = [];
+        const given = linear(calls, ["personal", "HITL", "proposal"]);
+
+        const report = await runTransition(
+            { source: "linear", id: "DOT-110" },
+            modeDeps(given),
+            STARTED,
+        );
+
+        expect(report).toMatchObject({ outcome: "advance", applied: false, reasons: [] });
+        expect(report.handoff?.questions.map(({ id, options }) => ({ id, options }))).toEqual([
+            {
+                id: "transition:linear:DOT-110",
+                options: [
+                    {
+                        label: "Approve",
+                        value: "implement",
+                        description: "Move the task to implement",
+                    },
+                    { label: "Later", value: null, description: "Leave the task in proposal" },
+                ],
+            },
+        ]);
+        expect(exitCodeFor(report.outcome)).toBe(0);
+        expect(calls).toEqual(["linear:readTask:DOT-110"]);
+        expect(await labelsOf(given, "linear", "DOT-110")).toEqual([
+            "personal",
+            "HITL",
+            "proposal",
+        ]);
+    });
+
+    it("AFK task in proposal: implement replaces proposal, applied, no handoff and exit 0", async () => {
         const calls: string[] = [];
         const given = linear(calls, ["personal", "AFK", "proposal"]);
 
@@ -271,19 +331,93 @@ describe("transition mode: Transition mode", () => {
             STARTED,
         );
 
-        expect(report.outcome).toBe("not-evaluable");
-        expect(report.task).toEqual({
-            source: "linear",
-            id: "DOT-110",
-            title: "Grill-me stage",
-            labels: ["personal", "AFK", "proposal"],
-        });
-        expect(report.reasons).toEqual([
-            "linear DOT-110 is not in grill-me (labels [personal, AFK, proposal])",
-        ]);
+        expect(report).toMatchObject({ outcome: "advance", applied: true, reasons: [] });
+        expect(report.task?.labels).toEqual(["personal", "AFK", "implement"]);
         expect(report).not.toHaveProperty("handoff");
-        expect(calls).toEqual(["linear:readTask:DOT-110"]);
+        expect(exitCodeFor(report.outcome)).toBe(0);
+        expect(writes(calls)).toEqual([
+            "linear:addLabel:DOT-110:implement",
+            "linear:removeLabel:DOT-110:proposal",
+        ]);
+        expect(await labelsOf(given, "linear", "DOT-110")).toEqual([
+            "personal",
+            "AFK",
+            "implement",
+        ]);
     });
+
+    it("implement not bootstrapped: nothing is written, the reason names --bootstrap-labels and exit 3", async () => {
+        const calls: string[] = [];
+        const given = linear(calls, ["personal", "AFK", "proposal"], {
+            labels: LINEAR_LABELS.filter((label) => label.name !== "implement"),
+        });
+
+        const report = await runTransition(
+            { source: "linear", id: "DOT-110" },
+            modeDeps(given),
+            STARTED,
+        );
+
+        expect(report).toMatchObject({
+            outcome: "not-evaluable",
+            applied: false,
+            reasons: ["implement is missing on linear; run --bootstrap-labels"],
+        });
+        expect(report).not.toHaveProperty("handoff");
+        expect(exitCodeFor(report.outcome)).toBe(3);
+        expect(writes(calls)).toEqual([]);
+    });
+
+    it("an AFK transition whose write fails is not applied and exits 3", async () => {
+        const calls: string[] = [];
+        const error = "linear issue update DOT-110 --label implement: rate limited";
+        const given = linear(calls, ["personal", "AFK", "proposal"], {
+            addLabelErrors: { implement: error },
+        });
+
+        const report = await runTransition(
+            { source: "linear", id: "DOT-110" },
+            modeDeps(given),
+            STARTED,
+        );
+
+        expect(report).toMatchObject({ outcome: "not-evaluable", applied: false });
+        expect(report.reasons).toEqual([
+            `${error} (before [personal, AFK, proposal] → after [personal, AFK, proposal]); nothing was removed`,
+        ]);
+        expect(exitCodeFor(report.outcome)).toBe(3);
+        expect(removals(calls)).toEqual([]);
+    });
+
+    it.each<[string, string[], string]>([
+        ["missing", ["personal", "proposal"], "has no autonomy"],
+        [
+            "in conflict",
+            ["personal", "AFK", "HITL", "proposal"],
+            "has conflicting autonomy [AFK, HITL]",
+        ],
+    ])(
+        "a task in proposal whose autonomy is %s: the reason, no handoff, nothing written and exit 3",
+        async (_name, labels, problem) => {
+            const calls: string[] = [];
+            const given = linear(calls, labels);
+
+            const report = await runTransition(
+                { source: "linear", id: "DOT-110" },
+                modeDeps(given),
+                STARTED,
+            );
+
+            expect(report).toMatchObject({
+                outcome: "not-evaluable",
+                applied: false,
+                reasons: [`linear DOT-110 in proposal ${problem}: expected one of AFK, HITL`],
+            });
+            expect(report).not.toHaveProperty("handoff");
+            expect(exitCodeFor(report.outcome)).toBe(3);
+            expect(calls).toEqual(["linear:readTask:DOT-110"]);
+        },
+    );
 
     it("a disabled source is not read and gives no task", async () => {
         const calls: string[] = [];
@@ -369,6 +503,49 @@ describe("transition mode: Transition question", () => {
     });
 });
 
+describe("transition mode: Approval question", () => {
+    it("Options: Approve and Later only, a single choice asking for no autonomy or scope", async () => {
+        const question = await questionFor("linear", "DOT-110", ["personal", "HITL", "proposal"]);
+
+        expect(question).toEqual({
+            id: "transition:linear:DOT-110",
+            step: TRANSITION,
+            header: "DOT-110",
+            question: [
+                'linear DOT-110 "Task DOT-110": the proposal is ready. Approve it to move the task to implement?',
+                "Labels: [personal, HITL, proposal]",
+            ].join("\n"),
+            options: [
+                { label: "Approve", value: "implement", description: "Move the task to implement" },
+                { label: "Later", value: null, description: "Leave the task in proposal" },
+            ],
+            multiSelect: false,
+        });
+    });
+
+    it("the header is the task id up to 12 characters and approval beyond", async () => {
+        const long = await questionFor("github", "owner/repo#123", ["work", "HITL", "proposal"]);
+
+        expect(long.header).toBe("approval");
+        expect(long.id).toBe("transition:github:owner/repo#123");
+    });
+
+    it("Later: an answer of Later is rejected, nothing is written and the task keeps proposal", async () => {
+        const calls: string[] = [];
+        const given = linear(calls, ["personal", "HITL", "proposal"]);
+
+        const record = await transition(given, "transition:linear:DOT-110", "Later");
+
+        expect(record.status).toBe("rejected");
+        expect(writes(calls)).toEqual([]);
+        expect(await labelsOf(given, "linear", "DOT-110")).toEqual([
+            "personal",
+            "HITL",
+            "proposal",
+        ]);
+    });
+});
+
 describe("transition mode: Transition report", () => {
     it("Transition JSON report: schema autonomous.transition.v1, the task and a handoff with one question", async () => {
         const given = linear([], ["personal", "grill-me"]);
@@ -409,8 +586,8 @@ describe("transition mode: Transition report", () => {
         expect(JSON.parse(last.slice("handoff: ".length))).toEqual(report.handoff);
     });
 
-    it("the text of a task not in grill-me lists the reason and no handoff", async () => {
-        const given = linear([], ["personal", "AFK", "proposal"]);
+    it("the text of a task in neither stage lists the reason and no handoff", async () => {
+        const given = linear([], ["personal", "AFK", "implement"]);
         const report = await runTransition(
             { source: "linear", id: "DOT-110" },
             modeDeps(given),
@@ -421,11 +598,30 @@ describe("transition mode: Transition report", () => {
             [
                 "autonomous transition — started 2026-11-01T09:00:00.000Z",
                 "outcome: not-evaluable",
-                'task: linear DOT-110 → "Grill-me stage" → labels [personal, AFK, proposal]',
+                'task: linear DOT-110 → "Grill-me stage" → labels [personal, AFK, implement]',
                 "reasons:",
-                "  - linear DOT-110 is not in grill-me (labels [personal, AFK, proposal])",
+                "  - linear DOT-110 is in neither grill-me nor proposal (labels [personal, AFK, implement])",
             ].join("\n"),
         );
+    });
+
+    it("the text of an applied transition says so and ends with no handoff", async () => {
+        const given = linear([], ["personal", "AFK", "proposal"]);
+        const report = await runTransition(
+            { source: "linear", id: "DOT-110" },
+            modeDeps(given),
+            STARTED,
+        );
+
+        expect(renderTransitionText(report)).toBe(
+            [
+                "autonomous transition — started 2026-11-01T09:00:00.000Z",
+                "outcome: advance",
+                "applied: true",
+                'task: linear DOT-110 → "Grill-me stage" → labels [personal, AFK, implement]',
+            ].join("\n"),
+        );
+        expect(JSON.parse(renderTransitionJson(report))).toMatchObject({ applied: true });
     });
 
     it("the text of an unreadable task says so", async () => {
@@ -450,6 +646,7 @@ describe("transition mode: Transition report", () => {
             schema: "autonomous.transition.v1",
             startedAt: "2026-11-01T09:00:00.000Z",
             outcome: "not-evaluable",
+            applied: false,
             task: null,
             reasons: [],
             config: { path: "/c.json", error: "bad config" },
@@ -547,7 +744,7 @@ describe("transition answers: Transition answers", () => {
             context(given),
         );
 
-        const detail = "invalid for the transition: expected one of AFK, HITL";
+        const detail = "invalid for the transition: expected one of AFK, HITL, implement";
         expect(records).toEqual([
             {
                 id: "transition:linear:DOT-110",
@@ -564,6 +761,77 @@ describe("transition answers: Transition answers", () => {
             { id: "transition:linear:DOT-112", labels: [], status: "rejected", detail },
         ]);
         expect(calls).toEqual([]);
+    });
+
+    it("Proposal approved: personal, HITL, proposal + implement → personal, HITL, implement", async () => {
+        const calls: string[] = [];
+        const given = linear(calls, ["personal", "HITL", "proposal"]);
+
+        const record = await transition(given, "transition:linear:DOT-110", "implement");
+
+        expect(record).toEqual({
+            id: "transition:linear:DOT-110",
+            labels: ["implement"],
+            status: "applied",
+            detail: "added implement, removed proposal on linear DOT-110, read back",
+        });
+        expect(await labelsOf(given, "linear", "DOT-110")).toEqual([
+            "personal",
+            "HITL",
+            "implement",
+        ]);
+    });
+
+    it("Autonomy answered for a task in proposal: skipped and nothing is written", async () => {
+        const calls: string[] = [];
+        const given = linear(calls, ["HITL", "proposal"]);
+
+        const record = await transition(given, "transition:linear:DOT-110", "AFK");
+
+        expect(record).toMatchObject({
+            status: "skipped",
+            detail: "already moved on: stage [proposal]",
+        });
+        expect(calls).toEqual(["linear:readTask:DOT-110"]);
+    });
+
+    it("an approval for a task still in grill-me is skipped and nothing is written", async () => {
+        const calls: string[] = [];
+        const given = linear(calls, ["work", "grill-me"]);
+
+        const record = await transition(given, "transition:linear:DOT-110", "implement");
+
+        expect(record).toMatchObject({
+            status: "skipped",
+            detail: "already moved on: stage [grill-me]",
+        });
+        expect(calls).toEqual(["linear:readTask:DOT-110"]);
+    });
+
+    it("an answer for a task in neither stage is skipped and nothing is written", async () => {
+        const calls: string[] = [];
+        const given = linear(calls, ["personal", "AFK", "implement"]);
+
+        const record = await transition(given, "transition:linear:DOT-110", "implement");
+
+        expect(record).toMatchObject({
+            status: "skipped",
+            detail: "already moved on: stage [implement]",
+        });
+        expect(calls).toEqual(["linear:readTask:DOT-110"]);
+    });
+
+    it("an approval for a task in proposal with no autonomy is rejected and nothing is written", async () => {
+        const calls: string[] = [];
+        const given = linear(calls, ["personal", "proposal"]);
+
+        const record = await transition(given, "transition:linear:DOT-110", "implement");
+
+        expect(record).toMatchObject({
+            status: "rejected",
+            detail: "linear DOT-110 in proposal has no autonomy: expected one of AFK, HITL",
+        });
+        expect(calls).toEqual(["linear:readTask:DOT-110"]);
     });
 
     it("a malformed id is rejected, naming the problem", async () => {
@@ -716,6 +984,51 @@ describe("transition answers: A transition replaces the stage", () => {
         });
         expect(removals(calls)).toEqual([]);
         expect(await labelsOf(given, "linear", "DOT-110")).toEqual(["work", "grill-me", "AFK"]);
+    });
+
+    it("Proposal ready: personal, HITL, proposal → personal, HITL, implement, and only proposal was removed", async () => {
+        const calls: string[] = [];
+        const given = trackers(calls, {
+            beads: [task("beads", "X-12", ["personal", "HITL", "proposal"])],
+        });
+
+        const record = await transition(given, "transition:beads:X-12", "implement");
+
+        expect(record.status).toBe("applied");
+        expect(writes(calls)).toEqual([
+            "beads:addLabel:X-12:implement",
+            "beads:removeLabel:X-12:proposal",
+        ]);
+        expect(await labelsOf(given, "beads", "X-12")).toEqual(["personal", "HITL", "implement"]);
+    });
+
+    it("a removal of proposal that fails leaves it beside implement, and a second run completes it", async () => {
+        const calls: string[] = [];
+        const given = linear(calls, ["work", "AFK", "proposal"]);
+        const error = "linear issue update DOT-110 --remove-label proposal: rate limited";
+
+        const failed = await runTransition(
+            { source: "linear", id: "DOT-110" },
+            modeDeps(failingRemoval(given, "linear", "proposal", error)),
+            STARTED,
+        );
+
+        expect(failed.reasons).toEqual([
+            `${error} (before [work, AFK, proposal] → after [work, AFK, proposal, implement]); ` +
+                "proposal may remain beside implement, answering again completes the transition",
+        ]);
+        expect(exitCodeFor(failed.outcome)).toBe(3);
+
+        calls.length = 0;
+        const again = await runTransition(
+            { source: "linear", id: "DOT-110" },
+            modeDeps(given),
+            STARTED,
+        );
+
+        expect(again.applied).toBe(true);
+        expect(writes(calls)).toEqual(["linear:removeLabel:DOT-110:proposal"]);
+        expect(await labelsOf(given, "linear", "DOT-110")).toEqual(["work", "AFK", "implement"]);
     });
 
     it("Alias kept by a transition: a Beads task keeps nazaries and work", async () => {
@@ -942,6 +1255,57 @@ describe("transition answers: A transition replaces the stage", () => {
     });
 });
 
+describe("transition: The autonomy decides whether leaving proposal needs an answer", () => {
+    it("AFK task: applied with no question, work, AFK, proposal → work, AFK, implement", async () => {
+        const calls: string[] = [];
+        const given = linear(calls, ["work", "AFK", "proposal"]);
+
+        const report = await runTransition(
+            { source: "linear", id: "DOT-110" },
+            modeDeps(given),
+            STARTED,
+        );
+
+        expect(report.applied).toBe(true);
+        expect(report).not.toHaveProperty("handoff");
+        expect(await labelsOf(given, "linear", "DOT-110")).toEqual(["work", "AFK", "implement"]);
+    });
+
+    it("HITL task not approved: Later sends no answer, so the task keeps proposal and nothing is written", async () => {
+        const calls: string[] = [];
+        const given = linear(calls, ["HITL", "proposal"]);
+
+        const report = await runTransition(
+            { source: "linear", id: "DOT-110" },
+            modeDeps(given),
+            STARTED,
+        );
+        const later = report.handoff?.questions[0]?.options.find(
+            (option) => option.label === "Later",
+        );
+
+        expect(later?.value).toBeNull();
+        expect(writes(calls)).toEqual([]);
+        expect(await labelsOf(given, "linear", "DOT-110")).toEqual(["HITL", "proposal"]);
+    });
+
+    it("Autonomy missing: personal and proposal only, nothing is written and the reason names the missing autonomy", async () => {
+        const calls: string[] = [];
+        const given = linear(calls, ["personal", "proposal"]);
+
+        const report = await runTransition(
+            { source: "linear", id: "DOT-110" },
+            modeDeps(given),
+            STARTED,
+        );
+
+        expect(report.reasons).toEqual([
+            "linear DOT-110 in proposal has no autonomy: expected one of AFK, HITL",
+        ]);
+        expect(writes(calls)).toEqual([]);
+    });
+});
+
 describe("transition receipt: The transition waits for the persistence receipt", () => {
     const states: string[] = [];
     const ID = attemptId({ source: "linear", id: "DOT-110" }, "grill-me", 1);
@@ -1141,16 +1505,77 @@ describe("transition receipt: The transition waits for the persistence receipt",
         expect(result.reasons).toEqual([missing(state, second)]);
     });
 
-    it("a task outside grill-me is reported as such, whatever its attempts hold", async () => {
+    it("a task in neither stage is reported as such, whatever its attempts hold", async () => {
         const state = await stateWith({});
 
-        const result = await report(linear([], ["personal", "AFK", "proposal"]), state);
-        const skipped = await answered(linear([], ["work", "AFK", "proposal"]), state);
+        const result = await report(linear([], ["personal", "AFK", "implement"]), state);
+        const skipped = await answered(linear([], ["work", "AFK", "implement"]), state);
 
         expect(result.reasons).toEqual([
-            "linear DOT-110 is not in grill-me (labels [personal, AFK, proposal])",
+            "linear DOT-110 is in neither grill-me nor proposal (labels [personal, AFK, implement])",
         ]);
         expect(skipped.status).toBe("skipped");
+    });
+
+    describe("leaving proposal", () => {
+        const PROPOSAL = attemptId({ source: "linear", id: "DOT-110" }, "proposal", 1);
+
+        const proposing = (overrides: Partial<AttemptRecord> = {}) =>
+            stateWith({ id: PROPOSAL, stage: "proposal", ...overrides });
+
+        const unsaved = (state: string) =>
+            `proposal attempt ${PROPOSAL} has no persistence receipt at ${receiptOf(state, PROPOSAL)}; ` +
+            `persist its stage summary with --apply --persist ${PROPOSAL}, or discard the attempt`;
+
+        it("Stage summary not persisted: nothing is written, the report names the attempt and the receipt, exit 3", async () => {
+            const calls: string[] = [];
+            const given = linear(calls, ["personal", "AFK", "proposal"]);
+            const state = await proposing();
+
+            const result = await report(given, state);
+
+            expect(result).toMatchObject({
+                outcome: "not-evaluable",
+                applied: false,
+                reasons: [unsaved(state)],
+            });
+            expect(result).not.toHaveProperty("handoff");
+            expect(exitCodeFor(result.outcome)).toBe(3);
+            expect(calls).toEqual(["linear:readTask:DOT-110"]);
+        });
+
+        it("Stage summary not persisted: the approval is rejected, naming the attempt", async () => {
+            const calls: string[] = [];
+            const given = linear(calls, ["personal", "HITL", "proposal"]);
+            const state = await proposing();
+
+            const [only] = await transitionHandler(state).answer(
+                [answer("transition:linear:DOT-110", "implement")],
+                context(given),
+            );
+
+            expect(only).toMatchObject({ status: "rejected", detail: unsaved(state) });
+            expect(calls).toEqual(["linear:readTask:DOT-110"]);
+        });
+
+        it("Stage summary persisted: the AFK task moves to implement", async () => {
+            const given = linear([], ["personal", "AFK", "proposal"]);
+            const state = await proposing();
+            await persisted(state, PROPOSAL);
+
+            const result = await report(given, state);
+
+            expect(result).toMatchObject({ outcome: "advance", applied: true });
+        });
+
+        it("an open grill-me attempt without a receipt does not hold a task in proposal", async () => {
+            const given = linear([], ["personal", "AFK", "proposal"]);
+            const state = await stateWith({});
+
+            const result = await report(given, state);
+
+            expect(result.applied).toBe(true);
+        });
     });
 
     it("a GitHub task is found in its nested attempt directory", async () => {
@@ -1265,7 +1690,12 @@ describe("transition record: An applied transition leaves a record in the open a
         });
         expect(await recordIn(state)).toEqual({
             ok: true,
-            value: { schema: TRANSITIONED_SCHEMA, answer: ["HITL"], at: AT.toISOString() },
+            value: {
+                schema: TRANSITIONED_SCHEMA,
+                answer: ["HITL"],
+                at: AT.toISOString(),
+                by: "human",
+            },
         });
     });
 
@@ -1285,7 +1715,7 @@ describe("transition record: An applied transition leaves a record in the open a
         );
     });
 
-    it("an open attempt of another stage holds it too", async () => {
+    it("an open attempt of another stage is left without a record", async () => {
         const state = tempState();
         states.push(state);
         const proposal = attemptId(TASK, "proposal", 1);
@@ -1294,10 +1724,7 @@ describe("transition record: An applied transition leaves a record in the open a
         const settled = await answered(state, ["work", "grill-me"]);
 
         expect(settled.status).toBe("applied");
-        expect(await recordIn(state, proposal)).toMatchObject({
-            ok: true,
-            value: { answer: ["HITL"] },
-        });
+        expect(existsSync(transitionedPath(attemptDir(state, proposal)))).toBe(false);
     });
 
     it("several open attempts: the first of the sorted list gets it", async () => {
@@ -1378,6 +1805,80 @@ describe("transition record: An applied transition leaves a record in the open a
     });
 });
 
+describe("transition record: leaving proposal", () => {
+    const states: string[] = [];
+    const TASK = { source: "linear", id: "DOT-110", title: "Grill-me stage" } as const;
+    const GRILL = attemptId(TASK, "grill-me", 1);
+    const PROPOSAL = attemptId(TASK, "proposal", 1);
+    const AT = new Date("2026-11-14T08:00:00.000Z");
+
+    afterEach(() => {
+        for (const state of states.splice(0)) {
+            rmSync(state, { recursive: true, force: true });
+        }
+    });
+
+    // A finished grill still owed its cleanup sorts before the proposal attempt.
+    async function proposing(): Promise<string> {
+        const state = tempState();
+        states.push(state);
+        await writeRecord(
+            state,
+            startedAttempt({
+                id: GRILL,
+                task: TASK,
+                stage: "grill-me",
+                state: "completed",
+                cleanup: { pending: true, error: "aoe remove failed" },
+            }),
+        );
+        await writeRecord(state, startedAttempt({ id: PROPOSAL, task: TASK, stage: "proposal" }));
+        await writeJsonAtomic(receiptPath(attemptDir(state, PROPOSAL)), {});
+        return state;
+    }
+
+    it("an AFK transition leaves implement, by the agent, in the proposal attempt", async () => {
+        const state = await proposing();
+
+        const report = await runTransition(
+            { source: "linear", id: "DOT-110" },
+            {
+                ...modeDeps(linear([], ["work", "AFK", "proposal"]), config(), state),
+                now: () => AT,
+            },
+            STARTED,
+        );
+
+        expect(report.applied).toBe(true);
+        expect(await readTransitioned(attemptDir(state, PROPOSAL))).toEqual({
+            ok: true,
+            value: {
+                schema: TRANSITIONED_SCHEMA,
+                answer: ["implement"],
+                at: AT.toISOString(),
+                by: "agent",
+            },
+        });
+        expect(existsSync(transitionedPath(attemptDir(state, GRILL)))).toBe(false);
+    });
+
+    it("an approval leaves implement, by the human, in the proposal attempt", async () => {
+        const state = await proposing();
+
+        const [only] = await transitionHandler(state, undefined, () => AT).answer(
+            [answer("transition:linear:DOT-110", "implement")],
+            context(linear([], ["work", "HITL", "proposal"])),
+        );
+
+        expect(only?.status).toBe("applied");
+        expect(await readTransitioned(attemptDir(state, PROPOSAL))).toMatchObject({
+            ok: true,
+            value: { answer: ["implement"], by: "human" },
+        });
+        expect(existsSync(transitionedPath(attemptDir(state, GRILL)))).toBe(false);
+    });
+});
+
 describe("transition record: readTransitioned", () => {
     let dir: string;
 
@@ -1411,12 +1912,38 @@ describe("transition record: readTransitioned", () => {
             "$.answer[0] must be a string",
         ],
         ["no time", JSON.stringify({ schema: TRANSITIONED_SCHEMA, answer: [] }), "$.at"],
+        [
+            "an unknown decider",
+            JSON.stringify({ schema: TRANSITIONED_SCHEMA, answer: [], at: "x", by: "bot" }),
+            "$.by must be agent or human",
+        ],
     ])("is an error naming the file for %s", async (_name, text, reason) => {
         const read = await given(text);
 
         expect(read.ok).toBe(false);
         expect(!read.ok && read.error).toContain(transitionedPath(dir));
         expect(!read.ok && read.error).toContain(reason);
+    });
+
+    it("reads a record written before by existed, and one that names who decided", async () => {
+        const old = await given(
+            JSON.stringify({ schema: TRANSITIONED_SCHEMA, answer: ["AFK"], at: "x" }),
+        );
+        expect(old).toEqual({
+            ok: true,
+            value: { schema: TRANSITIONED_SCHEMA, answer: ["AFK"], at: "x" },
+        });
+        rmSync(dir, { recursive: true, force: true });
+
+        const agent = await given(
+            JSON.stringify({
+                schema: TRANSITIONED_SCHEMA,
+                answer: ["implement"],
+                at: "x",
+                by: "agent",
+            }),
+        );
+        expect(agent).toMatchObject({ ok: true, value: { by: "agent" } });
     });
 
     it("is an error naming the file when it cannot be read", async () => {

@@ -3,12 +3,14 @@
 // waiting for an implementation.
 
 import { grillMeStage } from "./grill-me/stage.ts";
+import { proposalStage } from "./proposal/stage.ts";
 import type { Stage, StageId } from "./stage.ts";
 import { testStage } from "./test.ts";
 
 export const STAGES: ReadonlyMap<StageId, Stage> = new Map([
     [testStage.id, testStage],
     [grillMeStage.id, grillMeStage],
+    [proposalStage.id, proposalStage],
 ]);
 
 export function stageFor(id: StageId): Stage | undefined {

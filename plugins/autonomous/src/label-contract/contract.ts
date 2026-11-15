@@ -5,7 +5,7 @@
 // labels is derived from these.
 const SCOPE_LABELS = ["work", "personal"] as const;
 const AUTONOMY_LABELS = ["AFK", "HITL"] as const;
-const STAGE_LABELS = ["grill-me", "proposal"] as const;
+const STAGE_LABELS = ["grill-me", "proposal", "implement"] as const;
 const TAKEN_LABEL = "taken";
 
 export type Scope = (typeof SCOPE_LABELS)[number];
@@ -39,6 +39,7 @@ export const COLOURS: Record<ContractLabel, string> = {
     HITL: "#eb5757",
     "grill-me": "#f2994a",
     proposal: "#bb87fc",
+    implement: "#26b5ce",
     work: "#2f80ed",
     personal: "#27ae60",
     taken: "#95a2b3",
@@ -52,6 +53,7 @@ export const MEANINGS: Record<ContractLabel, string> = {
     "grill-me": "The task must be refined with a human in a grill before anyone works on it.",
     proposal:
         "The task is ready for proposal preparation, its autonomy decided and any grill it needed over.",
+    implement: "The task has a proposal and is ready to implement.",
     taken: "An agent or a person is advancing the task now; it is not selected until the label is removed.",
 };
 

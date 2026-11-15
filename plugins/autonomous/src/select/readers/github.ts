@@ -7,11 +7,11 @@ import type { TaskLink, WorkReader, WorkTask } from "../types.ts";
 
 // gh 2.100 gives a sub-issue node no repository field: its `url` is the only place a cross-repo
 // sub-issue names its own.
-const ISSUE_URL = /^https?:\/\/[^/]+\/([^/]+\/[^/]+)\/issues\/\d+$/;
+export const ISSUE_URL = /^https?:\/\/[^/]+\/([^/]+\/[^/]+)\/issues\/\d+$/;
 
 const FIELDS = "subIssues,url,parent";
 
-function splitId(id: string): { repository: string; number: string } {
+export function splitId(id: string): { repository: string; number: string } {
     const hash = id.lastIndexOf("#");
     return { repository: id.slice(0, hash), number: id.slice(hash + 1) };
 }
@@ -23,9 +23,11 @@ function childId(node: Json, path: string, taskRepository: string): string {
     return `${repository}#${number(node, "number", path)}`;
 }
 
-function openChildren(value: unknown, taskRepository: string): string[] {
-    const root = object(value, "$");
-    const nodes = array(object(root.subIssues, "$.subIssues").nodes, "$.subIssues.nodes");
+function subIssueNodes(root: Json): unknown[] {
+    return array(object(root.subIssues, "$.subIssues").nodes, "$.subIssues.nodes");
+}
+
+function openChildren(nodes: unknown[], taskRepository: string): string[] {
     return nodes.flatMap((item, index) => {
         const path = `$.subIssues.nodes[${index}]`;
         const node = object(item, path);
@@ -54,9 +56,11 @@ function taskUrl(root: Json, repository: string, issue: string): string {
 
 function parseDetail(value: unknown, task: WorkTask, repository: string, issue: string): WorkTask {
     const root = object(value, "$");
+    const nodes = subIssueNodes(root);
     return {
         ...task,
-        children: openChildren(root, repository),
+        children: openChildren(nodes, repository),
+        childCount: nodes.length,
         url: taskUrl(root, repository, issue),
         parent: parentLink(root, repository),
     };
@@ -76,6 +80,7 @@ export function githubWorkReader(exec: Exec, config: GithubConfig): WorkReader {
                 repository: splitId(task.id).repository,
                 blockedBy: null,
                 children: null,
+                childCount: null,
                 blocks: [],
             }));
             return { ok: true, value: tasks };

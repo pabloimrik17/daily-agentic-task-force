@@ -5,7 +5,7 @@
 // them through `runJson`/`run` instead).
 
 import type { Exec } from "../../exec.ts";
-import { object, ParseError, string } from "../../validate.ts";
+import { type Json, object, ParseError, string } from "../../validate.ts";
 import type { TrackerResult } from "./tracker.ts";
 
 export function parseError(command: string, error: unknown): string {
@@ -26,15 +26,30 @@ export function parseJson(
     }
 }
 
-export function commentBodies(
+export interface AuthoredComment {
+    author: string | null; // null when the tracker names none
+    body: string;
+}
+
+interface CommentKeys {
+    body: string;
+    createdAt: string;
+}
+
+export type CommentAuthor = (entry: Json, path: string) => string | null;
+
+// Oldest first.
+export function authoredComments(
     items: unknown[],
     path: string,
-    keys: { body: string; createdAt: string },
-): string[] {
+    keys: CommentKeys,
+    author: CommentAuthor,
+): AuthoredComment[] {
     const comments = items.map((item, index) => {
         const entryPath = `${path}[${index}]`;
         const entry = object(item, entryPath);
         return {
+            author: author(entry, entryPath),
             body: string(entry, keys.body, entryPath),
             createdAt: string(entry, keys.createdAt, entryPath),
         };
@@ -45,7 +60,11 @@ export function commentBodies(
         }
         return a.createdAt < b.createdAt ? -1 : 1;
     });
-    return comments.map((comment) => comment.body);
+    return comments.map(({ author: name, body }) => ({ author: name, body }));
+}
+
+export function commentBodies(items: unknown[], path: string, keys: CommentKeys): string[] {
+    return authoredComments(items, path, keys, () => null).map((comment) => comment.body);
 }
 
 export type MapExecError = (command: string, error: string) => string;

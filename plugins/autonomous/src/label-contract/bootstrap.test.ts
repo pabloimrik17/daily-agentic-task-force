@@ -119,6 +119,7 @@ const everyWorkspaceLabelExcept = (missing: string): TrackerLabel[] =>
             ["HITL", "#eb5757"],
             ["grill-me", "#f2994a"],
             ["proposal", "#bb87fc"],
+            ["implement", "#26b5ce"],
             ["taken", "#95a2b3"],
         ] as const
     )
@@ -150,6 +151,27 @@ describe("bootstrapLabels", () => {
         expect(report.outcome).toBe("advance");
     });
 
+    it("implement bootstrapped: missing on Linear, it is created at workspace level with its colour", async () => {
+        const linear = fake("linear", {
+            labelScopes: ["workspace"],
+            labels: { ok: true, value: everyWorkspaceLabelExcept("implement") },
+        });
+        const report = await bootstrapLabels(
+            trackers({ beads: beads(), github: fake("github"), linear }),
+            config({ beads: false, github: false }),
+            STARTED,
+        );
+        expect(linear.created).toEqual([["workspace", "implement", "#26b5ce"]]);
+        expect(report.sources[0]?.labels.find((label) => label.label === "implement")).toEqual({
+            scope: "workspace",
+            label: "implement",
+            status: "created",
+            colour: "#26b5ce",
+            expected: null,
+            note: null,
+        });
+    });
+
     it("recolours a GitHub label with another colour and reports it as recoloured", async () => {
         const dotfiles = { scope: "owner/dotfiles", name: "AFK", colour: "#000000" };
         const github = fake("github", {
@@ -167,6 +189,7 @@ describe("bootstrapLabels", () => {
             "HITL",
             "grill-me",
             "proposal",
+            "implement",
             "taken",
         ]);
         expect(github.recoloured).toEqual([[dotfiles, "#5e6ad2"]]);
@@ -291,9 +314,9 @@ describe("bootstrapLabels", () => {
         );
         expect(linear.created).toEqual([]);
         expect(linear.recoloured).toEqual([]);
-        expect(report.sources[0]?.labels).toHaveLength(7);
+        expect(report.sources[0]?.labels).toHaveLength(8);
         expect(report.sources[0]?.labels.map((label) => label.status)).toEqual(
-            Array(7).fill("present"),
+            Array(8).fill("present"),
         );
     });
 
@@ -339,7 +362,7 @@ describe("bootstrapLabels", () => {
         expect(linear.recoloured).toEqual([]);
         expect(report.sources[0]?.labels.every((label) => label.note === null)).toBe(true);
         expect(report.sources[0]?.labels.map((label) => label.status)).toEqual(
-            Array(7).fill("present"),
+            Array(8).fill("present"),
         );
     });
 
@@ -363,7 +386,7 @@ describe("bootstrapLabels", () => {
         );
         expect(linear.recoloured).toEqual([]);
         expect(report.sources[0]?.labels.map((label) => label.status)).toEqual(
-            Array(7).fill("present"),
+            Array(8).fill("present"),
         );
     });
 
@@ -418,12 +441,14 @@ describe("bootstrapLabels", () => {
             "owner/a HITL",
             "owner/a grill-me",
             "owner/a proposal",
+            "owner/a implement",
             "owner/a taken",
             "owner/b work",
             "owner/b AFK",
             "owner/b HITL",
             "owner/b grill-me",
             "owner/b proposal",
+            "owner/b implement",
             "owner/b taken",
         ]);
     });
@@ -462,7 +487,7 @@ describe("bootstrapLabels", () => {
             STARTED,
         );
         expect(report.sources.map((entry) => entry.source)).toEqual(["beads", "github", "linear"]);
-        expect(github.created).toHaveLength(7);
+        expect(github.created).toHaveLength(8);
         expect(linear.created).toEqual([]);
         expect(report.sources[2]).toEqual({
             source: "linear",
@@ -489,7 +514,7 @@ describe("bootstrapLabels", () => {
             config(),
             STARTED,
         );
-        expect(linear.created).toHaveLength(7);
+        expect(linear.created).toHaveLength(8);
         expect(report.sources[1]).toMatchObject({ source: "github", evaluable: false });
         expect(report.sources[2]).toMatchObject({ source: "linear", evaluable: true });
         expect(report.outcome).toBe("not-evaluable");
@@ -586,7 +611,7 @@ describe("bootstrapLabels", () => {
         expect(report.sources[0]?.labels.map((label) => label.label as string)).not.toContain(
             "bug",
         );
-        expect(report.sources[0]?.labels).toHaveLength(7);
+        expect(report.sources[0]?.labels).toHaveLength(8);
     });
 
     it("omits a disabled source and never calls its tracker", async () => {
@@ -653,8 +678,8 @@ describe("renderBootstrapText", () => {
                 "label bootstrap — started 2026-09-26T10:00:00.000Z",
                 "outcome: not-evaluable",
                 "  beads     not applicable — Beads needs no label creation: labels exist by use",
-                "  github    owner/repo: created work, personal, HITL, proposal, taken; recoloured AFK (was #000000); failed grill-me (gh label create grill-me --repo owner/repo: gh failed: HTTP 403)",
-                "  github    owner/other: present work, personal, AFK, HITL, grill-me, proposal, taken",
+                "  github    owner/repo: created work, personal, HITL, proposal, implement, taken; recoloured AFK (was #000000); failed grill-me (gh label create grill-me --repo owner/repo: gh failed: HTTP 403)",
+                "  github    owner/other: present work, personal, AFK, HITL, grill-me, proposal, implement, taken",
                 `  linear    not evaluable — ${UNAUTHENTICATED}`,
             ].join("\n"),
         );
@@ -685,7 +710,7 @@ describe("renderBootstrapText", () => {
             [
                 "label bootstrap — started 2026-09-26T10:00:00.000Z",
                 "outcome: not-evaluable",
-                "  github    owner/repo: present work, personal, AFK, grill-me, proposal, taken; failed HITL (gh label edit HITL --repo owner/repo: gh failed: HTTP 403)",
+                "  github    owner/repo: present work, personal, AFK, grill-me, proposal, implement, taken; failed HITL (gh label edit HITL --repo owner/repo: gh failed: HTTP 403)",
             ].join("\n"),
         );
     });
