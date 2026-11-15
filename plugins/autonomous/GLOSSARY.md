@@ -115,13 +115,14 @@ open, its parent is never a candidate.
 ### Quota
 
 **Claude account**:
-A Claude subscription whose quota OpenUsage reports, either with usage data or
-only with an account error. The quota gate evaluates exactly one per run.
+A Claude subscription whose quota OpenUsage reports with usage data. The quota
+gate evaluates exactly one per run.
 _Avoid_: candidate, provider
 
 **Account error**:
-An error that OpenUsage attributes to one Claude account. While it stands,
-that account's data is not fresh; the other accounts' data is unaffected.
+A failure of OpenUsage to refresh one Claude account. OpenUsage keeps that
+account's last values, which go stale; while it stands, that account's data is
+not fresh, and the other accounts' data is unaffected.
 
 ### Sessions
 

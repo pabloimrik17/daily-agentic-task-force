@@ -2,34 +2,34 @@ import type { OpenUsageLimits, OpenUsageProvider } from "./parse.ts";
 
 export interface Account {
     key: string;
-    displayName: string | null;
+    displayName: string;
 }
 
 export type Selection =
     | {
           ok: true;
           key: string;
-          provider: OpenUsageProvider | undefined;
-          errors: string[];
+          provider: OpenUsageProvider;
           accounts: Account[];
       }
     | { ok: false; reason: string; accounts: Account[] };
 
+// OpenUsage 0.8 keys every account `claude@<id>`; a bare `claude` key is still accepted.
 function isClaudeKey(key: string): boolean {
     return key === "claude" || key.startsWith("claude@");
 }
 
-// Accounts come from providers and from errors: an account whose refresh failed
-// may appear only in `errors`, and must still be selectable so the failure is reported.
+// Accounts come only from providers. OpenUsage 0.8 leaves out an account it has not fetched
+// yet, and reports an account whose refreshes fail through `stale`, not through an error list.
 export function selectAccount(limits: OpenUsageLimits, requested: string | undefined): Selection {
-    const keys = [
-        ...new Set([...Object.keys(limits.providers), ...limits.errors.map((e) => e.providerId)]),
-    ]
-        .filter(isClaudeKey)
-        .sort();
-    const accounts = keys.map((key) => ({
+    const claude = Object.entries(limits.providers)
+        .filter(([key]) => isClaudeKey(key))
+        // Keys are unique, so no two compare equal.
+        .sort(([a], [b]) => (a < b ? -1 : 1));
+    const keys = claude.map(([key]) => key);
+    const accounts = claude.map(([key, provider]) => ({
         key,
-        displayName: limits.providers[key]?.displayName ?? null,
+        displayName: provider.displayName,
     }));
 
     if (requested !== undefined && !keys.includes(requested)) {
@@ -42,16 +42,11 @@ export function selectAccount(limits: OpenUsageLimits, requested: string | undef
             accounts,
         };
     }
-    const key = requested ?? keys[0];
-    if (key === undefined) {
+    const selected = claude.find(([key]) => key === (requested ?? keys[0]));
+    if (selected === undefined) {
         return { ok: false, reason: "OpenUsage reported no Claude account", accounts };
     }
 
-    return {
-        ok: true,
-        key,
-        provider: limits.providers[key],
-        errors: limits.errors.filter((e) => e.providerId === key).map((e) => e.message),
-        accounts,
-    };
+    const [key, provider] = selected;
+    return { ok: true, key, provider, accounts };
 }

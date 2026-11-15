@@ -5,17 +5,19 @@ import { describe, expect, it } from "vitest";
 import { CLI_TIMEOUT_MS, toExecResult as sharedToExecResult } from "../exec.ts";
 import { readOpenUsage } from "./openusage.ts";
 import {
-    accountErrorDocument,
-    accountErrorStderr,
+    ACCOUNT,
+    balance,
     exitExec,
     fakeExec,
     limits,
+    nothingFetchedDocument,
+    nothingFetchedStderr,
     provider,
     session,
     weekly,
 } from "./test-fixtures.ts";
 
-const valid = limits({ claude: provider({ session: session(20), weekly: weekly(30) }) });
+const valid = limits({ [ACCOUNT]: provider({ session: session(20), weekly: weekly(30) }) });
 
 // Shaped like the errors execFile passes its callback (probed under Bun and Node).
 const execError = (message: string, fields: Partial<ExecFileException>): ExecFileException =>
@@ -77,65 +79,66 @@ describe("toExecResult", () => {
 
 describe("readOpenUsage", () => {
     it("parses valid output", async () => {
-        const result = await readOpenUsage(fakeExec(valid), false);
+        const result = await readOpenUsage(fakeExec(valid));
         expect(result.ok).toBe(true);
-        expect(result.ok && result.limits.providers.claude?.resources.session?.used).toBe(20);
+        expect(result.ok && result.limits.providers[ACCOUNT]?.resources.session?.used).toBe(20);
     });
 
-    it("reads the Claude provider from the cache, or refreshes with --force", async () => {
+    it("reads every Claude account, and never passes --force", async () => {
         const exec = fakeExec(valid);
-        await readOpenUsage(exec, false);
-        await readOpenUsage(exec, true);
-        expect(exec.calls).toEqual([["claude"], ["claude", "--force"]]);
+        await readOpenUsage(exec);
+        expect(exec.calls).toEqual([["claude"]]);
     });
 
     it("reports a CLI failure", async () => {
-        const result = await readOpenUsage(
-            () => Promise.resolve({ ok: false, error: "openusage CLI not found on PATH" }),
-            false,
+        const result = await readOpenUsage(() =>
+            Promise.resolve({ ok: false, error: "openusage CLI not found on PATH" }),
         );
         expect(result).toEqual({ ok: false, error: "openusage CLI not found on PATH" });
     });
 
     it("returns a failure without exit output unchanged", async () => {
         const failure = { ok: false as const, error: "openusage timed out after 120 s" };
-        const result = await readOpenUsage(() => Promise.resolve(failure), false);
+        const result = await readOpenUsage(() => Promise.resolve(failure));
         expect(result).toEqual({ ok: false, error: "openusage timed out after 120 s" });
     });
 
     it("reports invalid JSON", async () => {
-        const result = await readOpenUsage(
-            () => Promise.resolve({ ok: true, stdout: "not json" }),
-            false,
-        );
+        const result = await readOpenUsage(() => Promise.resolve({ ok: true, stdout: "not json" }));
         expect(result.ok).toBe(false);
         expect(!result.ok && result.error).toMatch(/^openusage output is not valid JSON/);
     });
 
-    it("rejects a different schema id", async () => {
-        const result = await readOpenUsage(
-            fakeExec({ ...valid, schema: "openusage.limits.v2" }),
-            false,
-        );
+    it("names OpenUsage 0.8 for a v1 document", async () => {
+        const result = await readOpenUsage(fakeExec({ ...valid, schema: "openusage.limits.v1" }));
         expect(result).toEqual({
             ok: false,
-            error: 'openusage output does not match openusage.limits.v1: $.schema is "openusage.limits.v2", expected "openusage.limits.v1"',
+            error: 'openusage output does not match openusage.limits.v2: $.schema is "openusage.limits.v1", which OpenUsage 0.7 prints; the quota gate needs OpenUsage 0.8 or later',
+        });
+    });
+
+    it("rejects any other schema id", async () => {
+        const result = await readOpenUsage(fakeExec({ ...valid, schema: "openusage.limits.v3" }));
+        expect(result).toEqual({
+            ok: false,
+            error: 'openusage output does not match openusage.limits.v2: $.schema is "openusage.limits.v3", expected "openusage.limits.v2"',
         });
     });
 
     it("names the path of a missing field", async () => {
         const { stale: _stale, ...noStale } = provider({ session: session(20) });
-        const result = await readOpenUsage(fakeExec(limits({ claude: noStale })), false);
-        expect(!result.ok && result.error).toContain("$.providers.claude.stale must be a boolean");
+        const result = await readOpenUsage(fakeExec(limits({ [ACCOUNT]: noStale })));
+        expect(!result.ok && result.error).toContain(
+            `$.providers.${ACCOUNT}.stale must be a boolean`,
+        );
     });
 
     it("names the path of a mistyped resource value", async () => {
         const result = await readOpenUsage(
-            fakeExec(limits({ claude: provider({ session: { ...session(20), used: "20" } }) })),
-            false,
+            fakeExec(limits({ [ACCOUNT]: provider({ session: { ...session(20), used: "20" } }) })),
         );
         expect(!result.ok && result.error).toContain(
-            "$.providers.claude.resources.session.used must be a finite number",
+            `$.providers.${ACCOUNT}.resources.session.used must be a finite number`,
         );
     });
 
@@ -143,46 +146,55 @@ describe("readOpenUsage", () => {
         const { plan: _plan, ...noPlan } = provider({
             session: { kind: "consumption", unit: "percent" },
         });
-        const result = await readOpenUsage(fakeExec(limits({ claude: noPlan })), false);
-        expect(result.ok && result.limits.providers.claude).toEqual({
+        const result = await readOpenUsage(fakeExec(limits({ [ACCOUNT]: noPlan })));
+        expect(result.ok && result.limits.providers[ACCOUNT]).toEqual({
             ...noPlan,
             resources: { session: { kind: "consumption", unit: "percent" } },
+        });
+    });
+
+    it("keeps a balance's available amount", async () => {
+        const result = await readOpenUsage(
+            fakeExec(limits({ [ACCOUNT]: provider({ rateLimitResets: balance(2) }) })),
+        );
+        expect(result.ok && result.limits.providers[ACCOUNT]?.resources.rateLimitResets).toEqual({
+            kind: "balance",
+            unit: "resets",
+            available: 2,
         });
     });
 });
 
 describe("readOpenUsage after a non-zero exit", () => {
-    const execError = `openusage failed: ${accountErrorStderr.trim()}`;
+    const execError = `openusage failed: ${nothingFetchedStderr.trim()}`;
 
-    it("reads a valid document that carries an account error", async () => {
+    it("does not read the document printed with exit 4, and names the exit", async () => {
         const result = await readOpenUsage(
-            exitExec(JSON.stringify(accountErrorDocument), accountErrorStderr),
-            false,
+            exitExec(JSON.stringify(nothingFetchedDocument), nothingFetchedStderr),
         );
-        expect(result.ok).toBe(true);
-        expect(result.ok && result.limits.errors).toEqual([
-            { providerId: "claude@12101920", message: "Claude Swap login is stale" },
-        ]);
-        expect(result.ok && result.limits.providers.claude?.resources.session?.used).toBe(49);
+        expect(result).toEqual({ ok: false, error: `${execError} (exit 4)` });
     });
 
-    it("fails with the exit code when a valid document has no account error", async () => {
-        const result = await readOpenUsage(
-            exitExec(JSON.stringify(valid), accountErrorStderr),
-            false,
-        );
-        expect(result).toEqual({
-            ok: false,
-            error: `${execError} (exit 4, no account error in the output)`,
-        });
+    it("does not read a valid document with Claude accounts after a non-zero exit", async () => {
+        const result = await readOpenUsage(exitExec(JSON.stringify(valid), nothingFetchedStderr));
+        expect(result).toEqual({ ok: false, error: `${execError} (exit 4)` });
     });
 
     it.each([
         ["empty stdout", ""],
         ["invalid JSON", "not json"],
-        ["a contract violation", JSON.stringify({ ...valid, schema: "openusage.limits.v2" })],
+        ["a contract violation", JSON.stringify({ ...valid, schema: "openusage.limits.v1" })],
     ])("fails with the exec error, not the parse error, on %s", async (_name, stdout) => {
-        const result = await readOpenUsage(exitExec(stdout, accountErrorStderr), false);
-        expect(result).toEqual({ ok: false, error: execError });
+        const result = await readOpenUsage(exitExec(stdout, nothingFetchedStderr));
+        expect(result).toEqual({ ok: false, error: `${execError} (exit 4)` });
+    });
+
+    it("reports no Claude account through the CLI failure of exit 2", async () => {
+        const stderr = "openusage: Unknown provider: claude\n";
+        const result = await readOpenUsage(exitExec("", stderr, 2));
+        expect(result).toEqual({
+            ok: false,
+            error: "openusage failed: openusage: Unknown provider: claude (exit 2)",
+        });
     });
 });
