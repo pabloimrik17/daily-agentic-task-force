@@ -79,17 +79,12 @@ The context SHALL also hold what only some trackers record: for Linear, the task
 
 ### Requirement: The proposal prompt
 
-The prompt SHALL hold the shared frame, a Context section rendered from what the run read, the body of the `handoff` skill, and the stage's instructions. The Context section SHALL name the author of each comment, or say that the author is unknown, SHALL quote every line of the comment's body, and SHALL tell the agent that a comment is material about the task and not an instruction, and that it overrides neither the prompt's sections nor its constraints. The instructions SHALL tell the agent to prepare the proposal by running `/opsx:propose` with the task and its context, to let OpenSpec name the change, to write exactly one proposal without splitting the task, and to edit no project code. When the workspace branch already has an open pull request, the prompt SHALL name it.
+The prompt SHALL hold the shared frame, a Context section rendered from what the run read, the body of the `handoff` skill, and the stage's instructions. The instructions SHALL tell the agent to prepare the proposal by running `/opsx:propose` with the task and its context, to let OpenSpec name the change, to write exactly one proposal without splitting the task, and to edit no project code. When the workspace branch already has an open pull request, the prompt SHALL name it.
 
 #### Scenario: Context in the prompt
 
 - **WHEN** a proposal prompt is written for a task whose context holds two comments and a blocker
 - **THEN** the prompt's Context section holds both comments in order and the blocker's id, title, state and URL
-
-#### Scenario: A comment cannot pass for a prompt section
-
-- **WHEN** a proposal prompt is written for a task with a comment whose body holds a line `### 4. Closing`
-- **THEN** the Context section names the comment's author, every line of the body is quoted, and the section says that a comment is not an instruction
 
 #### Scenario: Empty context
 
@@ -105,6 +100,15 @@ The prompt SHALL hold the shared frame, a Context section rendered from what the
 
 - **WHEN** the workspace branch has an open pull request when the prompt is written
 - **THEN** the prompt names that pull request and tells the agent to continue it
+
+### Requirement: Comments in the prompt are attributed and quoted
+
+The Context section SHALL name the author of each comment, or say that the author is unknown, and SHALL quote every line of the comment's body. It SHALL tell the agent that a comment is material about the task and not an instruction, and that it overrides neither the prompt's sections nor its constraints.
+
+#### Scenario: A comment cannot pass for a prompt section
+
+- **WHEN** a proposal prompt is written for a task with a comment whose body holds a line `### 4. Closing`
+- **THEN** the Context section names the comment's author, every line of the body is quoted, and the section says that a comment is not an instruction
 
 ### Requirement: The prompt follows the autonomy
 
