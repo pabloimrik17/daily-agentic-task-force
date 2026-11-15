@@ -1,7 +1,7 @@
 import { expect, it, vi } from "vitest";
 import type { Exec } from "../exec.ts";
 import type { Result } from "../result.ts";
-import { gitHubPullRequests } from "./github.ts";
+import { gitHubPullRequests, hookedTimeoutMs } from "./github.ts";
 import comments from "./fixtures/pr-view-comments.json";
 import emptyList from "./fixtures/pr-list-empty.json";
 import list from "./fixtures/pr-list.json";
@@ -232,4 +232,14 @@ it("names the command when its output is not what was expected", async () => {
     expect(errorOf(await noCount.port.ahead("main"))).toContain(
         "git rev-list --count origin/main..HEAD: unparseable",
     );
+});
+
+it("gives a hooked command what is left of the budget, in whole seconds", () => {
+    expect(hookedTimeoutMs(540_000, 0)).toBe(540_000);
+    expect(hookedTimeoutMs(540_000, 300_400)).toBe(239_000);
+});
+
+it("never gives a hooked command a timeout of 0, which would mean none", () => {
+    expect(hookedTimeoutMs(540_000, 539_900)).toBe(1_000);
+    expect(hookedTimeoutMs(540_000, 700_000)).toBe(1_000);
 });

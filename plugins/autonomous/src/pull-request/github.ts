@@ -12,9 +12,23 @@ import {
 } from "./port.ts";
 
 // The commit and the push run the repository's hooks, and a pre-push hook can run a whole test
-// suite, so those two get a long timeout. Both together stay under the 600 s the run command
-// gives the whole process, so a slow hook is reported by name instead of the process being killed.
-const HOOKED_TIMEOUT_MS = 240_000;
+// suite. They share one budget, counted from when the port is made and kept under the 600 s the
+// run command gives the whole process, so a slow hook is reported by name instead of the process
+// being killed.
+const HOOKED_BUDGET_MS = 540_000;
+
+// execFile reads a timeout of 0 as no timeout, so a spent budget still leaves one second.
+const HOOKED_FLOOR_MS = 1_000;
+
+/** What a hooked command starting at `now` may take, in whole seconds, before `deadline`. */
+export function hookedTimeoutMs(deadline: number, now: number): number {
+    return Math.max(Math.floor((deadline - now) / 1_000) * 1_000, HOOKED_FLOOR_MS);
+}
+
+function hookedGit(now: () => number = Date.now): Exec {
+    const deadline = now() + HOOKED_BUDGET_MS;
+    return (args, input) => execCommand("git", hookedTimeoutMs(deadline, now()))(args, input);
+}
 
 export interface GitHubExecs {
     gh: Exec;
@@ -200,7 +214,7 @@ export const ghPullRequests: PullRequestsFactory = (directory) =>
         {
             gh: execCommand("gh", CLI_TIMEOUT_MS, { cwd: directory }),
             git: execCommand("git"),
-            hooked: execCommand("git", HOOKED_TIMEOUT_MS),
+            hooked: hookedGit(),
         },
         directory,
     );
