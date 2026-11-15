@@ -26,17 +26,22 @@ export const TRANSITION_SCHEMA = "autonomous.transition.v1";
 
 // The transitions (spec label-contract, "A transition replaces the stage"), keyed by the stage
 // they leave; `asks` names the question that leads out of it.
+type TransitionQuestion = "autonomy" | "approval";
+
+interface TransitionTarget {
+    to: StageLabel;
+    asks: TransitionQuestion;
+}
+
 export const TRANSITIONS = {
     "grill-me": { to: "proposal", asks: "autonomy" },
     proposal: { to: "implement", asks: "approval" },
-} as const;
+} as const satisfies Partial<Record<StageLabel, TransitionTarget>>;
 
 export type TransitionStage = keyof typeof TRANSITIONS;
 
-export interface TransitionRow {
+export interface TransitionRow extends TransitionTarget {
     from: TransitionStage;
-    to: StageLabel;
-    asks: "autonomy" | "approval";
 }
 
 export function transitionRow(from: TransitionStage): TransitionRow {
