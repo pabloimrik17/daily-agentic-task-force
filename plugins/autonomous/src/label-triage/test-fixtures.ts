@@ -2,7 +2,7 @@ import type { RunArgs } from "../args.ts";
 import { type AutonomousConfig, CONFIG_SCHEMA, type ConfigLoad, type Source } from "../config.ts";
 import { NOW } from "../quota-gate/test-fixtures.ts";
 import type { RunContext } from "../runner.ts";
-import type { JudgementExec, JudgementRequest, JudgementResult } from "./judgement.ts";
+import type { JudgementExec, JudgementRequest } from "./judgement.ts";
 import type {
     Tracker,
     TrackerLabel,
@@ -155,7 +155,7 @@ export function trackers(
 }
 
 export function fakeJudgement(
-    answer: (request: JudgementRequest) => JudgementResult,
+    answer: (request: JudgementRequest) => Awaited<ReturnType<JudgementExec>>,
 ): JudgementExec & { requests: JudgementRequest[] } {
     const requests: JudgementRequest[] = [];
     const exec = (request: JudgementRequest) => {

@@ -13,7 +13,7 @@ import { fakeReader, workTask } from "../select/test-fixtures.ts";
 import type { WorkTask } from "../select/types.ts";
 import { cover } from "./cover.ts";
 import { runPullRequest } from "./mode.ts";
-import type { OpenRequest, PullRequest, PullRequests } from "./port.ts";
+import type { PullRequest, PullRequests } from "./port.ts";
 import {
     PULL_REQUEST_SCHEMA,
     renderPullRequestJson,
@@ -93,7 +93,7 @@ function fakePort(script: PortScript = {}): FakePort {
                 script.ahead = (script.ahead ?? 0) + 1;
             }),
         push: (branch) => act("push", [branch], () => undefined),
-        open: (request: OpenRequest) =>
+        open: (request: Parameters<PullRequests["open"]>[0]) =>
             act("open", [request], () => {
                 keepBody(request.bodyFile);
                 const opened = { number: 7, url: URL, title: request.title };

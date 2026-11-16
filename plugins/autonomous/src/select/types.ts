@@ -74,7 +74,7 @@ export interface SelectionAnswer {
     exception: string | null;
 }
 
-export type SelectionResult = { ok: true; answer: SelectionAnswer } | { ok: false; error: string };
+type SelectionResult = { ok: true; answer: SelectionAnswer } | { ok: false; error: string };
 
 export type SelectionExec = (request: SelectionRequest) => Promise<SelectionResult>;
 

@@ -10,7 +10,7 @@ import type {
     TrackerTask,
     Trackers,
 } from "./trackers/tracker.ts";
-import { applyDerivations, BOOTSTRAP_HINT, labelCheckFor, missingLabelDetail } from "./write.ts";
+import { applyDerivations, labelCheckFor, missingLabelDetail } from "./write.ts";
 
 interface FakeState {
     labels: string[];
@@ -928,7 +928,6 @@ describe("applyDerivations: the label check without --apply", () => {
 
 describe("missingLabelDetail", () => {
     it("names the label, the source and the bootstrap flag", () => {
-        expect(BOOTSTRAP_HINT).toBe("run --bootstrap-labels");
         expect(missingLabelDetail("proposal", "linear")).toBe(
             "proposal is missing on linear; run --bootstrap-labels",
         );

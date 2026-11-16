@@ -7,7 +7,7 @@ import { EventEmitter } from "node:events";
 
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-import { execCommand, WATCHDOG_GRACE_MS } from "./exec.ts";
+import { execCommand } from "./exec.ts";
 
 type Callback = (error: Error | null, stdout: string, stderr: string) => void;
 
@@ -37,7 +37,7 @@ describe("execCommand watchdog", () => {
             settled = true;
         });
 
-        await vi.advanceTimersByTimeAsync(1_000 + WATCHDOG_GRACE_MS - 1);
+        await vi.advanceTimersByTimeAsync(1_000 + 5_000 - 1);
         expect(settled).toBe(false);
 
         await vi.advanceTimersByTimeAsync(1);
@@ -75,7 +75,7 @@ describe("execCommand watchdog", () => {
         );
         const pending = execCommand("bd", 1_000)(["show", "x"]);
 
-        await vi.advanceTimersByTimeAsync(1_000 + WATCHDOG_GRACE_MS);
+        await vi.advanceTimersByTimeAsync(1_000 + 5_000);
         late?.(null, "{}", "");
 
         await expect(pending).resolves.toMatchObject({ ok: false });

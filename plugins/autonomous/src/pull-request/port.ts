@@ -11,7 +11,7 @@ export interface PullRequest {
     title: string;
 }
 
-export interface OpenRequest {
+interface OpenRequest {
     base: string;
     branch: string;
     title: string;

@@ -6,7 +6,7 @@
 
 import { readFileSync } from "node:fs";
 
-import { claudePrint, parseMessage, PRINT_TIMEOUT_MS } from "../claude-print.ts";
+import { claudePrint, parseMessage } from "../claude-print.ts";
 import type { Source } from "../config.ts";
 import type { Exec } from "../exec.ts";
 import { DECIDED_GROUPS, type DecidedGroup, optionsFor } from "../label-contract/contract.ts";
@@ -37,7 +37,7 @@ export interface JudgementRequest {
     tasks: JudgementTask[];
 }
 
-export interface GroupAnswer {
+interface GroupAnswer {
     labels: string[];
     confidence: number;
     reason: string;
@@ -49,9 +49,7 @@ export interface JudgementAnswer {
     autonomy?: GroupAnswer;
 }
 
-export type JudgementResult =
-    | { ok: true; answers: JudgementAnswer[] }
-    | { ok: false; error: string };
+type JudgementResult = { ok: true; answers: JudgementAnswer[] } | { ok: false; error: string };
 
 export type JudgementExec = (request: JudgementRequest) => Promise<JudgementResult>;
 
@@ -60,8 +58,6 @@ interface NotJudged {
     source: Source;
     reason: string;
 }
-
-export const JUDGEMENT_TIMEOUT_MS = PRINT_TIMEOUT_MS;
 
 const CRITERIA = readFileSync(new URL("./criteria.md", import.meta.url), "utf8");
 

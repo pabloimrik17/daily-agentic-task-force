@@ -12,6 +12,8 @@
         "lint:eslint:fix": "eslint . --fix",
         "lint:fallow": "fallow dead-code --fail-on-issues",
         "lint:knip": "knip --max-issues 60 && knip --cycles --max-issues 1",
+        "lint:knip:production": "knip --production --max-issues 60",
+        "lint:knip:production:strict": "knip --strict --max-issues 60",
         "lint:knip:fix": "knip --fix",
         "lint:markdownlint": "markdownlint --config .markdownlint.jsonc --dot .",
         "lint:markdownlint:fix": "markdownlint --config .markdownlint.jsonc --dot --fix .",

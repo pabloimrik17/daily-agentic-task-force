@@ -29,7 +29,6 @@ import {
     renderTransitionText,
     runTransition,
     TRANSITION,
-    TRANSITION_SCHEMA,
     type TransitionDeps,
     transitionQuestionId,
     unconfiguredTransition,
@@ -558,7 +557,6 @@ describe("transition mode: Transition report", () => {
         const parsed: unknown = JSON.parse(renderTransitionJson(report));
 
         expect(parsed).toEqual(report);
-        expect(TRANSITION_SCHEMA).toBe("autonomous.transition.v1");
         expect(parsed).toMatchObject({
             schema: "autonomous.transition.v1",
             task: { source: "linear", id: "DOT-110" },

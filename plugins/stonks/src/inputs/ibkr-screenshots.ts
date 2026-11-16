@@ -16,7 +16,7 @@ import {
     type Json,
 } from "../validate.ts";
 
-export const SCREENSHOTS_SCHEMA = "stonks.ibkr-screenshots.v1";
+const SCREENSHOTS_SCHEMA = "stonks.ibkr-screenshots.v1";
 
 export type StageResult =
     | { ok: true; read: IbkrRead; markdown: string }

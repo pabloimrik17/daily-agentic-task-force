@@ -22,7 +22,7 @@ import { recordTransition } from "./transitioned.ts";
 
 export const TRANSITION = "transition";
 
-export const TRANSITION_SCHEMA = "autonomous.transition.v1";
+const TRANSITION_SCHEMA = "autonomous.transition.v1";
 
 // The transitions (spec label-contract, "A transition replaces the stage"), keyed by the stage
 // they leave; `asks` names the question that leads out of it.
@@ -78,7 +78,7 @@ export function proposalAutonomy(ref: TaskRef, labels: readonly string[]): Resul
     return { ok: false, error: `${ref.source} ${ref.id} in proposal ${problem}: ${expected}` };
 }
 
-export interface TransitionTask {
+interface TransitionTask {
     source: Source;
     id: string;
     title: string;

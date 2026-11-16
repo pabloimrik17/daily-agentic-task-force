@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import { type DecidedGroup, MEANINGS } from "../label-contract/contract.ts";
-import type { GroupAnswer, JudgementAnswer, JudgementRequest } from "./judgement.ts";
+import type { JudgementAnswer, JudgementRequest } from "./judgement.ts";
 import { labelTriageStep } from "./step.ts";
 import { config, triageContext, fakeJudgement, task, trackers } from "./test-fixtures.ts";
 
@@ -41,7 +41,7 @@ function judgeAll(confidence = 0.97, calls?: string[]) {
 }
 
 // Answers every requested group of every task with the judgement given for that group.
-function judgeWith(given: Partial<Record<DecidedGroup, GroupAnswer>>) {
+function judgeWith(given: Partial<Record<DecidedGroup, NonNullable<JudgementAnswer["scope"]>>>) {
     return fakeJudgement((request: JudgementRequest) => ({
         ok: true,
         answers: request.tasks.map((t) => {
