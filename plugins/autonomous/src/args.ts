@@ -33,6 +33,7 @@ export interface RunArgs {
     interval: number | undefined; // minutes; only with --loop
     notices: number | undefined; // the count of notices already shown
     triageQuestions: boolean; // combinable with --json only
+    stopLoop: boolean; // combinable with nothing
 }
 
 export type ParseArgsResult = { ok: true; args: RunArgs } | { ok: false; error: string };
@@ -50,6 +51,7 @@ export const USAGE = [
     "       /autonomous:run --apply --log <attempt-id> [--json]",
     "       /autonomous:loop [--account <provider-key>] [--force] [--json] [--apply] [--grills <n>] [--parallel <n>] [--interval <minutes>]",
     "       bun plugins/autonomous/src/run.ts --notices <n>",
+    "       bun plugins/autonomous/src/run.ts --stop-loop",
 ].join("\n");
 
 const ANSWER_SHAPE = "--answer requires <id>=<value>[,<value>]";
@@ -65,6 +67,7 @@ const SWITCHES = new Map<string, (args: RunArgs) => void>([
     ["--release-workspace", (args) => (args.releaseWorkspace = true)],
     ["--loop", (args) => (args.loop = true)],
     ["--triage-questions", (args) => (args.triageQuestions = true)],
+    ["--stop-loop", (args) => (args.stopLoop = true)],
 ]);
 
 // Flags that take the next argument as their value; each returns an error or null.
@@ -109,6 +112,7 @@ export function parseArgs(argv: readonly string[]): ParseArgsResult {
         interval: undefined,
         notices: undefined,
         triageQuestions: false,
+        stopLoop: false,
     };
     for (let i = 0; i < argv.length; i++) {
         const arg = argv[i] ?? "";
@@ -350,6 +354,10 @@ const otherModes = (args: RunArgs, ...modes: ((args: RunArgs) => boolean)[]) =>
 
 // Flag combinations that are usage errors, checked in order.
 const COMBINATIONS: readonly (readonly [(args: RunArgs) => boolean, string])[] = [
+    [
+        (args) => args.stopLoop && (args.json || args.triageQuestions || otherThanJson(args)),
+        "--stop-loop cannot be combined with other flags",
+    ],
     [
         (args) => args.triageQuestions && otherThanJson(args),
         "--triage-questions can only be combined with --json",

@@ -25,6 +25,7 @@ const DEFAULTS: RunArgs = {
     interval: undefined,
     notices: undefined,
     triageQuestions: false,
+    stopLoop: false,
 };
 
 const REQUIRE_LOOP = "--grills, --parallel and --interval require --loop";
@@ -684,5 +685,33 @@ describe("parseArgs --triage-questions", () => {
 
     it("names the mode in the usage text", () => {
         expect(USAGE).toContain("/autonomous:run --triage-questions [--json]");
+    });
+});
+
+describe("parseArgs --stop-loop", () => {
+    const STOP_ALONE = "--stop-loop cannot be combined with other flags";
+
+    it("reads --stop-loop alone", () => {
+        expect(parseArgs(["--stop-loop"])).toEqual(accepted({ stopLoop: true }));
+    });
+
+    it.each([
+        [["--stop-loop", "--apply"]],
+        [["--stop-loop", "--json"]],
+        [["--stop-loop", "--loop"]],
+        [["--stop-loop", "--notices", "0"]],
+        [["--notices", "0", "--stop-loop"]],
+        [["--stop-loop", "--force"]],
+        [["--stop-loop", "--account", "claude"]],
+        [["--stop-loop", "--task", "linear:DOT-120"]],
+        [["--stop-loop", "--triage-questions"]],
+        [["--stop-loop", "--loop", "--interval", "5"]],
+        [["--apply", "--stop-loop", "--persist", "linear:DOT-121:grill-me:1"]],
+    ])("rejects %j", (argv) => {
+        expect(parseArgs(argv)).toEqual({ ok: false, error: STOP_ALONE });
+    });
+
+    it("names the mode in the usage text", () => {
+        expect(USAGE).toContain("run.ts --stop-loop");
     });
 });

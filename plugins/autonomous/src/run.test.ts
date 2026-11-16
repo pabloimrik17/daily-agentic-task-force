@@ -150,6 +150,9 @@ function deps(steps: readonly Step[] | undefined, overrides: Partial<MainDeps> =
         stderr: (t) => err.push(t),
         wait: () => Promise.reject(new Error("wait was not expected")),
         stopSignal: () => new AbortController().signal,
+        signalLoop: () => {
+            throw new Error("no signal was expected");
+        },
         ...(steps === undefined ? {} : { steps }),
         ...overrides,
     };
@@ -2501,5 +2504,20 @@ describe("main --notices", () => {
         expect(await main(["--notices", "3"], d)).toBe(2);
         expect(out).toEqual(["loop stopped: not running"]);
         expect(waits).toEqual([2_000, 2_000, 2_000, 2_000, 2_000]);
+    });
+});
+
+describe("main --stop-loop", () => {
+    it("says the loop is not running, with code 2, reading no configuration", async () => {
+        const stateDir = state();
+        const config = join(state(), "config.json");
+        writeFileSync(config, "{ not json");
+        const { d, out, err } = deps(undefined, {
+            env: { AUTONOMOUS_STATE: stateDir, AUTONOMOUS_CONFIG: config },
+        });
+        expect(await main(["--stop-loop"], d)).toBe(2);
+        expect(out).toEqual(["loop stopped: not running"]);
+        expect(err).toEqual([]);
+        expect(readdirSync(stateDir)).toEqual([]);
     });
 });

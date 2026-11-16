@@ -86,6 +86,7 @@ function args(discard: string, releaseWorkspace = false): RunArgs {
         interval: undefined,
         notices: undefined,
         triageQuestions: false,
+        stopLoop: false,
     };
 }
 
