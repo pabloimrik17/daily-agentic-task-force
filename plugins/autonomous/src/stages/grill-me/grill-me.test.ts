@@ -489,7 +489,6 @@ describe("launch: a grill-me unit", () => {
             },
             candidates: [],
             excluded: [],
-            notEvaluated: [],
             comparison: null,
         },
     };

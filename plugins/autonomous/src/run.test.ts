@@ -666,7 +666,6 @@ describe("main with the real steps", () => {
                 },
             ],
             excluded: [],
-            notEvaluated: ["github: dependencies"],
             comparison: { model: "sonnet", effort: "high" },
         } satisfies SelectData);
     });

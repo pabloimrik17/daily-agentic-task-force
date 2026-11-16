@@ -84,6 +84,5 @@ export interface SelectData {
     selected: SelectedUnit | null;
     candidates: { source: Source; id: string; title: string; scope: Scope; stage: StageName }[];
     excluded: Excluded[];
-    notEvaluated: string[]; // e.g. "github: dependencies"
     comparison: { model: string; effort: string } | null; // set only when the LLM was called
 }

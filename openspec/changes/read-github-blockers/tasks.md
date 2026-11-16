@@ -10,7 +10,7 @@
 
 ## 2. Remove the "not evaluated" note
 
-- [ ] 2.1 Remove `SelectData.notEvaluated`, `GITHUB_NOT_EVALUATED` in `src/select/step.ts` and the `not evaluated:` lines in `src/select/render.ts` (design D5); update `src/select/step.test.ts`, `src/select/render.test.ts`, `src/run.test.ts`, `src/stages/grill-me/grill-me.test.ts` and `src/attempts/launch.test.ts`, and add a render test for the spec scenario "GitHub enabled"; verify `bun run test` passes and `grep -rn notEvaluated plugins/autonomous/src` finds nothing.
+- [x] 2.1 Remove `SelectData.notEvaluated`, `GITHUB_NOT_EVALUATED` in `src/select/step.ts` and the `not evaluated:` lines in `src/select/render.ts` (design D5); update `src/select/step.test.ts`, `src/select/render.test.ts`, `src/run.test.ts`, `src/stages/grill-me/grill-me.test.ts` and `src/attempts/launch.test.ts`, and add a render test for the spec scenario "GitHub enabled"; verify `bun run test` passes and `grep -rn notEvaluated plugins/autonomous/src` finds nothing.
 
 ## 3. Documentation
 
