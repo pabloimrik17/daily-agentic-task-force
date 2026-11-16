@@ -266,8 +266,8 @@ function runNoticesMode(seen: number, deps: MainDeps): Promise<number> {
     });
 }
 
-// Design D5: reads only the loop's files and signals its owner, so it needs no
-// configuration and takes no lock.
+// Spec autonomous-loop, "Stopping the loop" (design D7): reads only the loop's files and
+// signals its owner, so it needs no configuration and takes no lock.
 function runStopLoopMode(deps: MainDeps): Promise<number> {
     return stopLoop({
         state: resolveStateDir(deps.env),
