@@ -27,7 +27,7 @@ import { capacityStep } from "./capacity/step.ts";
 import { type ConfigLoad, loadConfig } from "./config.ts";
 import { cliContext } from "./context/cli.ts";
 import type { ContextReaderFactory } from "./context/types.ts";
-import { type Exec, execCommand } from "./exec.ts";
+import { CLI_TIMEOUT_MS, type Exec, execCommand } from "./exec.ts";
 import {
     bootstrapLabels,
     renderBootstrapJson,
@@ -61,7 +61,8 @@ import {
     renderPullRequestText,
     unconfiguredPullRequest,
 } from "./pull-request/report.ts";
-import { execOpenUsage, type OpenUsageExec } from "./quota-gate/openusage.ts";
+import { execOpenUsage, openUsageSource } from "./quota-gate/openusage.ts";
+import type { QuotaSource } from "./quota-gate/source.ts";
 import { quotaGateStep } from "./quota-gate/step.ts";
 import {
     buildReport,
@@ -110,7 +111,8 @@ const SUPPLIED_TASK_STEPS: ReadonlySet<string> = new Set([
 export interface MainDeps {
     now: () => Date;
     env: Record<string, string | undefined>;
-    openUsage: OpenUsageExec;
+    quota: QuotaSource;
+    login: Exec;
     trackers: TrackerFactory;
     judgement: JudgementExec;
     chezmoi: Exec;
@@ -296,7 +298,8 @@ function context(
         config,
         results: [],
         io: {
-            openUsage: deps.openUsage,
+            quota: deps.quota,
+            login: deps.login,
             trackers: deps.trackers,
             judgement: deps.judgement,
             chezmoi: deps.chezmoi,
@@ -523,7 +526,9 @@ if (import.meta.main) {
     process.exitCode = await main(process.argv.slice(2), {
         now: () => new Date(),
         env: process.env,
-        openUsage: execOpenUsage,
+        quota: openUsageSource(execOpenUsage),
+        // Exit 1 is the answer for "no login", so its output is kept.
+        login: execCommand("claude", CLI_TIMEOUT_MS, { keepOutputOnExit: true }),
         trackers: cliTrackers,
         judgement: claudeJudgement(execCommand("claude", PRINT_TIMEOUT_MS)),
         chezmoi: execCommand("chezmoi"),

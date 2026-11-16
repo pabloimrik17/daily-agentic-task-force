@@ -1,5 +1,16 @@
 import { describe, expect, it } from "vitest";
 
+import { quotaGateStep } from "./quota-gate/step.ts";
+import {
+    ACCOUNT,
+    ANA,
+    context,
+    fakeExec,
+    limits,
+    provider,
+    session,
+    weekly,
+} from "./quota-gate/test-fixtures.ts";
 import { buildReport, renderJson, renderText } from "./report.ts";
 import type { RunResult } from "./runner.ts";
 
@@ -65,5 +76,27 @@ describe("run report lock", () => {
 
     it("prints no lock line when the lock was taken", () => {
         expect(renderText(buildReport(STARTED, RUN, ARGS), [])).not.toContain("lock:");
+    });
+});
+
+describe("run report of the quota gate", () => {
+    it("carries the email address of the evaluated account and keeps autonomous.run.v2", async () => {
+        const gate = await quotaGateStep.run(
+            context(
+                fakeExec(
+                    limits({ [ACCOUNT]: provider({ session: session(20), weekly: weekly(30) }) }),
+                ),
+            ),
+        );
+        const report = buildReport(
+            STARTED,
+            { results: [gate], outcome: gate.outcome, questions: [] },
+            ARGS,
+        );
+        expect(JSON.parse(renderJson(report))).toMatchObject({
+            schema: "autonomous.run.v2",
+            outcome: "advance",
+            steps: [{ step: "quota-gate", data: { account: { key: ACCOUNT, email: ANA } } }],
+        });
     });
 });

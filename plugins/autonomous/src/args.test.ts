@@ -3,7 +3,6 @@ import { describe, expect, it } from "vitest";
 import { parseArgs, type RunArgs, USAGE } from "./args.ts";
 
 const DEFAULTS: RunArgs = {
-    account: undefined,
     task: undefined,
     stage: undefined,
     discard: undefined,
@@ -30,21 +29,23 @@ const DEFAULTS: RunArgs = {
 
 const REQUIRE_LOOP = "--grills, --parallel and --interval require --loop";
 const LOOP_ONLY =
-    "--loop can only be combined with --apply, --account, --force, --json, --grills, --parallel and --interval";
+    "--loop can only be combined with --apply, --force, --json, --grills, --parallel and --interval";
 const NOTICES_ALONE = "--notices cannot be combined with other flags";
+const ACCOUNT_REMOVED =
+    "--account is no longer accepted: the run evaluates the account Claude Code is logged in as";
 
 function accepted(overrides: Partial<RunArgs>) {
     return { ok: true, args: { ...DEFAULTS, ...overrides } };
 }
 
 describe("parseArgs", () => {
-    it("defaults to no account, cached read, text output, no apply, no bootstrap and a handoff", () => {
+    it("defaults to cached read, text output, no apply, no bootstrap and a handoff", () => {
         expect(parseArgs([])).toEqual(accepted({}));
     });
 
     it("reads every flag", () => {
-        expect(parseArgs(["--account", "claude@123", "--force", "--json", "--apply"])).toEqual(
-            accepted({ account: "claude@123", force: true, json: true, apply: true }),
+        expect(parseArgs(["--force", "--json", "--apply"])).toEqual(
+            accepted({ force: true, json: true, apply: true }),
         );
     });
 
@@ -63,10 +64,8 @@ describe("parseArgs", () => {
     });
 
     it("reads --no-handoff combined with every run flag", () => {
-        expect(
-            parseArgs(["--account", "claude", "--force", "--json", "--apply", "--no-handoff"]),
-        ).toEqual(
-            accepted({ account: "claude", force: true, json: true, apply: true, noHandoff: true }),
+        expect(parseArgs(["--force", "--json", "--apply", "--no-handoff"])).toEqual(
+            accepted({ force: true, json: true, apply: true, noHandoff: true }),
         );
     });
 
@@ -119,22 +118,12 @@ describe("parseArgs", () => {
         );
     });
 
-    it("reads --task with --account, --force, --json, --apply and --no-handoff", () => {
+    it("reads --task with --force, --json, --apply and --no-handoff", () => {
         expect(
-            parseArgs([
-                "--task",
-                "beads:X-12",
-                "--account",
-                "claude",
-                "--force",
-                "--json",
-                "--apply",
-                "--no-handoff",
-            ]),
+            parseArgs(["--task", "beads:X-12", "--force", "--json", "--apply", "--no-handoff"]),
         ).toEqual(
             accepted({
                 task: { source: "beads", id: "X-12" },
-                account: "claude",
                 force: true,
                 json: true,
                 apply: true,
@@ -216,15 +205,8 @@ describe("parseArgs", () => {
     it.each([
         [["--verbose"], "unrecognised argument: --verbose"],
         [["claude"], "unrecognised argument: claude"],
-        [["--account"], "--account requires a provider key"],
-        [["--account", "--json"], "--account requires a provider key"],
-        [["--account", "a", "--account", "b"], "--account given more than once"],
         [["--bootstrap-labels", "--apply"], "--bootstrap-labels can only be combined with --json"],
         [["--bootstrap-labels", "--force"], "--bootstrap-labels can only be combined with --json"],
-        [
-            ["--bootstrap-labels", "--account", "x"],
-            "--bootstrap-labels can only be combined with --json",
-        ],
         [
             ["--json", "--bootstrap-labels", "--apply"],
             "--bootstrap-labels can only be combined with --json",
@@ -241,10 +223,6 @@ describe("parseArgs", () => {
         [["--json", "--answer", "a:b=HITL"], "--answer requires --apply"],
         [
             ["--apply", "--force", "--answer", "a:b=HITL"],
-            "--answer can only be combined with --apply and --json",
-        ],
-        [
-            ["--apply", "--account", "claude", "--answer", "a:b=HITL"],
             "--answer can only be combined with --apply and --json",
         ],
         [
@@ -309,10 +287,6 @@ describe("parseArgs", () => {
             "--discard given more than once",
         ],
         [["--discard", "beads:X-1"], "--discard requires --apply"],
-        [
-            ["--apply", "--discard", "beads:X-1", "--account", "claude"],
-            "--discard can only be combined with --apply, --json and --release-workspace",
-        ],
         [
             ["--apply", "--discard", "beads:X-1", "--force"],
             "--discard can only be combined with --apply, --json and --release-workspace",
@@ -380,10 +354,6 @@ describe("parseArgs", () => {
             "--bootstrap-labels can only be combined with --json",
         ],
         [
-            ["--apply", "--transition", "linear:DOT-110", "--account", "claude"],
-            "--transition can only be combined with --apply and --json",
-        ],
-        [
             ["--apply", "--transition", "linear:DOT-110", "--force"],
             "--transition can only be combined with --apply and --json",
         ],
@@ -432,10 +402,6 @@ describe("parseArgs", () => {
         ],
         [["--persist", "linear:DOT-121:grill-me:1"], "--persist requires --apply"],
         [["--persist", "linear:DOT-121:grill-me:1", "--json"], "--persist requires --apply"],
-        [
-            ["--apply", "--persist", "linear:DOT-121:grill-me:1", "--account", "claude"],
-            "--persist can only be combined with --apply and --json",
-        ],
         [
             ["--apply", "--persist", "linear:DOT-121:grill-me:1", "--force"],
             "--persist can only be combined with --apply and --json",
@@ -597,6 +563,32 @@ describe("parseArgs", () => {
     });
 });
 
+describe("parseArgs --account", () => {
+    it.each([
+        [["--account", "ana@example.com"]],
+        [["--account"]],
+        [["--account", "--json"]],
+        [["--account", "a@example.com", "--account", "b@example.com"]],
+        [["--loop", "--apply", "--account", "claude@1a2b3c4d"]],
+        [["--task", "beads:agentic-task-2x0", "--account", "ana@example.com"]],
+        [["--account", "ana@example.com", "--stage", "test"]],
+        [["--bootstrap-labels", "--account", "ana@example.com"]],
+        [["--apply", "--answer", "a:b=HITL", "--account", "ana@example.com"]],
+        [["--apply", "--discard", "beads:X-1", "--account", "ana@example.com"]],
+        [["--notices", "0", "--account", "ana@example.com"]],
+        [["--stop-loop", "--account", "ana@example.com"]],
+        [["--triage-questions", "--account", "ana@example.com"]],
+        [["--parallel", "3", "--account", "ana@example.com"]],
+    ])("rejects %j with the removal message", (argv) => {
+        expect(parseArgs(argv)).toEqual({ ok: false, error: ACCOUNT_REMOVED });
+    });
+
+    it("leaves --account out of the usage text", () => {
+        expect(USAGE).not.toContain("--account");
+        expect(USAGE).not.toContain("provider-key");
+    });
+});
+
 describe("parseArgs loop flags", () => {
     it("reads --loop alone as a dry iteration", () => {
         expect(parseArgs(["--loop"])).toEqual(accepted({ loop: true }));
@@ -607,8 +599,6 @@ describe("parseArgs loop flags", () => {
             parseArgs([
                 "--loop",
                 "--apply",
-                "--account",
-                "claude",
                 "--force",
                 "--json",
                 "--grills",
@@ -622,7 +612,6 @@ describe("parseArgs loop flags", () => {
             accepted({
                 loop: true,
                 apply: true,
-                account: "claude",
                 force: true,
                 json: true,
                 grills: 0,
@@ -630,6 +619,10 @@ describe("parseArgs loop flags", () => {
                 interval: 30,
             }),
         );
+    });
+
+    it("accepts --force with --loop", () => {
+        expect(parseArgs(["--loop", "--force"])).toEqual(accepted({ loop: true, force: true }));
     });
 
     it("accepts --grills 0 and --parallel 0", () => {
@@ -667,7 +660,6 @@ describe("parseArgs --triage-questions", () => {
     it.each([
         [["--triage-questions", "--apply"]],
         [["--triage-questions", "--task", "linear:DOT-120"]],
-        [["--triage-questions", "--account", "claude"]],
         [["--triage-questions", "--force"]],
         [["--triage-questions", "--loop"]],
         [["--triage-questions", "--answer", "linear:DOT-1:scope=personal"]],
@@ -702,7 +694,6 @@ describe("parseArgs --stop-loop", () => {
         [["--stop-loop", "--notices", "0"]],
         [["--notices", "0", "--stop-loop"]],
         [["--stop-loop", "--force"]],
-        [["--stop-loop", "--account", "claude"]],
         [["--stop-loop", "--task", "linear:DOT-120"]],
         [["--stop-loop", "--triage-questions"]],
         [["--stop-loop", "--loop", "--interval", "5"]],

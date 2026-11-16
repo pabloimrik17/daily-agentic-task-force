@@ -116,8 +116,19 @@ open, its parent is never a candidate.
 
 **Claude account**:
 A Claude subscription whose quota OpenUsage reports with usage data. The quota
-gate evaluates exactly one per run.
+gate evaluates exactly one per run: the active account.
 _Avoid_: candidate, provider
+
+**Active account**:
+The Claude account that Claude Code is logged in as on this machine right now.
+It can change at any moment, outside the run's control. It is the account the
+quota gate evaluates.
+_Avoid_: current account, default account, best account
+
+**Quota source**:
+The tool that reports each Claude account's quota. The quota gate reads only
+this for usage data.
+_Avoid_: usage provider, quota provider
 
 **Account error**:
 A failure of OpenUsage to refresh one Claude account. OpenUsage keeps that

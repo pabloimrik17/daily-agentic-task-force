@@ -1,13 +1,17 @@
 import { describe, expect, it } from "vitest";
 
+import type { Exec } from "../exec.ts";
 import { quotaGateStep } from "./step.ts";
 import {
     ACCOUNT,
+    ANA,
     balance,
     context,
     exitExec,
     fakeExec,
+    fakeLogin,
     limits,
+    LUIS,
     nothingFetchedDocument,
     nothingFetchedStderr,
     provider,
@@ -17,9 +21,10 @@ import {
 } from "./test-fixtures.ts";
 
 const WORK = "claude@9f8e7d6c";
+const asLuis = { displayName: `Claude · ${LUIS}` };
 
-async function gate(output: unknown, account?: string) {
-    return quotaGateStep.run(context(fakeExec(output), { account }));
+async function gate(output: unknown, login: Exec = fakeLogin(ANA)) {
+    return quotaGateStep.run(context(fakeExec(output), {}, login));
 }
 
 describe("quota gate decision: advance", () => {
@@ -149,17 +154,19 @@ describe("quota gate decision: not evaluable from the account data", () => {
         expect(result.reasons).toEqual([failingReason]);
     });
 
-    it("is not evaluable with several accounts and none selected", async () => {
+    it("is not evaluable when no account has the active email address, listing them", async () => {
         const result = await gate(
             limits({
-                [ACCOUNT]: provider({}),
-                [WORK]: provider({}, { displayName: "Claude · Work" }),
+                [ACCOUNT]: provider({}, { displayName: "Claude · Personal" }),
+                [WORK]: provider({}, asLuis),
             }),
         );
         expect(result.outcome).toBe("not-evaluable");
+        expect(result.reasons).toEqual([`the active account ${ANA} is not reported`]);
+        expect(result.data.account).toBeNull();
         expect(result.data.accounts).toEqual([
-            { key: ACCOUNT, displayName: "Claude · Personal" },
-            { key: WORK, displayName: "Claude · Work" },
+            { key: ACCOUNT, email: null, displayName: "Claude · Personal" },
+            { key: WORK, email: LUIS, displayName: `Claude · ${LUIS}` },
         ]);
     });
 
@@ -226,23 +233,27 @@ describe("quota gate decision: another account's failing refreshes", () => {
         const result = await gate(
             limits({
                 [ACCOUNT]: provider({ session: session(49), weekly: weekly(6) }),
-                [WORK]: provider({ session: session(20), weekly: weekly(30) }, { stale: true }),
+                [WORK]: provider(
+                    { session: session(20), weekly: weekly(30) },
+                    { ...asLuis, stale: true },
+                ),
             }),
-            ACCOUNT,
         );
         expect(result.outcome).toBe("advance");
         expect(result.reasons.join("\n")).not.toMatch(new RegExp(`${WORK}|stale|failing`));
         expect(result.data.account?.stale).toBe(false);
     });
 
-    it("treats an account OpenUsage has not fetched yet as unknown", async () => {
+    it("does not count an account OpenUsage has not fetched yet", async () => {
         const result = await gate(
             limits({ [ACCOUNT]: provider({ session: session(20), weekly: weekly(30) }) }),
-            WORK,
+            fakeLogin(LUIS),
         );
         expect(result.outcome).toBe("not-evaluable");
-        expect(result.reasons).toEqual([`unknown account "${WORK}"`]);
-        expect(result.data.accounts).toEqual([{ key: ACCOUNT, displayName: "Claude · Personal" }]);
+        expect(result.reasons).toEqual([`the active account ${LUIS} is not reported`]);
+        expect(result.data.accounts).toEqual([
+            { key: ACCOUNT, email: ANA, displayName: `Claude · ${ANA}` },
+        ]);
     });
 });
 
@@ -251,9 +262,8 @@ describe("quota gate decision: not evaluable from malformed output", () => {
         const result = await gate(
             limits({
                 [ACCOUNT]: provider({ session: session(20), weekly: weekly(30) }),
-                [WORK]: provider({}, { resources: "none" }),
+                [WORK]: provider({}, { ...asLuis, resources: "none" }),
             }),
-            ACCOUNT,
         );
         expect(result.outcome).toBe("not-evaluable");
         expect(result.reasons).toEqual([
@@ -269,8 +279,10 @@ describe("quota gate step: --force stays off the OpenUsage call", () => {
             const exec = fakeExec(
                 limits({ [ACCOUNT]: provider({ session: session(20), weekly: weekly(30) }) }),
             );
-            const result = await quotaGateStep.run(context(exec, { force }));
+            const login = fakeLogin(ANA);
+            const result = await quotaGateStep.run(context(exec, { force }, login));
             expect(exec.calls).toEqual([["claude"]]);
+            expect(login.calls).toEqual([["auth", "status"]]);
             expect(result.outcome).toBe("advance");
         },
     );
@@ -353,5 +365,85 @@ describe("quota gate decision: output after a non-zero exit", () => {
         expect(result.outcome).toBe("not-evaluable");
         expect(result.data.account).toBeNull();
         expect(result.reasons[0]).toMatch(/^openusage failed: .* \(exit 4\)$/);
+    });
+});
+
+describe("quota gate step: the active account", () => {
+    const capacity = () => provider({ session: session(20), weekly: weekly(30) });
+
+    it("does not read the login when the quota cannot be read", async () => {
+        const login = fakeLogin(ANA);
+        const result = await quotaGateStep.run(
+            context(exitExec("", nothingFetchedStderr), {}, login),
+        );
+        expect(result.outcome).toBe("not-evaluable");
+        expect(login.calls).toEqual([]);
+    });
+
+    it("is not evaluable when the login cannot be read, still listing the accounts", async () => {
+        const result = await gate(limits({ [ACCOUNT]: capacity(), [WORK]: capacity() }), () =>
+            Promise.resolve({ ok: false, error: "claude CLI not found on PATH" }),
+        );
+        expect(result.outcome).toBe("not-evaluable");
+        expect(result.reasons).toEqual(["claude CLI not found on PATH"]);
+        expect(result.data.account).toBeNull();
+        expect(result.data.accounts.map((a) => [a.key, a.email])).toEqual([
+            [ACCOUNT, ANA],
+            [WORK, ANA],
+        ]);
+    });
+
+    it("evaluates the account of the login, and reports its email address", async () => {
+        const result = await gate(
+            limits({ [ACCOUNT]: capacity(), [WORK]: provider({ session: session(100) }, asLuis) }),
+            fakeLogin(LUIS),
+        );
+        expect(result.outcome).toBe("wait");
+        expect(result.data.account).toMatchObject({ key: WORK, email: LUIS });
+    });
+});
+
+describe("quota gate step: other accounts with capacity", () => {
+    const exhausted = session(100);
+    const active = provider({ session: exhausted, weekly: weekly(30) });
+    const capacity = (overrides: Record<string, unknown>) =>
+        provider({ session: session(20), weekly: weekly(30) }, overrides);
+    const OTHER = "claude@5e6f7a8b";
+
+    it("waits on the active account and names another that would advance", async () => {
+        const result = await gate(limits({ [ACCOUNT]: active, [WORK]: capacity(asLuis) }));
+        const alone = await gate(limits({ [ACCOUNT]: active }));
+        expect(result.outcome).toBe("wait");
+        expect(result.reasons).toEqual(alone.reasons);
+        expect(result.reasons).toEqual([
+            `session window exhausted: 100/100 percent, resets at ${exhausted.resetsAt}`,
+        ]);
+        expect(result.data.account?.key).toBe(ACCOUNT);
+        expect(result.data.accountsWithCapacity).toEqual([{ email: LUIS, key: WORK }]);
+    });
+
+    it("lists an account with no email address by its id", async () => {
+        const result = await gate(
+            limits({ [ACCOUNT]: active, [WORK]: capacity({ displayName: "Claude" }) }),
+        );
+        expect(result.data.accountsWithCapacity).toEqual([{ email: null, key: WORK }]);
+    });
+
+    it("lists no account when every other one is exhausted or stale", async () => {
+        const result = await gate(
+            limits({
+                [ACCOUNT]: active,
+                [WORK]: provider({ session: session(20), weekly: weekly(100) }, asLuis),
+                [OTHER]: capacity({ displayName: "Claude · eva@example.com", stale: true }),
+            }),
+        );
+        expect(result.outcome).toBe("wait");
+        expect(result.data).not.toHaveProperty("accountsWithCapacity");
+    });
+
+    it("lists no account when the gate advances", async () => {
+        const result = await gate(limits({ [ACCOUNT]: capacity({}), [WORK]: capacity(asLuis) }));
+        expect(result.outcome).toBe("advance");
+        expect(result.data).not.toHaveProperty("accountsWithCapacity");
     });
 });

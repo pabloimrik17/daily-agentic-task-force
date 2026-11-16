@@ -11,7 +11,6 @@ export interface Answer {
 }
 
 export interface RunArgs {
-    account: string | undefined;
     task: { source: Source; id: string } | undefined;
     stage: StageId | undefined; // only with --task
     discard: string | undefined; // an attempt id or <source>:<id>
@@ -39,21 +38,23 @@ export interface RunArgs {
 export type ParseArgsResult = { ok: true; args: RunArgs } | { ok: false; error: string };
 
 export const USAGE = [
-    "Usage: /autonomous:run [--account <provider-key>] [--force] [--json] [--apply] [--no-handoff]",
+    "Usage: /autonomous:run [--force] [--json] [--apply] [--no-handoff]",
     "       /autonomous:run --bootstrap-labels [--json]",
     "       /autonomous:run --triage-questions [--json]",
     "       /autonomous:run --apply --answer <id>=<value>[,<value>]... [--json]",
-    "       /autonomous:run --task <source>:<id> [--stage <stage>] [--account <provider-key>] [--force] [--json] [--apply] [--no-handoff]",
+    "       /autonomous:run --task <source>:<id> [--stage <stage>] [--force] [--json] [--apply] [--no-handoff]",
     "       /autonomous:run --apply --discard <attempt-id|source:id> [--release-workspace] [--json]",
     "       /autonomous:run --apply --transition <source>:<task> [--json]",
     "       /autonomous:run --apply --persist <attempt-id> [--json]",
     "       /autonomous:run --apply --pull-request <attempt-id> [--title <title>] [--json]",
     "       /autonomous:run --apply --log <attempt-id> [--json]",
-    "       /autonomous:loop [--account <provider-key>] [--force] [--json] [--apply] [--grills <n>] [--parallel <n>] [--interval <minutes>]",
+    "       /autonomous:loop [--force] [--json] [--apply] [--grills <n>] [--parallel <n>] [--interval <minutes>]",
     "       bun plugins/autonomous/src/run.ts --notices <n>",
     "       bun plugins/autonomous/src/run.ts --stop-loop",
 ].join("\n");
 
+const ACCOUNT_REMOVED =
+    "--account is no longer accepted: the run evaluates the account Claude Code is logged in as";
 const ANSWER_SHAPE = "--answer requires <id>=<value>[,<value>]";
 const ATTEMPT_ID_SHAPE = "<source>:<task>:<stage>:<n>";
 
@@ -72,7 +73,7 @@ const SWITCHES = new Map<string, (args: RunArgs) => void>([
 
 // Flags that take the next argument as their value; each returns an error or null.
 const VALUED = new Map<string, (args: RunArgs, value: string | undefined) => string | null>([
-    ["--account", readAccount],
+    ["--account", () => ACCOUNT_REMOVED],
     ["--answer", readAnswer],
     ["--task", readTask],
     ["--stage", readStage],
@@ -90,7 +91,6 @@ const VALUED = new Map<string, (args: RunArgs, value: string | undefined) => str
 
 export function parseArgs(argv: readonly string[]): ParseArgsResult {
     const args: RunArgs = {
-        account: undefined,
         task: undefined,
         stage: undefined,
         discard: undefined,
@@ -150,17 +150,6 @@ function integer(flag: string, key: IntegerKey, min: number) {
         args[key] = Number(value);
         return null;
     };
-}
-
-function readAccount(args: RunArgs, value: string | undefined): string | null {
-    if (value === undefined || value.startsWith("--")) {
-        return "--account requires a provider key";
-    }
-    if (args.account !== undefined) {
-        return "--account given more than once";
-    }
-    args.account = value;
-    return null;
 }
 
 function readAnswer(args: RunArgs, value: string | undefined): string | null {
@@ -302,7 +291,7 @@ const transitioning = (args: RunArgs) => args.transition !== undefined;
 const persisting = (args: RunArgs) => args.persist !== undefined;
 const pullRequesting = (args: RunArgs) => args.pullRequest !== undefined;
 const logging = (args: RunArgs) => args.log !== undefined;
-const accountOrForce = (args: RunArgs) => args.account !== undefined || args.force;
+const forcing = (args: RunArgs) => args.force;
 const limited = (args: RunArgs) =>
     [args.grills, args.parallel, args.interval].some((value) => value !== undefined);
 
@@ -330,14 +319,14 @@ const otherThanJson = (args: RunArgs) =>
         args.loop,
         args.notices !== undefined,
         limited(args),
-        accountOrForce(args),
+        forcing(args),
         modeFlags(args),
     ].some(Boolean);
 
 // Every flag other than --apply and --json, for the modes that accept only those.
 const otherFlags = (args: RunArgs) =>
     [
-        accountOrForce(args),
+        forcing(args),
         args.noHandoff,
         args.bootstrapLabels,
         answering(args),
@@ -368,12 +357,12 @@ const COMBINATIONS: readonly (readonly [(args: RunArgs) => boolean, string])[] =
         "--no-handoff cannot be combined with --bootstrap-labels, --answer or --transition",
     ],
     [
-        (args) => args.bootstrapLabels && (accountOrForce(args) || args.apply || answering(args)),
+        (args) => args.bootstrapLabels && (forcing(args) || args.apply || answering(args)),
         "--bootstrap-labels can only be combined with --json",
     ],
     [(args) => answering(args) && !args.apply, "--answer requires --apply"],
     [
-        (args) => answering(args) && accountOrForce(args),
+        (args) => answering(args) && forcing(args),
         "--answer can only be combined with --apply and --json",
     ],
     [(args) => args.stage !== undefined && args.task === undefined, "--stage requires --task"],
@@ -390,7 +379,7 @@ const COMBINATIONS: readonly (readonly [(args: RunArgs) => boolean, string])[] =
     [
         (args) =>
             args.discard !== undefined &&
-            (accountOrForce(args) || args.noHandoff || args.bootstrapLabels || answering(args)),
+            (forcing(args) || args.noHandoff || args.bootstrapLabels || answering(args)),
         "--discard can only be combined with --apply, --json and --release-workspace",
     ],
     [(args) => transitioning(args) && !args.apply, "--transition requires --apply"],
@@ -426,7 +415,7 @@ const COMBINATIONS: readonly (readonly [(args: RunArgs) => boolean, string])[] =
     [(args) => limited(args) && !args.loop, "--grills, --parallel and --interval require --loop"],
     [
         (args) => args.loop && modeFlags(args),
-        "--loop can only be combined with --apply, --account, --force, --json, --grills, --parallel and --interval",
+        "--loop can only be combined with --apply, --force, --json, --grills, --parallel and --interval",
     ],
     [
         (args) =>
@@ -435,7 +424,7 @@ const COMBINATIONS: readonly (readonly [(args: RunArgs) => boolean, string])[] =
                 args.apply ||
                 args.json ||
                 limited(args) ||
-                accountOrForce(args) ||
+                forcing(args) ||
                 modeFlags(args)),
         "--notices cannot be combined with other flags",
     ],

@@ -4,7 +4,9 @@ import { join } from "node:path";
 import { afterAll, describe, expect, it } from "vitest";
 
 import { tempState } from "../attempts/test-fixtures.ts";
-import type { RunReport } from "../report.ts";
+import { gateOverLogins } from "../quota-gate/iteration-fixtures.ts";
+import { quotaGateStep } from "../quota-gate/step.ts";
+import { renderText, type RunReport } from "../report.ts";
 import type { StepOutcome } from "../runner.ts";
 import { type LoopIo, runLoop } from "./loop.ts";
 import { attempt, DEAD, NOW, reconciled, report } from "./test-fixtures.ts";
@@ -246,5 +248,31 @@ describe("runLoop notices", () => {
         );
         await runLoop(h.io);
         expect(notices(dir)).toEqual(["loop stopped: received SIGTERM"]);
+    });
+});
+
+describe("runLoop and the active account", () => {
+    it("evaluates, in each iteration, the account Claude Code is logged in as then", async () => {
+        const dir = state();
+        // The login is switched from ana to luis between the two iterations.
+        const gate = gateOverLogins("ana@example.com", "luis@example.com");
+        const h = harness(
+            dir,
+            async (n) => {
+                const result = await gate.run();
+                return report(result.outcome, [result], at(n));
+            },
+            2,
+            { render: (done) => renderText(done, [quotaGateStep]) },
+        );
+        expect(await runLoop(h.io)).toBe(0);
+        expect(gate.login.calls).toHaveLength(2);
+        const accounts = read(dir, "loop.log")
+            .split("\n")
+            .filter((line) => line.startsWith("  account "));
+        expect(accounts).toEqual([
+            "  account   ana@example.com — claude@1a2b3c4d · Claude · ana@example.com · Pro",
+            "  account   luis@example.com — claude@9f8e7d6c · Claude · luis@example.com · Pro",
+        ]);
     });
 });

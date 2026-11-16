@@ -185,7 +185,6 @@ export function triageContext(options: {
             : given;
     return {
         args: {
-            account: undefined,
             task: undefined,
             stage: undefined,
             discard: undefined,
@@ -214,7 +213,8 @@ export function triageContext(options: {
         config: load,
         results: [],
         io: {
-            openUsage: () => Promise.reject(new Error("the triage never reads OpenUsage")),
+            quota: { read: () => Promise.reject(new Error("the triage never reads the quota")) },
+            login: () => Promise.reject(new Error("the triage never reads the login")),
             trackers: () => options.trackers,
             judgement: options.judgement ?? noJudgement(),
             chezmoi: () => Promise.reject(new Error("the triage never reads chezmoi")),

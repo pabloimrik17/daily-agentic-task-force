@@ -9,7 +9,8 @@ steps, in this order:
    [The `reconcile` step](#the-reconcile-step)).
 2. `capacity` counts the open attempts as slots and compares them with the
    limits (see [Slots and the `capacity` step](#slots-and-the-capacity-step)).
-3. `quota-gate` decides whether the Claude account has quota to spend.
+3. `quota-gate` decides whether the [active account](#the-active-account) has
+   quota to spend.
 4. `label-triage` reports the tasks missing a label of the contract and, with
    `--apply`, writes the labels it is confident about.
 5. `select` chooses the next work unit and explains the choice (see
@@ -120,8 +121,8 @@ adding the Linear CLI there is tracked as DOT-82 sub-issue 7.
 ## Usage
 
 ```text
-/autonomous:run [--account <provider-key>] [--force] [--json] [--apply] [--no-handoff]
-/autonomous:run --task <source>:<id> [--stage <stage>] [--account <provider-key>] [--force] [--json] [--apply] [--no-handoff]
+/autonomous:run [--force] [--json] [--apply] [--no-handoff]
+/autonomous:run --task <source>:<id> [--stage <stage>] [--force] [--json] [--apply] [--no-handoff]
 /autonomous:run --bootstrap-labels [--json]
 /autonomous:run --triage-questions [--json]
 /autonomous:run --apply --answer <id>=<value>[,<value>]... [--json]
@@ -130,14 +131,13 @@ adding the Linear CLI there is tracked as DOT-82 sub-issue 7.
 /autonomous:run --apply --persist <attempt-id> [--json]
 /autonomous:run --apply --pull-request <attempt-id> [--title <title>] [--json]
 /autonomous:run --apply --log <attempt-id> [--json]
-/autonomous:loop [--apply] [--account <provider-key>] [--force] [--json] [--grills <n>] [--parallel <n>] [--interval <minutes>]
+/autonomous:loop [--apply] [--force] [--json] [--grills <n>] [--parallel <n>] [--interval <minutes>]
 /autonomous:loop-stop
 bun src/run.ts --notices <n>
 ```
 
 | Flag                                | Effect                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                     |
 | ----------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `--account <provider-key>`          | Claude account to evaluate, by its OpenUsage account id (`claude@<id>`, such as `claude@1a2b3c4d`). Required when several Claude accounts are present                                                                                                                                                                                                                                                                                                                                                                                                                      |
 | `--force`                           | Accepted, and does nothing: OpenUsage 0.8 prints what its app last fetched and refreshes on its own schedule                                                                                                                                                                                                                                                                                                                                                                                                                                                               |
 | `--json`                            | Print one `autonomous.run.v2` JSON document instead of the text report; with `--bootstrap-labels`, one `autonomous.bootstrap.v1` document; with `--answer`, one `autonomous.answers.v1` document; with `--discard`, one `autonomous.discard.v1` document; with `--transition`, one `autonomous.transition.v1` document; with `--persist`, one `autonomous.persist.v1` document; with `--pull-request`, one `autonomous.pull-request.v1` document; with `--log`, one `autonomous.log.v1` document; with `--triage-questions`, one `autonomous.triage-questions.v1` document |
 | `--apply`                           | Let steps write. Without it a run has no side effects beyond the CLIs' own caches and the run lock. Required by `--answer`, `--discard`, `--transition`, `--persist`, `--pull-request` and `--log`                                                                                                                                                                                                                                                                                                                                                                         |
@@ -154,7 +154,7 @@ bun src/run.ts --notices <n>
 | `--title <title>`                   | With `--pull-request`, the text of the pull request's title; the task id is appended. Required to open a pull request; replaces the title of one already open. Requires `--pull-request`. Given once                                                                                                                                                                                                                                                                                                                                                                       |
 | `--log <attempt-id>`                | [Log mode](#log-mode): publish the attempt's [logbook entry](#the-logbook) on the pull request, read it back and write the receipt, running no step. `<attempt-id>` is `<source>:<task>:<stage>:<n>`. Requires `--apply`. Only combines with `--apply` and `--json`. Given once                                                                                                                                                                                                                                                                                            |
 | `--persist <attempt-id>`            | [Persist mode](#persist-mode): save the definition and the stage summary of that open grill-me attempt, or the stage summary of that open proposal attempt, to its task and write the receipt, running no step. `<attempt-id>` is `<source>:<task>:<stage>:<n>`. Requires `--apply`. Only combines with `--apply` and `--json`. Given once                                                                                                                                                                                                                                 |
-| `--loop`                            | Run an iteration of the loop, where the [slot limits](#slots-and-the-capacity-step) bind. Only combines with `--apply`, `--account`, `--force`, `--json`, `--grills`, `--parallel` and `--interval`. Not combined with `--no-handoff`, `--bootstrap-labels`, `--answer`, `--task`, `--stage`, `--discard`, `--release-workspace`, `--transition`, `--persist`, `--pull-request`, `--title`, `--log`, `--notices` or `--stop-loop`                                                                                                                                          |
+| `--loop`                            | Run an iteration of the loop, where the [slot limits](#slots-and-the-capacity-step) bind. Only combines with `--apply`, `--force`, `--json`, `--grills`, `--parallel` and `--interval`. Not combined with `--no-handoff`, `--bootstrap-labels`, `--answer`, `--task`, `--stage`, `--discard`, `--release-workspace`, `--transition`, `--persist`, `--pull-request`, `--title`, `--log`, `--notices` or `--stop-loop`                                                                                                                                                       |
 | `--grills <n>`                      | The limit of grill slots for this loop, an integer of 0 or more. Replaces `runner.grills`. Requires `--loop`. Given once                                                                                                                                                                                                                                                                                                                                                                                                                                                   |
 | `--parallel <n>`                    | The limit of work slots for this loop, an integer of 0 or more. Replaces `runner.parallel`. Requires `--loop`. Given once                                                                                                                                                                                                                                                                                                                                                                                                                                                  |
 | `--interval <minutes>`              | The time between two iterations, an integer of 1 or more. Replaces `runner.intervalMinutes`. Requires `--loop`. Given once                                                                                                                                                                                                                                                                                                                                                                                                                                                 |
@@ -164,7 +164,7 @@ bun src/run.ts --notices <n>
 The script can also be run directly, which is what a shell should branch on:
 
 ```bash
-bun plugins/autonomous/src/run.ts --account claude@1a2b3c4d --json --apply --no-handoff
+bun plugins/autonomous/src/run.ts --json --apply --no-handoff
 ```
 
 `--apply` and `--bootstrap-labels` are the only ways anything is written;
@@ -180,14 +180,14 @@ unattended way is [the loop](#the-loop), which needs no `--no-handoff`.
 
 ### Exit codes
 
-For `/autonomous:run [--account …] [--force] [--json] [--apply] [--no-handoff]`:
+For `/autonomous:run [--force] [--json] [--apply] [--no-handoff]`:
 
-| Code | Outcome                                                                                                                                                                                        |
-| ---- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| 0    | `advance` — every step advanced                                                                                                                                                                |
-| 2    | `wait` — a step says to wait (for example, a window exhausted, or no task is selectable)                                                                                                       |
-| 3    | `not-evaluable` — no decision possible: account absent, ambiguous or unknown, data missing, incomplete, invalid, outdated, stale or failed, or another run holds the [run lock](#the-run-lock) |
-| 1    | Invalid arguments or a failure of the runner itself                                                                                                                                            |
+| Code | Outcome                                                                                                                                                                                                                                                                                                                                                |
+| ---- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| 0    | `advance` — every step advanced                                                                                                                                                                                                                                                                                                                        |
+| 2    | `wait` — a step says to wait (for example, a window exhausted, or no task is selectable)                                                                                                                                                                                                                                                               |
+| 3    | `not-evaluable` — no decision possible: no usable [active account](#the-active-account) (no login, a login with no email address, `claude auth status` unreadable, or no OpenUsage account or more than one with that email address), data missing, incomplete, invalid, outdated, stale or failed, or another run holds the [run lock](#the-run-lock) |
+| 1    | Invalid arguments or a failure of the runner itself                                                                                                                                                                                                                                                                                                    |
 
 The same codes apply with `--task`. A run that finds the lock held runs no
 step: it prints a report with no steps, outcome `not-evaluable` and, after the
@@ -348,7 +348,7 @@ launches at most one session. The loop is the only thing the limits bind.
 From an agent session:
 
 ```text
-/autonomous:loop --account claude@1a2b3c4d --apply
+/autonomous:loop --apply
 ```
 
 Before it starts the loop, the command asks the questions of the marked tasks
@@ -360,7 +360,7 @@ nothing else and says nothing while no notice arrives.
 From a shell:
 
 ```bash
-bun plugins/autonomous/src/run.ts --loop --apply --account claude@1a2b3c4d
+bun plugins/autonomous/src/run.ts --loop --apply
 ```
 
 The loop prints nothing to standard output. It exits with 0 when stopped, 1 on
@@ -409,7 +409,7 @@ prints its report as a run does, and exits with the code of its outcome (see
 [Exit codes](#exit-codes)). It takes no loop lock and writes no log or notice.
 
 ```bash
-bun plugins/autonomous/src/run.ts --loop --account claude@1a2b3c4d
+bun plugins/autonomous/src/run.ts --loop
 ```
 
 ### What keeps it going
@@ -573,7 +573,7 @@ Each `--answer` is split at its first `=` into the question's id and its
 values, and the values at `,`. These are usage errors (exit 1):
 
 - `--answer` without `--apply`;
-- `--answer` with `--account`, `--force`, `--no-handoff`,
+- `--answer` with `--force`, `--no-handoff`,
   `--bootstrap-labels` or `--transition`: it only combines with `--apply` and
   `--json`;
 - an `--answer` without `=`, with an empty id or with an empty value;
@@ -1906,7 +1906,7 @@ A first `--apply` over an existing backlog can write hundreds of labels by
 rule, and rule writes are uncapped. Each write is one add and one read-back, so
 such a run issues over 1,000 CLI calls and exceeds the command's timeout. Run
 without `--apply` first and read the report. Then run the `--apply` from a shell
-(`bun plugins/autonomous/src/run.ts --account <key> --apply`), not through
+(`bun plugins/autonomous/src/run.ts --apply`), not through
 `/autonomous:run`. The current example is the first `--apply` after the upgrade
 that introduced `proposal`, which writes it to every open task that has an
 autonomy label and no stage label (see
@@ -1965,7 +1965,7 @@ that adds `proposal` to every open task that has an autonomy label and no stage
 label. That first run writes several hundred labels, each write being one add
 plus one read-back. Read the list of proposed `proposal` writes in the dry run
 first, then run that `--apply` from a shell
-(`bun plugins/autonomous/src/run.ts --account <key> --apply`), because the
+(`bun plugins/autonomous/src/run.ts --apply`), because the
 command's timeout cannot hold it.
 
 ### Marking the tasks left for the human
@@ -2199,9 +2199,10 @@ a task closed in the meantime is harmless.
 ### Active-account caveat
 
 The judgement, and the comparison of the `select` step, run `claude -p` on the
-active Claude account, through the subscription the quota gate already
-checked. `--account` must name that same
-account; `claude-swap` integration is deferred. Both run in safe
+account Claude Code is logged in as at that moment. That is the account the
+quota gate checked, unless the login changed after the gate: the run does not
+hold the login
+([ADR 0006](docs/adr/0006-the-run-follows-the-active-account.md)). Both run in safe
 mode with no tools, no hooks, no MCP servers and no session persistence,
 because the prompt carries issue text anyone can write.
 
@@ -2765,7 +2766,7 @@ The step's tier is `llm` when the LLM named the session and `code` otherwise.
 ### The supplied task
 
 ```text
-/autonomous:run --task <source>:<id> [--stage <stage>] [--account <provider-key>] [--force] [--json] [--apply] [--no-handoff]
+/autonomous:run --task <source>:<id> [--stage <stage>] [--force] [--json] [--apply] [--no-handoff]
 ```
 
 With `--task`, only `reconcile`, `capacity`, `quota-gate` and `launch` run; `label-triage`
@@ -2780,7 +2781,7 @@ command again once the session has finished writing the marker; the second run
 finalises it:
 
 ```bash
-bun plugins/autonomous/src/run.ts --account <key> --apply --task <source>:<id> --stage test
+bun plugins/autonomous/src/run.ts --apply --task <source>:<id> --stage test
 ```
 
 ### The run lock
@@ -3378,19 +3379,18 @@ matches. The report says which signal matched.
 ## The quota gate
 
 Third in the run, after `reconcile` and `capacity`, so a stage that completed is
-recorded even when the gate says to wait. For the selected account the gate reads OpenUsage and evaluates the `session`
+recorded even when the gate says to wait. For the [active account](#the-active-account) the gate reads OpenUsage and evaluates the `session`
 and `weekly` windows: used amount, limit, window length, reset time, and the
 usage projected to the end of the window as OpenUsage's `Pace.evaluate`
 computes it. Other resources, such as `fable`, are listed but not evaluated; a
 balance, such as `rateLimitResets`, is listed with its available amount.
 They must still be well-formed, because validation covers the whole OpenUsage
-document, including accounts that are not selected.
+document, including accounts that are not evaluated.
 
 The gate runs `openusage claude`, which prints every Claude account as one
 `openusage.limits.v2` document. An account is keyed by its id, such as
 `claude@1a2b3c4d`; the bare `claude` is a provider kind, not an account. An
-account OpenUsage has not fetched yet is left out, so `--account` naming it is
-an unknown account. When an account's refreshes fail, OpenUsage keeps its last
+account OpenUsage has not fetched yet is left out. When an account's refreshes fail, OpenUsage keeps its last
 values and marks them stale once they expire, 10 minutes after they were
 fetched. That account is then `not-evaluable`; the other accounts are
 unaffected.
@@ -3411,6 +3411,40 @@ The decision, in order of precedence:
 
 Projection is reported but never blocks. Missing or stale data is never read as
 available capacity.
+
+### The active account
+
+The gate evaluates the active account: the Claude account that Claude Code is
+logged in as when the gate runs. It reads the login with `claude auth status`
+and matches it to OpenUsage's accounts by email address, which OpenUsage
+carries in the account's display name. The run never chooses an account, never
+switches the login and never uses another account when the active one is
+exhausted: it waits
+([ADR 0006](docs/adr/0006-the-run-follows-the-active-account.md)).
+
+The gate is `not-evaluable` when Claude Code reports no login, when its login
+has no email address, when `claude auth status` cannot be read, or when
+OpenUsage reports no account, or more than one, with that email address.
+
+The account line of the report starts with the email address:
+
+```text
+  account   ana@example.com — claude@1a2b3c4d · Claude · ana@example.com · Pro
+```
+
+When the outcome is `wait`, the report also lists the other accounts that have
+capacity. It is information only, and the run does not act on it:
+
+```text
+  capacity elsewhere (Claude Code is not logged in as these):
+    - luis@example.com
+```
+
+To run on another account, switch the Claude Code login to it before the run.
+
+`--account` was removed. Passing it is a usage error (exit 1) with the message
+`--account is no longer accepted: the run evaluates the account Claude Code is
+logged in as`.
 
 ## Read-backs and tracker lag
 

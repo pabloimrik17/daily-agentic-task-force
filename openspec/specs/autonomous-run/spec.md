@@ -12,8 +12,8 @@ The `autonomous` plugin SHALL expose two commands: `/autonomous:run`, which adva
 
 #### Scenario: Command invocation
 
-- **WHEN** the user runs `/autonomous:run --account claude@1a2b3c4d`
-- **THEN** the step runner is executed with `--account claude@1a2b3c4d`
+- **WHEN** the user runs `/autonomous:run --apply --json`
+- **THEN** the step runner is executed with `--apply --json`
 
 #### Scenario: Two commands
 
@@ -202,7 +202,7 @@ The run SHALL accept `--no-handoff`, which prevents the report from carrying a `
 
 #### Scenario: Loop invocation
 
-- **WHEN** `/loop` runs `/autonomous:run --account claude@1a2b3c4d --apply --no-handoff`
+- **WHEN** `/loop` runs `/autonomous:run --apply --no-handoff`
 - **THEN** the steps run and write as with `--apply`, and no question is asked
 
 #### Scenario: Transition without a handoff
@@ -258,7 +258,7 @@ The exit code SHALL be:
 
 ### Requirement: Supplied task flags
 
-The run SHALL accept `--task <source>:<id>`, which skips `label-triage` and `select` and gives that task to `launch`, and `--stage <stage>`, which names the stage to launch. `--stage` without `--task` is a usage error. Both MAY be combined with `--account`, `--force`, `--json`, `--apply` and `--no-handoff`, and SHALL NOT be combined with `--bootstrap-labels`, `--answer`, `--discard` or `--transition`.
+The run SHALL accept `--task <source>:<id>`, which skips `label-triage` and `select` and gives that task to `launch`, and `--stage <stage>`, which names the stage to launch. `--stage` without `--task` is a usage error. Both MAY be combined with `--force`, `--json`, `--apply` and `--no-handoff`, and SHALL NOT be combined with `--bootstrap-labels`, `--answer`, `--discard` or `--transition`.
 
 #### Scenario: Task supplied
 
@@ -659,3 +659,17 @@ The report of `--triage-questions` SHALL carry the count of marked tasks, every 
 
 - **WHEN** the run is invoked with `--triage-questions --apply`
 - **THEN** the run prints a usage message and exits with code 1
+
+### Requirement: No account flag
+
+The run SHALL NOT accept `--account`, in any mode. Passing it SHALL be a usage error with exit code 1, and the message SHALL say that the run evaluates the account Claude Code is logged in as.
+
+#### Scenario: Account given to a run
+
+- **WHEN** the run is invoked with `--account ana@example.com`
+- **THEN** it runs no step, prints a message that says the run evaluates the account Claude Code is logged in as, and exits with code 1
+
+#### Scenario: Account given to the loop
+
+- **WHEN** the step runner is invoked with `--loop --apply --account claude@1a2b3c4d`
+- **THEN** it starts no loop, prints the same message, and exits with code 1

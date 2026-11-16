@@ -18,7 +18,7 @@ const SCHEMA = "openusage.limits.v2";
 // What OpenUsage 0.7 printed. 0.8 prints only v2, so v1 means an OpenUsage too old for the gate.
 const PREVIOUS_SCHEMA = "openusage.limits.v1";
 
-export interface OpenUsageResource {
+interface OpenUsageResource {
     kind: string;
     unit: string;
     used?: number;
