@@ -63,6 +63,12 @@ The workspace is the path recorded in the task's latest attempt record, which ev
 
 *Alternative:* trust the prompt's gate. Rejected: the user's rule for this plugin is code before an LLM where code can decide, and an orchestrator near the end of a long session is exactly when a step gets skipped.
 
+### D6a. An AFK orchestrator leaves the tasks that need a human unchecked
+
+Proposals often end with end-to-end checks that need the user's go-ahead, such as real writes to a tracker. An `AFK` orchestrator has nobody to ask, and the guards of D6 refuse an unchecked task, so it could only end blocked, check the task without doing it, or do the write without the go-ahead. The prompt names the first as the only path: such a task is neither done nor checked, the rest is finished, and the blocked path names it in the stage summary. Keeping these checks out of an `AFK` proposal's `tasks.md`, so that the task can reach `verify` alone, belongs to proposal preparation and is left to a follow-up task.
+
+*Alternative:* let the guards skip a section with a fixed name, such as "End-to-end verification". Rejected: the guards would have to parse `tasks.md` themselves, and a section name is a convention a proposal can miss.
+
 ### D7. The transition table gains a row, and the autonomy rule is shared
 
 `TRANSITIONS` gains `implement: { to: "verify", asks: "approval" }`. `proposalAutonomy` becomes a function of the stage being left, so `implement` reuses it: `AFK` applies the transition directly, `HITL` asks. The approval question's text depends on the stage left ("the proposal is ready" or "the implementation is ready"), and its `Approve` value is the row's `to`. `receipt.ts` already reads the stage being left from the row, so it covers `implement` once the row exists.
@@ -83,7 +89,7 @@ The plan is proposal's: the stage summary only, no description change, header `a
 
 1. Release as a `feat(autonomous):` minor; no configuration changes.
 2. Before installing it, stop the loop (`/autonomous:loop-stop`). DOT-121 already carries `implement`: once the stage exists it becomes a candidate, ahead of every `proposal` task, and a running loop would launch it before the agreed manual run. Adding `taken` to DOT-121 instead also works, but `taken` also blocks the manual launch, so it must be removed right before it.
-3. Run `/autonomous:run --apply --bootstrap-labels` once per tracker, so `verify` exists before the first transition out of `implement`.
+3. Run `/autonomous:run --bootstrap-labels` once per tracker, so `verify` exists before the first transition out of `implement`.
 4. Accept the change with one real `HITL` run on DOT-121 (pull request #90), launched by hand after the user's go-ahead; restart the loop afterwards.
 
 Rollback: revert the release, but first relabel by hand every task already in `verify`. An older version does not know `verify`, sees those tasks as missing a stage, and its label triage would derive `proposal` for them.

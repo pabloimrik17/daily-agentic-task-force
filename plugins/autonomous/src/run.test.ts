@@ -157,6 +157,8 @@ function deps(steps: readonly Step[] | undefined, overrides: Partial<MainDeps> =
         pullRequests: () => inertPullRequests,
         context: () => ({ beads: inertContext, github: inertContext, linear: inertContext }),
         openspec: () => Promise.resolve({ ok: false, error: "unused" }),
+        openspecIn: () => () => Promise.resolve({ ok: false, error: "unused" }),
+        git: () => Promise.resolve({ ok: false, error: "unused" }),
         stdout: (t) => out.push(t),
         stderr: (t) => err.push(t),
         wait: () => Promise.reject(new Error("wait was not expected")),
@@ -416,7 +418,7 @@ describe("main --bootstrap-labels", () => {
             [
                 `label bootstrap — started ${NOW.toISOString()}`,
                 "outcome: advance",
-                "  linear    workspace: created work, personal, AFK, HITL, grill-me, proposal, implement, taken, triage-me",
+                "  linear    workspace: created work, personal, AFK, HITL, grill-me, proposal, implement, verify, taken, triage-me",
             ].join("\n"),
         ]);
     });
@@ -451,7 +453,7 @@ describe("main --bootstrap-labels", () => {
             [
                 `label bootstrap — started ${NOW.toISOString()}`,
                 "outcome: not-evaluable",
-                `  linear    workspace: present work, personal, AFK, HITL, grill-me, implement, taken, triage-me; failed proposal (${error})`,
+                `  linear    workspace: present work, personal, AFK, HITL, grill-me, implement, verify, taken, triage-me; failed proposal (${error})`,
             ].join("\n"),
         ]);
     });
@@ -464,7 +466,7 @@ describe("main --bootstrap-labels", () => {
             [
                 `label bootstrap — started ${NOW.toISOString()}`,
                 "outcome: advance",
-                "  linear    workspace: recoloured AFK (was #000000); present work, personal, HITL, grill-me, proposal, implement, taken, triage-me",
+                "  linear    workspace: recoloured AFK (was #000000); present work, personal, HITL, grill-me, proposal, implement, verify, taken, triage-me",
             ].join("\n"),
         ]);
     });
@@ -493,7 +495,7 @@ describe("main --bootstrap-labels", () => {
             [
                 `label bootstrap — started ${NOW.toISOString()}`,
                 "outcome: not-evaluable",
-                `  linear    workspace: present work, personal, HITL, grill-me, proposal, implement, taken, triage-me; failed AFK (${error})`,
+                `  linear    workspace: present work, personal, HITL, grill-me, proposal, implement, verify, taken, triage-me; failed AFK (${error})`,
             ].join("\n"),
         ]);
     });
@@ -1436,12 +1438,12 @@ describe("main --transition", () => {
     });
 
     it("Task not in grill-me: exits 3 with the reason and no handoff", async () => {
-        const { d, out, calls } = transitionDeps(["personal", "AFK", "implement"]);
+        const { d, out, calls } = transitionDeps(["personal", "AFK", "verify"]);
         expect(await main(transitionArgs("--json"), d)).toBe(3);
         const report = documentOf(out);
         expect(report.outcome).toBe("not-evaluable");
         expect(report.reasons).toEqual([
-            "beads B-1 is in neither grill-me nor proposal (labels [personal, AFK, implement])",
+            "beads B-1 is in none of grill-me, proposal and implement (labels [personal, AFK, verify])",
         ]);
         expect(report).not.toHaveProperty("handoff");
         expect(calls).toEqual(["beads:readTask:B-1"]);

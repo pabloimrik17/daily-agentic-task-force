@@ -124,6 +124,9 @@ export interface MainDeps {
     pullRequests: PullRequestsFactory;
     context: ContextReaderFactory;
     openspec: Exec;
+    // `openspec` finds its root from its working directory and has no flag to name another.
+    openspecIn: (directory: string) => Exec;
+    git: Exec; // run with `-C <directory>`
     stdout: (text: string) => void;
     stderr: (text: string) => void;
     wait: Wait; // the loop's interval and the polls of --notices and --stop-loop
@@ -311,6 +314,7 @@ function context(
             context: deps.context,
             pullRequests: deps.pullRequests,
             openspec: deps.openspec,
+            git: deps.git,
             state,
             home: deps.env.HOME ?? homedir(),
         },
@@ -377,7 +381,11 @@ async function runAnswers(args: RunArgs, steps: readonly Step[], deps: MainDeps)
     }
     const { config } = load;
     const ctx = { config, trackers: deps.trackers(config) };
-    const handlers = [...answeringSteps(steps), transitionHandler(resolveStateDir(deps.env))];
+    const tools = { git: deps.git, openspecIn: deps.openspecIn, pullRequests: deps.pullRequests };
+    const handlers = [
+        ...answeringSteps(steps),
+        transitionHandler(resolveStateDir(deps.env), tools),
+    ];
     const report = await applyAnswers(handlers, args.answers, ctx, startedAt);
     deps.stdout(args.json ? renderAnswersJson(report) : renderAnswersText(report));
     return exitCodeFor(report.outcome);
@@ -398,6 +406,9 @@ async function runTransitionMode(ref: TaskRef, args: RunArgs, deps: MainDeps): P
         config,
         trackers: deps.trackers(config),
         state: resolveStateDir(deps.env),
+        git: deps.git,
+        openspecIn: deps.openspecIn,
+        pullRequests: deps.pullRequests,
     };
     const report = await runTransition(ref, transitionDeps, startedAt);
     deps.stdout(args.json ? renderTransitionJson(report) : renderTransitionText(report));
@@ -540,6 +551,8 @@ if (import.meta.main) {
         pullRequests: ghPullRequests,
         context: cliContext,
         openspec: execCommand("openspec"),
+        openspecIn: (directory) => execCommand("openspec", CLI_TIMEOUT_MS, { cwd: directory }),
+        git: execCommand("git"),
         stdout: (text) => process.stdout.write(`${text}\n`),
         stderr: (text) => process.stderr.write(`${text}\n`),
         wait: sleep,

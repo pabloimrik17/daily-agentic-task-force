@@ -10,38 +10,44 @@ import type { Tracker } from "../label-triage/trackers/tracker.ts";
 import type { Wait } from "../read-back.ts";
 import type { AnswerContext, AnswerRecord } from "../runner.ts";
 import { applyTransition, type Settlement } from "./apply.ts";
+import { type GuardTools, guardsOnLeaving } from "./guards.ts";
 import {
     accepts,
+    APPROVAL_VALUES,
     AUTONOMY_OPTIONS,
     parseTransitionId,
-    proposalAutonomy,
     rowOf,
+    stageAutonomy,
     TRANSITION,
     type TransitionRow,
-    TRANSITIONS,
 } from "./mode.ts";
 import { awaitedDetail, awaitedReceipt } from "./receipt.ts";
 import { recordTransition } from "./transitioned.ts";
 
-const VALUES: readonly string[] = [...AUTONOMY_OPTIONS, TRANSITIONS.proposal.to];
+const VALUES: readonly string[] = [...AUTONOMY_OPTIONS, ...APPROVAL_VALUES];
 
 const INVALID_VALUE = `invalid for the transition: expected one of ${VALUES.join(", ")}`;
 
 const list = (labels: readonly string[]) => `[${labels.join(", ")}]`;
 
-interface Answering {
+interface Handling {
+    state: string;
+    wait: Wait | undefined;
+    now: () => Date;
+    tools: GuardTools;
+}
+
+interface Answering extends Handling {
     tracker: Tracker;
     ref: TaskRef;
     row: TransitionRow;
     before: string[];
     value: string;
-    state: string;
-    wait: Wait | undefined;
-    now: () => Date;
 }
 
 export function transitionHandler(
     state: string,
+    tools: GuardTools,
     wait?: Wait,
     now: () => Date = () => new Date(),
 ): AnswerHandler {
@@ -50,7 +56,7 @@ export function transitionHandler(
         async answer(answers: readonly Answer[], ctx: AnswerContext): Promise<AnswerRecord[]> {
             const records: AnswerRecord[] = [];
             for (const answer of answers) {
-                const { status, detail } = await settle(answer, ctx, state, wait, now);
+                const { status, detail } = await settle(answer, ctx, { state, tools, wait, now });
                 records.push({ id: answer.id, labels: [...answer.values], status, detail });
             }
             return records;
@@ -58,13 +64,7 @@ export function transitionHandler(
     };
 }
 
-async function settle(
-    answer: Answer,
-    ctx: AnswerContext,
-    state: string,
-    wait: Wait | undefined,
-    now: () => Date,
-): Promise<Settlement> {
+async function settle(answer: Answer, ctx: AnswerContext, handling: Handling): Promise<Settlement> {
     const parsed = parseTransitionId(answer.id);
     if (!parsed.ok) {
         return { status: "rejected", detail: parsed.error };
@@ -87,7 +87,7 @@ async function settle(
     if (row === null || !accepts(row, value)) {
         return { status: "skipped", detail: `already moved on: stage ${list(stageOf(before))}` };
     }
-    return transition({ tracker, ref, row, before, value, state, wait, now });
+    return transition({ tracker, ref, row, before, value, ...handling });
 }
 
 async function transition(answering: Answering): Promise<Settlement> {
@@ -99,7 +99,7 @@ async function transition(answering: Answering): Promise<Settlement> {
     if (awaited.value !== null) {
         return { status: "rejected", detail: awaitedDetail(awaited.value) };
     }
-    const refused = refusal(answering);
+    const refused = await refusal(answering);
     if (refused !== null) {
         return { status: "rejected", detail: refused };
     }
@@ -108,13 +108,19 @@ async function transition(answering: Answering): Promise<Settlement> {
     return leaveRecord(settled, answering);
 }
 
-// A task in proposal whose autonomy is missing or in conflict is not transitioned, whoever asks.
-function refusal({ ref, row, before }: Answering): string | null {
+// A task in a stage left on approval whose autonomy is missing or in conflict is not
+// transitioned, whoever asks; nor is one whose work is unfinished, which the workspace may have
+// become since the question was asked.
+async function refusal({ ref, row, before, state, tools }: Answering): Promise<string | null> {
     if (row.asks !== "approval") {
         return null;
     }
-    const autonomy = proposalAutonomy(ref, before);
-    return autonomy.ok ? null : autonomy.error;
+    const autonomy = stageAutonomy(ref, before, row.from);
+    if (!autonomy.ok) {
+        return autonomy.error;
+    }
+    const unfinished = await guardsOnLeaving(row.from, ref, state, tools);
+    return unfinished.length === 0 ? null : `${row.from} is not finished: ${unfinished.join("; ")}`;
 }
 
 // A failure to list or write the record is the settlement's detail, never its status.

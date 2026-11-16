@@ -62,6 +62,7 @@ export interface RunContext {
         context: ContextReaderFactory;
         pullRequests: PullRequestsFactory;
         openspec: Exec;
+        git: Exec; // run with `-C <directory>`
         state: string; // the resolved state directory
         home: string; // the home directory, where stage prerequisites look for installed tools
     };

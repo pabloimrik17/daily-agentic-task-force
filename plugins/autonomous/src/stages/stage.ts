@@ -10,7 +10,7 @@ import type { WorkTask } from "../select/types.ts";
 import type { SessionTool } from "../sessions/manager.ts";
 
 // Every stage the system knows: the selectable ones (select's `StageName`) and `test`.
-export const STAGE_IDS = ["test", "grill-me", "proposal"] as const;
+export const STAGE_IDS = ["test", "grill-me", "proposal", "implement"] as const;
 
 export type StageId = (typeof STAGE_IDS)[number];
 
@@ -22,6 +22,7 @@ interface StageReaders {
     context: ContextReader; // of the task's source
     pullRequests: PullRequests; // bound to the repository
     openspec: Exec;
+    git: Exec; // run with `-C <directory>`
 }
 
 export interface StageEnv {

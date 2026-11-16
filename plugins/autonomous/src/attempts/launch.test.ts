@@ -181,7 +181,8 @@ function setup(options: Setup = {}) {
         context: { source: "linear", read: () => Promise.resolve({ ok: false, error: "unused" }) },
         pullRequests: {} as PullRequests,
         openspec: (() => Promise.resolve({ ok: true, stdout: "" })) as Exec,
-    } satisfies { context: ContextReader; pullRequests: PullRequests; openspec: Exec };
+        git: (() => Promise.resolve({ ok: true, stdout: "" })) as Exec,
+    } satisfies { context: ContextReader; pullRequests: PullRequests; openspec: Exec; git: Exec };
     const bound: string[] = [];
     const ctx: RunContext = {
         ...base,
@@ -201,6 +202,7 @@ function setup(options: Setup = {}) {
                 return readers.pullRequests;
             },
             openspec: readers.openspec,
+            git: readers.git,
             state,
         },
     };
@@ -337,15 +339,15 @@ describe("launch: preconditions", () => {
     // input reaches launch with a stage that has no implementation; the args force one here.
     it("waits naming a stage without implementation, before any workspace", async () => {
         const { ctx, workspace, sessions } = setup({
-            args: { stage: "implement" as RunArgs["stage"] },
+            args: { stage: "verify" as RunArgs["stage"] },
         });
 
         expect(await launchStep.run(ctx)).toMatchObject({
             step: "launch",
             tier: "code",
             outcome: "wait",
-            reasons: ["stage implement has no implementation"],
-            data: { stage: "implement", repository: null },
+            reasons: ["stage verify has no implementation"],
+            data: { stage: "verify", repository: null },
         });
         expect(workspace.calls).toEqual([]);
         expect(sessionCalls(sessions.calls)).toEqual([]);

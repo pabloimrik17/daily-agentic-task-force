@@ -24,7 +24,7 @@ function normalise(text: string): string {
 }
 
 describe("LABELS, GROUPS and COLOURS", () => {
-    it("lists exactly the nine contract labels", () => {
+    it("lists exactly the ten contract labels", () => {
         expect(LABELS).toEqual([
             "work",
             "personal",
@@ -33,6 +33,7 @@ describe("LABELS, GROUPS and COLOURS", () => {
             "grill-me",
             "proposal",
             "implement",
+            "verify",
             "taken",
             "triage-me",
         ]);
@@ -42,7 +43,7 @@ describe("LABELS, GROUPS and COLOURS", () => {
         expect(GROUPS).toEqual({
             scope: ["work", "personal"],
             autonomy: ["AFK", "HITL"],
-            stage: ["grill-me", "proposal", "implement"],
+            stage: ["grill-me", "proposal", "implement", "verify"],
         });
     });
 
@@ -57,6 +58,7 @@ describe("LABELS, GROUPS and COLOURS", () => {
             "grill-me": "#f2994a",
             proposal: "#bb87fc",
             implement: "#26b5ce",
+            verify: "#d6409f",
             work: "#2f80ed",
             personal: "#27ae60",
             taken: "#95a2b3",
@@ -87,6 +89,12 @@ describe("LABELS, GROUPS and COLOURS", () => {
 
     it("states that implement means the task has a proposal and is ready to implement", () => {
         expect(MEANINGS.implement).toBe("The task has a proposal and is ready to implement.");
+    });
+
+    it("states that verify means the task is implemented and ready to verify against its proposal", () => {
+        expect(MEANINGS.verify).toBe(
+            "The task is implemented and ready to verify against its proposal.",
+        );
     });
 
     it("states grill-me without any precedence over AFK and HITL", () => {
@@ -221,6 +229,10 @@ describe("optionsFor", () => {
 
     it("Task in implement: its autonomy is AFK or HITL, never grill-me", () => {
         expect(optionsFor("autonomy", ["personal", "implement"])).toEqual(["AFK", "HITL"]);
+    });
+
+    it("Task in verify: its autonomy is AFK or HITL, never grill-me", () => {
+        expect(optionsFor("autonomy", ["work", "verify"])).toEqual(["AFK", "HITL"]);
     });
 });
 

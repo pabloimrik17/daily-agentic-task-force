@@ -116,6 +116,24 @@ describe("decide: autonomy in implement", () => {
     });
 });
 
+describe("decide: autonomy in verify", () => {
+    it("Task in verify: AFK is eligible and grill-me is asked as invalid", () => {
+        expect(
+            decide(derivation({ group: "autonomy", labels: ["AFK"] }), 0.95, ["work", "verify"]),
+        ).toEqual({ status: "eligible", reason: "" });
+        expect(
+            decide(
+                derivation({ group: "autonomy", labels: ["grill-me"], confidence: 0.99 }),
+                0.95,
+                ["work", "verify"],
+            ),
+        ).toEqual({
+            status: "asked",
+            reason: "invalid under the contract: grill-me with a stage label: verify",
+        });
+    });
+});
+
 describe("decide", () => {
     it("is eligible when confidence is at or above the threshold and the labels are valid", () => {
         expect(decide(derivation({ confidence: 1 }), 0.95, [])).toEqual({

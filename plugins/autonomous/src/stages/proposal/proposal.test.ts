@@ -178,7 +178,14 @@ function readers(calls: string[], reads: Reads = {}): StageEnv["readers"] {
         calls.push(`openspec ${args.join(" ")}`);
         return Promise.resolve(reads.openspec ?? { ok: true, stdout: "1.0.0\n" });
     };
-    return { context, pullRequests: { find } as Partial<PullRequests> as PullRequests, openspec };
+    const git: Exec = () =>
+        Promise.resolve({ ok: false, error: "proposal preparation runs no git" });
+    return {
+        context,
+        pullRequests: { find } as Partial<PullRequests> as PullRequests,
+        openspec,
+        git,
+    };
 }
 
 const AFK_TASK = workTask("linear", "DOT-121", ["personal", "AFK", "proposal"], {

@@ -236,6 +236,7 @@ export function triageContext(options: {
                 throw new Error("the triage never opens pull requests");
             },
             openspec: () => Promise.reject(new Error("the triage never runs openspec")),
+            git: () => Promise.reject(new Error("the triage never runs git")),
             state: "/unused/state",
             home: "/unused/home",
         },

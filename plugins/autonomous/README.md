@@ -22,12 +22,13 @@ With `--apply`, a run can also end with questions for the human, which
 `/autonomous:run` asks and applies in one round (see
 [The handoff](#the-handoff)). `--apply` can now also create sessions and
 worktrees and write the `taken` label. A separate mode, `--transition`, runs no
-step: it reads a task in `grill-me` or `proposal` and hands off the question
-that moves it to its next stage, or, for an `AFK` task in `proposal`, moves it
-itself (see [Transition mode](#transition-mode)). Another, `--persist`, runs no
-step either: it saves a grill-me or proposal attempt's stage summary, and the
-definition of a grill, to the task and writes the receipt the transition waits
-for (see [Persist mode](#persist-mode)). A third, `--triage-questions`, runs no
+step: it reads a task in `grill-me`, `proposal` or `implement` and hands off the
+question that moves it to its next stage, or, for an `AFK` task in `proposal` or
+`implement`, moves it itself (see [Transition mode](#transition-mode)). Another,
+`--persist`, runs no step either: it saves a grill-me, proposal or
+implementation attempt's stage summary, and the definition of a grill, to the
+task and writes the receipt the transition waits for (see
+[Persist mode](#persist-mode)). A third, `--triage-questions`, runs no
 step and writes nothing: it lists the questions of the tasks marked `triage-me`
 (see [Triage questions mode](#triage-questions-mode)).
 
@@ -47,13 +48,15 @@ mode) are defined in [`GLOSSARY.md`](GLOSSARY.md).
 label model of DOT-110: properties persist, stages replace. The
 [label contract](#the-label-contract) implements it, and the
 [grill-me stage](#the-grill-me-stage) is the first stage that uses it; the
-[proposal stage](#the-proposal-stage) is the second.
+[proposal stage](#the-proposal-stage) is the second, and the
+[implementation stage](#the-implementation-stage) the third.
 [ADR 0002](docs/adr/0002-remove-taken-on-finalisation.md) records why the
 runner removes `taken` when an attempt is finalised or discarded.
 [ADR 0003](docs/adr/0003-optional-config-blocks-with-shipped-defaults.md)
 records why the new configuration blocks are optional and the old ones are not.
 [ADR 0004](docs/adr/0004-afk-proposal-transition-needs-no-answer.md) records why
-an `AFK` task leaves proposal preparation without an answer.
+an `AFK` task leaves proposal preparation and the implementation without an
+answer.
 [ADR 0005](docs/adr/0005-slot-limits-bind-only-the-loop.md) records why the
 slot limits bind only the loop.
 
@@ -97,10 +100,21 @@ slot limits bind only the loop.
   `--safe-mode`, `--tools`, `--strict-mcp-config` and
   `--no-session-persistence`.
 - The `mattpocock-skills` plugin installed in Claude Code, only to launch the
-  grill-me or the proposal stage (see [Prerequisites](#prerequisites) and
-  [Proposal prerequisites](#proposal-prerequisites)).
-- The `openspec` CLI on `PATH`, only to launch the proposal stage (see
-  [Proposal prerequisites](#proposal-prerequisites)).
+  grill-me, the proposal or the implementation stage (see
+  [Prerequisites](#prerequisites),
+  [Proposal prerequisites](#proposal-prerequisites) and
+  [Implementation prerequisites](#implementation-prerequisites)).
+- The `openspec` CLI on `PATH`, only to launch the proposal or the
+  implementation stage, and to move a task out of `implement` (see
+  [Proposal prerequisites](#proposal-prerequisites),
+  [Implementation prerequisites](#implementation-prerequisites) and
+  [The guards on leaving implement](#the-guards-on-leaving-implement)).
+- `git` on `PATH`, to launch the implementation stage and to move a task out of
+  `implement`: both find the change with it, and the guards read the
+  workspace's status and commits with it. Both also read the repository's
+  default branch through `gh`. The task's repository must provide the OpenSpec
+  apply and update workflows (see
+  [Implementation prerequisites](#implementation-prerequisites)).
 - `aoe` (Agent of Empires) on `PATH`, verified against 1.14.0. It creates,
   observes and removes the managed sessions.
 - `wt` (worktrunk) on `PATH`, verified against 0.77.0. It prepares and
@@ -149,11 +163,11 @@ bun src/run.ts --notices <n>
 | `--stage <stage>`                   | The stage `launch` runs for the supplied task. Requires `--task`. Given once. Its name is checked when the arguments are parsed: a stage that is not registered is a usage error (exit 1) that names the registered stages                                                                                                                                                                                                                                                                                                                                                 |
 | `--discard <attempt-id\|source:id>` | [Discard mode](#discard-mode): discard that attempt, or the one open attempt of that task, and exit, running no step. Requires `--apply`. Only combines with `--apply`, `--json` and `--release-workspace`. Given once                                                                                                                                                                                                                                                                                                                                                     |
 | `--release-workspace`               | With `--discard`, also release the attempt's worktree. Requires `--discard`                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                |
-| `--transition <source>:<task>`      | [Transition mode](#transition-mode): read the task, which must carry `grill-me` or `proposal`, and hand off the question that moves it to its next stage, or move an `AFK` task in `proposal` to `implement`, running no step. `<source>` is `linear`, `beads` or `github`, split at the first `:`. Requires `--apply`. Only combines with `--apply` and `--json`. Given once. Not combined with `--no-handoff`, `--answer`, `--task`, `--stage`, `--discard`, `--persist` or `--bootstrap-labels`                                                                         |
+| `--transition <source>:<task>`      | [Transition mode](#transition-mode): read the task, which must carry `grill-me`, `proposal` or `implement`, and hand off the question that moves it to its next stage, or move an `AFK` task in `proposal` to `implement`, or in `implement` to `verify`, running no step. `<source>` is `linear`, `beads` or `github`, split at the first `:`. Requires `--apply`. Only combines with `--apply` and `--json`. Given once. Not combined with `--no-handoff`, `--answer`, `--task`, `--stage`, `--discard`, `--persist` or `--bootstrap-labels`                             |
 | `--pull-request <attempt-id>`       | [Pull-request mode](#pull-request-mode): find or open the draft pull request of that open attempt's workspace branch and write its cover, running no step. `<attempt-id>` is `<source>:<task>:<stage>:<n>`. Requires `--apply`. Only combines with `--apply`, `--title` and `--json`. Given once                                                                                                                                                                                                                                                                           |
 | `--title <title>`                   | With `--pull-request`, the text of the pull request's title; the task id is appended. Required to open a pull request; replaces the title of one already open. Requires `--pull-request`. Given once                                                                                                                                                                                                                                                                                                                                                                       |
 | `--log <attempt-id>`                | [Log mode](#log-mode): publish the attempt's [logbook entry](#the-logbook) on the pull request, read it back and write the receipt, running no step. `<attempt-id>` is `<source>:<task>:<stage>:<n>`. Requires `--apply`. Only combines with `--apply` and `--json`. Given once                                                                                                                                                                                                                                                                                            |
-| `--persist <attempt-id>`            | [Persist mode](#persist-mode): save the definition and the stage summary of that open grill-me attempt, or the stage summary of that open proposal attempt, to its task and write the receipt, running no step. `<attempt-id>` is `<source>:<task>:<stage>:<n>`. Requires `--apply`. Only combines with `--apply` and `--json`. Given once                                                                                                                                                                                                                                 |
+| `--persist <attempt-id>`            | [Persist mode](#persist-mode): save the definition and the stage summary of that open grill-me attempt, or the stage summary of that open proposal or implementation attempt, to its task and write the receipt, running no step. `<attempt-id>` is `<source>:<task>:<stage>:<n>`. Requires `--apply`. Only combines with `--apply` and `--json`. Given once                                                                                                                                                                                                               |
 | `--loop`                            | Run an iteration of the loop, where the [slot limits](#slots-and-the-capacity-step) bind. Only combines with `--apply`, `--force`, `--json`, `--grills`, `--parallel` and `--interval`. Not combined with `--no-handoff`, `--bootstrap-labels`, `--answer`, `--task`, `--stage`, `--discard`, `--release-workspace`, `--transition`, `--persist`, `--pull-request`, `--title`, `--log`, `--notices` or `--stop-loop`                                                                                                                                                       |
 | `--grills <n>`                      | The limit of grill slots for this loop, an integer of 0 or more. Replaces `runner.grills`. Requires `--loop`. Given once                                                                                                                                                                                                                                                                                                                                                                                                                                                   |
 | `--parallel <n>`                    | The limit of work slots for this loop, an integer of 0 or more. Replaces `runner.parallel`. Requires `--loop`. Given once                                                                                                                                                                                                                                                                                                                                                                                                                                                  |
@@ -220,11 +234,11 @@ For `/autonomous:run --apply --answer <id>=<value>[,<value>]... [--json]`:
 
 For `/autonomous:run --apply --transition <source>:<task> [--json]`:
 
-| Code | Outcome                                                                                                                                                                                                                                                                                                                   |
-| ---- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| 0    | `advance` — a handoff was emitted, or an `AFK` task in `proposal` was moved to `implement`                                                                                                                                                                                                                                |
-| 3    | `not-evaluable` — the task is in neither `grill-me` nor `proposal`, its source is disabled, it could not be read, a task in `proposal` has no single autonomy, an open attempt of the stage the task is leaving has no persistence receipt, an `AFK` transition was not applied, or the configuration could not be loaded |
-| 1    | Invalid arguments or a failure of the runner itself                                                                                                                                                                                                                                                                       |
+| Code | Outcome                                                                                                                                                                                                                                                                                                                                                                                             |
+| ---- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 0    | `advance` — a handoff was emitted, or an `AFK` task in `proposal` was moved to `implement`, or in `implement` to `verify`                                                                                                                                                                                                                                                                           |
+| 3    | `not-evaluable` — the task is in none of `grill-me`, `proposal` and `implement`, its source is disabled, it could not be read, a task in `proposal` or `implement` has no single autonomy, an open attempt of the stage the task is leaving has no persistence receipt, the guards on leaving `implement` refused it, an `AFK` transition was not applied, or the configuration could not be loaded |
+| 1    | Invalid arguments or a failure of the runner itself                                                                                                                                                                                                                                                                                                                                                 |
 
 For `/autonomous:run --apply --persist <attempt-id> [--json]`:
 
@@ -613,28 +627,33 @@ report never carries a handoff.
 ```
 
 A stage ends with a transition: the task's stage label is replaced by the next
-one. There are two, and the stage label the task carries picks the row:
+one. There are three, and the stage label the task carries picks the row:
 
-| From       | To          | Asks                                                      |
-| ---------- | ----------- | --------------------------------------------------------- |
-| `grill-me` | `proposal`  | The autonomy, on a human's answer                         |
-| `proposal` | `implement` | The approval of an `HITL` task; nothing for an `AFK` task |
+| From        | To          | Asks                                                      |
+| ----------- | ----------- | --------------------------------------------------------- |
+| `grill-me`  | `proposal`  | The autonomy, on a human's answer                         |
+| `proposal`  | `implement` | The approval of an `HITL` task; nothing for an `AFK` task |
+| `implement` | `verify`    | The approval of an `HITL` task; nothing for an `AFK` task |
 
 Transition mode starts the move. It reads the task and, for a task in
 `grill-me`, hands off one question, the task's autonomy. For an `HITL` task in
-`proposal` it hands off the approval question. For an `AFK` task in `proposal`
-it asks nothing: it applies the transition itself, reads it back and emits no
-handoff (see [ADR 0004](docs/adr/0004-afk-proposal-transition-needs-no-answer.md)).
+`proposal` or `implement` it hands off the approval question. For an `AFK` task
+in `proposal` or `implement` it asks nothing: it applies the transition itself,
+reads it back and emits no handoff (see
+[ADR 0004](docs/adr/0004-afk-proposal-transition-needs-no-answer.md)).
 It runs no step, so it needs no quota and no judgement, and it takes no
 [run lock](#the-run-lock): it writes labels, not attempts. A handoff's answer
 comes back through [answer mode](#answer-mode), which does the writing (see
 [The transition answer](#the-transition-answer)). The
-[grill-me stage](#the-grill-me-stage) and the
-[proposal stage](#the-proposal-stage) run it at their end; it can also be run
-by hand. Beyond the task's labels it reads only the attempts in the state
+[grill-me stage](#the-grill-me-stage), the
+[proposal stage](#the-proposal-stage) and the
+[implementation stage](#the-implementation-stage) run it at their end; it can
+also be run by hand. Beyond the task's labels it reads the attempts in the state
 directory, to find an attempt of the stage the task is leaving that has not
-persisted yet (see [The persistence receipt](#the-persistence-receipt)); it does
-not check that the stage took place otherwise.
+persisted yet (see [The persistence receipt](#the-persistence-receipt)). For a
+task in `implement` it also checks, in the task's workspace, that the work is
+finished (see [The guards on leaving implement](#the-guards-on-leaving-implement)).
+It does not check that a stage took place otherwise.
 
 Transition mode can now write: with `--apply`, the `AFK` path adds and removes
 labels itself, as answer mode does for a human's answer.
@@ -659,6 +678,7 @@ contain `#`:
 bun plugins/autonomous/src/run.ts --apply --transition linear:DOT-110
 bun plugins/autonomous/src/run.ts --apply --answer 'transition:linear:DOT-110=AFK'
 bun plugins/autonomous/src/run.ts --apply --answer 'transition:linear:DOT-121=implement'
+bun plugins/autonomous/src/run.ts --apply --answer 'transition:linear:DOT-121=verify'
 ```
 
 ### The transition report
@@ -672,23 +692,25 @@ labels after the move, as read back. The outcome is `advance`
 exactly when a handoff is emitted or the transition was applied, and
 `not-evaluable` otherwise, with the reason:
 
-| Reason                                                                                                                                                                     | When                                                                                    |
-| -------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------- |
-| `<source> is not enabled`                                                                                                                                                  | The source is disabled; no task is read                                                 |
-| The tracker's error                                                                                                                                                        | The task cannot be read; the task is null                                               |
-| `<source> <id> is in neither grill-me nor proposal (labels [<labels>])`                                                                                                    | The task carries neither stage label                                                    |
-| `<source> <id> in proposal has no autonomy: expected one of AFK, HITL`                                                                                                     | The task in `proposal` carries no autonomy label                                        |
-| `<source> <id> in proposal has conflicting autonomy [AFK, HITL]: expected one of AFK, HITL`                                                                                | The task in `proposal` carries both autonomy labels                                     |
-| `<stage> attempt <attempt-id> has no persistence receipt at <path>; persist its <definition or stage summary> with --apply --persist <attempt-id>, or discard the attempt` | The task has an open attempt of its stage without a receipt (see below)                 |
-| The failure of the transition                                                                                                                                              | The `AFK` transition was not applied: a label the tracker lacks, a write or a read-back |
-| The error of reading the attempts                                                                                                                                          | An attempt record in the state directory cannot be read or parsed                       |
+| Reason                                                                                                                                                                     | When                                                                                                                              |
+| -------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------- |
+| `<source> is not enabled`                                                                                                                                                  | The source is disabled; no task is read                                                                                           |
+| The tracker's error                                                                                                                                                        | The task cannot be read; the task is null                                                                                         |
+| `<source> <id> is in none of grill-me, proposal and implement (labels [<labels>])`                                                                                         | The task carries none of these stage labels                                                                                       |
+| `<source> <id> in <stage> has no autonomy: expected one of AFK, HITL`                                                                                                      | The task in `proposal` or `implement` carries no autonomy label                                                                   |
+| `<source> <id> in <stage> has conflicting autonomy [AFK, HITL]: expected one of AFK, HITL`                                                                                 | The task in `proposal` or `implement` carries both autonomy labels                                                                |
+| `<stage> attempt <attempt-id> has no persistence receipt at <path>; persist its <definition or stage summary> with --apply --persist <attempt-id>, or discard the attempt` | The task has an open attempt of its stage without a receipt (see below)                                                           |
+| Every reason of the guards that holds                                                                                                                                      | The task is in `implement` and its work is not finished (see [The guards on leaving implement](#the-guards-on-leaving-implement)) |
+| The failure of the transition                                                                                                                                              | The `AFK` transition was not applied: a label the tracker lacks, a write or a read-back                                           |
+| The error of reading the attempts                                                                                                                                          | An attempt record in the state directory cannot be read or parsed                                                                 |
 
-A task in `grill-me`, or an `HITL` task in `proposal`, with no attempt waiting
-for a receipt has no reasons and one question in its handoff. An `AFK` task in
-`proposal` with none has no reasons and no handoff, and its transition is
-applied. A task in neither stage, from a disabled source, unreadable, in
-`proposal` without a single autonomy, or waiting for a receipt has no handoff,
-and nothing is written. The task is null for a disabled source and for an
+A task in `grill-me`, or an `HITL` task in `proposal` or `implement`, with no
+attempt waiting for a receipt and no guard refusing it has no reasons and one
+question in its handoff. An `AFK` task in `proposal` or `implement` in the same
+case has no reasons and no handoff, and its transition is applied. A task in
+none of the three stages, from a disabled source, unreadable, in `proposal` or
+`implement` without a single autonomy, waiting for a receipt, or in `implement`
+with unfinished work has no handoff, and nothing is written. The task is null for a disabled source and for an
 unreadable task, and filled in for the other reasons.
 The exit codes are in [Exit codes](#exit-codes). A configuration that cannot be
 loaded is reported as in answer mode: the error is printed on stderr and, with
@@ -755,19 +777,19 @@ task: linear DOT-110 → "Grill-me stage" → labels [work, HITL, grill-me]
 handoff: {"questions":[{"id":"transition:linear:DOT-110","step":"transition", …}],"remaining":0}
 ```
 
-For a task that is in neither stage, the text report names the reason and
-carries no handoff line:
+For a task that is in none of the three stages, the text report names the
+reason and carries no handoff line:
 
 ```text
 autonomous transition — started 2026-11-01T09:00:00.000Z
 outcome: not-evaluable
-task: linear DOT-110 → "Grill-me stage" → labels [personal, AFK, implement]
+task: linear DOT-110 → "Grill-me stage" → labels [personal, AFK, verify]
 reasons:
-  - linear DOT-110 is in neither grill-me nor proposal (labels [personal, AFK, implement])
+  - linear DOT-110 is in none of grill-me, proposal and implement (labels [personal, AFK, verify])
 ```
 
-For an `AFK` task in `proposal` whose transition was applied, the text report
-adds a line `applied: true` after the outcome, and carries no handoff line. In
+For an `AFK` task in `proposal` or `implement` whose transition was applied,
+the text report adds a line `applied: true` after the outcome, and carries no handoff line. In
 the JSON document `applied` is `true` and `handoff` is null:
 
 ```text
@@ -803,42 +825,60 @@ grill does not change it.
 
 ### The approval question
 
-An `HITL` task in `proposal` gets the approval question instead. It has the same
-id shape and step as the transition question, `transition:<source>:<task>` and
-`transition`, a single choice, and the same header rule with `approval` in place
-of `autonomy`. The text has two lines:
+An `HITL` task in `proposal` or `implement` gets the approval question instead.
+It has the same id shape and step as the transition question,
+`transition:<source>:<task>` and `transition`, a single choice, and the same
+header rule with `approval` in place of `autonomy`. The text has two lines. For
+a task in `proposal`:
 
 ```text
 <source> <taskId> "<title>": the proposal is ready. Approve it to move the task to implement?
 Labels: [<labels on the task>]
 ```
 
-Its options are `Approve`, with the value `implement` and the description `Move
-the task to implement`, and `Later`, with a null value and the description
-`Leave the task in proposal`. It never asks for autonomy or scope. The
-mode writes nothing for this question: the task stays in `proposal` until the
-answer comes back.
+For a task in `implement`:
+
+```text
+<source> <taskId> "<title>": the implementation is ready. Approve it to move the task to verify?
+Labels: [<labels on the task>]
+```
+
+Its options are `Approve`, with the next stage as its value, `implement` or
+`verify`, and the description `Move the task to <next stage>`, and `Later`, with
+a null value and the description `Leave the task in <stage>`, the stage the task
+is in. It never asks for autonomy or scope. The mode writes nothing for this
+question: the task stays in its stage until the answer comes back. For a task in
+`implement` the question is emitted only once the
+[guards](#the-guards-on-leaving-implement) pass, so the human is never asked to
+approve unfinished work.
 
 ### The transition answer
 
-The answer is a single `AFK` or `HITL` for a task in `grill-me`, and a single
-`implement` for a task in `proposal`. It is passed to answer mode as
+The answer is a single `AFK` or `HITL` for a task in `grill-me`, a single
+`implement` for a task in `proposal`, and a single `verify` for a task in
+`implement`. It is passed to answer mode as
 `--apply --answer 'transition:<source>:<task>=<value>'`. Answer mode reads the
 task again to know which row it answers, validates the value and reports one
 status for it:
 
-| Status     | When                                                                                                                                                                                                                                        |
-| ---------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `applied`  | The transition was written and read back                                                                                                                                                                                                    |
-| `skipped`  | The task, read again, carries neither stage or no longer the one the value answers, such as `AFK` for a task in `proposal`. Nothing is written                                                                                              |
-| `rejected` | The value is not a single `AFK`, `HITL` or `implement`, the id is malformed, the source is unknown or disabled, an open attempt of the stage the task is leaving has no persistence receipt, or a task in `proposal` has no single autonomy |
-| `failed`   | The task or the attempts cannot be read, the tracker lacks the label the transition adds (the detail names `--bootstrap-labels`; nothing is written), or a write or a read-back fails                                                       |
+| Status     | When                                                                                                                                                                                                                                                                                                              |
+| ---------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `applied`  | The transition was written and read back                                                                                                                                                                                                                                                                          |
+| `skipped`  | The task, read again, carries none of the three stages or no longer the one the value answers, such as `AFK` for a task in `proposal`. Nothing is written                                                                                                                                                         |
+| `rejected` | The value is not a single `AFK`, `HITL`, `implement` or `verify`, the id is malformed, the source is unknown or disabled, an open attempt of the stage the task is leaving has no persistence receipt, a task in `proposal` or `implement` has no single autonomy, or the guards on leaving `implement` refuse it |
+| `failed`   | The task or the attempts cannot be read, the tracker lacks the label the transition adds (the detail names `--bootstrap-labels`; nothing is written), or a write or a read-back fails                                                                                                                             |
 
 `Later` has a null value, which the command never passes back, so it writes
-nothing and the task stays in its stage. A task in `proposal` whose autonomy is
-missing or in conflict is not transitioned: the answer is `rejected` with the
-reason transition mode gives. An `implement` answer for an `AFK` task is
-applied, because the human approving is enough.
+nothing and the task stays in its stage. A task in `proposal` or `implement`
+whose autonomy is missing or in conflict is not transitioned: the answer is
+`rejected` with the reason transition mode gives. A `verify` answer for a task
+whose work is unfinished is `rejected` too, because the guards run again when
+the answer arrives: the workspace may have changed since the question was
+asked. Its detail is `implement is not finished: <reason>; <reason>`, with every
+reason of the guards that holds (see
+[The guards on leaving implement](#the-guards-on-leaving-implement)). An
+`implement` or `verify` answer for an `AFK` task is applied, because the human
+approving is enough.
 
 When a transition is applied and read back, and the task has an open attempt of
 the stage being left (the same lookup as for the persistence receipt),
@@ -859,7 +899,7 @@ proposal's.
 `answer` is the labels answered and `at` the time the file is written, after
 the read-back. `by` says who moved the task: `human` for an answer applied by
 answer mode, `agent` for the `AFK` path of transition mode, which records
-`["implement"]`. `by` is optional: a record without it, as every grill-me record
+`["implement"]` or `["verify"]`. `by` is optional: a record without it, as every grill-me record
 written before it existed, still parses, and any other value is rejected. A
 failure to write the file is added to the answer's detail, or to the report's
 reasons on the `AFK` path, and leaves the transition applied. A task with no
@@ -869,7 +909,8 @@ none either. The [logbook entry](#the-logbook) reads it for its header.
 The transition runs in phases, and reads the task back after each write phase:
 
 1. **Check.** The tracker must have the labels the transition adds, the
-   answered autonomy and `proposal` for a grill, `implement` for a proposal, as in
+   answered autonomy and `proposal` for a grill, `implement` for a proposal,
+   `verify` for an implementation, as in
    [Labels the tracker lacks](#labels-the-tracker-lacks): one listing, Linear
    in any scope, GitHub in the task's repository, Beads unchecked. This happens
    before any write.
@@ -877,7 +918,8 @@ The transition runs in phases, and reads the task back after each write phase:
    lacks it. The task is read back and must hold exactly its earlier
    labels plus the added ones.
 3. **Remove.** For a grill, every other autonomy label is removed, and then
-   `grill-me`. For a proposal, `proposal` is removed. The task is read back.
+   `grill-me`. For a proposal, `proposal` is removed, and for an
+   implementation, `implement`. The task is read back.
 4. **Verify.** The final labels must equal the earlier labels, plus the added
    ones, minus the removed ones.
 
@@ -888,12 +930,13 @@ that holds them settles it (see
 reads without `proposal` for at least 8 s after it acknowledged the write.
 
 Labels are added before any is removed. The transition removes only the stage it
-leaves and, for a grill, the autonomy labels the answer replaces. The proposal
-transition touches no autonomy label. It never removes scope, `taken`, an alias
+leaves and, for a grill, the autonomy labels the answer replaces. The
+transitions out of `proposal` and `implement` touch no autonomy label. It never removes scope, `taken`, an alias
 or any other label: a Beads task that carries `nazaries`, `work` and `grill-me`
 ends with `nazaries`, `work`, the answered autonomy and `proposal`, and one that
 carries `personal`, `AFK` and `proposal` ends with `personal`, `AFK` and
-`implement`. This is the first exception to the rule that the loop never removes
+`implement`; one that carries `personal`, `HITL` and `implement` ends with
+`personal`, `HITL` and `verify`. This is the first exception to the rule that the loop never removes
 a label; the second is `taken`, and the third is `triage-me`, removed by
 `label-triage` and its answers.
 
@@ -919,15 +962,16 @@ outcome: advance
 Answering a task that has moved on is `skipped`, with the detail
 `already moved on: stage [proposal]`. A `grill-me` answer to the transition
 question is `rejected`, with `invalid for the transition: expected one of AFK,
-HITL, implement`. A task carrying both `grill-me` and `proposal`, left so by a
+HITL, implement, verify`. A task carrying both `grill-me` and `proposal`, left so by a
 cut-short transition, is treated as being in `grill-me`: answering its autonomy
 completes the move, and an `implement` answer is `skipped`.
 
 ### The persistence receipt
 
 A stage must persist what it saves before it moves the task: a grill its
-definition and stage summary, a proposal its stage summary. When the task has an
-open attempt of the stage it is leaving, `grill-me` or `proposal`, transition
+definition and stage summary, a proposal and an implementation their stage
+summary. When the task has an open attempt of the stage it is leaving,
+`grill-me`, `proposal` or `implement`, transition
 mode and the transition answer both look for that attempt's persistence
 receipt, `persisted.json`, which [persist mode](#persist-mode) writes in the
 attempt's directory. They read the attempts in the state directory, take no run
@@ -936,7 +980,8 @@ lock and write nothing for this check. An attempt is open when it is `pending`,
 attempts of the task at the stage it is leaving count: the row's `from`.
 
 - Without the receipt, transition mode reports `not-evaluable`, exits 3, emits
-  no handoff and, for an `AFK` task in `proposal`, applies nothing. Its reason names the attempt and the path where the receipt
+  no handoff and, for an `AFK` task in `proposal` or `implement`, applies
+  nothing. Its reason names the attempt and the path where the receipt
   is expected, as in the table of
   [The transition report](#the-transition-report).
 - Without the receipt, the answer is `rejected`, with the same text as its
@@ -959,13 +1004,68 @@ reasons:
   - grill-me attempt linear:DOT-110:grill-me:1 has no persistence receipt at /home/me/.local/state/autonomous/attempts/linear/DOT-110/grill-me/1/persisted.json; persist its definition with --apply --persist linear:DOT-110:grill-me:1, or discard the attempt
 ```
 
-The check comes after the task is read and found in `grill-me` or `proposal`. A
-task that has moved on is reported as such, and invalid answer values, disabled
+The check comes after the task is read and found in `grill-me`, `proposal` or
+`implement`, and before the autonomy check and the
+[guards](#the-guards-on-leaving-implement). A task that has moved on is reported as such, and invalid answer values, disabled
 sources and unreadable tasks are reported before it, whatever the attempts hold.
 In the [grill-me session](#what-the-session-does) the transition is step 6,
 after persist mode, which is step 4. In the
-[proposal session](#what-the-session-does-1) it also comes right after persist
-mode.
+[proposal session](#what-the-session-does-1) and in the
+[implementation session](#what-the-orchestrator-does) it also comes right after
+persist mode.
+
+### The guards on leaving implement
+
+A task leaves `implement` only with its work finished. Transition mode and the
+transition answer both refuse a task in `implement` while, in the task's
+workspace, the change the stage implements has an unchecked task, the working
+tree has uncommitted changes, or the branch has commits its remote branch lacks.
+The guards run for `implement` only: leaving `grill-me` or `proposal` runs no
+command. They come after the receipt and the autonomy checks, and before the
+approval question is emitted or anything is written, so an `HITL` human is never
+asked to approve unfinished work. Answer mode runs them again when the answer
+arrives, because the workspace may have changed since the question was asked.
+
+The workspace is the path recorded in the task's latest attempt record, of any
+stage, by creation time: every stage of a task shares one workspace. A task with
+no attempt gives the reason
+`there is no workspace to check: the task has no attempt`, and a recorded path
+that no longer exists, for instance after `--release-workspace`, gives
+`there is no workspace to check: <path> no longer exists`. Nothing else is
+checked then.
+
+Otherwise, every command runs in the workspace. `git fetch origin` runs first;
+a fetch that fails is a reason, `fetching origin in the workspace: <error>`, and
+the three checks still run. Each check gives at most one reason, and every
+reason that holds is reported, so one run names all there is to finish:
+
+| Check               | How                                                                                                                                                                                                                | Reason                                                                                  |
+| ------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | --------------------------------------------------------------------------------------- |
+| Unchecked tasks     | The repository's default branch is read through `gh`, the change is found as the [prerequisites](#implementation-prerequisites) find it, on `HEAD`, and `openspec list --json` gives its completed and total tasks | `the change <name> has <n> of <total> tasks unchecked`                                  |
+| Uncommitted changes | `git status --porcelain` prints a line per change                                                                                                                                                                  | `the working tree has <n> uncommitted changes`                                          |
+| Unpushed commits    | `git rev-parse --verify --quiet origin/<branch>`, then `git rev-list --count origin/<branch>..HEAD`, with the branch of the attempt record                                                                         | `the branch <branch> has <n> commits origin/<branch> lacks`                             |
+| No remote branch    | `origin/<branch>` does not exist; it counts as unpushed                                                                                                                                                            | `the branch <branch> has no remote branch origin/<branch>, so its commits are unpushed` |
+
+The nouns are singular for a count of 1. A check that cannot be made is a
+reason too, never a pass: the default branch, the change, the OpenSpec listing,
+the status or the commit count that cannot be read names what failed, and a
+change that `openspec list` does not report, or reports without task counts,
+gives `openspec list reports no task count for the change <name>`.
+
+In transition mode each reason is one entry of the report's reasons: the outcome
+is `not-evaluable`, the report carries no handoff, nothing is written, and the
+process exits 3. In answer mode the answer is `rejected`, with the detail
+`implement is not finished: <reason>; <reason>`, and the task keeps `implement`.
+For a task whose change has 11 of 12 tasks checked and an uncommitted change:
+
+```text
+autonomous transition — started 2026-11-16T10:00:00.000Z
+outcome: not-evaluable
+task: linear DOT-121 → "Read GitHub blockers" → labels [personal, AFK, implement]
+reasons:
+  - the change read-github-blockers has 1 of 12 tasks unchecked
+  - the working tree has 1 uncommitted change
+```
 
 ## Persist mode
 
@@ -973,19 +1073,21 @@ mode.
 /autonomous:run --apply --persist <attempt-id> [--json]
 ```
 
-Persist mode saves what a grill-me or proposal attempt produced. What it saves
-depends on the attempt's stage:
+Persist mode saves what a grill-me, proposal or implementation attempt produced.
+What it saves depends on the attempt's stage:
 
-| Stage      | Requires                               | Writes                                                                       |
-| ---------- | -------------------------------------- | ---------------------------------------------------------------------------- |
-| `grill-me` | `definition.md` and `stage-summary.md` | The definition at the top of the description, the stage summary as a comment |
-| `proposal` | `stage-summary.md`                     | The stage summary as a comment; the description is never touched             |
+| Stage       | Requires                               | Writes                                                                       |
+| ----------- | -------------------------------------- | ---------------------------------------------------------------------------- |
+| `grill-me`  | `definition.md` and `stage-summary.md` | The definition at the top of the description, the stage summary as a comment |
+| `proposal`  | `stage-summary.md`                     | The stage summary as a comment; the description is never touched             |
+| `implement` | `stage-summary.md`                     | The stage summary as a comment; the description is never touched             |
 
 It reads what it wrote back and writes a receipt. It runs no step, so it needs
 no quota and no judgement: it loads the configuration and builds the trackers,
 nothing more. The [grill-me session](#what-the-session-does) runs it as step 4
-of its closing and the [proposal session](#what-the-session-does-1) in its own;
-it can also be run from a shell, for instance to persist again after a
+of its closing, and the [proposal session](#what-the-session-does-1) and the
+[implementation session](#what-the-orchestrator-does) in theirs; it can also be
+run from a shell, for instance to persist again after a
 failure. Quote a GitHub attempt id, because the task id
 contains `#`:
 
@@ -1013,19 +1115,20 @@ hold:
 - the attempt has a record, which can be read;
 - the attempt is open: `pending`, `created`, `started` or `retained`. A
   `completed`, `aborted` or `discarded` attempt is refused;
-- the attempt's stage is `grill-me` or `proposal`; an attempt of the `test`
-  stage is refused;
+- the attempt's stage is `grill-me`, `proposal` or `implement`; an attempt of
+  the `test` stage is refused, with the reason
+  `attempt <attempt-id> is a test attempt: persist mode takes only grill-me, proposal and implement attempts`;
 - the attempt's source is enabled;
 - the attempt's directory holds the files its stage requires (see the table
   above), and none is empty or only whitespace. The agent writes them; a reason
-  names each file that is missing or empty. A proposal attempt's missing
-  `definition.md` is not a reason.
+  names each file that is missing or empty. A proposal or implementation
+  attempt's missing `definition.md` is not a reason.
 
 ### What it writes
 
 For a `grill-me` attempt, in this order, stopping at the first failure. A
-`proposal` attempt takes steps 1, 3 and 4 and skips step 2: it reads the task,
-posts its comment and writes its receipt.
+`proposal` or `implement` attempt takes steps 1, 3 and 4 and skips step 2: it
+reads the task, posts its comment and writes its receipt.
 
 1. **Read.** The task is read again, right before the write, so a description
    edited while the grill ran is the one that is spliced.
@@ -1061,9 +1164,11 @@ posts its comment and writes its receipt.
    `<source> <id>: the comment headed "<header>" was not found when read back (read 6 times over 30 s)`.
    The header is `autonomous · grill-me · <attempt-id> · definition saved`.
    For a proposal attempt it is
-   `autonomous · proposal · <attempt-id> · stage summary saved`, the comment is
-   the header, a blank line and the stage summary, and the comment is the only
-   thing written to the task.
+   `autonomous · proposal · <attempt-id> · stage summary saved`, and for an
+   implementation attempt
+   `autonomous · implement · <attempt-id> · stage summary saved`. For both, the
+   comment is the header, a blank line and the stage summary, and the comment is
+   the only thing written to the task.
 4. **The receipt.** `persisted.json` is written in the attempt's directory,
    through a temporary file and a rename:
 
@@ -1184,7 +1289,7 @@ With `--json` the report is one document identified by
 | `receipt`   | The path of `persisted.json` once written, otherwise `null`                                                                          |
 | `config`    | `{ path, error }`, only when the configuration could not be loaded                                                                   |
 
-For a proposal attempt the description is never written: the `description:`
+For a proposal or an implementation attempt the description is never written: the `description:`
 line reads `not written` and, in the JSON document, `written.description` and
 `readBack.description` are false, in a report whose outcome is still `advance`.
 
@@ -1385,7 +1490,9 @@ stage may add sections of its own:
 ```
 
 `none` is fine for Decisions or Assumptions. The proposal prompt adds the
-section `### Proposal`, naming the OpenSpec change and its files. The grill-me prompt asks the agent
+section `### Proposal`, naming the OpenSpec change and its files, and the
+implementation prompt the section `### Implementation`, listing the tasks of the
+change done and the commits by subject. The grill-me prompt asks the agent
 to mark each decision as the agent's or the human's and to link the stage
 summary from Next stage without repeating it. Code checks the body and does not
 check who took a decision. It rejects the body, and publishes nothing, when:
@@ -1424,8 +1531,9 @@ is not recorded:
 - the start, the first `started` entry of the record, then the end, the time of
   the run, in UTC, and the duration;
 - `answered <labels>`, from `transition.json`; when the record says the agent
-  moved the task, as the `AFK` path of the proposal stage does, the text is
-  ``moved to `implement` by the agent, with no answer`` instead;
+  moved the task, as the `AFK` path of the proposal and the implementation
+  stages does, the text is ``moved to `implement` by the agent, with no answer``
+  instead, or ``moved to `verify` …`` for an implementation;
 - the commits made on the branch since the start, as short ids, or `no commits`.
   The empty commit pull-request mode adds is not counted. The count is an
   approximation by time: a commit made by hand in the worktree during the
@@ -1462,8 +1570,9 @@ publishes no entry when it exists.
 
 Log mode publishes the attempt's [logbook entry](#the-logbook). It runs no step.
 The [grill-me session](#what-the-session-does) runs it as step 8 of its closing,
-after pull-request mode, the [proposal session](#what-the-session-does-1) in its
-own, and it can be run from a shell, for instance again
+after pull-request mode, the [proposal session](#what-the-session-does-1) and the
+[implementation session](#what-the-orchestrator-does) in theirs, and it can be
+run from a shell, for instance again
 after a rejected body. These are usage errors (exit 1):
 
 - `--log` without `--apply`;
@@ -1662,18 +1771,19 @@ exists: the flag, the key in the user's file, the shipped default.
 
 Every task carries labels from three groups:
 
-| Group    | Labels                              | Rule                                                                |
-| -------- | ----------------------------------- | ------------------------------------------------------------------- |
-| scope    | `work`, `personal`                  | Exactly one. `work` is Nazaries work                                |
-| autonomy | `AFK`, `HITL`                       | Exactly one. It may be absent only while the stage is `grill-me`    |
-| stage    | `grill-me`, `proposal`, `implement` | Exactly one. Two stage labels are a conflict, for a human to settle |
+| Group    | Labels                                        | Rule                                                                |
+| -------- | --------------------------------------------- | ------------------------------------------------------------------- |
+| scope    | `work`, `personal`                            | Exactly one. `work` is Nazaries work                                |
+| autonomy | `AFK`, `HITL`                                 | Exactly one. It may be absent only while the stage is `grill-me`    |
+| stage    | `grill-me`, `proposal`, `implement`, `verify` | Exactly one. Two stage labels are a conflict, for a human to settle |
 
 Two labels of one group are a conflict, reported for a human to settle: neither
 detection, triage nor the bootstrap removes or replaces either label. A task in
 `grill-me` with no autonomy label is complete: the contract reports its autonomy
 as deferred, because the grill decides it, and triage, selection and the
 creation helper count a deferred autonomy as present. A task in `proposal` with
-no autonomy label is missing its autonomy, and so is a task in `implement`.
+no autonomy label is missing its autonomy, and so is a task in `implement` or
+`verify`.
 `HITL` with `grill-me` is valid: the autonomy was decided ahead of the grill.
 
 Scope and autonomy are properties, kept for the whole life of a task. The stage
@@ -1701,8 +1811,9 @@ must be refined with a human in a grill before anyone works on it, and its
 autonomy, when it has one, is provisional until the grill confirms it.
 `proposal` means the task is ready for proposal preparation, its autonomy
 decided and any grill it needed over. `implement` means the task has a
-proposal and is ready to implement; the loop runs no stage for it yet. `taken` means an agent or a person is
-advancing the task now. `triage-me` means the task is waiting for a person to
+proposal and is ready to implement. `verify` means the task is implemented and
+ready to verify against its proposal; the loop runs no stage for it yet. `taken`
+means an agent or a person is advancing the task now. `triage-me` means the task is waiting for a person to
 decide its scope or autonomy.
 
 Add `taken` to a task you work on by hand. It is the only evidence that a task
@@ -1729,13 +1840,14 @@ Spelling is exact and case-sensitive: `Grill Me` is not `grill-me`, and
 | `grill-me`  | `#f2994a` |
 | `proposal`  | `#bb87fc` |
 | `implement` | `#26b5ce` |
+| `verify`    | `#d6409f` |
 | `work`      | `#2f80ed` |
 | `personal`  | `#27ae60` |
 | `taken`     | `#95a2b3` |
 | `triage-me` | `#f2c94c` |
 
 The loop never creates labels on its own. `--bootstrap-labels` does, `proposal`,
-`implement`, `taken` and `triage-me` included: at workspace level on Linear (a same-name label in any
+`implement`, `verify`, `taken` and `triage-me` included: at workspace level on Linear (a same-name label in any
 team counts as present), per repo on GitHub, and not at all on Beads, where
 labels exist only by use.
 
@@ -1930,8 +2042,9 @@ It follows the autonomy (see [The label contract](#the-label-contract)):
 
 The autonomy decision offers `AFK`, `HITL` and `grill-me` ("decide it in a
 grill") only for a task with no stage label. For a task with a stage label,
-`proposal` or `implement` included, it offers `AFK` and `HITL`, so a `grill-me`
-judged for a task in `proposal` or `implement` is invalid and is asked. The question and the validity check take their options
+`proposal`, `implement` or `verify` included, it offers `AFK` and `HITL` only, so
+a `grill-me` judged for a task in `proposal`, `implement` or `verify` is invalid
+and is asked. The question and the validity check take their options
 from the same function, so they cannot disagree.
 
 Each decision is recorded in the group of the label it writes. The writes for a
@@ -2273,7 +2386,8 @@ In order, the step:
 
 4. Keeps the candidates at the most advanced stage. The order is the order of
    the stage labels of the [label contract](#the-label-contract), by code:
-   `grill-me`, then `proposal`. Candidates at an earlier stage are set aside
+   `grill-me`, then `proposal`, then `implement`, so an `implement` candidate
+   is kept over every `proposal` and `grill-me` one. Candidates at an earlier stage are set aside
    for this run and shown apart in the report, not among the excluded tasks.
    The rule applies to every candidate whatever its scope, in a run and in an
    iteration: a `personal` candidate in `proposal` is kept over a `work`
@@ -2283,12 +2397,13 @@ In order, the step:
    scope, the report marks it as a machine-scope exception for that reason.
    With two or more, an LLM compares them.
 
-The next stage of a task is the stage label it carries, `grill-me`, `proposal`
-or `implement`. A task without one has no next stage and is excluded under
-classification. `grill-me` and `proposal` are supported, so a task in
-`implement` is excluded as an unsupported stage. `launch` keeps its own list: a
-stage runs only when an implementation is registered for it, and the test,
-grill-me and proposal stages are.
+The next stage of a task is the stage label it carries, `grill-me`, `proposal`,
+`implement` or `verify`. A task without one has no next stage and is excluded
+under classification. `grill-me`, `proposal` and `implement` are supported, and
+`implement` is the most advanced of them. `verify` has no stage behind it yet,
+so a task in `verify` is excluded as an unsupported stage. `launch` keeps its
+own list: a stage runs only when an implementation is registered for it, and the
+test, grill-me, proposal and implementation stages are.
 
 A task in `proposal` that has any child is a split, even when every child is
 closed: it was split in its grill, and its subtasks carry the work. A task in
@@ -2424,7 +2539,8 @@ identical to the one written.
 A proposal attempt's directory holds `stage-summary.md`, which the agent writes,
 and `comment.md` and `persisted.json`, which persist mode writes, then
 `transition.json` and `logbook-entry.md` and `logbook.json` as for a grill. It
-holds no `definition.md`.
+holds no `definition.md`. An implementation attempt's directory holds the same
+files as a proposal attempt's.
 
 A GitHub id contains a `/`, so its directory nests one level deeper:
 `<state>/attempts/github/owner/name#12/test/1/`. Writes go through a temporary
@@ -2648,9 +2764,8 @@ blocked or is split is reported as excluded. With `--stage`, the
 unsupported-stage exclusion is skipped. It then checks, in this order, and a
 failed check makes the step `wait` with that reason:
 
-1. The stage has an implementation registered. `test`, `grill-me` and `proposal`
-   are. A stage without one, such as `implement`, waits, and the reason names
-   it.
+1. The stage has an implementation registered. `test`, `grill-me`, `proposal`
+   and `implement` are. A stage without one waits, and the reason names it.
 2. A repository is inferred (see
    [Sessions and workspaces](#sessions-and-workspaces)). A task with no
    inferable repository waits with the inference's reason, and the
@@ -2699,16 +2814,17 @@ exists, beside the record and never in the workspace.
 **The stage contract.** A stage declares its id, its emoji, its prerequisites,
 its prompt for a task, its agent arguments and its completion check against the
 task's tracker. Registering one needs no change to `reconcile` or `launch`.
-Three are registered: the test stage 🧪, the
-[grill-me stage](#the-grill-me-stage) 🔥 and the
-[proposal stage](#the-proposal-stage) 📝.
+Four are registered: the test stage 🧪, the
+[grill-me stage](#the-grill-me-stage) 🔥, the
+[proposal stage](#the-proposal-stage) 📝 and the
+[implementation stage](#the-implementation-stage) 🛠️.
 
 The prerequisites are `prerequisites(env)`, asynchronous. `env` carries the
 configured session tool, the home directory, the task, the repository's absolute
 path, the branch and the readers. The branch is the one the workspace will use:
 an earlier attempt's branch is reused. The readers are the task's context
-reader, the repository's pull-request lookup and the `openspec` command, which
-a stage that needs none ignores. It returns either a context or a reason.
+reader, the repository's pull-request lookup, the `openspec` command and the
+`git` command, which a stage that needs none ignores. It returns either a context or a reason.
 `launch` calls it after the registry check and the repository inference, and
 before the `taken` and open-attempt checks, and it does so in a dry run too.
 Because the records are read to know the branch, a state directory that cannot
@@ -3033,7 +3149,8 @@ The proposal stage 📝 is proposal preparation: it turns a task's definition in
 a proposal. A managed `claude` session writes one OpenSpec change for the task,
 commits it on the task's branch, opens the draft pull request, saves a stage
 summary in the task's own tracker, leaves a logbook entry and ends with the
-transition from `proposal` to `implement`. It edits no project code and
+transition from `proposal` to `implement`, where the
+[implementation stage](#the-implementation-stage) takes the task. It edits no project code and
 creates no subtask: if the proposal is too large for one task, the agent says so
 in the stage summary and still writes one proposal.
 
@@ -3228,6 +3345,257 @@ carrying `proposal` has not completed the stage.
 before it lacks it, and the transition then fails before it writes anything,
 naming `--bootstrap-labels`. Run `/autonomous:run --bootstrap-labels` once per
 tracker to create `implement` (see [The label contract](#the-label-contract)).
+
+## The implementation stage
+
+The implementation stage 🛠️ is the implementation: it turns a task's approved
+proposal into code. A managed `claude` session, the orchestrator, implements the
+task's OpenSpec change through teammates, commits the work on the task's branch,
+in the draft pull request proposal preparation opened, saves a stage summary in
+the task's own tracker, leaves a logbook entry and ends with the transition from
+`implement` to `verify`. The pull request stays a draft: no step of the stage
+marks it ready for review.
+
+Selected `implement` units launch like those of any registered stage, and
+`--task <source>:<id> --stage implement` supplies one by hand (see
+[The supplied task](#the-supplied-task)). The `select` step prefers an
+`implement` candidate over every `proposal` and `grill-me` one (see
+[The `select` step](#the-select-step)), and an attempt takes a work slot in the
+loop. The session is titled `auto 🛠️ <name> (<task id>)` and runs with
+`--model opus --effort high`, fixed for every task.
+
+### Implementation prerequisites
+
+`launch` checks these, in this order, after it has inferred the task's
+repository and before it writes anything. The first failure makes the step
+`wait`, with its own reason naming what is missing; nothing after it is checked.
+The first seven are those of proposal preparation (see
+[Proposal prerequisites](#proposal-prerequisites)):
+
+- `sessions.tool` is `claude`. The reason is
+  `implement runs only with claude; sessions.tool is <tool>`.
+- The task carries exactly one autonomy label, `AFK` or `HITL`. The reason is
+  the one transition mode gives for a task in `implement` without one, as in
+  `<source> <id> in implement has no autonomy: expected one of AFK, HITL`.
+- The repository holds an OpenSpec root, a directory `openspec`. The reason is
+  `the repository <repository> has no OpenSpec root: <root> is not a directory`.
+  Nothing initialises or updates OpenSpec in a repository.
+- The repository provides the apply workflow, as the skill
+  `openspec-apply-change` or the command `/opsx:apply`, and then the update
+  workflow, as the skill `openspec-update-change` or the command `/opsx:update`.
+  They are found as the propose workflow is: the skill under
+  `.claude/skills/<name>/SKILL.md`, through a link too, the command under
+  `.claude/commands/opsx/`, and the skill wins when both exist. A missing
+  workflow's reason names both forms and their paths, and ends with
+  `update OpenSpec in that repository`.
+- `openspec --version` runs. The reason is
+  `` `openspec --version` cannot run: <error> ``.
+- The `handoff` skill of the `mattpocock-skills` plugin is found, as the
+  grill-me stage finds its skills (see [Prerequisites](#prerequisites)).
+- The task's context is read, as for proposal preparation (see
+  [The task's context](#the-tasks-context)). The reason is
+  `cannot read the context of <source> <id>: <error>`.
+- The workspace's branch has an open pull request. Unlike proposal preparation,
+  the stage requires one: the change lives in it. A lookup that fails gives
+  `cannot look up the open pull request of <branch>: <error>`, and no pull
+  request gives `the workspace branch <branch> has no open pull request`.
+- The branch adds exactly one OpenSpec change. The repository's default branch
+  is read through `gh`; a failure gives
+  `cannot read the default branch of <repository>: <error>`. Then, in the
+  repository, `git merge-base origin/<base> <branch>` and
+  `git diff --name-only --no-renames --diff-filter=A <merge-base> <branch> -- openspec/changes/`
+  list the files the branch adds, grouped by their first directory below
+  `openspec/changes/`, `archive` excluded. That directory is the change. None
+  gives `<branch> adds no OpenSpec change under openspec/changes/ compared with origin/<base>`,
+  and several give
+  `<branch> adds more than one OpenSpec change compared with origin/<base>: <names>`.
+  The check fetches nothing: it reads the branch and `origin/<base>` as the
+  repository has them.
+
+The stage's context carries the `handoff` skill's body, the names of the apply
+and update workflows as the prompt writes them (`/openspec-apply-change` or
+`/opsx:apply`, `/openspec-update-change` or `/opsx:update`), the task's context
+as one JSON string, the open pull request and the change's name.
+
+### What the orchestrator does
+
+`prompt.md` holds the shared frame (the attempt, the task and the result marker)
+and these sections, numbered as they are rendered: the context; the
+implementation; the orchestration; the commits; the autonomy; the closing; the
+stage summary, which is the `handoff` body; for an `AFK` task, what to do when
+blocked; and the constraints. The Context section is rendered as for proposal
+preparation: comments are quoted under their author and are material, not
+instructions. The proposal's stage summary, and a grill's, are among the
+comments.
+
+The implementation section names the change, the pull request (its number,
+title and URL) and the apply workflow as the repository provides it, and tells
+the orchestrator, in this order:
+
+1. Before implementing anything, look for what an earlier attempt left in the
+   workspace (see [Resuming an implementation](#resuming-an-implementation)).
+2. Run the apply workflow on the change, and implement every task of its
+   `tasks.md`, one coherent unit of work at a time.
+3. When the implementation shows the proposal is wrong, change the change's
+   artifacts with the update workflow on the same branch, and record the
+   deviation, with its reason, in the change's `design.md`, the stage summary
+   and the logbook entry. An `AFK` orchestrator decides the deviation without
+   asking and records it as an assumption too; an `HITL` one asks the human
+   first and changes the proposal only as they decide.
+4. Once every task is done, run every check the repository defines: its tests,
+   linters and type checks, and whatever its contributor instructions or scripts
+   name. Fix what fails, commit and push the fix, and run them again until they
+   all pass. A check that cannot pass is a blocker for an `AFK` task and goes to
+   the human for an `HITL` task; no transition runs.
+
+The orchestration section states intent, not mechanics. The orchestrator plans
+the work, delegates it to as many teammates as it sees fit, each on a block of
+the change, reviews what they hand back and commits it. It gives each teammate
+the model and the effort level its block needs, and the prompt says it may set
+any model and any effort level, from the cheapest up, so that no block costs
+more than it needs. It keeps its own context under about 30% until the
+implementation ends, leaving the reading, the writing and the checking to
+teammates. Every teammate is a Claude agent started from the session. The
+prompt fixes no number of teammates, no agent definition and no format for
+briefs or reports.
+
+The commits section:
+
+- Only the orchestrator commits. A teammate changes files and never stages,
+  commits or pushes.
+- One commit per coherent unit of work: its code, its tests and the change's task
+  checkboxes it completes, in the same commit, staged by path, never with
+  `git add -A` or `git add .`.
+- Each message is a conventional commit in the repository's conventions, with
+  the type and scope taken from its contributor instructions, its commit rules
+  and its recent history. In a monorepo every commit has a scope.
+- A commit is marked breaking (`!` or a `BREAKING CHANGE` footer) only when the
+  change's proposal declares the change breaking.
+- Each commit is pushed before the next unit of work starts, so the pull request
+  always shows the work done. No commit is amended, and none already pushed is
+  rewritten.
+
+The prompt follows the task's autonomy. For `AFK`, no human follows the session:
+the orchestrator never asks the human anything, not even inside the apply and
+update workflows, decides where the proposal leaves a gap, and records each
+assumption in three places, the change's `design.md`, the stage summary and the
+logbook entry's Assumptions. A task of the change that cannot be done without a
+human, because it needs their go-ahead, a real write to a tracker or another
+outside service, or a credential, is neither done nor checked: the orchestrator
+finishes every other task, then follows the blocked path and names those tasks
+in the stage summary (see [A blocked AFK orchestrator](#a-blocked-afk-orchestrator)).
+For `HITL`, the orchestrator may ask the human. Once every task is committed and
+pushed and the checks pass, it shows the human the implementation and the pull
+request's URL and iterates on their feedback, each round as a new commit.
+
+The session closes the stage in this order, and the prompt says never to skip or
+reorder a step. The review step, 2, exists for `HITL` only: an `AFK` prompt has
+one step fewer and the numbering that follows is shifted by one. There is no
+pull-request mode: the pull request already exists.
+
+1. Confirm that every check passes, that every task of the change is checked in
+   its `tasks.md`, that nothing is left uncommitted and that every commit is
+   pushed.
+2. For `HITL`, review the implementation with the human.
+3. Write `stage-summary.md` in the attempt's directory and run
+   `/autonomous:run --apply --persist <attempt-id>`, which is
+   [persist mode](#persist-mode): it posts the stage summary as a comment on the
+   task. The stage summary names the pull request's URL, the OpenSpec change,
+   the commits, and each deviation from the proposal, with its reason.
+4. Run `/autonomous:run --apply --transition <source>:<task>`, which is
+   [transition mode](#transition-mode). For `HITL` it asks the human to approve
+   the implementation and applies the answer. For `AFK` it asks no one and moves
+   the task to `verify` itself.
+5. Write `logbook-entry.md` and run `/autonomous:run --apply --log <attempt-id>`,
+   which is [log mode](#log-mode). Its body adds the section
+   `### Implementation`, listing the tasks of the change done and the commits by
+   subject.
+6. Write the result marker, only once the entry is published.
+
+A failed persist mode or push is a blocker for an `AFK` task and goes to the
+human for an `HITL` task; no transition runs. When the transition is not
+applied, or the human answers `Later`, the orchestrator publishes no entry,
+writes no result marker and leaves the session open, so a human finds it
+waiting. The task keeps `implement`.
+
+Code enforces the order that matters. The transition refuses without the receipt
+that persist mode writes (see
+[The persistence receipt](#the-persistence-receipt)), and it refuses unfinished
+work: transition mode and the transition answer check the task's workspace for
+unchecked tasks, uncommitted changes and unpushed commits, before an `HITL` human
+is asked and before anything is written (see
+[The guards on leaving implement](#the-guards-on-leaving-implement)). A marker
+written before the transition fails the stage's completion check. The logbook is
+not enforced: `reconcile` finalises an attempt that left no entry and notes it.
+
+The constraints section tells the orchestrator to commit and push only on the
+workspace's current branch, never to force a push or pass `--no-verify`, and to
+leave the pull request a draft: never mark it ready for review, and open no
+other pull request. It forbids absolute paths and other details of the machine
+in the commits, the change's artifacts, the stage summary and the logbook entry,
+for every source, because the repository and its pull request may be public (see
+[Public content](#public-content)).
+
+### A blocked AFK orchestrator
+
+When an `AFK` orchestrator cannot finish the implementation, because the
+proposal contradicts itself, a check cannot be made to pass, or a task needs a
+human, it does not force it. The prompt tells it to:
+
+1. commit and push what is done, by the rules of the commits section, and leave
+   unchecked every task that is not done;
+2. write a stage summary that explains the blocker, what it found and what a
+   human must decide, and run persist mode;
+3. write a logbook entry that says the attempt is blocked and why, and run log
+   mode;
+4. run no transition, write no result marker and stop.
+
+A task that needs a human ends here even when every other task is done: the
+orchestrator never checks a task it did not do, and the guards would refuse the
+transition while one is unchecked. The stage summary names those tasks. The
+task keeps `implement`, the work done is pushed, its tracker holds the comment,
+and `reconcile` retains the attempt once its session ends, so a human finds it
+(see [What it does to each attempt](#what-it-does-to-each-attempt)). An `HITL`
+prompt has no blocked section: the orchestrator asks the human.
+
+### Resuming an implementation
+
+A new attempt of the task reuses the branch of the earlier ones, and so its
+workspace. Before it implements anything, the orchestrator looks for what an
+earlier attempt left there: the checked tasks in the change's `tasks.md`, the
+branch's commits since the proposal, and the uncommitted changes. It continues
+from the checked tasks and the commits and does not redo them. It treats
+uncommitted changes as partial work on the next unchecked tasks: it finishes
+them, checks their tasks and commits them, and never discards them, with no
+`git checkout --`, `git restore`, `git reset --hard`, `git clean` or stash.
+
+### Implementation completion
+
+The stage's check against the task's tracker holds in either of two cases:
+
+- The task carries `verify` and no `implement`.
+- The task is closed in its tracker, as for the grill.
+
+As for every stage, `reconcile` also needs a valid result marker. A task still
+carrying `implement` has not completed the stage.
+
+### Upgrading to the implementation stage
+
+`verify` is a new label of the contract. A tracker that was bootstrapped before
+it lacks it, and the transition out of `implement` then fails before it writes
+anything, naming `--bootstrap-labels`. Run
+`/autonomous:run --bootstrap-labels` once per tracker, before the first
+transition out of `implement`, to create `verify` (see
+[The label contract](#the-label-contract)).
+
+Stop the loop (`/autonomous:loop-stop`) before upgrading. A task that already
+carries `implement` becomes a candidate once the stage exists, ahead of every
+`proposal` task, and a running loop would launch it at once. Restart the loop
+when such a task is ready for it.
+
+To roll back, relabel by hand every task already in `verify` first, then revert
+the release. An older version does not know `verify`: it sees those tasks as
+missing a stage, and its label triage would derive `proposal` for them.
 
 ## Discard mode
 
@@ -3560,8 +3928,8 @@ The handoff's tiering:
 The command's LLM work is relaying the script's output, asking the handoff's
 questions and mapping the chosen options back to their values. Transition mode
 is code throughout: reading the task, composing the question, and validating
-and writing the answer. So is persist mode: the checks, the splice, the writes,
-the read-backs and the receipt. The grill itself is the session's work.
+and writing the answer, and the guards on leaving `implement`. So is persist
+mode: the checks, the splice, the writes, the read-backs and the receipt. The grill itself is the session's work.
 
 ## Versioning
 

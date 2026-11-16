@@ -212,12 +212,21 @@ The stage SHALL leave the task's pull request a draft. Neither the prompt nor an
 
 ### Requirement: A blocked AFK orchestrator ends without a transition
 
-For an `AFK` task, the prompt SHALL tell the agent what to do when it cannot finish the implementation, because the proposal contradicts itself or a check cannot be made to pass: commit and push what is done, write a stage summary that explains the blocker and run persist mode, write a logbook entry that says the attempt is blocked and run log mode, run no transition, write no result marker, and stop.
+For an `AFK` task, the prompt SHALL tell the agent what to do when it cannot finish the implementation, because the proposal contradicts itself, a check cannot be made to pass, or a task needs a human: commit and push what is done, write a stage summary that explains the blocker and run persist mode, write a logbook entry that says the attempt is blocked and run log mode, run no transition, write no result marker, and stop.
 
 #### Scenario: Check that cannot pass
 
 - **WHEN** an `AFK` orchestrator cannot make the repository's tests pass
 - **THEN** the task keeps `implement`, the work done is pushed, the task's tracker holds a comment explaining the blocker, no result marker exists, and reconcile retains the attempt once its session ends
+
+### Requirement: Tasks that need a human
+
+For an `AFK` task, the prompt SHALL tell the agent that a task of the change that needs a human, because it needs the human's go-ahead, a real write to a tracker or another outside service, or a credential, is neither done nor checked. The agent SHALL finish the other tasks, and the task that needs a human SHALL block the implementation and be named in the stage summary.
+
+#### Scenario: Task that needs a human
+
+- **WHEN** an implementation prompt is written for a task carrying `AFK`
+- **THEN** it tells the agent neither to do nor to check a task that needs the human's go-ahead, a real write to a tracker or another outside service, or a credential, to finish the rest, and to follow the blocked path naming that task in the stage summary
 
 ### Requirement: Implementation stage summary comment
 
