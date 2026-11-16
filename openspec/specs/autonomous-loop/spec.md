@@ -11,8 +11,8 @@ The plugin SHALL expose `/autonomous:loop`, which runs the step runner with `--l
 
 #### Scenario: Loop started
 
-- **WHEN** the user runs `/autonomous:loop --account claude@1a2b3c4d --apply`
-- **THEN** the step runner is executed with `--loop --account claude@1a2b3c4d --apply` and iterations start
+- **WHEN** the user runs `/autonomous:loop --apply`
+- **THEN** the step runner is executed with `--loop --apply` and iterations start
 
 #### Scenario: Loop from a shell
 
@@ -191,7 +191,7 @@ When `--notices <n>` finds no live loop, it SHALL first wait up to 10 seconds fo
 
 ### Requirement: Loop flags
 
-`--loop` SHALL combine only with `--apply`, `--account`, `--force`, `--json`, `--grills`, `--parallel` and `--interval`. `--grills`, `--parallel` and `--interval` SHALL require `--loop`. `--notices` SHALL combine with nothing. `--stop-loop` SHALL combine with nothing. A broken combination or a value that is not an integer in range SHALL be a usage error with exit code 1.
+`--loop` SHALL combine only with `--apply`, `--force`, `--json`, `--grills`, `--parallel` and `--interval`. `--grills`, `--parallel` and `--interval` SHALL require `--loop`. `--notices` SHALL combine with nothing. `--stop-loop` SHALL combine with nothing. A broken combination or a value that is not an integer in range SHALL be a usage error with exit code 1.
 
 #### Scenario: Limit flag on a run
 
@@ -331,3 +331,12 @@ The plugin SHALL expose `/autonomous:loop-stop`, which takes no arguments, asks 
 
 - **WHEN** the user runs `/autonomous:loop-stop` and no loop is alive
 - **THEN** the session shows `loop stopped: not running` and exit code 2, and nothing else
+
+### Requirement: The active account is read in every iteration
+
+The loop SHALL read the active account again in every iteration. It SHALL NOT keep the account of an earlier iteration.
+
+#### Scenario: Login switched between two iterations
+
+- **WHEN** an iteration evaluates `ana@example.com`, and Claude Code is logged in as `luis@example.com` when the next iteration runs
+- **THEN** the next iteration evaluates `luis@example.com`
