@@ -6,7 +6,7 @@ import { setTimeout as delay } from "node:timers/promises";
 export type Wait = (ms: number, stop?: AbortSignal) => Promise<void>;
 
 // The longest delay a timer takes; Bun turns a longer one into 1 ms.
-export const MAX_TIMER_MS = 2_147_483_647;
+const MAX_TIMER_MS = 2_147_483_647;
 
 type Delay = (ms: number, value: undefined, options: { signal?: AbortSignal }) => Promise<unknown>;
 

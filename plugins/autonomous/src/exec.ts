@@ -19,7 +19,7 @@ export const CLI_TIMEOUT_MS = 120_000;
 
 // How long after its own timeout execFile gets to report the kill before the watchdog
 // settles the call without it.
-export const WATCHDOG_GRACE_MS = 5_000;
+const WATCHDOG_GRACE_MS = 5_000;
 
 const MAX_BUFFER = 64 * 1024 * 1024;
 

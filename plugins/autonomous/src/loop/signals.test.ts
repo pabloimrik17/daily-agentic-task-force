@@ -2,7 +2,7 @@ import { EventEmitter } from "node:events";
 
 import { describe, expect, it } from "vitest";
 
-import { MAX_TIMER_MS, sleep, sleepWith, stopOnSignals } from "./signals.ts";
+import { sleep, sleepWith, stopOnSignals } from "./signals.ts";
 
 describe("sleep", () => {
     it("resolves at once when the stop is already asked", async () => {
@@ -31,9 +31,9 @@ describe("sleep", () => {
             return Promise.resolve();
         });
 
-        await wait(2 * MAX_TIMER_MS + 5);
+        await wait(2 * 2_147_483_647 + 5);
 
-        expect(delays).toEqual([MAX_TIMER_MS, MAX_TIMER_MS, 5]);
+        expect(delays).toEqual([2_147_483_647, 2_147_483_647, 5]);
     });
 
     it("gives a wait that one timer takes to one timer", async () => {

@@ -12,12 +12,7 @@ import { exitCodeFor } from "../report.ts";
 import autolink from "./fixtures/linear-autolink.json";
 import rewrite from "./fixtures/linear-rewrite.json";
 import { headerOf, RECEIPT_SCHEMA, runPersist } from "./persist.ts";
-import {
-    PERSIST_SCHEMA,
-    renderPersistJson,
-    renderPersistText,
-    unconfiguredPersist,
-} from "./report.ts";
+import { renderPersistJson, renderPersistText, unconfiguredPersist } from "./report.ts";
 import { spliceDefinition } from "./splice.ts";
 import {
     type AttemptOptions,
@@ -165,7 +160,7 @@ describe("persist: Persistence is read back and leaves a receipt", () => {
         const { run, fake, dir, id } = await arrange();
         const report = await run();
         expect(report).toMatchObject({
-            schema: PERSIST_SCHEMA,
+            schema: "autonomous.persist.v1",
             startedAt: STARTED.toISOString(),
             outcome: "advance",
             attempt: id,

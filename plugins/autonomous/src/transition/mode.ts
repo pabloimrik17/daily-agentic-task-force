@@ -22,7 +22,7 @@ import { recordTransition } from "./transitioned.ts";
 
 export const TRANSITION = "transition";
 
-export const TRANSITION_SCHEMA = "autonomous.transition.v1";
+const TRANSITION_SCHEMA = "autonomous.transition.v1";
 
 // The transitions (spec label-contract, "A transition replaces the stage"), keyed by the stage
 // they leave; `asks` names the question that leads out of it.

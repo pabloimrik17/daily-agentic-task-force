@@ -4,7 +4,7 @@
 import type { Finding, Mirror, Movement, Report, WatchlistResult } from "../domain.ts";
 
 /** The most characters one pane block may carry. */
-export const BLOCK_LIMIT = 10_000;
+const BLOCK_LIMIT = 10_000;
 
 const MIRROR_TITLES: Record<Mirror, string> = {
     "sws-portfolio": "SWS portfolio",

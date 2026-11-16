@@ -1,7 +1,7 @@
 import type { AttemptId } from "../attempts/record.ts";
 import type { Source } from "../config.ts";
 
-export const PERSIST_SCHEMA = "autonomous.persist.v1";
+const PERSIST_SCHEMA = "autonomous.persist.v1";
 
 interface PersistTask {
     source: Source;

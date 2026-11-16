@@ -41,7 +41,7 @@ export default {
         // Production entries are the files commands, skills and hooks run with `bun`.
         "plugins/autonomous": {
             entry: ["src/run.ts!", "src/label-at-creation/cli.ts!"],
-            project: ["src/**/*.ts!"],
+            project: ["src/**/*.ts!", "!src/**/*.test.ts!", "!src/**/*fixtures.ts!"],
         },
         // The stonks hooks module is loaded by Claude Code from hooks.json
         // `modules`; `claude-code` is the engine's own module, present at run
@@ -55,7 +55,15 @@ export default {
                 "mod/register.ts!",
                 "src/cli.ts!",
             ],
-            project: ["**/*.ts", "!mod/types/claude-code.d.ts", "src/**/*.ts!", "mod/**/*.ts!"],
+            project: [
+                "scripts/**/*.ts",
+                "*.ts",
+                "src/**/*.ts!",
+                "mod/**/*.ts!",
+                "!mod/types/claude-code.d.ts",
+                "!src/**/*.test.ts!",
+                "!mod/**/*.test.ts!",
+            ],
             ignoreDependencies: ["claude-code"],
         },
     },

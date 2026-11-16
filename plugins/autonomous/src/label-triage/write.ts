@@ -60,7 +60,7 @@ const GROUP_ORDER: readonly Group[] = ["scope", "autonomy", "stage"];
 // Prefix of the error a read-back mismatch reports; the report renders it apart.
 export const READ_BACK_MISMATCH = "read-back mismatch";
 
-export const BOOTSTRAP_HINT = "run --bootstrap-labels";
+const BOOTSTRAP_HINT = "run --bootstrap-labels";
 
 export function missingLabelDetail(label: string, source: Source): string {
     return `${label} is missing on ${source}; ${BOOTSTRAP_HINT}`;

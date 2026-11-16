@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { SCREENSHOTS_SCHEMA, renderIbkrTable, stageScreenshots } from "./ibkr-screenshots.ts";
+import { renderIbkrTable, stageScreenshots } from "./ibkr-screenshots.ts";
 
 const hool = { ticker: "HOOL", quantity: 8 };
 const acme = { ticker: "ACME", quantity: 2.5 };
@@ -15,7 +15,7 @@ const trail = {
 };
 
 const stage = (document: object): ReturnType<typeof stageScreenshots> =>
-    stageScreenshots(JSON.stringify({ schema: SCREENSHOTS_SCHEMA, ...document }));
+    stageScreenshots(JSON.stringify({ schema: "stonks.ibkr-screenshots.v1", ...document }));
 
 describe("IBKR screenshots", () => {
     it("merges two overlapping screens and renders both tables", () => {
