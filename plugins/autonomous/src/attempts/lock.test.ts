@@ -3,7 +3,7 @@ import { join } from "node:path";
 
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 
-import { acquireLock, acquireLoopLock, loopIsAlive } from "./lock.ts";
+import { acquireLock, acquireLoopLock, loopIsAlive, readLoopLock } from "./lock.ts";
 import { tempState } from "./test-fixtures.ts";
 
 const DEAD = 2 ** 22;
@@ -196,5 +196,38 @@ describe("loopIsAlive", () => {
     it("ignores the run lock", async () => {
         await writeLock(process.pid);
         expect(await loopIsAlive(state, NOW)).toBe(false);
+    });
+});
+
+describe("readLoopLock", () => {
+    const loopLock = () => join(state, "loop.lock");
+
+    it("reports none without a loop lock and writes nothing", async () => {
+        expect(await readLoopLock(state)).toEqual({ kind: "none" });
+        expect(await readdir(state)).toEqual([]);
+    });
+
+    it("reports a live owner with its pid", async () => {
+        await acquireLoopLock(state, process.pid, NOW);
+        expect(await readLoopLock(state)).toEqual({ kind: "alive", pid: process.pid });
+    });
+
+    it("reports a dead owner with its pid, and leaves the file", async () => {
+        await writeFile(loopLock(), JSON.stringify({ pid: DEAD, startedAt: NOW.toISOString() }));
+        expect(await readLoopLock(state)).toEqual({ kind: "dead", pid: DEAD });
+        expect(await readdir(state)).toEqual(["loop.lock"]);
+    });
+
+    it("reports a lock whose owner does not parse as ownerless, however old", async () => {
+        await writeFile(loopLock(), "");
+        const old = new Date(NOW.getTime() - 60_000);
+        await utimes(loopLock(), old, old);
+        expect(await readLoopLock(state)).toEqual({ kind: "ownerless" });
+        expect(await readdir(state)).toEqual(["loop.lock"]);
+    });
+
+    it("ignores the run lock", async () => {
+        await writeLock(process.pid);
+        expect(await readLoopLock(state)).toEqual({ kind: "none" });
     });
 });

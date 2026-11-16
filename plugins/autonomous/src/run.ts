@@ -49,6 +49,7 @@ import type { TrackerFactory } from "./label-triage/trackers/tracker.ts";
 import { intervalMs } from "./loop/interval.ts";
 import { runLoop } from "./loop/loop.ts";
 import { sleep, stopOnSignals, type Wait } from "./loop/signals.ts";
+import { stopLoop } from "./loop/stop.ts";
 import { waitForNotices } from "./loop/wait-notices.ts";
 import { runPersist } from "./persist/persist.ts";
 import { renderPersistJson, renderPersistText, unconfiguredPersist } from "./persist/report.ts";
@@ -123,8 +124,9 @@ export interface MainDeps {
     openspec: Exec;
     stdout: (text: string) => void;
     stderr: (text: string) => void;
-    wait: Wait; // the loop's interval and the poll of --notices
+    wait: Wait; // the loop's interval and the polls of --notices and --stop-loop
     stopSignal: () => AbortSignal; // the loop's stop request
+    signalLoop: (pid: number) => void; // the one SIGTERM of --stop-loop; throws like process.kill
     steps?: readonly Step[];
 }
 
@@ -180,6 +182,9 @@ function dispatchRest(args: RunArgs, steps: readonly Step[], deps: MainDeps): Pr
     }
     if (args.notices !== undefined) {
         return runNoticesMode(args.notices, deps);
+    }
+    if (args.stopLoop) {
+        return runStopLoopMode(deps);
     }
     if (looping(args)) {
         return runLoopMode(args, steps, deps);
@@ -258,6 +263,19 @@ function runNoticesMode(seen: number, deps: MainDeps): Promise<number> {
         now: deps.now,
         wait: deps.wait,
         stdout: deps.stdout,
+    });
+}
+
+// Design D5: reads only the loop's files and signals its owner, so it needs no
+// configuration and takes no lock.
+function runStopLoopMode(deps: MainDeps): Promise<number> {
+    return stopLoop({
+        state: resolveStateDir(deps.env),
+        now: deps.now,
+        wait: deps.wait,
+        stdout: deps.stdout,
+        stderr: deps.stderr,
+        signal: deps.signalLoop,
     });
 }
 
@@ -521,5 +539,6 @@ if (import.meta.main) {
         stderr: (text) => process.stderr.write(`${text}\n`),
         wait: sleep,
         stopSignal: stopOnSignals,
+        signalLoop: (pid) => process.kill(pid, "SIGTERM"),
     });
 }

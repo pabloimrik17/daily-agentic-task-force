@@ -131,6 +131,7 @@ adding the Linear CLI there is tracked as DOT-82 sub-issue 7.
 /autonomous:run --apply --pull-request <attempt-id> [--title <title>] [--json]
 /autonomous:run --apply --log <attempt-id> [--json]
 /autonomous:loop [--apply] [--account <provider-key>] [--force] [--json] [--grills <n>] [--parallel <n>] [--interval <minutes>]
+/autonomous:loop-stop
 bun src/run.ts --notices <n>
 ```
 
@@ -153,11 +154,12 @@ bun src/run.ts --notices <n>
 | `--title <title>`                   | With `--pull-request`, the text of the pull request's title; the task id is appended. Required to open a pull request; replaces the title of one already open. Requires `--pull-request`. Given once                                                                                                                                                                                                                                                                                                                                                                       |
 | `--log <attempt-id>`                | [Log mode](#log-mode): publish the attempt's [logbook entry](#the-logbook) on the pull request, read it back and write the receipt, running no step. `<attempt-id>` is `<source>:<task>:<stage>:<n>`. Requires `--apply`. Only combines with `--apply` and `--json`. Given once                                                                                                                                                                                                                                                                                            |
 | `--persist <attempt-id>`            | [Persist mode](#persist-mode): save the definition and the stage summary of that open grill-me attempt, or the stage summary of that open proposal attempt, to its task and write the receipt, running no step. `<attempt-id>` is `<source>:<task>:<stage>:<n>`. Requires `--apply`. Only combines with `--apply` and `--json`. Given once                                                                                                                                                                                                                                 |
-| `--loop`                            | Run an iteration of the loop, where the [slot limits](#slots-and-the-capacity-step) bind. Only combines with `--apply`, `--account`, `--force`, `--json`, `--grills`, `--parallel` and `--interval`. Not combined with `--no-handoff`, `--bootstrap-labels`, `--answer`, `--task`, `--stage`, `--discard`, `--release-workspace`, `--transition`, `--persist`, `--pull-request`, `--title`, `--log` or `--notices`                                                                                                                                                         |
+| `--loop`                            | Run an iteration of the loop, where the [slot limits](#slots-and-the-capacity-step) bind. Only combines with `--apply`, `--account`, `--force`, `--json`, `--grills`, `--parallel` and `--interval`. Not combined with `--no-handoff`, `--bootstrap-labels`, `--answer`, `--task`, `--stage`, `--discard`, `--release-workspace`, `--transition`, `--persist`, `--pull-request`, `--title`, `--log`, `--notices` or `--stop-loop`                                                                                                                                          |
 | `--grills <n>`                      | The limit of grill slots for this loop, an integer of 0 or more. Replaces `runner.grills`. Requires `--loop`. Given once                                                                                                                                                                                                                                                                                                                                                                                                                                                   |
 | `--parallel <n>`                    | The limit of work slots for this loop, an integer of 0 or more. Replaces `runner.parallel`. Requires `--loop`. Given once                                                                                                                                                                                                                                                                                                                                                                                                                                                  |
 | `--interval <minutes>`              | The time between two iterations, an integer of 1 or more. Replaces `runner.intervalMinutes`. Requires `--loop`. Given once                                                                                                                                                                                                                                                                                                                                                                                                                                                 |
 | `--notices <n>`                     | The count of notices already shown, an integer of 0 or more. Cannot be combined with any other flag. Given once                                                                                                                                                                                                                                                                                                                                                                                                                                                            |
+| `--stop-loop`                       | Stop the live loop: send its process one termination signal and wait up to 10 seconds. Cannot be combined with any other flag. Run by `/autonomous:loop-stop`                                                                                                                                                                                                                                                                                                                                                                                                              |
 
 The script can also be run directly, which is what a shell should branch on:
 
@@ -369,8 +371,8 @@ while a manual run holds the run lock is `not-evaluable`.
 
 **The loop outlives the session.** A loop started from an agent session is a
 background task of that session, and it keeps running after the session is
-closed. No agent then receives its notices, so stop it on purpose (see
-[Stopping it](#stopping-it)) or wait for its notices again from a new session
+closed. No agent then receives its notices, so stop it on purpose with
+`/autonomous:loop-stop` (see [Stopping it](#stopping-it)) or wait for its notices again from a new session
 with `--notices <n>`: the notices stay on disk.
 
 `--interval <minutes>` replaces `runner.intervalMinutes` (10 by default), the
@@ -470,8 +472,41 @@ else `~/.local/state/autonomous`):
 
 ### Stopping it
 
-There is no stop command. Send SIGTERM or SIGINT to the pid in `loop.lock`; from
-an agent session, stop the background task instead. A stop sent to that pid
+From any session or shell:
+
+```text
+/autonomous:loop-stop
+```
+
+```bash
+bun plugins/autonomous/src/run.ts --stop-loop
+```
+
+It needs no `--apply` and no configuration, and takes no lock. It sends the
+loop's process one SIGTERM, then waits up to 10 seconds for the loop to end.
+
+| Output                                                | Exit code | Meaning                                                             |
+| ----------------------------------------------------- | --------- | ------------------------------------------------------------------- |
+| `loop stopped`                                        | 0         | The loop ended within the wait                                      |
+| `loop stopping: the iteration in progress ends first` | 0         | The loop is still in an iteration; it stops when the iteration ends |
+| `loop stopped: not running`                           | 2         | No live loop; no signal was sent                                    |
+| An error on standard error                            | 1         | The signal could not be sent, or the lock has no readable owner     |
+
+A lock left by a process that no longer exists counts as no live loop and is
+left in place; the next loop reclaims it. A lock with no readable owner is a
+loop still writing its lock, or a damaged file. For a loop that is starting, run
+the command again; a damaged lock is reclaimed by the next loop.
+
+Stopping changes no session and no attempt. Launched sessions stay open, and
+open attempts keep their slots until the next `/autonomous:run` or loop.
+
+Do not repeat the command while the loop is stopping. After
+`loop stopping: …` nothing more is needed: the loop ends when its iteration
+does, and `loop stopped: received SIGTERM` in its notices confirms it. A second
+signal kills the process and can cut a launch.
+
+Underneath, the command sends SIGTERM to the pid in `loop.lock`; SIGINT does the
+same. A stop sent to that pid
 during an iteration is honoured when the iteration ends, so a launch is never
 cut. A second identical signal kills the process, and the next loop reclaims
 the stale lock.

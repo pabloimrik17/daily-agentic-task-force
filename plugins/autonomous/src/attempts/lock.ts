@@ -173,3 +173,23 @@ export async function loopIsAlive(state: string, now: Date = new Date()): Promis
     const seen = await look(lockFile(state, LOOP_LOCK));
     return seen !== null && holds(seen, now);
 }
+
+export type LoopLockRead =
+    | { kind: "none" }
+    | { kind: "alive"; pid: number }
+    | { kind: "dead"; pid: number }
+    | { kind: "ownerless" };
+
+// What the loop lock says about its owner; never writes. An owner that does not parse
+// is reported as such whatever the file's age, unlike `loopIsAlive`'s grace period.
+export async function readLoopLock(state: string): Promise<LoopLockRead> {
+    const seen = await look(lockFile(state, LOOP_LOCK));
+    if (seen === null) {
+        return { kind: "none" };
+    }
+    if (seen.owner === null) {
+        return { kind: "ownerless" };
+    }
+    const { pid } = seen.owner;
+    return { kind: isAlive(pid) ? "alive" : "dead", pid };
+}

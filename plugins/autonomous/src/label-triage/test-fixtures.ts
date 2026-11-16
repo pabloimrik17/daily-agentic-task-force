@@ -207,6 +207,7 @@ export function triageContext(options: {
             interval: undefined,
             notices: undefined,
             triageQuestions: false,
+            stopLoop: false,
             ...options.args,
         },
         now: NOW,

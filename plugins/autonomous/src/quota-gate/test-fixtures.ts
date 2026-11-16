@@ -118,6 +118,7 @@ export function context(exec: OpenUsageExec, args: Partial<RunArgs> = {}): RunCo
             interval: undefined,
             notices: undefined,
             triageQuestions: false,
+            stopLoop: false,
             ...args,
         },
         now: NOW,
