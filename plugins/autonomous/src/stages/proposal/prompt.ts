@@ -1,6 +1,6 @@
-// Spec proposal-stage, "The proposal prompt". The handoff body, the task's context and the open
-// pull request come from what the prerequisites read at launch, so the prompt file keeps exactly
-// the text this attempt's agent received.
+// Spec proposal-stage, "The proposal prompt". The handoff body, the propose workflow's name, the
+// task's context and the open pull request come from what the prerequisites read at launch, so
+// the prompt file keeps exactly the text this attempt's agent received.
 
 import { dirname } from "node:path";
 
@@ -18,6 +18,7 @@ import type { StageContext, StagePromptInput } from "../stage.ts";
 export const HANDOFF_SKILL = "handoff";
 export const CONTEXT_KEY = "context";
 export const PULL_REQUEST_KEY = "pullRequest"; // absent when the branch has no open pull request
+export const WORKFLOW_KEY = "proposeWorkflow"; // `/openspec-propose` or `/opsx:propose`
 
 interface Section {
     title: string;
@@ -34,7 +35,7 @@ interface Paths {
 // What changes with the task's autonomy: its own section, the review step, the closing
 // transition, and what to do when a command fails.
 interface Autonomy {
-    section: Section;
+    section: (workflow: string) => Section;
     review: string | null;
     blocked: boolean; // whether the prompt gives the blocked path
     transition: (task: TaskKey) => string;
@@ -60,17 +61,17 @@ function autonomyOf(input: StagePromptInput): AutonomyLabel {
 }
 
 const AFK: Autonomy = {
-    section: {
+    section: (workflow) => ({
         title: "Working without a human (AFK)",
         lines: [
             "This task carries `AFK`: no human follows this session, and nobody will answer a question.",
             "",
-            "- Never ask the human anything, and never wait for an answer: a question hangs the session until someone happens to look at it. This holds inside `/opsx:propose` too: where it would ask, answer yourself.",
+            `- Never ask the human anything, and never wait for an answer: a question hangs the session until someone happens to look at it. This holds inside \`${workflow}\` too: where it would ask, answer yourself.`,
             "- Where the definition leaves a gap, decide it yourself, choosing what the description, the Context section and the repository support best.",
             "- Record each assumption you make in three places: the proposal's design (the change's `design.md`), the stage summary and the logbook entry's `### Assumptions`. A human reviews the proposal later, and must see what you assumed without asking you.",
             `- If you cannot write a sound proposal, do not force one: follow the section "${BLOCKED_TITLE}".`,
         ],
-    },
+    }),
     review: null,
     blocked: true,
     transition: (task) =>
@@ -79,7 +80,7 @@ const AFK: Autonomy = {
 };
 
 const HITL: Autonomy = {
-    section: {
+    section: () => ({
         title: "Working with the human (HITL)",
         lines: [
             "This task carries `HITL`: a human follows this session and reviews the proposal before the task moves on.",
@@ -88,7 +89,7 @@ const HITL: Autonomy = {
             "- Once the proposal is pushed and its pull request is open, show the human the proposal and the pull request's URL, and iterate on their feedback. Commit and push each round as a new commit, and never amend or rewrite a pushed commit, so the pull request keeps the history of the review.",
             "- The transition question comes only after the human has seen the proposal, because it asks them to approve the proposal as it stands.",
         ],
-    },
+    }),
     review: "Review the proposal with the human: show them the proposal and the pull request's URL, and commit and push each round of their feedback as a new commit. Go on only when the human is done with it.",
     blocked: false,
     transition: (task) =>
@@ -124,14 +125,14 @@ function openPullRequest(context: StageContext): string[] {
     ];
 }
 
-function proposalSection(task: TaskKey, context: StageContext): Section {
+function proposalSection(task: TaskKey, workflow: string, context: StageContext): Section {
     return {
         title: "Proposal",
         lines: [
             "Prepare one OpenSpec proposal for this task, in this order.",
             "",
-            `1. Before you propose anything, look for a change an earlier attempt of this task left in this workspace: run \`openspec list\`, and look in \`openspec/changes/\` for a change that names ${task} or that this branch added, committed or not. If you find one, continue it: read its artifacts, then finish and correct them in place. Do not run \`/opsx:propose\` in that case, because it would create a second change, and one task ends with one OpenSpec change and one pull request.`,
-            `2. Otherwise, run \`/opsx:propose\` with the task and its context: give it the task's id (${task}), its title, its description and the Context section. Let OpenSpec name the change; do not choose or force a name.`,
+            `1. Before you propose anything, look for a change an earlier attempt of this task left in this workspace: run \`openspec list\`, and look in \`openspec/changes/\` for a change that names ${task} or that this branch added, committed or not. If you find one, continue it: read its artifacts, then finish and correct them in place. Do not run \`${workflow}\` in that case, because it would create a second change, and one task ends with one OpenSpec change and one pull request.`,
+            `2. Otherwise, run \`${workflow}\` with the task and its context: give it the task's id (${task}), its title, its description and the Context section. Let OpenSpec name the change; do not choose or force a name.`,
             "3. Write exactly one proposal for the whole task. Do not split the task into several changes, and create no subtask: a split is decided in a grill, not here. If the proposal turns out too large for one task, say so in the stage summary, and still write one proposal and create no subtask, so a human can decide on the split after reading it.",
             "4. Edit no project code. Write only the change's artifacts, and the glossary and ADR files the proposal needs. The code is the next stage's work, once the proposal is approved.",
             ...openPullRequest(context),
@@ -227,10 +228,11 @@ export function proposalPrompt(input: StagePromptInput): string {
         entry: logbookEntryPath(dir),
     };
     const autonomy = AUTONOMIES[autonomyOf(input)];
+    const workflow = contextValue(context, WORKFLOW_KEY);
     const sections = [
         contextSection(context),
-        proposalSection(task, context),
-        autonomy.section,
+        proposalSection(task, workflow, context),
+        autonomy.section(workflow),
         closingSection(paths, autonomy),
         summarySection(context, paths.summary),
         ...(autonomy.blocked ? [blockedSection(paths)] : []),

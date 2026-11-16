@@ -10,9 +10,16 @@ import type { Result } from "../../result.ts";
 import type { SessionTool } from "../../sessions/manager.ts";
 import { proposalAutonomy, transitionRow } from "../../transition/mode.ts";
 import { SKILLS_PLUGIN } from "../grill-me/prompt.ts";
+import { findWorkflow, missingWorkflow } from "../openspec-workflows.ts";
 import { loadSkills } from "../skills.ts";
 import type { Stage, StageContext, StageEnv, StagePrerequisites } from "../stage.ts";
-import { CONTEXT_KEY, HANDOFF_SKILL, PULL_REQUEST_KEY, proposalPrompt } from "./prompt.ts";
+import {
+    CONTEXT_KEY,
+    HANDOFF_SKILL,
+    PULL_REQUEST_KEY,
+    proposalPrompt,
+    WORKFLOW_KEY,
+} from "./prompt.ts";
 
 // No codex flags: the prerequisites never let a codex session start.
 const AGENT_ARGS: Record<SessionTool, string[]> = {
@@ -54,6 +61,13 @@ const openspecRoot: Check = async ({ repository }) => {
         : failed(`the repository ${repository} has no OpenSpec root: ${root} is not a directory`);
 };
 
+const proposeWorkflow: Check = async ({ repository }) => {
+    const found = await findWorkflow(repository, "propose");
+    return found === null
+        ? failed(missingWorkflow(repository, "propose"))
+        : { ok: true, value: { [WORKFLOW_KEY]: found } };
+};
+
 const openspecCli: Check = async ({ readers }) => {
     const run = await readers.openspec(["--version"]);
     return run.ok ? NOTHING : failed(`\`openspec --version\` cannot run: ${run.error}`);
@@ -85,6 +99,7 @@ const CHECKS: readonly Check[] = [
     claudeOnly,
     oneAutonomy,
     openspecRoot,
+    proposeWorkflow,
     openspecCli,
     handoffSkill,
     taskContext,
