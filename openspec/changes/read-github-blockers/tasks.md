@@ -19,8 +19,8 @@
 
 ## 4. Integration checks
 
-- [ ] 4.1 Run `bun run lint:oxfmt`, `bun run lint:eslint`, `bun run lint:knip`, `bun run lint:fallow`, `bun run typecheck` and `bun run test`; verify all pass.
-- [ ] 4.2 Run `/autonomous:run` read-only with GitHub enabled against the configured repositories; verify the select step reads every repository with one `gh issue list` each and its report has no `not evaluated:` line.
+- [x] 4.1 Run `bun run lint:oxfmt`, `bun run lint:eslint`, `bun run lint:knip`, `bun run lint:fallow`, `bun run typecheck` and `bun run test`; verify all pass.
+- [x] 4.2 Run `/autonomous:run` read-only with GitHub enabled against the configured repositories; verify the select step reads every repository with one `gh issue list` each and its report has no `not evaluated:` line.
 
 ## Workflow follow-up
 
