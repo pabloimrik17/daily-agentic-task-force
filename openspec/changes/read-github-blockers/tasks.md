@@ -14,7 +14,7 @@
 
 ## 3. Documentation
 
-- [ ] 3.1 Update `plugins/autonomous/README.md`: the `gh` requirement names `blockedBy` and `blocking` beside `subIssues`; the GitHub paragraph of the selection section describes the blocker read, the open-only and any-repository rules and the cut-short failure; the selection report list drops the GitHub note. Verify `bun run lint:markdownlint` passes and `grep -n "not evaluated for GitHub" plugins/autonomous/README.md` finds nothing.
+- [x] 3.1 Update `plugins/autonomous/README.md`: the `gh` requirement names `blockedBy` and `blocking` beside `subIssues`; the GitHub paragraph of the selection section describes the blocker read, the open-only and any-repository rules and the cut-short failure; the selection report list drops the GitHub note. Verify `bun run lint:markdownlint` passes and `grep -n "not evaluated for GitHub" plugins/autonomous/README.md` finds nothing.
 - [ ] 3.2 Check that `plugins/autonomous/GLOSSARY.md`'s **Open blocker** entry matches the behavior shipped, and that the new code and README use "open blocker" rather than its avoided terms; verify by reading the diff.
 
 ## 4. Integration checks
