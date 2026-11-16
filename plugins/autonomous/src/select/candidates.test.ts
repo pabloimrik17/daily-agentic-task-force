@@ -28,7 +28,7 @@ function evaluate(
 const NO_NODES = { nodes: [], totalCount: 0 };
 
 // `output` is what `gh issue view --json subIssues` prints for the issue; `listed` adds
-// to what `gh issue list` prints for it, whose dependencies default to none.
+// to what `gh issue list` prints for it, whose blockers and blocked issues default to none.
 async function githubIssue(output: unknown, listed: Record<string, unknown> = {}) {
     const issue = {
         number: 1,
