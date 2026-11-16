@@ -25,7 +25,7 @@ import { fakeReader, selectContext, workTask } from "../../select/test-fixtures.
 import type { SelectData, WorkTask } from "../../select/types.ts";
 import type { SessionSpec } from "../../sessions/manager.ts";
 import { SKILLS_PLUGIN } from "../grill-me/prompt.ts";
-import type { StageEnv, StagePromptInput, StageReaders } from "../stage.ts";
+import type { StageEnv, StagePromptInput } from "../stage.ts";
 import { stageEnv } from "../test-fixtures.ts";
 import { CONTEXT_KEY, HANDOFF_SKILL, PULL_REQUEST_KEY } from "./prompt.ts";
 import { proposalStage } from "./stage.ts";
@@ -124,7 +124,7 @@ interface Reads {
 
 // Readers that log each call to `calls` and answer as `reads` says, or with an empty context,
 // no pull request and a CLI that runs.
-function readers(calls: string[], reads: Reads = {}): StageReaders {
+function readers(calls: string[], reads: Reads = {}): StageEnv["readers"] {
     const context: ContextReader = {
         source: "linear",
         read: (read) => {

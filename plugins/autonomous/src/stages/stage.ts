@@ -18,7 +18,7 @@ export function isStageId(value: string): value is StageId {
     return (STAGE_IDS as readonly string[]).includes(value);
 }
 
-export interface StageReaders {
+interface StageReaders {
     context: ContextReader; // of the task's source
     pullRequests: PullRequests; // bound to the repository
     openspec: Exec;

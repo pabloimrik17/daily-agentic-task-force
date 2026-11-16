@@ -4,7 +4,7 @@ import type { QuotaAccount, QuotaSource } from "./source.ts";
 
 export type OpenUsageExec = Exec;
 
-export type ReadResult = { ok: true; limits: OpenUsageLimits } | { ok: false; error: string };
+type ReadResult = { ok: true; limits: OpenUsageLimits } | { ok: false; error: string };
 
 // The output of a non-zero exit is kept only for its exit code, which the reason names.
 export const execOpenUsage: OpenUsageExec = execCommand("openusage", CLI_TIMEOUT_MS, {

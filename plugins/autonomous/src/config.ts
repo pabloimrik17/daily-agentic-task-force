@@ -107,7 +107,7 @@ export interface AutonomousConfig {
 }
 
 // The shipped values of the optional blocks, as the JSON file holds them.
-export interface ConfigDefaults {
+interface ConfigDefaults {
     sessions: Json;
     workspace: Json;
     naming: Json;

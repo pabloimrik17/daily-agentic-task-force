@@ -37,7 +37,7 @@ export interface JudgementRequest {
     tasks: JudgementTask[];
 }
 
-export interface GroupAnswer {
+interface GroupAnswer {
     labels: string[];
     confidence: number;
     reason: string;
@@ -49,9 +49,7 @@ export interface JudgementAnswer {
     autonomy?: GroupAnswer;
 }
 
-export type JudgementResult =
-    | { ok: true; answers: JudgementAnswer[] }
-    | { ok: false; error: string };
+type JudgementResult = { ok: true; answers: JudgementAnswer[] } | { ok: false; error: string };
 
 export type JudgementExec = (request: JudgementRequest) => Promise<JudgementResult>;
 

@@ -30,7 +30,7 @@ function hookedGit(): Exec {
     return (args, input) => execCommand("git", hookedTimeoutMs(deadline, Date.now()))(args, input);
 }
 
-export interface GitHubExecs {
+interface GitHubExecs {
     gh: Exec;
     git: Exec;
     hooked: Exec;

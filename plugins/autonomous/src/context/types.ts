@@ -34,6 +34,6 @@ export interface ContextReader {
     read(task: WorkTask): Promise<TrackerResult<TaskContext>>; // an error names the command that failed
 }
 
-export type ContextReaders = Record<Source, ContextReader>;
+type ContextReaders = Record<Source, ContextReader>;
 
 export type ContextReaderFactory = (config: AutonomousConfig) => ContextReaders;

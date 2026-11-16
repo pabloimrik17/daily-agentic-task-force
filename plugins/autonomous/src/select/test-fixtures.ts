@@ -3,14 +3,7 @@ import type { AutonomousConfig, ConfigLoad, Source } from "../config.ts";
 import type { Exec } from "../exec.ts";
 import { task, trackers, triageContext } from "../label-triage/test-fixtures.ts";
 import type { RunContext, StepResult } from "../runner.ts";
-import type {
-    Candidate,
-    SelectionExec,
-    SelectionRequest,
-    SelectionResult,
-    WorkReader,
-    WorkTask,
-} from "./types.ts";
+import type { Candidate, SelectionExec, SelectionRequest, WorkReader, WorkTask } from "./types.ts";
 
 export function workTask(
     source: Source = "linear",
@@ -89,7 +82,7 @@ export function fakeChezmoi(data: Record<string, unknown> | string, calls: strin
 }
 
 export function fakeSelection(
-    answer: (request: SelectionRequest) => SelectionResult,
+    answer: (request: SelectionRequest) => Awaited<ReturnType<SelectionExec>>,
 ): SelectionExec & { requests: SelectionRequest[] } {
     const requests: SelectionRequest[] = [];
     const exec = (request: SelectionRequest) => {

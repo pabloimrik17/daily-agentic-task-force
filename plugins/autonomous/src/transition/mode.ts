@@ -78,7 +78,7 @@ export function proposalAutonomy(ref: TaskRef, labels: readonly string[]): Resul
     return { ok: false, error: `${ref.source} ${ref.id} in proposal ${problem}: ${expected}` };
 }
 
-export interface TransitionTask {
+interface TransitionTask {
     source: Source;
     id: string;
     title: string;
