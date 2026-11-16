@@ -3056,17 +3056,24 @@ repository and before it writes anything. The first failure makes the step
 - The repository holds an OpenSpec root, a directory `openspec`. The reason
   names the repository and the missing directory. Nothing initialises OpenSpec
   in a repository: the stage never creates the directory.
+- The repository provides the propose workflow, as the skill `openspec-propose`
+  (`.claude/skills/openspec-propose/SKILL.md`, through a link too, as OpenSpec
+  2.0 writes it) or as the command `/opsx:propose`
+  (`.claude/commands/opsx/propose.md`, which only OpenSpec 1.x writes). The
+  skill wins when both exist. The reason names both forms and tells the human
+  to update OpenSpec in that repository.
 - `openspec --version` runs. The reason names the command and the error.
 - The `handoff` skill of the `mattpocock-skills` plugin is found, as the grill-me
   stage finds its skills (see [Prerequisites](#prerequisites)). The stage reads
-  no other skill; `/opsx:propose` is the agent's own command.
+  no other skill; the propose workflow is the agent's own to run.
 - The task's context is read (see below). A read that fails names its command.
 - The open pull request of the workspace's branch is looked up. The lookup
   failing names the branch and the error.
 
-The stage's context carries the `handoff` skill's body, the task's context as
-one JSON string, and, only when the branch already has an open pull request,
-that pull request.
+The stage's context carries the `handoff` skill's body, the propose workflow's
+name as the prompt writes it (`/openspec-propose` or `/opsx:propose`), the
+task's context as one JSON string, and, only when the branch already has an
+open pull request, that pull request.
 
 ### The task's context
 
@@ -3110,8 +3117,11 @@ The proposal section tells the agent, in this order:
 1. Look first for a change that an earlier attempt of the task left in the
    workspace, committed or not, and continue it in place instead of creating
    another (see [A re-attempt](#a-re-attempt)).
-2. Otherwise run `/opsx:propose` with the task's id, title, description and
-   context, and let OpenSpec name the change.
+2. Otherwise run the propose workflow with the task's id, title, description
+   and context, and let OpenSpec name the change. The prompt names the
+   workflow as the repository provides it: the skill `/openspec-propose` when
+   it exists, the command `/opsx:propose` otherwise, and the same name in every
+   mention.
 3. Write exactly one proposal for the whole task, and say in the stage summary
    when it is too large.
 4. Edit no project code: only the change's artifacts and the glossary and ADR
@@ -3196,8 +3206,9 @@ prompt has no blocked section: the agent asks the human.
 One task ends with one OpenSpec change and one pull request. A new attempt of
 the task reuses the branch of the earlier ones, and so its workspace. The prompt tells the agent to look
 for a change an earlier attempt left there, one that names the task or that the
-branch added, committed or not, and to update it in place. It does not run
-`/opsx:propose` for a task that already has a change. The branch's open pull
+branch added, committed or not, and to update it in place. It does not run the
+propose workflow, `/openspec-propose` or `/opsx:propose`, for a task that
+already has a change. The branch's open pull
 request, when there is one, is named in the prompt and pull-request mode finds
 it instead of opening another.
 

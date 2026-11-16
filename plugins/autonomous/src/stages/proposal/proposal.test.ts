@@ -1,4 +1,11 @@
-import { mkdirSync, mkdtempSync, readdirSync, readFileSync, writeFileSync } from "node:fs";
+import {
+    mkdirSync,
+    mkdtempSync,
+    readdirSync,
+    readFileSync,
+    symlinkSync,
+    writeFileSync,
+} from "node:fs";
 import { rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
@@ -27,7 +34,7 @@ import type { SessionSpec } from "../../sessions/manager.ts";
 import { SKILLS_PLUGIN } from "../grill-me/prompt.ts";
 import type { StageEnv, StagePromptInput } from "../stage.ts";
 import { stageEnv } from "../test-fixtures.ts";
-import { CONTEXT_KEY, HANDOFF_SKILL, PULL_REQUEST_KEY } from "./prompt.ts";
+import { CONTEXT_KEY, HANDOFF_SKILL, PULL_REQUEST_KEY, WORKFLOW_KEY } from "./prompt.ts";
 import { proposalStage } from "./stage.ts";
 
 const HANDOFF_BODY = [
@@ -112,8 +119,39 @@ function install(skills: Record<string, string> = { "productivity/handoff": HAND
     );
 }
 
-function withOpenspec(): void {
+const SKILL = "/openspec-propose";
+const COMMAND = "/opsx:propose";
+
+// How a repository provides the propose workflow: OpenSpec 1.x writes the skill and the command,
+// 2.0 only the skill, under `.agents/skills/` and linked from `.claude/skills/`.
+type Form = "skill" | "linked skill" | "command";
+
+const FORMS: Record<Form, (repo: string) => void> = {
+    skill: (repo) => {
+        writeFileAt(join(repo, ".claude", "skills", "openspec-propose", "SKILL.md"), "Propose.");
+    },
+    "linked skill": (repo) => {
+        writeFileAt(join(repo, ".agents", "skills", "openspec-propose", "SKILL.md"), "Propose.");
+        mkdirSync(join(repo, ".claude", "skills"), { recursive: true });
+        symlinkSync(
+            join("..", "..", ".agents", "skills", "openspec-propose"),
+            join(repo, ".claude", "skills", "openspec-propose"),
+        );
+    },
+    command: (repo) => {
+        writeFileAt(join(repo, ".claude", "commands", "opsx", "propose.md"), "Propose.");
+    },
+};
+
+function provide(repo: string, forms: readonly Form[]): void {
+    for (const form of forms) {
+        FORMS[form](repo);
+    }
+}
+
+function withOpenspec(forms: readonly Form[] = ["skill"]): void {
     mkdirSync(join(repository, "openspec"));
+    provide(repository, forms);
 }
 
 interface Reads {
@@ -193,10 +231,11 @@ interface PromptOptions {
     autonomy?: "AFK" | "HITL";
     context?: TaskContext;
     pullRequest?: PullRequest;
+    workflow?: string;
 }
 
 function input(options: PromptOptions = {}): StagePromptInput {
-    const { autonomy = "AFK", context = EMPTY, pullRequest } = options;
+    const { autonomy = "AFK", context = EMPTY, pullRequest, workflow = SKILL } = options;
     return {
         attempt: attempt(ATTEMPT, { source: "linear", id: "DOT-121" }),
         task: { ...AFK_TASK, labels: ["personal", autonomy, "proposal"] },
@@ -204,6 +243,7 @@ function input(options: PromptOptions = {}): StagePromptInput {
         context: {
             [HANDOFF_SKILL]: HANDOFF_BODY,
             [CONTEXT_KEY]: JSON.stringify(context),
+            [WORKFLOW_KEY]: workflow,
             ...(pullRequest === undefined
                 ? {}
                 : { [PULL_REQUEST_KEY]: JSON.stringify(pullRequest) }),
@@ -258,6 +298,7 @@ describe("launch: a proposal unit", () => {
         root = mkdtempSync(join(tmpdir(), "proposal-root-"));
         mkdirSync(join(root, "dotfiles", ".git"), { recursive: true });
         mkdirSync(join(root, "dotfiles", "openspec"));
+        provide(join(root, "dotfiles"), ["linked skill"]);
         worktree = mkdtempSync(join(tmpdir(), "proposal-worktree-"));
     });
 
@@ -374,6 +415,7 @@ describe("launch: a proposal unit", () => {
         );
         expect(written).toContain(HANDOFF_BODY);
         expect(written).toContain("Second: a later remark.");
+        expect(written).toContain(`run \`${SKILL}\` with the task and its context`);
     });
 });
 
@@ -413,6 +455,40 @@ describe("Proposal prerequisites", () => {
         expect(calls).toEqual([]);
     });
 
+    it("Repository on OpenSpec 2: finds the propose workflow as the skill openspec-propose", async () => {
+        withOpenspec(["linked skill"]);
+        install();
+
+        const ready = await proposalStage.prerequisites(env([]));
+
+        expect(readdirSync(join(repository, ".claude"))).toEqual(["skills"]);
+        expect(ready.ok ? ready.context[WORKFLOW_KEY] : reasonOf(ready)).toBe(SKILL);
+    });
+
+    it("holds naming the command /opsx:propose when the repository has only the command", async () => {
+        withOpenspec(["command"]);
+        install();
+
+        const ready = await proposalStage.prerequisites(env([]));
+
+        expect(ready.ok ? ready.context[WORKFLOW_KEY] : reasonOf(ready)).toBe(COMMAND);
+    });
+
+    it("Neither form: fails naming both forms and telling the human to update OpenSpec, and nothing else is checked", async () => {
+        const calls: string[] = [];
+        withOpenspec([]);
+        install();
+
+        const ready = await proposalStage.prerequisites(env(calls));
+
+        expect(ready).toEqual({
+            ok: false,
+            reason: `the repository ${repository} provides neither the skill openspec-propose (${join(repository, ".claude", "skills", "openspec-propose", "SKILL.md")}) nor the command /opsx:propose (${join(repository, ".claude", "commands", "opsx", "propose.md")}): update OpenSpec in that repository`,
+        });
+        expect(calls).toEqual([]);
+        expect(readdirSync(repository)).toEqual(["openspec"]);
+    });
+
     it("CLI missing: fails naming the command", async () => {
         const calls: string[] = [];
         withOpenspec();
@@ -437,7 +513,7 @@ describe("Proposal prerequisites", () => {
         expect(calls).toEqual(["openspec --version"]);
     });
 
-    it("Everything present: holds, with the handoff body, the context and the open pull request", async () => {
+    it("Everything present: holds, with the handoff body, the skill, the context and the open pull request", async () => {
         const calls: string[] = [];
         withOpenspec();
         install();
@@ -450,12 +526,18 @@ describe("Proposal prerequisites", () => {
 
         expect(ready.ok).toBe(true);
         const context = ready.ok ? ready.context : {};
-        expect(Object.keys(context).sort()).toEqual([CONTEXT_KEY, HANDOFF_SKILL, PULL_REQUEST_KEY]);
+        expect(Object.keys(context).sort()).toEqual([
+            CONTEXT_KEY,
+            HANDOFF_SKILL,
+            WORKFLOW_KEY,
+            PULL_REQUEST_KEY,
+        ]);
         expect(context[HANDOFF_SKILL]?.trim()).toBe(HANDOFF_BODY);
+        expect(context[WORKFLOW_KEY]).toBe(SKILL);
         expect(JSON.parse(context[CONTEXT_KEY] ?? "")).toEqual(FULL);
         expect(JSON.parse(context[PULL_REQUEST_KEY] ?? "")).toEqual(PULL_REQUEST);
         expect(calls).toEqual(["openspec --version", "context:DOT-121", `find:${BRANCH}`]);
-        expect(readdirSync(repository)).toEqual(["openspec"]);
+        expect(readdirSync(repository)).toEqual([".claude", "openspec"]);
     });
 
     it("holds without a pull request key when the branch has no open pull request", async () => {
@@ -467,6 +549,7 @@ describe("Proposal prerequisites", () => {
         expect(ready.ok ? Object.keys(ready.context).sort() : []).toEqual([
             CONTEXT_KEY,
             HANDOFF_SKILL,
+            WORKFLOW_KEY,
         ]);
     });
 
@@ -483,7 +566,7 @@ describe("Proposal prerequisites", () => {
             reason: "cannot read the context of linear DOT-121: linear failed: comments: network down",
         });
         expect(calls).toEqual(["openspec --version", "context:DOT-121"]);
-        expect(readdirSync(repository)).toEqual(["openspec"]);
+        expect(readdirSync(repository)).toEqual([".claude", "openspec"]);
         expect(readdirSync(join(repository, "openspec"))).toEqual([]);
     });
 
@@ -522,15 +605,69 @@ describe("The proposal prompt", () => {
         expect(sections, String(sections)).toSatisfy(ascending);
     });
 
-    it("tells the agent to run /opsx:propose with the task and its context, let OpenSpec name the change and edit no code", () => {
-        const proposal = section(prompt(), "Proposal");
+    it.each([SKILL, COMMAND])(
+        "tells the agent to run %s with the task and its context, let OpenSpec name the change and edit no code",
+        (workflow) => {
+            const proposal = section(prompt({ workflow }), "Proposal");
 
-        expect(proposal).toContain(
-            "run `/opsx:propose` with the task and its context: give it the task's id (linear:DOT-121), its title, its description and the Context section.",
-        );
-        expect(proposal).toContain("Let OpenSpec name the change; do not choose or force a name.");
-        expect(proposal).toContain("Write exactly one proposal for the whole task.");
-        expect(proposal).toContain("Edit no project code.");
+            expect(proposal).toContain(
+                `run \`${workflow}\` with the task and its context: give it the task's id (linear:DOT-121), its title, its description and the Context section.`,
+            );
+            expect(proposal).toContain(
+                "Let OpenSpec name the change; do not choose or force a name.",
+            );
+            expect(proposal).toContain("Write exactly one proposal for the whole task.");
+            expect(proposal).toContain("Edit no project code.");
+        },
+    );
+
+    // The three mentions: the AFK section, the lookup for an earlier change, and the propose step.
+    const mentions = (workflow: string) => [
+        `This holds inside \`${workflow}\` too: where it would ask, answer yourself.`,
+        `Do not run \`${workflow}\` in that case`,
+        `2. Otherwise, run \`${workflow}\` with the task and its context`,
+    ];
+
+    const count = (text: string, needle: string) => text.split(needle).length - 1;
+
+    // The prompt written from what the prerequisites read in a repository providing `forms`.
+    async function promptIn(forms: readonly Form[], autonomy: "AFK" | "HITL" = "AFK") {
+        withOpenspec(forms);
+        install();
+        const ready = await proposalStage.prerequisites(env([]));
+        expect(ready.ok, reasonOf(ready)).toBe(true);
+        const base = input({ autonomy });
+        return proposalStage.prompt({ ...base, context: ready.ok ? ready.context : {} });
+    }
+
+    it("Skill named: with both forms, every mention names the skill and none names /opsx:propose", async () => {
+        const text = await promptIn(["skill", "command"]);
+
+        for (const mention of mentions(SKILL)) {
+            expect(text).toContain(mention);
+        }
+        expect(count(text, SKILL)).toBe(3);
+        expect(text).not.toContain(COMMAND);
+    });
+
+    it("Command named: with only the command, every mention names /opsx:propose", async () => {
+        const text = await promptIn(["command"]);
+
+        for (const mention of mentions(COMMAND)) {
+            expect(text).toContain(mention);
+        }
+        expect(count(text, COMMAND)).toBe(3);
+        expect(text).not.toContain(SKILL);
+    });
+
+    it("an HITL prompt names the workflow in the lookup and the propose step", async () => {
+        const text = await promptIn(["linked skill"], "HITL");
+
+        for (const mention of mentions(SKILL).slice(1)) {
+            expect(text).toContain(mention);
+        }
+        expect(count(text, SKILL)).toBe(2);
+        expect(text).not.toContain(COMMAND);
     });
 
     it("Context in the prompt: holds both comments in order and the blocker's id, title, state and URL", () => {
@@ -708,19 +845,22 @@ describe("A proposal's commits and pushes", () => {
 });
 
 describe("A new attempt continues the work", () => {
-    it("Second attempt: looks for the earlier change first, and updates it instead of creating another", () => {
-        const proposal = section(prompt(), "Proposal");
+    it.each([SKILL, COMMAND])(
+        "Second attempt: looks for the earlier change first, and updates it instead of running %s",
+        (workflow) => {
+            const proposal = section(prompt({ workflow }), "Proposal");
 
-        const lookup =
-            "1. Before you propose anything, look for a change an earlier attempt of this task left in this workspace";
-        expect(proposal).toContain(lookup);
-        expect(proposal).toContain(
-            "If you find one, continue it: read its artifacts, then finish and correct them in place. Do not run `/opsx:propose` in that case, because it would create a second change, and one task ends with one OpenSpec change and one pull request.",
-        );
-        expect(positions(proposal, [lookup, "2. Otherwise, run `/opsx:propose`"])).toSatisfy(
-            ascending,
-        );
-    });
+            const lookup =
+                "1. Before you propose anything, look for a change an earlier attempt of this task left in this workspace";
+            expect(proposal).toContain(lookup);
+            expect(proposal).toContain(
+                `If you find one, continue it: read its artifacts, then finish and correct them in place. Do not run \`${workflow}\` in that case, because it would create a second change, and one task ends with one OpenSpec change and one pull request.`,
+            );
+            expect(positions(proposal, [lookup, `2. Otherwise, run \`${workflow}\``])).toSatisfy(
+                ascending,
+            );
+        },
+    );
 });
 
 describe("A blocked AFK agent ends without a transition", () => {
