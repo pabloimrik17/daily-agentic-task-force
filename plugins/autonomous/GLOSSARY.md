@@ -37,6 +37,17 @@ proposal committed on the task's branch, in a draft pull request, and the task
 ready to implement.
 _Avoid_: propose stage, proposal stage
 
+**Implementation**:
+The stage that turns a task's approved proposal into code. It ends with every
+task of the proposal done, committed on the task's branch, and the task ready
+to verify.
+_Avoid_: apply, implement stage
+
+**Verification**:
+The stage that checks a task's implementation against its proposal and
+corrects what is missing.
+_Avoid_: review, code review
+
 **Proposal**:
 The planning documents of a task, written before any code: what changes and
 why, the design, the requirements it adds or changes, and the tasks to
@@ -175,6 +186,16 @@ _Avoid_: human slot
 **Work slot**:
 A slot occupied by an attempt of any stage other than the grill.
 
+**Orchestrator**:
+The agent of an implementation session. It shares the proposal's tasks out
+among teammates and is the only one that commits their work.
+_Avoid_: main agent, lead
+
+**Teammate**:
+An agent the orchestrator starts within its session for one block of work,
+with the model and effort that block needs. It never commits.
+_Avoid_: subagent, worker
+
 **Stage contract**:
 What a stage declares: its id, its emoji, its prerequisites, its prompt for a
 task, its agent arguments and its completion check against the task's tracker.
@@ -225,11 +246,12 @@ the whole life of the task, and provisional while the task is in its grill.
 _Avoid_: participation mode
 
 **Stage label**:
-Where a task is in the process: `grill-me`, `proposal` or `implement`. Every
-task has exactly one, and each transition replaces it. A task whose autonomy is
-decided starts at `proposal`, a task in `grill-me` moves to `proposal` when the
-grill ends, and a task in `proposal` moves to `implement` when its proposal
-preparation ends.
+Where a task is in the process: `grill-me`, `proposal`, `implement` or
+`verify`. Every task has exactly one, and each transition replaces it. A task
+whose autonomy is decided starts at `proposal`, a task in `grill-me` moves to
+`proposal` when the grill ends, a task in `proposal` moves to `implement` when
+its proposal preparation ends, and a task in `implement` moves to `verify` when
+its implementation ends.
 
 **Taken label**:
 `taken`: marks a taken task for as long as an agent or a person advances it.
@@ -256,7 +278,7 @@ to the human.
 A task leaving its stage: its stage label is replaced and, when the stage
 decided it, its autonomy label is set. It follows the human's answer to a
 question at the end of the stage, except when an `AFK` task leaves proposal
-preparation, which needs no answer. A script applies it.
+preparation or implementation, which needs no answer. A script applies it.
 
 ### Talking to the human
 
