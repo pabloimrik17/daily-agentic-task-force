@@ -77,7 +77,7 @@ The gate SHALL count as a Claude account every provider whose key is `claude` or
 
 #### Scenario: No Claude account
 
-- **WHEN** OpenUsage exits 0 with a document that has no Claude account
+- **WHEN** OpenUsage exits 0 with a document that has no Claude account, and Claude Code is logged in
 - **THEN** the outcome is `not-evaluable` and the reason says no Claude account was reported
 
 ### Requirement: Active account from Claude Code

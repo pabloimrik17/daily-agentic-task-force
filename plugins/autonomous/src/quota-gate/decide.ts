@@ -1,10 +1,11 @@
 import type { StepOutcome } from "../runner.ts";
-import type { OpenUsageProvider, OpenUsageResource } from "./parse.ts";
 import { type Projection, project } from "./project.ts";
-
-const EVALUATED_WINDOWS = ["session", "weekly"] as const;
-
-type WindowName = (typeof EVALUATED_WINDOWS)[number];
+import {
+    EVALUATED_WINDOWS,
+    type QuotaAccount,
+    type QuotaResource,
+    type WindowName,
+} from "./source.ts";
 
 export interface WindowReport {
     name: WindowName;
@@ -33,6 +34,7 @@ export interface OtherResource {
 
 export interface AccountReport {
     key: string;
+    email: string | null;
     displayName: string;
     plan: string | null;
     fetchedAt: string;
@@ -49,10 +51,10 @@ export interface Evaluation {
 
 export function evaluateAccount(
     account: AccountReport,
-    provider: OpenUsageProvider,
+    quota: QuotaAccount,
     now: Date,
 ): Evaluation {
-    const { resources } = provider;
+    const { resources } = quota;
     const windows = EVALUATED_WINDOWS.map((name) => evaluateWindow(name, resources[name], now));
     const otherResources = Object.entries(resources)
         .filter(([name]) => !(EVALUATED_WINDOWS as readonly string[]).includes(name))
@@ -69,7 +71,7 @@ export function evaluateAccount(
 
 function evaluateWindow(
     name: WindowName,
-    resource: OpenUsageResource | undefined,
+    resource: QuotaResource | undefined,
     now: Date,
 ): WindowReport {
     if (resource === undefined) {
@@ -139,7 +141,7 @@ const UNKNOWN_VALUES: WindowValues = {
     windowSeconds: null,
 };
 
-function windowValues(resource: OpenUsageResource): WindowValues {
+function windowValues(resource: QuotaResource): WindowValues {
     return {
         used: resource.used ?? null,
         limit: resource.limit ?? null,

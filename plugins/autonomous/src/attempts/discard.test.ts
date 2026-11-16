@@ -64,7 +64,6 @@ async function withoutSleeping<T>(pending: Promise<T>): Promise<T> {
 
 function args(discard: string, releaseWorkspace = false): RunArgs {
     return {
-        account: undefined,
         task: undefined,
         stage: undefined,
         discard,

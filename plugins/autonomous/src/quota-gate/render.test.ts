@@ -1,19 +1,23 @@
 import { describe, expect, it } from "vitest";
 
+import type { Exec } from "../exec.ts";
 import { quotaGateStep } from "./step.ts";
 import {
     ACCOUNT,
+    ANA,
     balance,
     context,
     fakeExec,
+    fakeLogin,
     limits,
+    LUIS,
     provider,
     session,
     weekly,
 } from "./test-fixtures.ts";
 
-async function rendered(output: unknown, account?: string) {
-    return quotaGateStep.render(await quotaGateStep.run(context(fakeExec(output), { account })));
+async function rendered(output: unknown, login: Exec = fakeLogin(ANA)) {
+    return quotaGateStep.render(await quotaGateStep.run(context(fakeExec(output), {}, login)));
 }
 
 describe("renderQuotaGate", () => {
@@ -31,7 +35,7 @@ describe("renderQuotaGate", () => {
         expect(text).toBe(
             [
                 "[quota-gate] advance (code)",
-                `  account   ${ACCOUNT} — Claude · Personal · Pro`,
+                `  account   ${ANA} — ${ACCOUNT} · Claude · ${ANA} · Pro`,
                 "  fetched   2026-09-23T11:59:00.000Z",
                 "  session   20% / 100%  window 5h  resets 2026-09-23T15:00:00.000Z  projected 50%",
                 "  weekly    0% / 100%  window 7d  resets 2026-09-27T12:00:00.000Z  no projection: no consumption yet",
@@ -71,22 +75,44 @@ describe("renderQuotaGate", () => {
         );
     });
 
-    it("lists the accounts when none could be selected", async () => {
+    it("lists the accounts with their email addresses when none could be selected", async () => {
         const text = await rendered(
             limits({
                 [ACCOUNT]: provider({}),
                 "claude@9f8e7d6c": provider({}, { displayName: "Claude · Work" }),
             }),
+            fakeLogin(LUIS),
         );
         expect(text).toBe(
             [
                 "[quota-gate] not-evaluable (code)",
                 "  accounts:",
-                `    - ${ACCOUNT} — Claude · Personal`,
+                `    - ${ANA} — ${ACCOUNT} · Claude · ${ANA}`,
                 "    - claude@9f8e7d6c — Claude · Work",
                 "  reasons:",
-                "    - ambiguous account: 2 Claude accounts present, pass --account <provider-key>",
+                `    - the active account ${LUIS} is not reported`,
             ].join("\n"),
         );
+    });
+
+    it("names the accounts with capacity on a wait, by email address or else by id", async () => {
+        const exhausted = session(100);
+        const capacity = (displayName: string) =>
+            provider({ session: session(20), weekly: weekly(30) }, { displayName });
+        const text = await rendered(
+            limits({
+                [ACCOUNT]: provider({ session: exhausted, weekly: weekly(30) }),
+                "claude@5e6f7a8b": capacity("Claude"),
+                "claude@9f8e7d6c": capacity(`Claude · ${LUIS}`),
+            }),
+        );
+        expect(text).toMatch(/^\[quota-gate\] wait \(code\)\n {2}account {3}ana@example\.com — /);
+        expect(text.split("\n").slice(-5)).toEqual([
+            "  capacity elsewhere (Claude Code is not logged in as these):",
+            "    - claude@5e6f7a8b",
+            `    - ${LUIS}`,
+            "  reasons:",
+            `    - session window exhausted: 100/100 percent, resets at ${exhausted.resetsAt}`,
+        ]);
     });
 });

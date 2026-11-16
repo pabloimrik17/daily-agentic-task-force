@@ -5,6 +5,7 @@ import type { Exec } from "./exec.ts";
 import type { JudgementExec } from "./label-triage/judgement.ts";
 import type { TrackerFactory, Trackers } from "./label-triage/trackers/tracker.ts";
 import type { PullRequestsFactory } from "./pull-request/port.ts";
+import type { QuotaSource } from "./quota-gate/source.ts";
 import type { SelectionExec, WorkReaderFactory } from "./select/types.ts";
 import type { SessionManagerFactory } from "./sessions/manager.ts";
 import type { WorkspaceManagerFactory } from "./workspace/manager.ts";
@@ -48,7 +49,8 @@ export interface RunContext {
     config: ConfigLoad;
     results: readonly StepResult[]; // the steps that already ran, in order (design D1)
     io: {
-        openUsage: Exec;
+        quota: QuotaSource;
+        login: Exec; // claude, asked which account it is logged in as
         trackers: TrackerFactory;
         judgement: JudgementExec;
         chezmoi: Exec;

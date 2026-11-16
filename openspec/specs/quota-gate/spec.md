@@ -2,7 +2,7 @@
 
 ## Purpose
 
-Decides whether the autonomous loop may spend Claude quota now, from OpenUsage data for one unambiguously selected account, and explains the decision with values that can be checked by hand.
+Decides whether the autonomous loop may spend Claude quota now, from OpenUsage data for the active account, the one Claude Code is logged in as, and explains the decision with values that can be checked by hand.
 
 ## Requirements
 

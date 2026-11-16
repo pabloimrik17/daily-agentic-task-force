@@ -50,7 +50,17 @@ import {
     trackersWith,
 } from "./persist/test-fixtures.ts";
 import type { PullRequests } from "./pull-request/port.ts";
-import { fakeExec, limits, NOW, provider, session, weekly } from "./quota-gate/test-fixtures.ts";
+import { openUsageSource } from "./quota-gate/openusage.ts";
+import {
+    ANA,
+    fakeExec,
+    fakeLogin,
+    limits,
+    NOW,
+    provider,
+    session,
+    weekly,
+} from "./quota-gate/test-fixtures.ts";
 import { main, type MainDeps } from "./run.ts";
 import type {
     AnswerContext,
@@ -125,7 +135,8 @@ function deps(steps: readonly Step[] | undefined, overrides: Partial<MainDeps> =
     const d: MainDeps = {
         now: () => NOW,
         env: {},
-        openUsage: () => Promise.resolve({ ok: false, error: "unused" }),
+        quota: { read: () => Promise.resolve({ ok: false, error: "unused" }) },
+        login: () => Promise.resolve({ ok: false, error: "unused" }),
         trackers: () => {
             throw new Error("unused");
         },
@@ -165,8 +176,13 @@ function deps(steps: readonly Step[] | undefined, overrides: Partial<MainDeps> =
     return { d, out, err };
 }
 
-const capacity = () =>
-    fakeExec(limits({ claude: provider({ session: session(20), weekly: weekly(30) }) }));
+const CAPACITY = limits({ claude: provider({ session: session(20), weekly: weekly(30) }) });
+
+// One Claude account with capacity, and Claude Code logged in as it.
+const capacity = (openUsage = fakeExec(CAPACITY)) => ({
+    quota: openUsageSource(openUsage),
+    login: fakeLogin(ANA),
+});
 
 describe("main", () => {
     it.each<[StepOutcome, number]>([
@@ -211,6 +227,18 @@ describe("main", () => {
         expect(await main(["--nope"], d)).toBe(1);
         expect(out).toEqual([]);
         expect(err.join("\n")).toContain("Usage: /autonomous:run");
+    });
+
+    it.each([
+        ["a run", ["--account", "ana@example.com"]],
+        ["the loop", ["--loop", "--apply", "--account", "claude@1a2b3c4d"]],
+    ])("runs no step and exits 1 when --account is given to %s", async (_, argv) => {
+        const { d, out, err } = deps([fakeStep("advance")]);
+        expect(await main(argv, d)).toBe(1);
+        expect(out).toEqual([]);
+        expect(err.join("\n")).toContain(
+            "the run evaluates the account Claude Code is logged in as",
+        );
     });
 
     it("exits 1 when the runner itself fails", async () => {
@@ -356,7 +384,7 @@ describe("main --bootstrap-labels", () => {
         tracker: Tracker,
         env: Record<string, string> = { AUTONOMOUS_CONFIG: configPath },
     ) {
-        const calls = { steps: 0, openUsage: 0 };
+        const calls = { steps: 0, quota: 0 };
         const step: Step = {
             id: "counted",
             run: () => {
@@ -367,9 +395,11 @@ describe("main --bootstrap-labels", () => {
         };
         const result = deps([step], {
             env,
-            openUsage: () => {
-                calls.openUsage++;
-                return Promise.resolve({ ok: false, error: "unused" });
+            quota: {
+                read: () => {
+                    calls.quota++;
+                    return Promise.resolve({ ok: false, error: "unused" });
+                },
             },
             // Beads and GitHub are disabled in the configuration, so only Linear is reached.
             trackers: (): Trackers => ({ beads: tracker, github: tracker, linear: tracker }),
@@ -380,7 +410,7 @@ describe("main --bootstrap-labels", () => {
     it("runs only the bootstrap and prints its report", async () => {
         const { d, out, err, calls } = bootstrapDeps(linear([]));
         expect(await main(["--bootstrap-labels"], d)).toBe(0);
-        expect(calls).toEqual({ steps: 0, openUsage: 0 });
+        expect(calls).toEqual({ steps: 0, quota: 0 });
         expect(err).toEqual([]);
         expect(out).toEqual([
             [
@@ -472,7 +502,7 @@ describe("main --bootstrap-labels", () => {
         const missing = join(dir, "absent.json");
         const { d, out, err, calls } = bootstrapDeps(linear([]), { AUTONOMOUS_CONFIG: missing });
         expect(await main(["--bootstrap-labels"], d)).toBe(3);
-        expect(calls).toEqual({ steps: 0, openUsage: 0 });
+        expect(calls).toEqual({ steps: 0, quota: 0 });
         expect(out).toEqual([]);
         expect(err).toHaveLength(1);
         expect(err[0]).toContain(`configuration file not found at ${missing}`);
@@ -482,7 +512,7 @@ describe("main --bootstrap-labels", () => {
         const missing = join(dir, "absent.json");
         const { d, out, calls } = bootstrapDeps(linear([]), { AUTONOMOUS_CONFIG: missing });
         expect(await main(["--bootstrap-labels", "--json"], d)).toBe(3);
-        expect(calls).toEqual({ steps: 0, openUsage: 0 });
+        expect(calls).toEqual({ steps: 0, quota: 0 });
         expect(out).toHaveLength(1);
         expect(JSON.parse(out[0] as string)).toEqual({
             schema: "autonomous.bootstrap.v1",
@@ -503,7 +533,7 @@ describe("main --bootstrap-labels", () => {
             AUTONOMOUS_STATE: dir,
         });
         expect(await main(["--bootstrap-labels"], d)).toBe(0);
-        expect(calls).toEqual({ steps: 0, openUsage: 0 });
+        expect(calls).toEqual({ steps: 0, quota: 0 });
     });
 
     it("exits 1 when the bootstrap itself fails", async () => {
@@ -549,7 +579,7 @@ describe("main --triage-questions", () => {
     ) {
         const calls: string[] = [];
         const judged = fakeJudgement(() => ({ ok: false, error: "judgement was not expected" }));
-        const counts = { steps: 0, openUsage: 0 };
+        const counts = { steps: 0, quota: 0 };
         const step: Step = {
             id: "counted",
             run: () => {
@@ -560,9 +590,11 @@ describe("main --triage-questions", () => {
         };
         const result = deps([step], {
             env,
-            openUsage: () => {
-                counts.openUsage++;
-                return Promise.resolve({ ok: false, error: "unused" });
+            quota: {
+                read: () => {
+                    counts.quota++;
+                    return Promise.resolve({ ok: false, error: "unused" });
+                },
             },
             judgement: judged,
             trackers: () => trackers(calls, { linear: listing }),
@@ -576,7 +608,7 @@ describe("main --triage-questions", () => {
             task("linear", "DOT-9", []),
         ]);
         expect(await main(["--triage-questions"], d)).toBe(0);
-        expect(counts).toEqual({ steps: 0, openUsage: 0 });
+        expect(counts).toEqual({ steps: 0, quota: 0 });
         expect(judged.requests).toEqual([]);
         // Linear lists no description, so each marked task is read for its own; the unmarked
         // one is not, and nothing is written.
@@ -701,7 +733,7 @@ describe("main with the real steps", () => {
         const missing = join(dir, "absent.json");
         const { d, out } = deps(undefined, {
             env: { AUTONOMOUS_CONFIG: missing },
-            openUsage: capacity(),
+            ...capacity(),
         });
         expect(await main(["--json"], d)).toBe(3);
         const report = JSON.parse(out[0] as string) as {
@@ -758,7 +790,7 @@ describe("main with the real steps", () => {
         const calls: string[] = [];
         const { d, out, err } = deps(undefined, {
             env: { AUTONOMOUS_CONFIG: configPath, HOME: dir },
-            openUsage: capacity(),
+            ...capacity(),
             trackers: emptyTrackers,
             judgement: () => {
                 judged++;
@@ -785,7 +817,7 @@ describe("main with the real steps", () => {
     it("runs reconcile, capacity, quota-gate, label-triage, select and launch, in that order", async () => {
         const { d, out } = deps(undefined, {
             env: { AUTONOMOUS_CONFIG: configPath, HOME: dir },
-            openUsage: capacity(),
+            ...capacity(),
             trackers: emptyTrackers,
             ...selecting([]),
         });
@@ -804,7 +836,7 @@ describe("main with the real steps", () => {
     it("runs reconcile, capacity, quota-gate and launch with --task", async () => {
         const { d, out } = deps(undefined, {
             env: { AUTONOMOUS_CONFIG: configPath, HOME: dir },
-            openUsage: capacity(),
+            ...capacity(),
             trackers: emptyTrackers,
             ...selecting([]),
         });
@@ -822,7 +854,7 @@ describe("main with the real steps", () => {
         const calls: string[] = [];
         const { d, out } = deps(undefined, {
             env: { AUTONOMOUS_CONFIG: configPath, HOME: dir },
-            openUsage: capacity(),
+            ...capacity(),
             trackers: () => trackers(calls, { beads: "bd list --json: bd CLI not found on PATH" }),
             ...selecting(calls),
         });
@@ -843,7 +875,7 @@ describe("main with the real steps", () => {
         const calls: string[] = [];
         const { d, out } = deps(undefined, {
             env: { AUTONOMOUS_CONFIG: configPath, HOME: dir },
-            openUsage: capacity(),
+            ...capacity(),
             // Every listed task is complete, so label-triage has nothing to write or ask either.
             trackers: () =>
                 trackers(calls, { beads: [task("beads", "B-7", ["personal", "grill-me"])] }),
@@ -860,7 +892,7 @@ describe("main with the real steps", () => {
         const calls: string[] = [];
         const { d, out } = deps(undefined, {
             env: { AUTONOMOUS_CONFIG: configPath, HOME: dir },
-            openUsage: capacity(),
+            ...capacity(),
             trackers: emptyTrackers,
             ...selecting(calls),
         });
@@ -911,7 +943,7 @@ describe("main with the real steps", () => {
         const calls: string[] = [];
         const { d, out } = deps(undefined, {
             env: { AUTONOMOUS_CONFIG: configPath, HOME: dir },
-            openUsage: capacity(),
+            ...capacity(),
             trackers: emptyTrackers,
             ...selecting(calls),
         });
@@ -991,9 +1023,11 @@ describe("main --answer", () => {
         const fake = trackers([], {});
         const result = deps(steps, {
             env,
-            openUsage: () => {
-                log.push("openUsage");
-                return Promise.resolve({ ok: false, error: "unused" });
+            quota: {
+                read: () => {
+                    log.push("quota");
+                    return Promise.resolve({ ok: false, error: "unused" });
+                },
             },
             judgement: () => {
                 log.push("judgement");
@@ -1231,10 +1265,10 @@ describe("main --answer", () => {
                 autonomy: { labels: ["HITL"], confidence: 0.8, reason: "needs a decision" },
             })),
         }));
-        const openUsage = capacity();
+        const openUsage = fakeExec(CAPACITY);
         const shared = {
             env: { AUTONOMOUS_CONFIG: configPath, HOME: dir },
-            openUsage,
+            ...capacity(openUsage),
             trackers: () => fake,
             judgement,
             // B-1 still lacks its autonomy group, so select advances on another, complete task.
@@ -1314,9 +1348,11 @@ describe("main --transition", () => {
         };
         const result = deps([step], {
             env,
-            openUsage: () => {
-                log.push("openUsage");
-                return Promise.resolve({ ok: false, error: "unused" });
+            quota: {
+                read: () => {
+                    log.push("quota");
+                    return Promise.resolve({ ok: false, error: "unused" });
+                },
             },
             trackers: () => {
                 log.push("trackers");
@@ -1537,9 +1573,11 @@ describe("main --persist", () => {
         };
         const result = deps([step], {
             env: { AUTONOMOUS_CONFIG: configPath, AUTONOMOUS_STATE: stateDir, ...env },
-            openUsage: () => {
-                log.push("openUsage");
-                return Promise.resolve({ ok: false, error: "unused" });
+            quota: {
+                read: () => {
+                    log.push("quota");
+                    return Promise.resolve({ ok: false, error: "unused" });
+                },
             },
             trackers: () => {
                 log.push("trackers");

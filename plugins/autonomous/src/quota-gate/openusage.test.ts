@@ -3,9 +3,10 @@ import type { ExecFileException } from "node:child_process";
 import { describe, expect, it } from "vitest";
 
 import { CLI_TIMEOUT_MS, toExecResult as sharedToExecResult } from "../exec.ts";
-import { readOpenUsage } from "./openusage.ts";
+import { openUsageSource, readOpenUsage } from "./openusage.ts";
 import {
     ACCOUNT,
+    ANA,
     balance,
     exitExec,
     fakeExec,
@@ -13,6 +14,7 @@ import {
     nothingFetchedDocument,
     nothingFetchedStderr,
     provider,
+    quotaAccounts,
     session,
     weekly,
 } from "./test-fixtures.ts";
@@ -196,5 +198,62 @@ describe("readOpenUsage after a non-zero exit", () => {
             ok: false,
             error: "openusage failed: openusage: Unknown provider: claude (exit 2)",
         });
+    });
+});
+
+describe("openUsageSource", () => {
+    const named = (displayName: string) =>
+        provider({ session: session(20), weekly: weekly(30) }, { displayName });
+
+    it("takes the email address after the last separator of the display name", async () => {
+        const [account] = await quotaAccounts({ [ACCOUNT]: named(`Claude · ${ANA}`) });
+        const read = await readOpenUsage(fakeExec(valid));
+        expect(account).toEqual({
+            id: ACCOUNT,
+            email: ANA,
+            displayName: `Claude · ${ANA}`,
+            plan: "Pro",
+            fetchedAt: "2026-09-23T11:59:00.000Z",
+            expiresAt: "2026-09-23T12:04:00.000Z",
+            stale: false,
+            resources: read.ok ? read.limits.providers[ACCOUNT]?.resources : null,
+        });
+    });
+
+    it.each([
+        ["no separator", "Claude"],
+        ["no @ after the last separator", "Claude · Personal"],
+        ["the address before the last separator", `Claude · ${ANA} · Work`],
+    ])("has no email address with %s", async (_name, displayName) => {
+        const [account] = await quotaAccounts({ [ACCOUNT]: named(displayName) });
+        expect(account?.email).toBeNull();
+    });
+
+    it("keeps only the Claude accounts, ordered by id, and a missing plan as null", async () => {
+        const { plan: _plan, ...noPlan } = named(`Claude · ${ANA}`);
+        const accounts = await quotaAccounts({
+            "codex@0a0b0c0d": named("Codex · ana@example.com"),
+            "claude@9f8e7d6c": named(`Claude · ${ANA}`),
+            claude: noPlan,
+        });
+        expect(accounts.map((a) => [a.id, a.plan])).toEqual([
+            ["claude", null],
+            ["claude@9f8e7d6c", "Pro"],
+        ]);
+    });
+
+    it("reads OpenUsage once, for the Claude accounts", async () => {
+        const exec = fakeExec(valid);
+        await openUsageSource(exec).read();
+        expect(exec.calls).toEqual([["claude"]]);
+    });
+
+    it.each([
+        ["a CLI failure", () => Promise.resolve({ ok: false as const, error: "boom" })],
+        ["output after a non-zero exit", exitExec(JSON.stringify(valid), nothingFetchedStderr)],
+        ["output that is not JSON", () => Promise.resolve({ ok: true as const, stdout: "{" })],
+        ["a contract violation", fakeExec({ ...valid, schema: "openusage.limits.v3" })],
+    ])("keeps the reason of %s", async (_name, exec) => {
+        expect(await openUsageSource(exec).read()).toEqual(await readOpenUsage(exec));
     });
 });

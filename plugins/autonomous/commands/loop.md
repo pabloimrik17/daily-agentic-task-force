@@ -1,6 +1,6 @@
 ---
 description: Run the autonomous loop's iterations at a fixed interval under the slot limits and show only its notices, or with no --apply run one dry iteration and report it; with --apply, first ask the questions of the tasks marked triage-me
-argument-hint: "[--apply] [--account <provider-key>] [--force] [--json] [--grills <n>] [--parallel <n>] [--interval <minutes>]"
+argument-hint: "[--apply] [--force] [--json] [--grills <n>] [--parallel <n>] [--interval <minutes>]"
 allowed-tools: Bash(bun:*)
 ---
 
