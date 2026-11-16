@@ -43,7 +43,7 @@ When OpenUsage exits with a non-zero code, the gate SHALL NOT read its output, a
 
 ### Requirement: Account selection
 
-The gate SHALL count as a Claude account every provider whose key is `claude` or starts with `claude@`. It SHALL evaluate the active account and no other. It SHALL NOT aggregate accounts, evaluate another account in place of the active one, or switch the active account.
+The gate SHALL count as a Claude account every provider whose key is `claude` or starts with `claude@`. The outcome SHALL come from the active account and from no other. The gate MAY evaluate another account only to report it (see "Other accounts with capacity are reported"). It SHALL NOT aggregate accounts, decide from another account in place of the active one, or switch the active account.
 
 #### Scenario: Several accounts
 
@@ -104,6 +104,11 @@ The gate SHALL read the active account by running `claude auth status`, and SHAL
 - **WHEN** `claude` cannot be executed
 - **THEN** the outcome is `not-evaluable` and the reason names the failure
 
+#### Scenario: Exit 1 with no answer
+
+- **WHEN** `claude auth status` exits 1 and prints nothing, or text that is not the expected JSON
+- **THEN** the outcome is `not-evaluable` and the reason is the CLI failure with its exit code, not a parse error
+
 #### Scenario: Unexpected output
 
 - **WHEN** `claude auth status` exits 0 and prints text that is not JSON
@@ -154,12 +159,17 @@ The gate report SHALL show the email address of the evaluated account. The JSON 
 
 ### Requirement: Other accounts with capacity are reported
 
-When the outcome is `wait`, the report SHALL list every other Claude account whose own data would give `advance`, by email address, and SHALL say that Claude Code is not logged in as any of them. The list SHALL be information only: it SHALL NOT change the outcome, and the run SHALL NOT use those accounts. With any other outcome, or when no other account would advance, the report SHALL carry no such list.
+When the outcome is `wait`, the report SHALL list every other Claude account whose own data would give `advance`, by email address, or by OpenUsage account id when it has none, and SHALL say that Claude Code is not logged in as any of them. The list SHALL be information only: it SHALL NOT change the outcome, and the run SHALL NOT use those accounts. With any other outcome, or when no other account would advance, the report SHALL carry no such list.
 
 #### Scenario: Active account exhausted, another has capacity
 
 - **WHEN** the active account `ana@example.com` has an exhausted session window, and the account `luis@example.com` has fresh, complete windows below their limits
 - **THEN** the outcome is `wait`, and the report lists `luis@example.com` as an account with capacity that Claude Code is not logged in as
+
+#### Scenario: Account with capacity and no email address
+
+- **WHEN** the active account is exhausted, and the account `claude@9f8e7d6c`, with the display name `Claude`, has fresh, complete windows below their limits
+- **THEN** the outcome is `wait`, and the report lists `claude@9f8e7d6c` as an account with capacity
 
 #### Scenario: Every account exhausted
 

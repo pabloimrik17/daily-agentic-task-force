@@ -2199,8 +2199,10 @@ a task closed in the meantime is harmless.
 ### Active-account caveat
 
 The judgement, and the comparison of the `select` step, run `claude -p` on the
-active Claude account, through the subscription the quota gate already
-checked. Both run in safe
+account Claude Code is logged in as at that moment. That is the account the
+quota gate checked, unless the login changed after the gate: the run does not
+hold the login
+([ADR 0006](docs/adr/0006-the-run-follows-the-active-account.md)). Both run in safe
 mode with no tools, no hooks, no MCP servers and no session persistence,
 because the prompt carries issue text anyone can write.
 

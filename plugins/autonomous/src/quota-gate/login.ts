@@ -7,6 +7,9 @@ import { boolean, object, ParseError } from "../validate.ts";
 
 type LoginRead = { ok: true; email: string } | { ok: false; error: string };
 
+// What the CLI printed: an answer about the login, or text that is no answer at all.
+type Status = { read: true; login: LoginRead } | { read: false; detail: string };
+
 const COMMAND = "claude auth status";
 
 function failure(result: Extract<ExecResult, { ok: false }>): string {
@@ -15,6 +18,13 @@ function failure(result: Extract<ExecResult, { ok: false }>): string {
 
 function unreadable(detail: string): LoginRead {
     return { ok: false, error: `the output of ${COMMAND} could not be read: ${detail}` };
+}
+
+function loginOf(status: Record<string, unknown>): LoginRead {
+    if (!boolean(status, "loggedIn", "$")) {
+        return { ok: false, error: `Claude Code has no login: ${COMMAND} reports loggedIn false` };
+    }
+    return emailOf(status);
 }
 
 function emailOf(status: Record<string, unknown>): LoginRead {
@@ -28,33 +38,33 @@ function emailOf(status: Record<string, unknown>): LoginRead {
     return { ok: true, email: email.trim() };
 }
 
-function parseStatus(stdout: string): LoginRead {
+function parseStatus(stdout: string): Status {
     let json: unknown;
     try {
         json = JSON.parse(stdout);
     } catch (error) {
-        return unreadable(`not valid JSON (${(error as Error).message})`);
+        return { read: false, detail: `not valid JSON (${(error as Error).message})` };
     }
     try {
-        const status = object(json, "$");
-        if (!boolean(status, "loggedIn", "$")) {
-            return {
-                ok: false,
-                error: `Claude Code has no login: ${COMMAND} reports loggedIn false`,
-            };
-        }
-        return emailOf(status);
+        return { read: true, login: loginOf(object(json, "$")) };
     } catch (error) {
-        if (error instanceof ParseError) return unreadable(error.message);
+        if (error instanceof ParseError) return { read: false, detail: error.message };
         throw error;
     }
 }
 
-// Exit 1 is how Claude Code answers "nobody is logged in", so its output is read like exit 0's;
-// any other exit is a CLI failure.
+// Exit 1 is how Claude Code answers "nobody is logged in", so its output is read like exit 0's.
+// It is also how a CLI fails, so an exit 1 that prints no answer is reported as the failure it
+// is, with its stderr. Any other exit is a CLI failure.
 export async function readLogin(exec: Exec): Promise<LoginRead> {
     const result = await exec(["auth", "status"]);
-    if (result.ok) return parseStatus(result.stdout);
-    if (result.exit?.code === 1) return parseStatus(result.exit.stdout);
+    if (result.ok) {
+        const status = parseStatus(result.stdout);
+        return status.read ? status.login : unreadable(status.detail);
+    }
+    if (result.exit?.code === 1) {
+        const status = parseStatus(result.exit.stdout);
+        if (status.read) return status.login;
+    }
     return { ok: false, error: failure(result) };
 }

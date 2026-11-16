@@ -49,6 +49,17 @@ describe("readLogin", () => {
         expect(await readLogin(answering(failure))).toEqual(failure);
     });
 
+    it.each([
+        ["nothing", ""],
+        ["text that is not JSON", "Error: unknown command"],
+        ["JSON that is no answer", "{}"],
+    ])("reports the CLI failure when exit 1 prints %s", async (_name, stdout) => {
+        expect(await readLogin(answering(exited(1, stdout)))).toEqual({
+            ok: false,
+            error: "claude failed: Command failed: claude auth status (exit 1)",
+        });
+    });
+
     it("does not read the output of another exit code, and names it", async () => {
         const result = await readLogin(answering(exited(2, JSON.stringify(authStatus(ANA)))));
         expect(result).toEqual({
