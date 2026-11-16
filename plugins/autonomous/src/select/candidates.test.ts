@@ -25,8 +25,11 @@ function evaluate(
     });
 }
 
-// `output` is what `gh issue view --json subIssues` prints for the issue.
-async function githubIssue(output: unknown) {
+const NO_NODES = { nodes: [], totalCount: 0 };
+
+// `output` is what `gh issue view --json subIssues` prints for the issue; `listed` adds
+// to what `gh issue list` prints for it, whose dependencies default to none.
+async function githubIssue(output: unknown, listed: Record<string, unknown> = {}) {
     const issue = {
         number: 1,
         title: "Synthetic issue",
@@ -34,16 +37,20 @@ async function githubIssue(output: unknown) {
         labels: [{ name: "personal" }, { name: "grill-me" }],
         updatedAt: "2026-01-01T00:00:00Z",
         state: "OPEN",
+        blockedBy: NO_NODES,
+        blocking: NO_NODES,
+        ...listed,
     };
-    const exec: Exec = (args) =>
+    const exec = vi.fn<Exec>((args) =>
         Promise.resolve({
             ok: true,
             stdout: JSON.stringify(args[1] === "list" ? [issue] : output),
-        });
+        }),
+    );
     const reader = githubWorkReader(exec, { enabled: true, repos: ["owner/repo"] });
-    const listed = await reader.list();
-    if (!listed.ok) throw new Error(listed.error);
-    return { tasks: listed.value, detail: (task: WorkTask) => reader.detail(task) };
+    const result = await reader.list();
+    if (!result.ok) throw new Error(result.error);
+    return { exec, tasks: result.value, detail: (task: WorkTask) => reader.detail(task) };
 }
 
 function triageResult(records: TriageRecord[]): StepResult<LabelTriageData> {
@@ -254,14 +261,19 @@ describe("selectCandidates", () => {
         });
     });
 
-    it("does not exclude a GitHub task as blocked, its dependencies being unevaluated", async () => {
-        const { tasks, detail } = await githubIssue({ subIssues: { nodes: [], totalCount: 0 } });
+    it("excludes a GitHub task with an open blocker as blocked, without reading detail", async () => {
+        const blocker = { number: 3, state: "OPEN", repository: { nameWithOwner: "owner/repo" } };
+        const { exec, tasks, detail } = await githubIssue(
+            { subIssues: NO_NODES },
+            { blockedBy: { nodes: [blocker], totalCount: 1 } },
+        );
 
-        expect(tasks[0]).toMatchObject({ blockedBy: null });
+        expect(tasks[0]).toMatchObject({ blockedBy: ["owner/repo#3"] });
         expect(await evaluate(tasks, { detail })).toMatchObject({
             ok: true,
-            value: { candidates: [{ task: { id: "owner/repo#1", children: [] } }], excluded: [] },
+            value: { candidates: [], excluded: [{ id: "owner/repo#1", reason: "blocked" }] },
         });
+        expect(exec.mock.calls.filter(([args]) => args[1] === "view")).toEqual([]);
     });
 
     it("excludes a GitHub issue with an open sub-issue as split", async () => {

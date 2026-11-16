@@ -1,5 +1,12 @@
 import { expect, it, vi } from "vitest";
 import type { Exec } from "../../exec.ts";
+import blockedByCut from "./fixtures/github-blockedby-cut.json";
+import blockerClosed from "./fixtures/github-blocker-closed.json";
+import blockerForeign from "./fixtures/github-blocker-foreign.json";
+import blockerHidden from "./fixtures/github-blocker-hidden.json";
+import blockerOpen from "./fixtures/github-blocker-open.json";
+import blocking from "./fixtures/github-blocking.json";
+import blockingCut from "./fixtures/github-blocking-cut.json";
 import listing from "./fixtures/github-list.json";
 import subIssues from "./fixtures/github-subissues.json";
 import { githubWorkReader } from "./github.ts";
@@ -19,7 +26,7 @@ const PARENT: WorkTask = {
     priority: null,
     project: null,
     repository: "ghrecon-ec0359/sv-issues",
-    blockedBy: null,
+    blockedBy: [],
     children: null,
     blocks: [],
 };
@@ -33,18 +40,87 @@ function withNodes(nodes: unknown[]) {
     return { subIssues: { nodes, totalCount: nodes.length } };
 }
 
-it("marks priority, blockers and children unevaluated for every GitHub task until detail", async () => {
-    const { exec, work } = reading(listing);
+it("leaves priority and children unevaluated for every GitHub task until detail", async () => {
+    const { work } = reading(listing);
     const result = await work.list();
     if (!result.ok) throw new Error(result.error);
     expect(result.value).toHaveLength(2);
     for (const task of result.value) {
         expect(task.priority).toBeNull();
-        expect(task.blockedBy).toBeNull();
         expect(task.children).toBeNull();
+        expect(task.blockedBy).toEqual([]);
         expect(task.blocks).toEqual([]);
     }
+});
+
+it("lists each configured repository once, asking for the blockers in the same call", async () => {
+    const { exec, work } = reading(listing);
+    await work.list();
     expect(exec).toHaveBeenCalledTimes(2);
+    for (const [index, repo] of CONFIG.repos.entries()) {
+        const args = exec.mock.calls[index]![0];
+        expect(args.slice(0, 4)).toEqual(["issue", "list", "--repo", repo]);
+        expect(args[args.indexOf("--json") + 1]).toBe(
+            "number,title,body,labels,updatedAt,state,blockedBy,blocking",
+        );
+    }
+});
+
+async function listOne(stdout: unknown) {
+    const exec = vi.fn<Exec>().mockResolvedValue({ ok: true, stdout: JSON.stringify(stdout) });
+    return githubWorkReader(exec, { enabled: true, repos: ["demo/one"] }).list();
+}
+
+it("has an open blocker when a blockedBy node is OPEN", async () => {
+    expect(await listOne(blockerOpen)).toMatchObject({
+        ok: true,
+        value: [{ id: "demo/one#7", blockedBy: ["demo/one#3"] }],
+    });
+});
+
+it("has no open blocker when every blocker is closed, whatever the reason", async () => {
+    expect(await listOne(blockerClosed)).toMatchObject({
+        ok: true,
+        value: [{ id: "demo/one#7", blockedBy: [] }],
+    });
+});
+
+it("counts an open blocker of a repository outside the configuration", async () => {
+    expect(await listOne(blockerForeign)).toMatchObject({
+        ok: true,
+        value: [{ id: "demo/one#7", blockedBy: ["other/elsewhere#12"] }],
+    });
+});
+
+it("blocks only the open tasks of the blocking list, from any repository", async () => {
+    expect(await listOne(blocking)).toMatchObject({
+        ok: true,
+        value: [{ id: "demo/one#3", blocks: ["demo/one#7"] }],
+    });
+});
+
+async function failure(stdout: unknown): Promise<string> {
+    const result = await listOne(stdout);
+    if (result.ok) throw new Error("expected the read to fail");
+    return result.error;
+}
+
+it("fails naming the task, the field and both counts when blockedBy is cut short", async () => {
+    expect(await failure(blockedByCut)).toContain(
+        "demo/one#7 blockedBy has totalCount 51 but 50 nodes",
+    );
+});
+
+it("fails naming the task and the field when blocking is cut short", async () => {
+    expect(await failure(blockingCut)).toContain(
+        "demo/one#7 blocking has totalCount 51 but 50 nodes",
+    );
+});
+
+it("fails naming the task when a blocker has no node, as for one the token cannot see", async () => {
+    expect(await failure(blockerHidden)).toContain(
+        "demo/one#7 blockedBy has totalCount 1 but 0 nodes",
+    );
 });
 
 it("reads the repository from each task id and no project", async () => {

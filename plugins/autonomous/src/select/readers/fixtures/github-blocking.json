@@ -1,0 +1,43 @@
+[
+    {
+        "number": 3,
+        "title": "Synthetic issue",
+        "body": "Example description",
+        "labels": [
+            {
+                "name": "personal"
+            }
+        ],
+        "updatedAt": "2026-01-01T00:00:00Z",
+        "state": "OPEN",
+        "blockedBy": {
+            "nodes": [],
+            "totalCount": 0
+        },
+        "blocking": {
+            "nodes": [
+                {
+                    "id": "I_demo_one_7",
+                    "number": 7,
+                    "title": "Blocker 7",
+                    "url": "https://github.com/demo/one/issues/7",
+                    "state": "OPEN",
+                    "repository": {
+                        "nameWithOwner": "demo/one"
+                    }
+                },
+                {
+                    "id": "I_other_elsewhere_12",
+                    "number": 12,
+                    "title": "Blocker 12",
+                    "url": "https://github.com/other/elsewhere/issues/12",
+                    "state": "CLOSED",
+                    "repository": {
+                        "nameWithOwner": "other/elsewhere"
+                    }
+                }
+            ],
+            "totalCount": 2
+        }
+    }
+]

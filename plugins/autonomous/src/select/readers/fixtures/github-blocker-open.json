@@ -1,0 +1,33 @@
+[
+    {
+        "number": 7,
+        "title": "Synthetic issue",
+        "body": "Example description",
+        "labels": [
+            {
+                "name": "personal"
+            }
+        ],
+        "updatedAt": "2026-01-01T00:00:00Z",
+        "state": "OPEN",
+        "blockedBy": {
+            "nodes": [
+                {
+                    "id": "I_demo_one_3",
+                    "number": 3,
+                    "title": "Blocker 3",
+                    "url": "https://github.com/demo/one/issues/3",
+                    "state": "OPEN",
+                    "repository": {
+                        "nameWithOwner": "demo/one"
+                    }
+                }
+            ],
+            "totalCount": 1
+        },
+        "blocking": {
+            "nodes": [],
+            "totalCount": 0
+        }
+    }
+]

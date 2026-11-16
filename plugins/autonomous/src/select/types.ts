@@ -9,7 +9,7 @@ import type { TrackerResult, TrackerTask } from "../label-triage/trackers/tracke
 export interface WorkTask extends TrackerTask {
     priority: string | null; // the tracker's own priority label; null when it has none (GitHub)
     blocks: string[]; // ids this task blocks while it is open
-    blockedBy: string[] | null; // open blockers; null: not evaluated (GitHub)
+    blockedBy: string[]; // open blockers
     children: string[] | null; // open children; null until detail reads them (GitHub, Linear)
     project: string | null; // Linear project name, read by detail; null elsewhere, when absent and before detail
     repository: string | null; // GitHub "owner/name", from the id; null elsewhere
