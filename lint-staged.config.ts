@@ -46,6 +46,7 @@ export default defineConfig({
             forStaged(ESLINT_FILES, "eslint --fix --no-warn-ignored", filenames),
         (filenames: readonly string[]): string[] =>
             forStaged(MARKDOWN_FILES, "markdownlint --config .markdownlint.jsonc --fix", filenames),
+        "oxfmt --no-error-on-unmatched-pattern",
         (filenames: readonly string[]): string[] => [
             // New-only ratchet vs the merge-base; the full-repo gate lives in push CI.
             ...whenStaged(FALLOW_FILES, "bun run fallow audit", filenames),
