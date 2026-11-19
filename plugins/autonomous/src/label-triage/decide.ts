@@ -77,20 +77,18 @@ export function markedRecords(detections: readonly Detection[]): TriageRecord[] 
             DECIDED_GROUPS.filter((group) => {
                 const state = detection.groups[group];
                 return state.status === "missing" && state.evidence.length === 0;
-            }).map(
-                (group): TriageRecord => ({
-                    source: detection.task.source,
-                    taskId: detection.task.id,
-                    title: detection.task.title,
-                    group,
-                    labels: [],
-                    confidence: null,
-                    reason: MARKED_REASON,
-                    tier: "marked",
-                    status: "asked",
-                    detail: null,
-                }),
-            ),
+            }).map((group): TriageRecord => ({
+                source: detection.task.source,
+                taskId: detection.task.id,
+                title: detection.task.title,
+                group,
+                labels: [],
+                confidence: null,
+                reason: MARKED_REASON,
+                tier: "marked",
+                status: "asked",
+                detail: null,
+            })),
         );
 }
 
