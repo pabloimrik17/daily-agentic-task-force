@@ -22,9 +22,7 @@ import {
     reauthOfferedPath,
     readActiveRun,
     resolveStateDir,
-    RUN_EXPIRY_MS,
     runDir,
-    runsDir,
     stagedPath,
     warningsPath,
 } from "./state.ts";
@@ -81,7 +79,7 @@ describe("beginRun", () => {
         writeFileSync(handoffPath(stateDir), "{}", { mode: 0o644 });
         const { runId, runDir: dir } = beginRun({ stateDir, mode: "full", now: t0 });
         expect(mode(dir)).toBe(0o700);
-        expect(mode(runsDir(stateDir))).toBe(0o700);
+        expect(mode(join(stateDir, "runs"))).toBe(0o700);
         expect(mode(activePath(stateDir))).toBe(0o600);
         expect(mode(previousPath(stateDir, runId))).toBe(0o600);
     });
@@ -132,9 +130,8 @@ describe("readActiveRun", () => {
     });
 
     it("returns null once expired, so a capture writes nothing", () => {
-        expect(RUN_EXPIRY_MS).toBe(6 * 60 * 60 * 1000);
         beginRun({ stateDir, mode: "full", now: t0 });
-        const expired = new Date(t0.getTime() + RUN_EXPIRY_MS + 1);
+        const expired = new Date(t0.getTime() + 6 * 60 * 60 * 1000 + 1);
         expect(readActiveRun({ stateDir, now: expired })).toBeNull();
     });
 

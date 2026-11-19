@@ -243,7 +243,7 @@ An attempt SHALL be open when it is `pending`, `created`, `started` or `retained
 
 ### Requirement: The launch step
 
-`/autonomous:run` SHALL run a `launch` step last, after `select`. It SHALL take the selected work unit and, before anything else, check that the stage has an implementation, that the stage's prerequisites hold, that the task read again from its tracker carries no `taken`, that no attempt of the task is open, and that a repository is inferred. A failed precondition SHALL make the step `wait` with that reason. Without `--apply` the step SHALL report what it would launch and `advance`.
+`/autonomous:run` SHALL run a `launch` step last, after `select`. It SHALL take the selected work unit and, before anything else, check that the stage has an implementation, that a repository is inferred, that the stage's prerequisites hold for the task and that repository, that the task read again from its tracker carries no `taken`, and that no attempt of the task is open. A failed precondition SHALL make the step `wait` with that reason. Without `--apply` the step SHALL report what it would launch and `advance`.
 
 #### Scenario: Stage without implementation
 
@@ -254,6 +254,16 @@ An attempt SHALL be open when it is `pending`, `created`, `started` or `retained
 
 - **WHEN** the selected unit's stage is registered and one of its prerequisites fails
 - **THEN** the step is `wait` with the prerequisite's reason, and no record, label, prompt or session is written
+
+#### Scenario: Prerequisite about the repository
+
+- **WHEN** a stage's prerequisite needs something in the task's repository and the repository lacks it
+- **THEN** the step is `wait` with a reason naming the repository and what it lacks, and nothing is written
+
+#### Scenario: No repository inferred
+
+- **WHEN** no repository is inferred for the task
+- **THEN** the step is `wait` with that reason, and the stage's prerequisites are not checked
 
 #### Scenario: Taken since selection
 
@@ -488,3 +498,31 @@ Every session manager command SHALL be bounded by the plugin's CLI time limit, a
 
 - **WHEN** preparing the worktree takes longer than 120 s
 - **THEN** the launch fails with a reason naming the workspace command, and no `taken` is written
+
+### Requirement: The attempt keeps its agent arguments
+
+The attempt's record SHALL hold the agent arguments its stage declared when the attempt was launched, so a later change to a stage does not change what an attempt reports. A record written before this requirement holds none and SHALL still be read.
+
+#### Scenario: Grill-me attempt launched
+
+- **WHEN** a grill-me attempt is launched with the `claude` tool
+- **THEN** its record holds `--model opus --effort high`
+
+#### Scenario: Older record
+
+- **WHEN** a record without agent arguments is read
+- **THEN** it parses, and its agent arguments read as not recorded
+
+### Requirement: A completed attempt without a logbook entry is noted
+
+When `reconcile` finalises an attempt whose directory holds no logbook receipt, it SHALL finalise it as any other and report a note naming the attempt and the missing entry. The note SHALL NOT change the step's outcome.
+
+#### Scenario: Task closed in the grill
+
+- **WHEN** a grill-me attempt completes because the human closed the task, with no logbook receipt
+- **THEN** the attempt is finalised and the report notes that it left no logbook entry
+
+#### Scenario: Entry published
+
+- **WHEN** a completed attempt's directory holds a logbook receipt
+- **THEN** the attempt is finalised and no note is reported

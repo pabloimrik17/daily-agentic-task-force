@@ -17,7 +17,9 @@ import {
 
 // `human`: an answer to a question of the handoff, applied in answer mode; no triage
 // report renders it.
-type Tier = "code" | "llm" | "human";
+// `marked`: a group of a task that carries `triage-me`, listed for the human without a
+// judgement.
+type Tier = "code" | "llm" | "human" | "marked";
 
 export interface Derivation {
     source: Source;
@@ -25,7 +27,7 @@ export interface Derivation {
     title: string;
     group: Group;
     labels: string[]; // what was derived (validity checked in decide)
-    confidence: number; // rules: 1
+    confidence: number | null; // rules: 1; null with tier `marked`, which judges nothing
     reason: string; // rules: the evidence detail(s); llm: the model's one sentence
     tier: Tier;
 }

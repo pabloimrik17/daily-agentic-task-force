@@ -2,8 +2,8 @@
 // file"): per-user parts of the label contract live in one JSON file outside
 // the plugin, validated strictly. A missing file, a missing required field, a
 // mistyped field or an unknown field is an error naming the path, never a
-// default. The one exception is the optional `sessions`, `workspace` and
-// `naming` blocks: a key absent from the file takes the shipped default, and
+// default. The one exception is the optional `sessions`, `workspace`,
+// `naming` and `runner` blocks: a key absent from the file takes the shipped default, and
 // the load records which keys did (design D13).
 
 import { readFileSync } from "node:fs";
@@ -14,6 +14,7 @@ import { fileURLToPath } from "node:url";
 import {
     type ContractLabel,
     isContractLabel,
+    isUngroupedLabel,
     isScope,
     type Scope,
 } from "./label-contract/contract.ts";
@@ -88,6 +89,12 @@ interface WorkspaceConfig {
 
 type NamingConfig = SelectionConfig;
 
+export interface RunnerConfig {
+    grills: number; // grill slots: open attempts at the grill-me stage
+    parallel: number; // work slots: open attempts at any other stage
+    intervalMinutes: number; // time between two iterations of the loop
+}
+
 export interface AutonomousConfig {
     schema: "autonomous.config.v1";
     sources: { linear: LinearConfig; beads: BeadsConfig; github: GithubConfig };
@@ -96,13 +103,15 @@ export interface AutonomousConfig {
     sessions: SessionsConfig;
     workspace: WorkspaceConfig;
     naming: NamingConfig;
+    runner: RunnerConfig;
 }
 
 // The shipped values of the optional blocks, as the JSON file holds them.
-export interface ConfigDefaults {
+interface ConfigDefaults {
     sessions: Json;
     workspace: Json;
     naming: Json;
+    runner: Json;
 }
 
 export type ConfigLoad =
@@ -176,7 +185,16 @@ function config(
     const root = object(input, "$");
     rejectUnknownKeys(
         root,
-        ["schema", "sources", "judgement", "selection", "sessions", "workspace", "naming"],
+        [
+            "schema",
+            "sources",
+            "judgement",
+            "selection",
+            "sessions",
+            "workspace",
+            "naming",
+            "runner",
+        ],
         "$",
     );
     const schema = string(root, "schema", "$");
@@ -211,6 +229,7 @@ function config(
 const SESSIONS_KEYS = ["tool", "profile", "binary"];
 const WORKSPACE_KEYS = ["root"];
 const NAMING_KEYS = ["model", "effort"];
+const RUNNER_KEYS = ["grills", "parallel", "intervalMinutes"];
 
 // Design D13. The filled values are validated afterwards, by the caller.
 function overlay(
@@ -237,15 +256,19 @@ function optionalConfig(
     root: Json,
     defaults: ConfigDefaults,
     home: string,
-): Pick<AutonomousConfig, "sessions" | "workspace" | "naming"> & { defaulted: string[] } {
+): Pick<AutonomousConfig, "sessions" | "workspace" | "naming" | "runner"> & {
+    defaulted: string[];
+} {
     const defaulted: string[] = [];
     const sessions = overlay(root, "sessions", SESSIONS_KEYS, defaults, defaulted);
     const workspace = overlay(root, "workspace", WORKSPACE_KEYS, defaults, defaulted);
     const naming = overlay(root, "naming", NAMING_KEYS, defaults, defaulted);
+    const runner = overlay(root, "runner", RUNNER_KEYS, defaults, defaulted);
     return {
         sessions: sessionsConfig(sessions, "$.sessions"),
         workspace: workspaceConfig(workspace, "$.workspace", home),
         naming: modelSettings(naming, "$.naming"),
+        runner: runnerConfig(runner, "$.runner"),
         defaulted,
     };
 }
@@ -290,6 +313,22 @@ function workspaceConfig(entry: Json, path: string, home: string): WorkspaceConf
     return { root: expandHome(root, home) };
 }
 
+function integerAtLeast(entry: Json, key: string, path: string, min: number): number {
+    const value = number(entry, key, path);
+    if (!Number.isInteger(value) || value < min) {
+        throw new ParseError(`${path}.${key} must be an integer >= ${min}`);
+    }
+    return value;
+}
+
+function runnerConfig(entry: Json, path: string): RunnerConfig {
+    return {
+        grills: integerAtLeast(entry, "grills", path, 0),
+        parallel: integerAtLeast(entry, "parallel", path, 0),
+        intervalMinutes: integerAtLeast(entry, "intervalMinutes", path, 1),
+    };
+}
+
 function expandHome(value: string, home: string): string {
     if (value === "~") {
         return home;
@@ -302,11 +341,12 @@ function expandHome(value: string, home: string): string {
 function readDefaults(): ConfigDefaults {
     try {
         const root = object(JSON.parse(readFileSync(DEFAULTS_PATH, "utf8")), "$");
-        rejectUnknownKeys(root, ["sessions", "workspace", "naming"], "$");
+        rejectUnknownKeys(root, ["sessions", "workspace", "naming", "runner"], "$");
         const defaults = {
             sessions: object(root.sessions, "$.sessions"),
             workspace: object(root.workspace, "$.workspace"),
             naming: object(root.naming, "$.naming"),
+            runner: object(root.runner, "$.runner"),
         };
         optionalConfig({}, defaults, "/");
         return defaults;
@@ -343,8 +383,9 @@ function aliasesValue(
     const aliasPath = `${path}.${key}`;
     const result: Partial<Record<ContractLabel, string[]>> = {};
     for (const label of Object.keys(entry)) {
-        // taken is set by hand or by an agent, never inferred, so it has no aliases.
-        if (!isContractLabel(label) || label === "taken") {
+        // A label outside the groups is set by a person or by the runner, never inferred,
+        // so it has no aliases.
+        if (!isContractLabel(label) || isUngroupedLabel(label)) {
             throw new ParseError(`${aliasPath}.${label} is not a recognised field`);
         }
         const values = stringArray(entry, label, aliasPath);

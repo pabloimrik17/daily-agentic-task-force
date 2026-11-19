@@ -2,7 +2,7 @@ import type { RunArgs } from "../args.ts";
 import { type AutonomousConfig, CONFIG_SCHEMA, type ConfigLoad, type Source } from "../config.ts";
 import { NOW } from "../quota-gate/test-fixtures.ts";
 import type { RunContext } from "../runner.ts";
-import type { JudgementExec, JudgementRequest, JudgementResult } from "./judgement.ts";
+import type { JudgementExec, JudgementRequest } from "./judgement.ts";
 import type {
     Tracker,
     TrackerLabel,
@@ -30,6 +30,7 @@ export function config(): AutonomousConfig {
         sessions: { tool: "claude", profile: null, binary: null },
         workspace: { root: "/home/me/WebstormProjects" },
         naming: { model: "haiku", effort: "low" },
+        runner: { grills: 1, parallel: 2, intervalMinutes: 10 },
     };
 }
 
@@ -154,7 +155,7 @@ export function trackers(
 }
 
 export function fakeJudgement(
-    answer: (request: JudgementRequest) => JudgementResult,
+    answer: (request: JudgementRequest) => Awaited<ReturnType<JudgementExec>>,
 ): JudgementExec & { requests: JudgementRequest[] } {
     const requests: JudgementRequest[] = [];
     const exec = (request: JudgementRequest) => {
@@ -184,7 +185,6 @@ export function triageContext(options: {
             : given;
     return {
         args: {
-            account: undefined,
             task: undefined,
             stage: undefined,
             discard: undefined,
@@ -197,13 +197,24 @@ export function triageContext(options: {
             answers: [],
             transition: undefined,
             persist: undefined,
+            pullRequest: undefined,
+            title: undefined,
+            log: undefined,
+            loop: false,
+            grills: undefined,
+            parallel: undefined,
+            interval: undefined,
+            notices: undefined,
+            triageQuestions: false,
+            stopLoop: false,
             ...options.args,
         },
         now: NOW,
         config: load,
         results: [],
         io: {
-            openUsage: () => Promise.reject(new Error("the triage never reads OpenUsage")),
+            quota: { read: () => Promise.reject(new Error("the triage never reads the quota")) },
+            login: () => Promise.reject(new Error("the triage never reads the login")),
             trackers: () => options.trackers,
             judgement: options.judgement ?? noJudgement(),
             chezmoi: () => Promise.reject(new Error("the triage never reads chezmoi")),
@@ -218,6 +229,13 @@ export function triageContext(options: {
                 throw new Error("the triage never prepares workspaces");
             },
             naming: () => Promise.reject(new Error("the triage never names sessions")),
+            context: () => {
+                throw new Error("the triage never reads context");
+            },
+            pullRequests: () => {
+                throw new Error("the triage never opens pull requests");
+            },
+            openspec: () => Promise.reject(new Error("the triage never runs openspec")),
             state: "/unused/state",
             home: "/unused/home",
         },

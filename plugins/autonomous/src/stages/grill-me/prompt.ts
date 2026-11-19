@@ -4,7 +4,7 @@
 import { dirname } from "node:path";
 
 import { type TaskKey, taskKey } from "../../attempts/record.ts";
-import { definitionPath, stageSummaryPath } from "../../attempts/state.ts";
+import { definitionPath, logbookEntryPath, stageSummaryPath } from "../../attempts/state.ts";
 import { DEFINITION_HEADING } from "../../persist/splice.ts";
 import { renderPrompt } from "../prompt.ts";
 import type { StageContext, StagePromptInput } from "../stage.ts";
@@ -21,6 +21,7 @@ interface Closing {
     task: TaskKey;
     definition: string;
     summary: string;
+    entry: string;
 }
 
 function skillBody(context: StageContext, name: string): string {
@@ -75,7 +76,7 @@ const TEMPLATE = [
     "```",
 ];
 
-function closing({ attempt, task, definition, summary }: Closing): string[] {
+function closing({ attempt, task, definition, summary, entry }: Closing): string[] {
     return [
         "### 2. Closing",
         "",
@@ -87,15 +88,19 @@ function closing({ attempt, task, definition, summary }: Closing): string[] {
         `4. Run \`/autonomous:run --apply --persist ${attempt}\`. It writes the definition into the task's description and posts the stage summary as a comment on the task. If it exits non-zero, tell the human what it reported, and do not run the transition.`,
         "5. Show the human the task's URL, or its id when the task has no URL.",
         `6. Run \`/autonomous:run --apply --transition ${task}\`. It asks the human for the task's autonomy and applies the answer.`,
-        `7. Only once the transition is applied, write the result marker. When the human answers "Later", or the answer is not applied, do not write the marker, and leave this session open.`,
+        `7. Run \`/autonomous:run --apply --pull-request ${attempt} --title "<title>"\`. It pushes the branch and opens the pull request, or finds the one already open. Write the title in this repository's own conventions: read its contributor instructions (AGENTS.md, CONTRIBUTING or the like) and its recent commit subjects first. Do not add the task's id to the title: the command appends it. If it exits non-zero, tell the human what it reported (a failed push included), and continue only as the human decides. If it reports that the task needs no pull request (the parent of a split, when the grill committed no documentation), skip step 8.`,
+        `8. Write the logbook entry's body to \`${entry}\` (described below), then run \`/autonomous:run --apply --log ${attempt}\`. It publishes the entry as a comment on the pull request. If log mode rejects the body, correct \`${entry}\` as it reports and run it again.`,
+        `9. Only once the entry is published (or step 8 was skipped because the task needs no pull request), write the result marker. When the human answers "Later" to the transition question, or the answer is not applied, do not run steps 7 to 9: open no pull request, publish no entry, do not write the marker, and leave this session open.`,
         "",
-        "The one exception: if the human decides to close the task instead of defining it, the human closes it in its tracker, or tells you to and you close it there. Then skip steps 2 to 6 (no docs commit, no definition, no persist, no transition), write the result marker with a summary saying the task was closed, and stop.",
+        "The one exception: if the human decides to close the task instead of defining it, the human closes it in its tracker, or tells you to and you close it there. Then skip steps 2 to 8 (no docs commit, no definition, no persist, no transition, no pull request, no logbook entry), write the result marker with a summary saying the task was closed, and stop.",
         "",
         `Definition template. Its first line is \`${DEFINITION_HEADING}\`, exactly:`,
         "",
         ...TEMPLATE,
         "",
         "The Proposed autonomy section only records what the grill proposes. The task's autonomy label, set by the transition in step 6, is the decision: if the human answers another autonomy, leave the definition as it is and do not run persist again.",
+        "",
+        `The logbook entry's body, in \`${entry}\`, addresses a person catching up on the pull request, not the next agent. It has these four sections, in this order, and a stage may add its own after them: \`### What I did\`, \`### Decisions\`, \`### Assumptions\` and \`### Next stage\`. It holds at most 300 words. Mark each decision as the agent's or the human's. Next stage links this task's stage summary without repeating it. \`none\` is fine for Decisions or Assumptions. Do not write the entry's header: log mode writes it.`,
     ];
 }
 
@@ -113,17 +118,17 @@ const CONSTRAINTS = [
     "### 4. Constraints",
     "",
     "- Do not prepare a proposal for this task in this session.",
-    "- Commit and push only the glossary and ADR files the grill changed, on this workspace's current branch. Open no pull request, never force a push and never pass `--no-verify`. When the grill changed no such file, commit and push nothing.",
+    "- Commit and push only the glossary and ADR files the grill changed, on this workspace's current branch. Open no pull request yourself: pull-request mode opens it. Never force a push and never pass `--no-verify`. When the grill changed no such file, commit and push nothing.",
     "- If a push fails, tell the human why, and continue only as the human decides.",
-    "- When the human confirms a split, create each subtask with the `autonomous:labelling-new-tasks` skill, as a native subtask of this task in the same tracker, through that tracker's parent option. Each subtask's description holds its own definition, in the template above, and each subtask gets its own autonomy. This task keeps the overall definition and still goes through its own persist and transition (steps 4 to 6).",
+    "- When the human confirms a split, create each subtask with the `autonomous:labelling-new-tasks` skill, as a native subtask of this task in the same tracker, through that tracker's parent option. Each subtask's description holds its own definition, in the template above, and each subtask gets its own autonomy. This task keeps the overall definition and still goes through its own persist, transition and pull-request mode (steps 4 to 7); pull-request mode opens a pull request for it only when the grill committed documentation.",
     "- Before a Linear split, tell the human how many Linear issues it creates: the free plan limits them.",
 ];
 
 const PUBLIC_ISSUE =
-    "- The issue may be public: write no absolute path and no other detail of this machine (user name, home directory, host name) in the definition or in the stage summary; use repository-relative paths and URLs.";
+    "- The issue and the pull request may be public: write no absolute path and no other detail of this machine (user name, home directory, host name) in the definition, the stage summary or the logbook entry; use repository-relative paths and URLs.";
 
 export function grillMePrompt(input: StagePromptInput): string {
-    const { attempt, task, resultPath, context } = input;
+    const { attempt, resultPath, context } = input;
     const dir = dirname(resultPath);
     const summary = stageSummaryPath(dir);
     const instructions = [
@@ -136,12 +141,13 @@ export function grillMePrompt(input: StagePromptInput): string {
             task: taskKey(attempt.task.source, attempt.task.id),
             definition: definitionPath(dir),
             summary,
+            entry: logbookEntryPath(dir),
         }),
         "",
         ...stageSummary(context, summary),
         "",
         ...CONSTRAINTS,
-        ...(task.source === "github" ? [PUBLIC_ISSUE] : []),
+        PUBLIC_ISSUE,
     ];
     return renderPrompt(input, instructions.join("\n"));
 }

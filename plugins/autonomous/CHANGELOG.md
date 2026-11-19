@@ -1,5 +1,21 @@
 # Changelog
 
+## [2.3.0](https://github.com/pabloimrik17/daily-agentic-task-force/compare/autonomous--v2.2.0...autonomous--v2.3.0) (2026-11-15)
+
+
+### Features
+
+* **autonomous:** add the loop command and slot limits ([#83](https://github.com/pabloimrik17/daily-agentic-task-force/issues/83)) ([dfd4035](https://github.com/pabloimrik17/daily-agentic-task-force/commit/dfd40354fa5861166e3c750132a356e91919e713))
+* **autonomous:** mark the tasks left for the human with triage-me ([#84](https://github.com/pabloimrik17/daily-agentic-task-force/issues/84)) ([f217b6d](https://github.com/pabloimrik17/daily-agentic-task-force/commit/f217b6deada83e3680e3f597bb7a97bd6bdd09fa))
+* **autonomous:** open a draft pull request per task and log each attempt on it ([#86](https://github.com/pabloimrik17/daily-agentic-task-force/issues/86)) ([cef2d6e](https://github.com/pabloimrik17/daily-agentic-task-force/commit/cef2d6ed5a2e79195ab838114f636530a74837a2))
+* **autonomous:** run proposal preparation as a stage ([#87](https://github.com/pabloimrik17/daily-agentic-task-force/issues/87)) ([c0daf75](https://github.com/pabloimrik17/daily-agentic-task-force/commit/c0daf758be664bdf9cc37b903c357f269653989d))
+
+
+### Bug Fixes
+
+* **autonomous:** read OpenUsage's document after an account-error exit (DOT-112) ([#73](https://github.com/pabloimrik17/daily-agentic-task-force/issues/73)) ([ce30fe5](https://github.com/pabloimrik17/daily-agentic-task-force/commit/ce30fe589dca81b5b3b44d5c860ffffc2c090c04))
+* **autonomous:** read the openusage.limits.v2 document of OpenUsage 0.8 ([#91](https://github.com/pabloimrik17/daily-agentic-task-force/issues/91)) ([4463f7f](https://github.com/pabloimrik17/daily-agentic-task-force/commit/4463f7fd3da067360c758fe0d37b6bfc3ae2d650))
+
 ## [2.2.0](https://github.com/pabloimrik17/daily-agentic-task-force/compare/autonomous--v2.1.0...autonomous--v2.2.0) (2026-11-06)
 
 

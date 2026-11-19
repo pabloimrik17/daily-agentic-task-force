@@ -24,7 +24,7 @@ function normalise(text: string): string {
 }
 
 describe("LABELS, GROUPS and COLOURS", () => {
-    it("lists exactly the seven contract labels", () => {
+    it("lists exactly the nine contract labels", () => {
         expect(LABELS).toEqual([
             "work",
             "personal",
@@ -32,7 +32,9 @@ describe("LABELS, GROUPS and COLOURS", () => {
             "HITL",
             "grill-me",
             "proposal",
+            "implement",
             "taken",
+            "triage-me",
         ]);
     });
 
@@ -40,7 +42,7 @@ describe("LABELS, GROUPS and COLOURS", () => {
         expect(GROUPS).toEqual({
             scope: ["work", "personal"],
             autonomy: ["AFK", "HITL"],
-            stage: ["grill-me", "proposal"],
+            stage: ["grill-me", "proposal", "implement"],
         });
     });
 
@@ -54,9 +56,11 @@ describe("LABELS, GROUPS and COLOURS", () => {
             HITL: "#eb5757",
             "grill-me": "#f2994a",
             proposal: "#bb87fc",
+            implement: "#26b5ce",
             work: "#2f80ed",
             personal: "#27ae60",
             taken: "#95a2b3",
+            "triage-me": "#f2c94c",
         });
     });
 
@@ -81,10 +85,24 @@ describe("LABELS, GROUPS and COLOURS", () => {
         );
     });
 
+    it("states that implement means the task has a proposal and is ready to implement", () => {
+        expect(MEANINGS.implement).toBe("The task has a proposal and is ready to implement.");
+    });
+
     it("states grill-me without any precedence over AFK and HITL", () => {
         expect(MEANINGS["grill-me"]).toBe(
             "The task must be refined with a human in a grill before anyone works on it.",
         );
+    });
+
+    it("keeps triage-me in the vocabulary, in no group, with its colour and a meaning", () => {
+        expect(LABELS).toContain("triage-me");
+        expect(isContractLabel("triage-me")).toBe(true);
+        for (const labels of Object.values(GROUPS)) {
+            expect(labels).not.toContain("triage-me");
+        }
+        expect(COLOURS["triage-me"]).toBe("#f2c94c");
+        expect(MEANINGS["triage-me"]).toBeTruthy();
     });
 
     it("states that taken means someone is advancing the task now", () => {
@@ -117,6 +135,7 @@ describe("isContractLabel", () => {
     it("accepts exact spellings", () => {
         expect(isContractLabel("grill-me")).toBe(true);
         expect(isContractLabel("proposal")).toBe(true);
+        expect(isContractLabel("implement")).toBe(true);
     });
 
     it("rejects a near-miss spelling", () => {
@@ -198,6 +217,10 @@ describe("optionsFor", () => {
     it("offers AFK and HITL only for autonomy when the task has a stage label", () => {
         expect(optionsFor("autonomy", ["personal", "proposal"])).toEqual(["AFK", "HITL"]);
         expect(optionsFor("autonomy", ["grill-me"])).toEqual(["AFK", "HITL"]);
+    });
+
+    it("Task in implement: its autonomy is AFK or HITL, never grill-me", () => {
+        expect(optionsFor("autonomy", ["personal", "implement"])).toEqual(["AFK", "HITL"]);
     });
 });
 

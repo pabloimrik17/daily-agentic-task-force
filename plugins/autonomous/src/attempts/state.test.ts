@@ -165,6 +165,36 @@ describe("parseRecord", () => {
     });
 });
 
+describe("parseRecord: agent arguments", () => {
+    const ARGS = ["--model", "opus", "--effort", "high"];
+
+    const raw = (change: (r: Record<string, unknown>) => void): Record<string, unknown> => {
+        const copy = structuredClone(record()) as unknown as Record<string, unknown>;
+        change(copy);
+        return copy;
+    };
+
+    it("Older record: a record without the key parses with agentArgs null", () => {
+        const older = raw((r) => delete r.agentArgs);
+
+        expect(parseRecord(older)).toEqual(record({ agentArgs: null }));
+    });
+
+    it("round-trips a record holding the arguments, through the file", async () => {
+        const written = record({ agentArgs: ARGS });
+        await writeRecord(state, written);
+
+        expect(parseRecord(structuredClone(written))).toEqual(written);
+        expect(await readRecord(recordPath(attemptDir(state, written.id)))).toEqual(written);
+    });
+
+    it("rejects an element that is not a string, naming the path", () => {
+        const bad = raw((r) => (r.agentArgs = ["--model", 3]));
+
+        expect(() => parseRecord(bad)).toThrow("$.agentArgs[1] must be a string");
+    });
+});
+
 describe("nextAttempt", () => {
     it("is one past the highest of that task and stage", () => {
         const records = [

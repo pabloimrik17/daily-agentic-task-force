@@ -1,7 +1,9 @@
 import {
     copyFileSync,
     existsSync,
+    mkdirSync,
     mkdtempSync,
+    readdirSync,
     readFileSync,
     rmSync,
     writeFileSync,
@@ -13,9 +15,19 @@ import { afterAll, describe, expect, it } from "vitest";
 
 import type { Answer } from "./args.ts";
 import { fakeSessions, fakeWorkspace, record, tempState } from "./attempts/test-fixtures.ts";
-import { attemptDir, receiptPath, recordPath, writeRecord } from "./attempts/state.ts";
+import {
+    attemptDir,
+    logbookEntryPath,
+    logbookReceiptPath,
+    receiptPath,
+    recordPath,
+    writeRecord,
+} from "./attempts/state.ts";
+import { capacityStep } from "./capacity/step.ts";
 import { type AutonomousConfig, CONFIG_SCHEMA, EXAMPLE_PATH } from "./config.ts";
+import type { ContextReader } from "./context/types.ts";
 import { COLOURS, LABELS } from "./label-contract/contract.ts";
+import type { TriageQuestionsReport } from "./label-triage/questions-mode.ts";
 import {
     config,
     fakeJudgement,
@@ -27,6 +39,7 @@ import type {
     Tracker,
     TrackerLabel,
     TrackerResult,
+    TrackerTask,
     Trackers,
 } from "./label-triage/trackers/tracker.ts";
 import {
@@ -36,7 +49,18 @@ import {
     startAttempt,
     trackersWith,
 } from "./persist/test-fixtures.ts";
-import { fakeExec, limits, NOW, provider, session, weekly } from "./quota-gate/test-fixtures.ts";
+import type { PullRequests } from "./pull-request/port.ts";
+import { openUsageSource } from "./quota-gate/openusage.ts";
+import {
+    ANA,
+    fakeExec,
+    fakeLogin,
+    limits,
+    NOW,
+    provider,
+    session,
+    weekly,
+} from "./quota-gate/test-fixtures.ts";
 import { main, type MainDeps } from "./run.ts";
 import type {
     AnswerContext,
@@ -77,6 +101,15 @@ function state(): string {
     return dir;
 }
 
+const inertContext: ContextReader = {
+    source: "linear",
+    read: () => Promise.resolve({ ok: false, error: "unused" }),
+};
+
+const inertPullRequests = new Proxy({} as PullRequests, {
+    get: () => () => Promise.resolve({ ok: false, error: "unused" }),
+});
+
 // The run lock (design D12) of every run whose env does not name its own state.
 const STATE = state();
 
@@ -102,7 +135,8 @@ function deps(steps: readonly Step[] | undefined, overrides: Partial<MainDeps> =
     const d: MainDeps = {
         now: () => NOW,
         env: {},
-        openUsage: () => Promise.resolve({ ok: false, error: "unused" }),
+        quota: { read: () => Promise.resolve({ ok: false, error: "unused" }) },
+        login: () => Promise.resolve({ ok: false, error: "unused" }),
         trackers: () => {
             throw new Error("unused");
         },
@@ -119,8 +153,17 @@ function deps(steps: readonly Step[] | undefined, overrides: Partial<MainDeps> =
             throw new Error("unused");
         },
         naming: () => Promise.resolve({ ok: false, error: "unused" }),
+        // Launch builds the stage's readers before its prerequisites, so these are inert.
+        pullRequests: () => inertPullRequests,
+        context: () => ({ beads: inertContext, github: inertContext, linear: inertContext }),
+        openspec: () => Promise.resolve({ ok: false, error: "unused" }),
         stdout: (t) => out.push(t),
         stderr: (t) => err.push(t),
+        wait: () => Promise.reject(new Error("wait was not expected")),
+        stopSignal: () => new AbortController().signal,
+        signalLoop: () => {
+            throw new Error("no signal was expected");
+        },
         ...(steps === undefined ? {} : { steps }),
         ...overrides,
     };
@@ -133,8 +176,13 @@ function deps(steps: readonly Step[] | undefined, overrides: Partial<MainDeps> =
     return { d, out, err };
 }
 
-const capacity = () =>
-    fakeExec(limits({ claude: provider({ session: session(20), weekly: weekly(30) }) }));
+const CAPACITY = limits({ claude: provider({ session: session(20), weekly: weekly(30) }) });
+
+// One Claude account with capacity, and Claude Code logged in as it.
+const capacity = (openUsage = fakeExec(CAPACITY)) => ({
+    quota: openUsageSource(openUsage),
+    login: fakeLogin(ANA),
+});
 
 describe("main", () => {
     it.each<[StepOutcome, number]>([
@@ -179,6 +227,18 @@ describe("main", () => {
         expect(await main(["--nope"], d)).toBe(1);
         expect(out).toEqual([]);
         expect(err.join("\n")).toContain("Usage: /autonomous:run");
+    });
+
+    it.each([
+        ["a run", ["--account", "ana@example.com"]],
+        ["the loop", ["--loop", "--apply", "--account", "claude@1a2b3c4d"]],
+    ])("runs no step and exits 1 when --account is given to %s", async (_, argv) => {
+        const { d, out, err } = deps([fakeStep("advance")]);
+        expect(await main(argv, d)).toBe(1);
+        expect(out).toEqual([]);
+        expect(err.join("\n")).toContain(
+            "the run evaluates the account Claude Code is logged in as",
+        );
     });
 
     it("exits 1 when the runner itself fails", async () => {
@@ -324,7 +384,7 @@ describe("main --bootstrap-labels", () => {
         tracker: Tracker,
         env: Record<string, string> = { AUTONOMOUS_CONFIG: configPath },
     ) {
-        const calls = { steps: 0, openUsage: 0 };
+        const calls = { steps: 0, quota: 0 };
         const step: Step = {
             id: "counted",
             run: () => {
@@ -335,9 +395,11 @@ describe("main --bootstrap-labels", () => {
         };
         const result = deps([step], {
             env,
-            openUsage: () => {
-                calls.openUsage++;
-                return Promise.resolve({ ok: false, error: "unused" });
+            quota: {
+                read: () => {
+                    calls.quota++;
+                    return Promise.resolve({ ok: false, error: "unused" });
+                },
             },
             // Beads and GitHub are disabled in the configuration, so only Linear is reached.
             trackers: (): Trackers => ({ beads: tracker, github: tracker, linear: tracker }),
@@ -348,13 +410,13 @@ describe("main --bootstrap-labels", () => {
     it("runs only the bootstrap and prints its report", async () => {
         const { d, out, err, calls } = bootstrapDeps(linear([]));
         expect(await main(["--bootstrap-labels"], d)).toBe(0);
-        expect(calls).toEqual({ steps: 0, openUsage: 0 });
+        expect(calls).toEqual({ steps: 0, quota: 0 });
         expect(err).toEqual([]);
         expect(out).toEqual([
             [
                 `label bootstrap — started ${NOW.toISOString()}`,
                 "outcome: advance",
-                "  linear    workspace: created work, personal, AFK, HITL, grill-me, proposal, taken",
+                "  linear    workspace: created work, personal, AFK, HITL, grill-me, proposal, implement, taken, triage-me",
             ].join("\n"),
         ]);
     });
@@ -389,7 +451,7 @@ describe("main --bootstrap-labels", () => {
             [
                 `label bootstrap — started ${NOW.toISOString()}`,
                 "outcome: not-evaluable",
-                `  linear    workspace: present work, personal, AFK, HITL, grill-me, taken; failed proposal (${error})`,
+                `  linear    workspace: present work, personal, AFK, HITL, grill-me, implement, taken, triage-me; failed proposal (${error})`,
             ].join("\n"),
         ]);
     });
@@ -402,7 +464,7 @@ describe("main --bootstrap-labels", () => {
             [
                 `label bootstrap — started ${NOW.toISOString()}`,
                 "outcome: advance",
-                "  linear    workspace: recoloured AFK (was #000000); present work, personal, HITL, grill-me, proposal, taken",
+                "  linear    workspace: recoloured AFK (was #000000); present work, personal, HITL, grill-me, proposal, implement, taken, triage-me",
             ].join("\n"),
         ]);
     });
@@ -431,7 +493,7 @@ describe("main --bootstrap-labels", () => {
             [
                 `label bootstrap — started ${NOW.toISOString()}`,
                 "outcome: not-evaluable",
-                `  linear    workspace: present work, personal, HITL, grill-me, proposal, taken; failed AFK (${error})`,
+                `  linear    workspace: present work, personal, HITL, grill-me, proposal, implement, taken, triage-me; failed AFK (${error})`,
             ].join("\n"),
         ]);
     });
@@ -440,7 +502,7 @@ describe("main --bootstrap-labels", () => {
         const missing = join(dir, "absent.json");
         const { d, out, err, calls } = bootstrapDeps(linear([]), { AUTONOMOUS_CONFIG: missing });
         expect(await main(["--bootstrap-labels"], d)).toBe(3);
-        expect(calls).toEqual({ steps: 0, openUsage: 0 });
+        expect(calls).toEqual({ steps: 0, quota: 0 });
         expect(out).toEqual([]);
         expect(err).toHaveLength(1);
         expect(err[0]).toContain(`configuration file not found at ${missing}`);
@@ -450,7 +512,7 @@ describe("main --bootstrap-labels", () => {
         const missing = join(dir, "absent.json");
         const { d, out, calls } = bootstrapDeps(linear([]), { AUTONOMOUS_CONFIG: missing });
         expect(await main(["--bootstrap-labels", "--json"], d)).toBe(3);
-        expect(calls).toEqual({ steps: 0, openUsage: 0 });
+        expect(calls).toEqual({ steps: 0, quota: 0 });
         expect(out).toHaveLength(1);
         expect(JSON.parse(out[0] as string)).toEqual({
             schema: "autonomous.bootstrap.v1",
@@ -471,7 +533,7 @@ describe("main --bootstrap-labels", () => {
             AUTONOMOUS_STATE: dir,
         });
         expect(await main(["--bootstrap-labels"], d)).toBe(0);
-        expect(calls).toEqual({ steps: 0, openUsage: 0 });
+        expect(calls).toEqual({ steps: 0, quota: 0 });
     });
 
     it("exits 1 when the bootstrap itself fails", async () => {
@@ -482,10 +544,172 @@ describe("main --bootstrap-labels", () => {
     });
 });
 
+describe("main --triage-questions", () => {
+    const dir = mkdtempSync(join(tmpdir(), "autonomous-triage-questions-"));
+    const configPath = join(dir, "config.json");
+    writeFileSync(
+        configPath,
+        JSON.stringify({
+            schema: CONFIG_SCHEMA,
+            sources: {
+                linear: { enabled: true },
+                beads: { enabled: false, directory: "/repo" },
+                github: { enabled: false, repos: [] },
+            },
+            judgement: {
+                model: "claude-sonnet-5",
+                effort: "medium",
+                threshold: 0.95,
+                cap: 25,
+                batch: 20,
+            },
+            selection: { model: "sonnet", effort: "high" },
+        }),
+    );
+    afterAll(() => rmSync(dir, { recursive: true, force: true }));
+
+    // Six marked Linear tasks, each lacking the scope, and an unmarked one with a doubt.
+    const sixMarked = [1, 2, 3, 4, 5, 6].map((n) =>
+        task("linear", `DOT-${n}`, ["triage-me", "AFK", "proposal"]),
+    );
+
+    function questionsDeps(
+        listing: TrackerTask[] | string,
+        env: Record<string, string> = { AUTONOMOUS_CONFIG: configPath },
+    ) {
+        const calls: string[] = [];
+        const judged = fakeJudgement(() => ({ ok: false, error: "judgement was not expected" }));
+        const counts = { steps: 0, quota: 0 };
+        const step: Step = {
+            id: "counted",
+            run: () => {
+                counts.steps++;
+                return Promise.reject(new Error("a step ran"));
+            },
+            render: () => "",
+        };
+        const result = deps([step], {
+            env,
+            quota: {
+                read: () => {
+                    counts.quota++;
+                    return Promise.resolve({ ok: false, error: "unused" });
+                },
+            },
+            judgement: judged,
+            trackers: () => trackers(calls, { linear: listing }),
+        });
+        return { ...result, calls, counts, judged };
+    }
+
+    it("Marked tasks waiting: runs no step, judges nothing, writes nothing and lists six questions", async () => {
+        const { d, out, calls, counts, judged } = questionsDeps([
+            ...sixMarked,
+            task("linear", "DOT-9", []),
+        ]);
+        expect(await main(["--triage-questions"], d)).toBe(0);
+        expect(counts).toEqual({ steps: 0, quota: 0 });
+        expect(judged.requests).toEqual([]);
+        // Linear lists no description, so each marked task is read for its own; the unmarked
+        // one is not, and nothing is written.
+        expect(calls).toEqual([
+            "linear:listTasks",
+            ...sixMarked.map(({ id }) => `linear:readTask:${id}`),
+        ]);
+        expect(out[0]).toContain("marked: 6 tasks");
+        expect(out[0]?.match(/^question /gm)).toHaveLength(6);
+        expect(out[0]?.split("\n").at(-1)).toMatch(/^handoff: /);
+    });
+
+    it("Nothing marked: says there is no marked task and exits 0", async () => {
+        const { d, out } = questionsDeps([task("linear", "DOT-1", ["AFK", "proposal"])]);
+        expect(await main(["--triage-questions"], d)).toBe(0);
+        expect(out).toEqual([
+            [
+                `triage questions — started ${NOW.toISOString()}`,
+                "outcome: advance",
+                "no marked task",
+            ].join("\n"),
+        ]);
+    });
+
+    it("prints one autonomous.triage-questions.v1 document with --json and a handoff of 4 with remaining 2", async () => {
+        const { d, out } = questionsDeps(sixMarked);
+        expect(await main(["--triage-questions", "--json"], d)).toBe(0);
+        expect(out).toHaveLength(1);
+        const report = JSON.parse(out[0] ?? "") as TriageQuestionsReport;
+        expect(report).toMatchObject({
+            schema: "autonomous.triage-questions.v1",
+            outcome: "advance",
+            marked: 6,
+        });
+        expect(report.questions).toHaveLength(6);
+        expect(report.handoff?.questions).toHaveLength(4);
+        expect(report.handoff?.remaining).toBe(2);
+    });
+
+    it("Source unreachable: the reason names Linear and the command, no question, exit 3", async () => {
+        const { d, out } = questionsDeps("linear issue query --json: linear failed: unreachable");
+        expect(await main(["--triage-questions"], d)).toBe(3);
+        expect(out[0]).toContain("outcome: not-evaluable");
+        expect(out[0]).toContain("reason: linear: linear issue query --json");
+        expect(out[0]).not.toContain("question ");
+    });
+
+    it("exits 3 with the error on stderr when the configuration cannot be loaded", async () => {
+        const missing = join(dir, "absent.json");
+        const { d, out, err, calls } = questionsDeps([], { AUTONOMOUS_CONFIG: missing });
+        expect(await main(["--triage-questions"], d)).toBe(3);
+        expect(err).toHaveLength(1);
+        expect(err[0]).toContain(missing);
+        expect(out).toEqual([]);
+        expect(calls).toEqual([]);
+    });
+
+    it("prints the missing configuration as one autonomous.triage-questions.v1 document with --json", async () => {
+        const missing = join(dir, "absent.json");
+        const { d, out } = questionsDeps([], { AUTONOMOUS_CONFIG: missing });
+        expect(await main(["--triage-questions", "--json"], d)).toBe(3);
+        expect(JSON.parse(out[0] ?? "")).toMatchObject({
+            schema: "autonomous.triage-questions.v1",
+            outcome: "not-evaluable",
+            questions: [],
+        });
+    });
+
+    it("takes no lock: another run holding it does not stop the mode", async () => {
+        const { dir: held } = heldLock();
+        const { d } = questionsDeps(sixMarked, {
+            AUTONOMOUS_CONFIG: configPath,
+            AUTONOMOUS_STATE: held,
+        });
+        expect(await main(["--triage-questions"], d)).toBe(0);
+    });
+
+    it("Combined with apply: prints a usage message and exits 1 without reading a tracker", async () => {
+        const { d, err, calls } = questionsDeps(sixMarked);
+        expect(await main(["--triage-questions", "--apply"], d)).toBe(1);
+        expect(err[0]).toContain("--triage-questions can only be combined with --json");
+        expect(calls).toEqual([]);
+    });
+
+    it("exits 1 when the mode itself fails", async () => {
+        const { d, err } = questionsDeps([]);
+        d.trackers = () => {
+            throw new Error("boom");
+        };
+        expect(await main(["--triage-questions"], d)).toBe(1);
+        expect(err).toEqual(["autonomous run failed: boom"]);
+    });
+});
+
 describe("main with the real steps", () => {
     const dir = mkdtempSync(join(tmpdir(), "autonomous-steps-"));
     const configPath = join(dir, "config.json");
     copyFileSync(EXAMPLE_PATH, configPath);
+    // The example's workspace root, under the HOME of these runs: launch infers the repository
+    // before the stage's prerequisites.
+    mkdirSync(join(dir, "WebstormProjects", "dotfiles", ".git"), { recursive: true });
     afterAll(() => rmSync(dir, { recursive: true, force: true }));
 
     function empty(source: Tracker["source"]): Tracker {
@@ -509,7 +733,7 @@ describe("main with the real steps", () => {
         const missing = join(dir, "absent.json");
         const { d, out } = deps(undefined, {
             env: { AUTONOMOUS_CONFIG: missing },
-            openUsage: capacity(),
+            ...capacity(),
         });
         expect(await main(["--json"], d)).toBe(3);
         const report = JSON.parse(out[0] as string) as {
@@ -542,7 +766,11 @@ describe("main with the real steps", () => {
                 fakeReader("beads", [workTask("beads", "B-7", ["personal", "grill-me"])], calls),
                 fakeReader(
                     "linear",
-                    [workTask("linear", "DOT-120", ["personal", "HITL", "grill-me"])],
+                    [
+                        workTask("linear", "DOT-120", ["personal", "HITL", "grill-me"], {
+                            project: "Dotfiles",
+                        }),
+                    ],
                     calls,
                 ),
             ],
@@ -562,7 +790,7 @@ describe("main with the real steps", () => {
         const calls: string[] = [];
         const { d, out, err } = deps(undefined, {
             env: { AUTONOMOUS_CONFIG: configPath, HOME: dir },
-            openUsage: capacity(),
+            ...capacity(),
             trackers: emptyTrackers,
             judgement: () => {
                 judged++;
@@ -576,6 +804,7 @@ describe("main with the real steps", () => {
         const text = out[0] as string;
         expect(text).toContain("outcome: wait");
         expect(text).toContain("[reconcile] advance (code)");
+        expect(text).toContain("[capacity] advance (code)");
         expect(text).toContain("[quota-gate] advance (code)");
         expect(text).toContain("[label-triage] advance (code)");
         expect(text).toContain("[select] advance (llm)");
@@ -585,11 +814,47 @@ describe("main with the real steps", () => {
         );
     });
 
+    it("runs reconcile, capacity, quota-gate, label-triage, select and launch, in that order", async () => {
+        const { d, out } = deps(undefined, {
+            env: { AUTONOMOUS_CONFIG: configPath, HOME: dir },
+            ...capacity(),
+            trackers: emptyTrackers,
+            ...selecting([]),
+        });
+        await main(["--json"], d);
+        const report = JSON.parse(out[0] as string) as { steps: { step: string }[] };
+        expect(report.steps.map((s) => s.step)).toEqual([
+            "reconcile",
+            "capacity",
+            "quota-gate",
+            "label-triage",
+            "select",
+            "launch",
+        ]);
+    });
+
+    it("runs reconcile, capacity, quota-gate and launch with --task", async () => {
+        const { d, out } = deps(undefined, {
+            env: { AUTONOMOUS_CONFIG: configPath, HOME: dir },
+            ...capacity(),
+            trackers: emptyTrackers,
+            ...selecting([]),
+        });
+        await main(["--json", "--task", "beads:B-7"], d);
+        const report = JSON.parse(out[0] as string) as { steps: { step: string }[] };
+        expect(report.steps.map((s) => s.step)).toEqual([
+            "reconcile",
+            "capacity",
+            "quota-gate",
+            "launch",
+        ]);
+    });
+
     it("does not run the select step when label-triage is not evaluable because bd cannot be executed", async () => {
         const calls: string[] = [];
         const { d, out } = deps(undefined, {
-            env: { AUTONOMOUS_CONFIG: configPath },
-            openUsage: capacity(),
+            env: { AUTONOMOUS_CONFIG: configPath, HOME: dir },
+            ...capacity(),
             trackers: () => trackers(calls, { beads: "bd list --json: bd CLI not found on PATH" }),
             ...selecting(calls),
         });
@@ -599,6 +864,7 @@ describe("main with the real steps", () => {
         };
         expect(report.steps.map((s) => [s.step, s.outcome])).toEqual([
             ["reconcile", "advance"],
+            ["capacity", "advance"],
             ["quota-gate", "advance"],
             ["label-triage", "not-evaluable"],
         ]);
@@ -608,8 +874,8 @@ describe("main with the real steps", () => {
     it("writes nothing and carries no question from the select step with --apply", async () => {
         const calls: string[] = [];
         const { d, out } = deps(undefined, {
-            env: { AUTONOMOUS_CONFIG: configPath },
-            openUsage: capacity(),
+            env: { AUTONOMOUS_CONFIG: configPath, HOME: dir },
+            ...capacity(),
             // Every listed task is complete, so label-triage has nothing to write or ask either.
             trackers: () =>
                 trackers(calls, { beads: [task("beads", "B-7", ["personal", "grill-me"])] }),
@@ -625,8 +891,8 @@ describe("main with the real steps", () => {
     it("carries the select step's data in the --json report", async () => {
         const calls: string[] = [];
         const { d, out } = deps(undefined, {
-            env: { AUTONOMOUS_CONFIG: configPath },
-            openUsage: capacity(),
+            env: { AUTONOMOUS_CONFIG: configPath, HOME: dir },
+            ...capacity(),
             trackers: emptyTrackers,
             ...selecting(calls),
         });
@@ -634,7 +900,7 @@ describe("main with the real steps", () => {
         const report = JSON.parse(out[0] as string) as {
             steps: { step: string; tier: string; outcome: string; data: unknown }[];
         };
-        const select = report.steps[3];
+        const select = report.steps[4];
         expect(select?.step).toBe("select");
         expect(select?.tier).toBe("llm");
         expect(select?.data).toEqual({
@@ -665,17 +931,19 @@ describe("main with the real steps", () => {
                     stage: "grill-me",
                 },
             ],
+            setAside: [],
             excluded: [],
             notEvaluated: ["github: dependencies"],
             comparison: { model: "sonnet", effort: "high" },
+            readyToClose: [],
         } satisfies SelectData);
     });
 
     it("prints an autonomous.run.v2 document that names no entry group with --json", async () => {
         const calls: string[] = [];
         const { d, out } = deps(undefined, {
-            env: { AUTONOMOUS_CONFIG: configPath },
-            openUsage: capacity(),
+            env: { AUTONOMOUS_CONFIG: configPath, HOME: dir },
+            ...capacity(),
             trackers: emptyTrackers,
             ...selecting(calls),
         });
@@ -689,9 +957,12 @@ describe("main with the real steps", () => {
 describe("main --answer", () => {
     const dir = mkdtempSync(join(tmpdir(), "autonomous-answers-"));
     const configPath = join(dir, "config.json");
+    // The workspace holds the repository B-2 names, as launch infers it before the prerequisites.
+    mkdirSync(join(dir, "dotfiles", ".git"), { recursive: true });
     // Only Beads is enabled, so the round at the end reads a single source.
     const settings: AutonomousConfig = {
         ...config(),
+        workspace: { root: dir },
         sources: {
             linear: { enabled: false },
             beads: { enabled: true, directory: "/repo" },
@@ -752,9 +1023,11 @@ describe("main --answer", () => {
         const fake = trackers([], {});
         const result = deps(steps, {
             env,
-            openUsage: () => {
-                log.push("openUsage");
-                return Promise.resolve({ ok: false, error: "unused" });
+            quota: {
+                read: () => {
+                    log.push("quota");
+                    return Promise.resolve({ ok: false, error: "unused" });
+                },
             },
             judgement: () => {
                 log.push("judgement");
@@ -992,15 +1265,21 @@ describe("main --answer", () => {
                 autonomy: { labels: ["HITL"], confidence: 0.8, reason: "needs a decision" },
             })),
         }));
-        const openUsage = capacity();
+        const openUsage = fakeExec(CAPACITY);
         const shared = {
             env: { AUTONOMOUS_CONFIG: configPath, HOME: dir },
-            openUsage,
+            ...capacity(openUsage),
             trackers: () => fake,
             judgement,
             // B-1 still lacks its autonomy group, so select advances on another, complete task.
             chezmoi: fakeChezmoi({ machineType: "personal" }, []),
-            work: () => [fakeReader("beads", [workTask("beads", "B-2", ["work", "grill-me"])], [])],
+            work: () => [
+                fakeReader(
+                    "beads",
+                    [workTask("beads", "B-2", ["work", "grill-me", "dotfiles"])],
+                    [],
+                ),
+            ],
         };
 
         // launch waits: the home holds no plugin registry for the grill-me prerequisites.
@@ -1069,9 +1348,11 @@ describe("main --transition", () => {
         };
         const result = deps([step], {
             env,
-            openUsage: () => {
-                log.push("openUsage");
-                return Promise.resolve({ ok: false, error: "unused" });
+            quota: {
+                read: () => {
+                    log.push("quota");
+                    return Promise.resolve({ ok: false, error: "unused" });
+                },
             },
             trackers: () => {
                 log.push("trackers");
@@ -1155,15 +1436,32 @@ describe("main --transition", () => {
     });
 
     it("Task not in grill-me: exits 3 with the reason and no handoff", async () => {
-        const { d, out, calls } = transitionDeps(["personal", "AFK", "proposal"]);
+        const { d, out, calls } = transitionDeps(["personal", "AFK", "implement"]);
         expect(await main(transitionArgs("--json"), d)).toBe(3);
         const report = documentOf(out);
         expect(report.outcome).toBe("not-evaluable");
         expect(report.reasons).toEqual([
-            "beads B-1 is not in grill-me (labels [personal, AFK, proposal])",
+            "beads B-1 is in neither grill-me nor proposal (labels [personal, AFK, implement])",
         ]);
         expect(report).not.toHaveProperty("handoff");
         expect(calls).toEqual(["beads:readTask:B-1"]);
+    });
+
+    it("AFK task in proposal: applies the transition, exits 0 and carries no handoff", async () => {
+        const { d, out, fake } = transitionDeps(["personal", "AFK", "proposal"], {
+            AUTONOMOUS_CONFIG: configPath,
+            AUTONOMOUS_STATE: dir,
+        });
+        expect(await main(transitionArgs("--json"), d)).toBe(0);
+        const report = documentOf(out);
+        expect(report).toMatchObject({ outcome: "advance", applied: true });
+        expect(report).not.toHaveProperty("handoff");
+        const read = await fake.beads.readTask("B-1");
+        expect(read.ok ? [...read.value.labels].sort() : []).toEqual([
+            "AFK",
+            "implement",
+            "personal",
+        ]);
     });
 
     it("Transition without apply: prints usage and exits 1", async () => {
@@ -1196,6 +1494,7 @@ describe("main --transition", () => {
             schema: "autonomous.transition.v1",
             startedAt: NOW.toISOString(),
             outcome: "not-evaluable",
+            applied: false,
             task: null,
             reasons: [],
             config: { path: missing, error: missingError },
@@ -1274,9 +1573,11 @@ describe("main --persist", () => {
         };
         const result = deps([step], {
             env: { AUTONOMOUS_CONFIG: configPath, AUTONOMOUS_STATE: stateDir, ...env },
-            openUsage: () => {
-                log.push("openUsage");
-                return Promise.resolve({ ok: false, error: "unused" });
+            quota: {
+                read: () => {
+                    log.push("quota");
+                    return Promise.resolve({ ok: false, error: "unused" });
+                },
             },
             trackers: () => {
                 log.push("trackers");
@@ -1458,6 +1759,202 @@ function named(id: string, outcome: StepOutcome, log: string[], data: unknown = 
 }
 
 const FIVE = ["reconcile", "quota-gate", "label-triage", "select", "launch"];
+
+function fakePullRequests(log: string[]): PullRequests {
+    const ok = <T>(name: string, value: T) => {
+        log.push(name);
+        return Promise.resolve({ ok: true as const, value });
+    };
+    return {
+        defaultBranch: () => ok("defaultBranch", "main"),
+        find: () => ok("find", null),
+        ahead: () => ok("ahead", 1),
+        commitsSince: () => ok("commitsSince", []),
+        emptyCommit: () => ok("emptyCommit", undefined),
+        push: () => ok("push", undefined),
+        open: ({ title }) => ok("open", { number: 7, url: "https://github.com/o/r/pull/7", title }),
+        edit: () => ok("edit", undefined),
+        comment: () => ok("comment", undefined),
+        comments: () => ok("comments", []),
+    };
+}
+
+describe("main --pull-request", () => {
+    const dir = mkdtempSync(join(tmpdir(), "autonomous-pull-request-"));
+    const configPath = join(dir, "config.json");
+    writeFileSync(configPath, JSON.stringify(config()));
+    afterAll(() => rmSync(dir, { recursive: true, force: true }));
+
+    const ATTEMPT = "linear:DOT-121:grill-me:1";
+    const TITLE = "feat(autonomous): read GitHub blockers";
+
+    async function pullRequestDeps(options: AttemptOptions = {}, env: Record<string, string> = {}) {
+        const stateDir = state();
+        await startAttempt(stateDir, options);
+        const log: string[] = [];
+        const reader = fakeReader("linear", [workTask("linear", "DOT-121")], log);
+        const result = deps([], {
+            env: { AUTONOMOUS_CONFIG: configPath, AUTONOMOUS_STATE: stateDir, ...env },
+            work: () => [reader],
+            pullRequests: (directory) => {
+                log.push(`port:${directory}`);
+                return fakePullRequests(log);
+            },
+        });
+        return { ...result, log };
+    }
+
+    it("Pull request opened: runs no step, opens the draft and exits 0", async () => {
+        const { d, out, log } = await pullRequestDeps();
+        expect(
+            await main(["--apply", "--pull-request", ATTEMPT, "--title", TITLE, "--json"], d),
+        ).toBe(0);
+        expect(out).toHaveLength(1);
+        const report = JSON.parse(out[0] as string) as {
+            schema: string;
+            pullRequest: { url: string; title: string; action: string } | null;
+        };
+        expect(report.schema).toBe("autonomous.pull-request.v1");
+        expect(report.pullRequest).toMatchObject({
+            url: "https://github.com/o/r/pull/7",
+            title: `${TITLE} (DOT-121)`,
+            action: "opened",
+        });
+        expect(log).toContain("push");
+        expect(log).toContain("open");
+    });
+
+    it("Pull-request mode without apply: usage error, exit 1", async () => {
+        const { d, out, err, log } = await pullRequestDeps();
+        expect(await main(["--pull-request", ATTEMPT], d)).toBe(1);
+        expect(out).toEqual([]);
+        expect(err.join("\n")).toContain("--pull-request requires --apply");
+        expect(log).toEqual([]);
+    });
+
+    it("Title without the mode: usage error, exit 1", async () => {
+        const { d, err } = await pullRequestDeps();
+        expect(await main(["--apply", "--title", "feat: x"], d)).toBe(1);
+        expect(err.join("\n")).toContain("--title requires --pull-request");
+    });
+
+    it("Completed attempt: nothing is pushed or opened, exit 3", async () => {
+        const { d, log } = await pullRequestDeps({ status: "completed" });
+        expect(await main(["--apply", "--pull-request", ATTEMPT, "--title", TITLE], d)).toBe(3);
+        expect(log.filter((call) => call.startsWith("port:"))).toEqual([]);
+    });
+
+    it("prints a configuration that cannot be loaded as one autonomous.pull-request.v1 document", async () => {
+        const { d, out, err } = await pullRequestDeps(
+            {},
+            { AUTONOMOUS_CONFIG: join(dir, "absent.json") },
+        );
+        expect(await main(["--apply", "--pull-request", ATTEMPT, "--json"], d)).toBe(3);
+        expect(err.join("\n")).toContain("configuration file not found");
+        expect(out).toHaveLength(1);
+        expect(JSON.parse(out[0] as string)).toMatchObject({
+            schema: "autonomous.pull-request.v1",
+            outcome: "not-evaluable",
+            pullRequest: null,
+        });
+    });
+});
+
+describe("main --log", () => {
+    const dir = mkdtempSync(join(tmpdir(), "autonomous-log-"));
+    const configPath = join(dir, "config.json");
+    writeFileSync(configPath, JSON.stringify(config()));
+    afterAll(() => rmSync(dir, { recursive: true, force: true }));
+
+    const ATTEMPT = "linear:DOT-121:grill-me:1";
+    const BODY = [
+        "### What I did",
+        "Grilled the task.",
+        "### Decisions",
+        "none",
+        "### Assumptions",
+        "none",
+        "### Next stage",
+        "See the stage summary.",
+    ].join("\n\n");
+
+    function openPullRequest(log: string[]): PullRequests {
+        const posted: string[] = [];
+        return {
+            ...fakePullRequests(log),
+            find: () => {
+                log.push("find");
+                return Promise.resolve({
+                    ok: true,
+                    value: { number: 7, url: "https://github.com/o/r/pull/7", title: "t" },
+                });
+            },
+            comment: (_number, file) => {
+                log.push("comment");
+                posted.push(readFileSync(file, "utf8"));
+                return Promise.resolve({ ok: true, value: undefined });
+            },
+            comments: () => Promise.resolve({ ok: true, value: [...posted] }),
+        };
+    }
+
+    async function logDeps(body: string | null, env: Record<string, string> = {}) {
+        const stateDir = state();
+        const { dir: attempt } = await startAttempt(stateDir);
+        if (body !== null) {
+            writeFileSync(logbookEntryPath(attempt), body);
+        }
+        const log: string[] = [];
+        const result = deps([], {
+            env: { AUTONOMOUS_CONFIG: configPath, AUTONOMOUS_STATE: stateDir, ...env },
+            trackers: () => trackersWith(fakeDocuments("linear")),
+            pullRequests: () => openPullRequest(log),
+        });
+        return { ...result, log, attempt };
+    }
+
+    it("Entry logged: runs no step, publishes, reads back, writes the receipt and exits 0", async () => {
+        const { d, out, log, attempt } = await logDeps(BODY);
+        expect(await main(["--apply", "--log", ATTEMPT, "--json"], d)).toBe(0);
+        expect(out).toHaveLength(1);
+        expect(JSON.parse(out[0] as string)).toMatchObject({
+            schema: "autonomous.log.v1",
+            outcome: "advance",
+            entry: "published",
+            receipt: logbookReceiptPath(attempt),
+        });
+        expect(log.filter((call) => call === "comment")).toHaveLength(1);
+        expect(existsSync(logbookReceiptPath(attempt))).toBe(true);
+    });
+
+    it("Log mode without apply: usage error, exit 1", async () => {
+        const { d, out, err, log } = await logDeps(BODY);
+        expect(await main(["--log", ATTEMPT], d)).toBe(1);
+        expect(out).toEqual([]);
+        expect(err.join("\n")).toContain("--log requires --apply");
+        expect(log).toEqual([]);
+    });
+
+    it("Body file missing: nothing is published, the report names the file, exit 3", async () => {
+        const { d, out, log, attempt } = await logDeps(null);
+        expect(await main(["--apply", "--log", ATTEMPT, "--json"], d)).toBe(3);
+        const report = JSON.parse(out[0] as string) as { reasons: string[]; receipt: unknown };
+        expect(report.reasons.join("\n")).toContain(logbookEntryPath(attempt));
+        expect(report.receipt).toBeNull();
+        expect(log).not.toContain("comment");
+    });
+
+    it("prints a configuration that cannot be loaded as one autonomous.log.v1 document", async () => {
+        const { d, out } = await logDeps(BODY, { AUTONOMOUS_CONFIG: join(dir, "absent.json") });
+        expect(await main(["--apply", "--log", ATTEMPT, "--json"], d)).toBe(3);
+        expect(out).toHaveLength(1);
+        expect(JSON.parse(out[0] as string)).toMatchObject({
+            schema: "autonomous.log.v1",
+            outcome: "not-evaluable",
+            receipt: null,
+        });
+    });
+});
 
 describe("main stage-session wiring", () => {
     it("runs reconcile before the quota gate and keeps its result when the gate waits", async () => {
@@ -1657,6 +2154,7 @@ describe("main --discard", () => {
             found: [],
             removed: { session: false, taken: false, workspace: false },
             reasons: [error],
+            notes: [],
         });
     });
 
@@ -1698,9 +2196,17 @@ describe("main --discard", () => {
                 sessions: undefined,
                 workspace: undefined,
                 naming: undefined,
+                runner: undefined,
             }),
         );
-        const defaulted = ["sessions.tool", "sessions.profile", "sessions.binary"];
+        const defaulted = [
+            "sessions.tool",
+            "sessions.profile",
+            "sessions.binary",
+            "runner.grills",
+            "runner.parallel",
+            "runner.intervalMinutes",
+        ];
 
         const text = await discardDeps({ AUTONOMOUS_CONFIG: bare });
         await main(argv(), text.d);
@@ -1731,11 +2237,11 @@ describe("main configuration defaults", () => {
     afterAll(() => rmSync(dir, { recursive: true, force: true }));
 
     function configFile(name: string, full: boolean): string {
-        const { sessions, workspace, naming, ...required } = config();
+        const { sessions, workspace, naming, runner, ...required } = config();
         const path = join(dir, name);
         writeFileSync(
             path,
-            JSON.stringify(full ? { ...required, sessions, workspace, naming } : required),
+            JSON.stringify(full ? { ...required, sessions, workspace, naming, runner } : required),
         );
         return path;
     }
@@ -1747,6 +2253,9 @@ describe("main configuration defaults", () => {
         "workspace.root",
         "naming.model",
         "naming.effort",
+        "runner.grills",
+        "runner.parallel",
+        "runner.intervalMinutes",
     ];
 
     it("shows the defaulted keys in the text header and in the JSON", async () => {
@@ -1777,5 +2286,276 @@ describe("main configuration defaults", () => {
         const json = deps([fakeStep("advance")], { env });
         await main(["--json"], json.d);
         expect(JSON.parse(json.out[0] as string)).not.toHaveProperty("config");
+    });
+});
+
+describe("main --loop", () => {
+    const dir = mkdtempSync(join(tmpdir(), "autonomous-loop-config-"));
+    afterAll(() => rmSync(dir, { recursive: true, force: true }));
+
+    function configFile(runner: Partial<AutonomousConfig["runner"]>): string {
+        const base = config();
+        const path = join(dir, `config-${STATES.length}.json`);
+        writeFileSync(path, JSON.stringify({ ...base, runner: { ...base.runner, ...runner } }));
+        return path;
+    }
+
+    const RECONCILED = { attempts: [], retained: [], cleanups: [], needsHuman: [], errors: [] };
+
+    // Stops the loop in the wait that follows its `iterations`-th iteration.
+    function looped(iterations: number, onWait: (n: number) => Promise<void> = async () => {}) {
+        const controller = new AbortController();
+        const waits: number[] = [];
+        return {
+            waits,
+            overrides: {
+                wait: async (ms: number) => {
+                    waits.push(ms);
+                    await onWait(waits.length);
+                    if (waits.length >= iterations) {
+                        controller.abort("received SIGTERM");
+                    }
+                },
+                stopSignal: () => controller.signal,
+            },
+        };
+    }
+
+    const read = (state: string, name: string) => readFileSync(join(state, name), "utf8");
+
+    it("logs an iteration where every kind is full and prints nothing", async () => {
+        const log: string[] = [];
+        const stateDir = state();
+        const loop = looped(2);
+        const { d, out, err } = deps(
+            [
+                named("reconcile", "advance", log, RECONCILED),
+                capacityStep,
+                named("launch", "advance", log),
+            ],
+            {
+                ...loop.overrides,
+                env: {
+                    AUTONOMOUS_STATE: stateDir,
+                    AUTONOMOUS_CONFIG: configFile({ grills: 0, parallel: 0 }),
+                },
+            },
+        );
+        expect(await main(["--loop", "--apply"], d)).toBe(0);
+        expect(log).toEqual(["reconcile", "reconcile"]);
+        expect(out).toEqual([]);
+        expect(err).toEqual([]);
+        const entries = read(stateDir, "loop.log").split(`autonomous run — started `).slice(1);
+        expect(entries).toHaveLength(2);
+        expect(entries[0]).toContain("outcome: wait");
+        expect(entries[0]).toContain("every kind of slot is full: grill slots 0/0, work slots 0/0");
+        expect(read(stateDir, "loop.notices")).toBe("loop stopped: received SIGTERM\n");
+        expect(existsSync(join(stateDir, "loop.lock"))).toBe(false);
+    });
+
+    it("writes one JSON line per iteration with --json, without a handoff", async () => {
+        const stateDir = state();
+        const loop = looped(2);
+        const asking: Step = {
+            id: "asking",
+            run: () =>
+                Promise.resolve({
+                    step: "asking",
+                    tier: "code",
+                    outcome: "advance",
+                    reasons: [],
+                    data: null,
+                    questions: [
+                        {
+                            id: "asking:1",
+                            step: "asking",
+                            header: "Q1",
+                            question: "Which scope?",
+                            options: [
+                                { label: "A", value: "a", description: "a" },
+                                { label: "Later", value: null, description: "later" },
+                            ],
+                            multiSelect: false,
+                        },
+                    ],
+                }),
+            render: () => "[asking]",
+        };
+        const { d, out } = deps([asking], {
+            ...loop.overrides,
+            env: { AUTONOMOUS_STATE: stateDir },
+        });
+        expect(await main(["--loop", "--apply", "--json"], d)).toBe(0);
+        expect(out).toEqual([]);
+        const lines = read(stateDir, "loop.log").split("\n").filter(Boolean);
+        expect(lines).toHaveLength(2);
+        for (const line of lines) {
+            const report = JSON.parse(line) as Record<string, unknown>;
+            expect(report).toMatchObject({ schema: "autonomous.run.v2", outcome: "advance" });
+            expect(report).not.toHaveProperty("handoff");
+        }
+    });
+
+    it.each<[string, string[], Partial<AutonomousConfig["runner"]> | null, number]>([
+        ["the shipped default", [], null, 10],
+        ["the file", [], { intervalMinutes: 5 }, 5],
+        ["the flag over the file", ["--interval", "30"], { intervalMinutes: 5 }, 30],
+    ])("waits the interval from %s", async (_, flags, runner, minutes) => {
+        const loop = looped(2);
+        const env = {
+            AUTONOMOUS_STATE: state(),
+            ...(runner === null ? {} : { AUTONOMOUS_CONFIG: configFile(runner) }),
+        };
+        const { d } = deps([fakeStep("advance")], { ...loop.overrides, env });
+        expect(await main(["--loop", "--apply", ...flags], d)).toBe(0);
+        expect(loop.waits).toEqual([minutes * 60_000, minutes * 60_000]);
+    });
+
+    it("goes on while a manual run holds the run lock", async () => {
+        const log: string[] = [];
+        const { dir: stateDir, error } = heldLock();
+        const loop = looped(2);
+        const { d } = deps([named("reconcile", "advance", log)], {
+            ...loop.overrides,
+            env: { AUTONOMOUS_STATE: stateDir },
+        });
+        expect(await main(["--loop", "--apply"], d)).toBe(0);
+        expect(log).toEqual([]);
+        const text = read(stateDir, "loop.log");
+        expect(text.split("outcome: not-evaluable")).toHaveLength(3);
+        expect(text).toContain(`lock: ${error}`);
+    });
+
+    it("lets a manual run execute while the loop waits", async () => {
+        const stateDir = state();
+        const manual: string[] = [];
+        const codes: number[] = [];
+        const loop = looped(1, async () => {
+            const run = deps([named("reconcile", "advance", manual)], {
+                env: { AUTONOMOUS_STATE: stateDir },
+            });
+            codes.push(await main(["--apply"], run.d));
+        });
+        const { d } = deps([fakeStep("advance")], {
+            ...loop.overrides,
+            env: { AUTONOMOUS_STATE: stateDir },
+        });
+        expect(await main(["--loop", "--apply"], d)).toBe(0);
+        expect(codes).toEqual([0]);
+        expect(manual).toEqual(["reconcile"]);
+    });
+
+    it("refuses a second loop with code 3, naming the first, and runs no iteration", async () => {
+        const log: string[] = [];
+        const stateDir = state();
+        const startedAt = "2026-11-14T08:00:00.000Z";
+        writeFileSync(join(stateDir, "loop.lock"), JSON.stringify({ pid: process.pid, startedAt }));
+        const { d, out, err } = deps([named("reconcile", "advance", log)], {
+            env: { AUTONOMOUS_STATE: stateDir },
+        });
+        expect(await main(["--loop", "--apply"], d)).toBe(3);
+        expect(log).toEqual([]);
+        expect(out).toEqual([]);
+        expect(err).toEqual([
+            `another loop holds ${join(stateDir, "loop.lock")} (pid ${process.pid}, started ${startedAt})`,
+        ]);
+    });
+
+    it("stops with code 1 and the stop notice when the runner throws", async () => {
+        const stateDir = state();
+        const broken: Step = {
+            id: "broken",
+            run: () => Promise.reject(new Error("boom")),
+            render: () => "",
+        };
+        const { d, err } = deps([broken], { env: { AUTONOMOUS_STATE: stateDir } });
+        expect(await main(["--loop", "--apply"], d)).toBe(1);
+        expect(err).toEqual(["autonomous loop failed: boom"]);
+        expect(read(stateDir, "loop.notices")).toBe("loop stopped: runner error: boom\n");
+        expect(existsSync(join(stateDir, "loop.lock"))).toBe(false);
+        expect(existsSync(join(stateDir, "run.lock"))).toBe(false);
+    });
+
+    it("runs one dry iteration without --apply, prints its report and writes nothing", async () => {
+        const log: string[] = [];
+        const stateDir = state();
+        const { d, out, err } = deps(
+            [
+                named("reconcile", "advance", log, RECONCILED),
+                capacityStep,
+                named("launch", "advance", log),
+            ],
+            {
+                env: { AUTONOMOUS_STATE: stateDir, AUTONOMOUS_CONFIG: configFile({}) },
+                stopSignal: () => {
+                    throw new Error("a dry iteration asks for no stop signal");
+                },
+            },
+        );
+        expect(await main(["--loop"], d)).toBe(0);
+        expect(log).toEqual(["reconcile", "launch"]);
+        expect(err).toEqual([]);
+        expect(out).toHaveLength(1);
+        expect(out[0]).toContain("[capacity] advance (code)");
+        expect(out[0]).toContain("grill slots 0/1  limit from file");
+        expect(out[0]).toContain("[launch] advance");
+        expect(readdirSync(stateDir)).toEqual([]);
+    });
+
+    it("exits a dry iteration with the code of its outcome", async () => {
+        const stateDir = state();
+        const { d } = deps([named("reconcile", "advance", [], RECONCILED), capacityStep], {
+            env: {
+                AUTONOMOUS_STATE: stateDir,
+                AUTONOMOUS_CONFIG: configFile({ grills: 0, parallel: 0 }),
+            },
+        });
+        expect(await main(["--loop"], d)).toBe(2);
+        expect(readdirSync(stateDir)).toEqual([]);
+    });
+});
+
+describe("main --notices", () => {
+    // Polls without real time and counts them.
+    function polled(stateDir: string) {
+        const waits: number[] = [];
+        const wait = (ms: number) => {
+            waits.push(ms);
+            return Promise.resolve();
+        };
+        return { waits, ...deps(undefined, { env: { AUTONOMOUS_STATE: stateDir }, wait }) };
+    }
+
+    it("prints the new notices of the live loop and the next count", async () => {
+        const stateDir = state();
+        const startedAt = "2026-01-01T00:00:00.000Z";
+        writeFileSync(join(stateDir, "loop.lock"), JSON.stringify({ pid: process.pid, startedAt }));
+        writeFileSync(join(stateDir, "loop.notices"), "linear:DOT-98 grill-me → proposal\n");
+        const { d, out, waits } = polled(stateDir);
+        expect(await main(["--notices", "0"], d)).toBe(0);
+        expect(out).toEqual(["linear:DOT-98 grill-me → proposal\nnext: 1"]);
+        expect(waits).toEqual([]);
+    });
+
+    it("says the loop is not running, with code 2, when none appears within the grace", async () => {
+        const { d, out, waits } = polled(state());
+        expect(await main(["--notices", "3"], d)).toBe(2);
+        expect(out).toEqual(["loop stopped: not running"]);
+        expect(waits).toEqual([2_000, 2_000, 2_000, 2_000, 2_000]);
+    });
+});
+
+describe("main --stop-loop", () => {
+    it("says the loop is not running, with code 2, reading no configuration", async () => {
+        const stateDir = state();
+        const config = join(state(), "config.json");
+        writeFileSync(config, "{ not json");
+        const { d, out, err } = deps(undefined, {
+            env: { AUTONOMOUS_STATE: stateDir, AUTONOMOUS_CONFIG: config },
+        });
+        expect(await main(["--stop-loop"], d)).toBe(2);
+        expect(out).toEqual(["loop stopped: not running"]);
+        expect(err).toEqual([]);
+        expect(readdirSync(stateDir)).toEqual([]);
     });
 });

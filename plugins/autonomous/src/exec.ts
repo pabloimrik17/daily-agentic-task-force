@@ -10,6 +10,7 @@ export type ExecResult =
 
 interface ExecOptions {
     keepOutputOnExit?: boolean;
+    cwd?: string; // for a CLI that reads its repository from the working directory (gh)
 }
 
 export type Exec = (args: string[], input?: string) => Promise<ExecResult>;
@@ -18,7 +19,7 @@ export const CLI_TIMEOUT_MS = 120_000;
 
 // How long after its own timeout execFile gets to report the kill before the watchdog
 // settles the call without it.
-export const WATCHDOG_GRACE_MS = 5_000;
+const WATCHDOG_GRACE_MS = 5_000;
 
 const MAX_BUFFER = 64 * 1024 * 1024;
 
@@ -76,7 +77,7 @@ export function execCommand(
             const child = execFile(
                 command,
                 args,
-                { timeout: timeoutMs, maxBuffer: MAX_BUFFER },
+                { timeout: timeoutMs, maxBuffer: MAX_BUFFER, cwd: options.cwd },
                 (error, stdout, stderr) => {
                     clearTimeout(watchdog);
                     resolve(toExecResult(command, timeoutMs, error, stdout, stderr, options));

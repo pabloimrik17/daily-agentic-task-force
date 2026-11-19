@@ -32,6 +32,7 @@ const RECORD: AttemptRecord = {
     observed: null,
     cleanup: null,
     retained: null,
+    agentArgs: null,
 };
 
 it("identifies a record by its task, stage and number", () => {

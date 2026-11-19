@@ -8,11 +8,16 @@ The label vocabulary shared by every tracker the autonomous loop reads — which
 
 ### Requirement: Three label groups
 
-Every task SHALL carry labels from three groups. The **scope** group is `work` and `personal`. The **autonomy** group is `AFK` and `HITL`. The **stage** group is `grill-me` and `proposal`. Each group SHALL hold exactly one label on a task: two labels of the same group are a conflict. A task without a label of a group is untagged for that group, except that a task whose stage is `grill-me` MAY lack autonomy. Missing groups and conflicts SHALL be detected and reported per group, and SHALL NOT be resolved by the system removing or replacing a label.
+Every task SHALL carry labels from three groups. The **scope** group is `work` and `personal`. The **autonomy** group is `AFK` and `HITL`. The **stage** group is `grill-me`, `proposal` and `implement`. Each group SHALL hold exactly one label on a task: two labels of the same group are a conflict. A task without a label of a group is untagged for that group, except that a task whose stage is `grill-me` MAY lack autonomy. Missing groups and conflicts SHALL be detected and reported per group, and SHALL NOT be resolved by the system removing or replacing a label.
 
 #### Scenario: Complete task
 
 - **WHEN** a task carries `personal`, `AFK` and `proposal`
+- **THEN** it is complete for all three groups
+
+#### Scenario: Task ready to implement
+
+- **WHEN** a task carries `personal`, `AFK` and `implement`
 - **THEN** it is complete for all three groups
 
 #### Scenario: Grill without autonomy
@@ -55,9 +60,14 @@ Every task SHALL carry labels from three groups. The **scope** group is `work` a
 - **WHEN** a task carries `grill-me` and `proposal`
 - **THEN** it is reported as a stage conflict for a human to resolve
 
+#### Scenario: proposal with implement
+
+- **WHEN** a task carries `proposal` and `implement`
+- **THEN** it is reported as a stage conflict for a human to resolve
+
 ### Requirement: Meaning of each label
 
-The contract SHALL fix one meaning per label: `work` is Nazaries work; `personal` is the user's own work; `AFK` means an agent may advance the task without a human; `HITL` means an agent may advance the task but a human intervenes during or at the end of each stage; `grill-me` means the task must be refined with a human in a grill before anyone works on it; `proposal` means the task is ready for proposal preparation, its autonomy decided and any grill it needed over; `taken` means an agent or a person is advancing the task now. Scope and autonomy are properties, kept for the whole life of a task; the stage says where the task is and is replaced by each transition. While a task is in `grill-me`, its autonomy, when it has one, is provisional until the grill confirms it. No scope has priority over the other in the contract. What each label implies for selecting work, including the preference for the machine's scope, is defined by the capability that selects work, not by this contract.
+The contract SHALL fix one meaning per label: `work` is Nazaries work; `personal` is the user's own work; `AFK` means an agent may advance the task without a human; `HITL` means an agent may advance the task but a human intervenes during or at the end of each stage; `grill-me` means the task must be refined with a human in a grill before anyone works on it; `proposal` means the task is ready for proposal preparation, its autonomy decided and any grill it needed over; `implement` means the task has a proposal and is ready to implement; `taken` means an agent or a person is advancing the task now. Scope and autonomy are properties, kept for the whole life of a task; the stage says where the task is and is replaced by each transition. While a task is in `grill-me`, its autonomy, when it has one, is provisional until the grill confirms it. No scope has priority over the other in the contract. What each label implies for selecting work, including the preference for the machine's scope, is defined by the capability that selects work, not by this contract.
 
 #### Scenario: grill-me with AFK
 
@@ -69,6 +79,11 @@ The contract SHALL fix one meaning per label: `work` is Nazaries work; `personal
 - **WHEN** a task carries `HITL` and `proposal`
 - **THEN** the contract reads it as ready for proposal preparation, with a human intervening in each stage
 
+#### Scenario: implement with AFK
+
+- **WHEN** a task carries `AFK` and `implement`
+- **THEN** the contract reads it as having a proposal and being ready for an agent to implement without a human
+
 #### Scenario: Meaning of work in a triage question
 
 - **WHEN** triage offers `work` as an option
@@ -76,7 +91,7 @@ The contract SHALL fix one meaning per label: `work` is Nazaries work; `personal
 
 ### Requirement: One spelling and one colour per label
 
-Each label SHALL have exactly one spelling, used verbatim on every tracker: `work`, `personal`, `AFK`, `HITL`, `grill-me`, `proposal`, `taken`. Matching SHALL be exact and case-sensitive; a label that differs only in case or spacing (for example `Grill Me`) is not the contract label. Each label SHALL have one colour, applied on trackers that support colour: `AFK` `#5e6ad2`, `HITL` `#eb5757`, `grill-me` `#f2994a`, `proposal` `#bb87fc`, `work` `#2f80ed`, `personal` `#27ae60`, `taken` `#95a2b3`. A tracker without label colours carries the name only.
+Each label SHALL have exactly one spelling, used verbatim on every tracker: `work`, `personal`, `AFK`, `HITL`, `grill-me`, `proposal`, `implement`, `taken`. Matching SHALL be exact and case-sensitive; a label that differs only in case or spacing (for example `Grill Me`) is not the contract label. Each label SHALL have one colour, applied on trackers that support colour: `AFK` `#5e6ad2`, `HITL` `#eb5757`, `grill-me` `#f2994a`, `proposal` `#bb87fc`, `implement` `#26b5ce`, `work` `#2f80ed`, `personal` `#27ae60`, `taken` `#95a2b3`. A tracker without label colours carries the name only.
 
 #### Scenario: Near-miss spelling
 
@@ -97,6 +112,11 @@ Each label SHALL have exactly one spelling, used verbatim on every tracker: `wor
 
 - **WHEN** a task carries `Proposal`
 - **THEN** the task is untagged for the stage group
+
+#### Scenario: implement bootstrapped
+
+- **WHEN** Linear lacks `implement` and the bootstrap runs
+- **THEN** `implement` is created at workspace level with colour `#26b5ce` and reported as created
 
 ### Requirement: Aliases are evidence, never removed
 
@@ -123,7 +143,7 @@ The configuration MAY declare that every task of a source has a given scope. A s
 
 ### Requirement: User configuration file
 
-The per-user parts of the contract SHALL live in one JSON file outside the plugin, at `~/.config/autonomous/config.json` unless the environment variable `AUTONOMOUS_CONFIG` names another path. It SHALL be identified by `schema: "autonomous.config.v1"` and SHALL hold: per source, whether it is enabled, its aliases and structural rules, the Beads directory and the GitHub repository list; the judgement settings — model, effort, confidence threshold, tasks judged per run, tasks per batch; the selection settings — model and effort; and the optional session, workspace and naming settings. It SHALL carry no credentials. The file SHALL be validated strictly: a missing file, a missing required field, a mistyped field or an unknown field is an error naming the path, never a corrected value; an optional block or key that is absent takes its shipped default, and the run reports it. The plugin SHALL ship the format, the defaults and an example, and the error for a missing file SHALL point to the example.
+The per-user parts of the contract SHALL live in one JSON file outside the plugin, at `~/.config/autonomous/config.json` unless the environment variable `AUTONOMOUS_CONFIG` names another path. It SHALL be identified by `schema: "autonomous.config.v1"` and SHALL hold: per source, whether it is enabled, its aliases and structural rules, the Beads directory and the GitHub repository list; the judgement settings — model, effort, confidence threshold, tasks judged per run, tasks per batch; the selection settings — model and effort; and the optional session, workspace, naming and runner settings. It SHALL carry no credentials. The file SHALL be validated strictly: a missing file, a missing required field, a mistyped field or an unknown field is an error naming the path, never a corrected value; an optional block or key that is absent takes its shipped default, and the run reports it. The plugin SHALL ship the format, the defaults and an example, and the error for a missing file SHALL point to the example.
 
 #### Scenario: Missing file
 
@@ -147,7 +167,7 @@ The per-user parts of the contract SHALL live in one JSON file outside the plugi
 
 ### Requirement: Optional configuration blocks with shipped defaults
 
-The configuration file MAY omit the `sessions`, `workspace` and `naming` blocks or any key inside them. The plugin SHALL ship a defaults file for those blocks, and a key absent from the user's file SHALL take the shipped value, key by key. A key present in the user's file SHALL still be validated strictly, and an unknown key is still an error. Every run SHALL report the keys that took a shipped default.
+The configuration file MAY omit the `sessions`, `workspace`, `naming` and `runner` blocks or any key inside them. The plugin SHALL ship a defaults file for those blocks, and a key absent from the user's file SHALL take the shipped value, key by key. A key present in the user's file SHALL still be validated strictly, and an unknown key is still an error. Every run SHALL report the keys that took a shipped default.
 
 #### Scenario: Block omitted
 
@@ -163,6 +183,11 @@ The configuration file MAY omit the `sessions`, `workspace` and `naming` blocks 
 
 - **WHEN** the file sets `naming.effort` to `"fast"`
 - **THEN** the configuration is rejected with the path `naming.effort`
+
+#### Scenario: Runner block omitted
+
+- **WHEN** the file has no `runner` block
+- **THEN** every `runner` key takes the shipped default and the report lists them
 
 ### Requirement: Session, workspace and naming settings
 
@@ -257,7 +282,7 @@ The configuration SHALL NOT declare aliases for `taken`. The label bootstrap SHA
 
 ### Requirement: A transition replaces the stage
 
-A transition SHALL move a task out of its stage on a human's answer. It adds the answered autonomy and the next stage, then removes the stage it leaves and every other autonomy label, and reads the task back. Labels SHALL be added before any is removed. It is the first exception to the rule that the loop never removes a label, and it removes nothing else. The only transition SHALL be from `grill-me` to `proposal`.
+A transition SHALL move a task out of its stage. It adds the next stage and, when the stage decided it, the answered autonomy; then it removes the stage it leaves and, when an autonomy was answered, every other autonomy label; and it reads the task back. Labels SHALL be added before any is removed. It is the first exception to the rule that the loop never removes a label, and it removes nothing else. There SHALL be two transitions: from `grill-me` to `proposal`, on a human's answer that sets the autonomy, and from `proposal` to `implement`, which changes no autonomy.
 
 #### Scenario: Grill ends with AFK
 
@@ -278,3 +303,83 @@ A transition SHALL move a task out of its stage on a human's answer. It adds the
 
 - **WHEN** adding `proposal` fails after `AFK` was added to a task carrying `work` and `grill-me`
 - **THEN** nothing is removed and the task still carries `grill-me`
+
+#### Scenario: Proposal ready
+
+- **WHEN** the transition out of `proposal` is applied to a task carrying `personal`, `HITL` and `proposal`
+- **THEN** the task carries `personal`, `HITL` and `implement`, and `proposal` was removed
+
+### Requirement: The autonomy decides whether leaving proposal needs an answer
+
+The transition from `proposal` to `implement` SHALL be applied without a human's answer for a task carrying `AFK`, and only on a human's approval for a task carrying `HITL`. A task in `proposal` whose autonomy is missing or in conflict SHALL NOT be transitioned.
+
+#### Scenario: AFK task
+
+- **WHEN** the transition out of `proposal` is requested for a task carrying `work`, `AFK` and `proposal`
+- **THEN** it is applied with no question, and the task carries `work`, `AFK` and `implement`
+
+#### Scenario: HITL task not approved
+
+- **WHEN** the human answers "Later" for a task carrying `HITL` and `proposal`
+- **THEN** the task keeps `proposal` and nothing is written
+
+#### Scenario: Autonomy missing
+
+- **WHEN** the transition out of `proposal` is requested for a task carrying `personal` and `proposal` only
+- **THEN** nothing is written and the reason names the missing autonomy
+
+### Requirement: Runner settings
+
+The configuration SHALL hold, under `runner`: `grills`, the limit of grill slots; `parallel`, the limit of work slots; and `intervalMinutes`, the time between two iterations of the loop. `grills` and `parallel` SHALL be integers of 0 or more and `intervalMinutes` an integer of 1 or more. The shipped defaults SHALL be 1, 2 and 10.
+
+#### Scenario: Shipped defaults
+
+- **WHEN** the file carries no `runner` block
+- **THEN** the limits are 1 grill slot and 2 work slots, and the interval is 10 minutes
+
+#### Scenario: Negative limit
+
+- **WHEN** the file sets `runner.parallel` to `-1`
+- **THEN** the configuration is rejected with the path `runner.parallel`
+
+#### Scenario: Fractional interval
+
+- **WHEN** the file sets `runner.intervalMinutes` to `2.5`
+- **THEN** the configuration is rejected with the path `runner.intervalMinutes`
+
+### Requirement: The triage label
+
+The contract SHALL include a `triage-me` label that belongs to no group. It is never required, never missing and never in conflict. It SHALL mean that the task's scope or autonomy could not be decided without the human, and that the task is neither judged again nor selected until the label is removed. The label names no group: the group in doubt SHALL be the scope or autonomy group that has no label on the task.
+
+#### Scenario: Task without the label
+
+- **WHEN** a task carries `work`, `AFK` and `proposal` and no `triage-me`
+- **THEN** it is complete for every group and nothing reports `triage-me` as missing
+
+#### Scenario: Group in doubt
+
+- **WHEN** a task carries `personal` and `triage-me` and no autonomy or stage label
+- **THEN** its group in doubt is autonomy
+
+### Requirement: Who sets the triage label
+
+Only `label-triage` and the answers to its questions SHALL add or remove `triage-me` on behalf of the runner. A person MAY add or remove it in the tracker, and the runner SHALL treat the label the same whoever set it.
+
+#### Scenario: Label set by a person
+
+- **WHEN** a person adds `triage-me` in the tracker to a task that lacks a scope label
+- **THEN** the task is treated as marked, as if a run had added the label
+
+### Requirement: The triage label has no aliases and is bootstrapped
+
+The configuration SHALL NOT declare aliases for `triage-me`. The label bootstrap SHALL create `triage-me` like every other contract label, with colour `#f2c94c`.
+
+#### Scenario: Alias for the triage label
+
+- **WHEN** the configuration declares a Beads alias for `triage-me`
+- **THEN** the configuration is rejected with the alias's path
+
+#### Scenario: Bootstrap on Linear
+
+- **WHEN** Linear lacks `triage-me` and the bootstrap runs
+- **THEN** `triage-me` is created at workspace level with colour `#f2c94c` and reported as created

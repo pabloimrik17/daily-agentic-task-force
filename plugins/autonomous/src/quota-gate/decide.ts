@@ -1,10 +1,11 @@
 import type { StepOutcome } from "../runner.ts";
-import type { OpenUsageProvider, OpenUsageResource } from "./parse.ts";
 import { type Projection, project } from "./project.ts";
-
-const EVALUATED_WINDOWS = ["session", "weekly"] as const;
-
-type WindowName = (typeof EVALUATED_WINDOWS)[number];
+import {
+    EVALUATED_WINDOWS,
+    type QuotaAccount,
+    type QuotaResource,
+    type WindowName,
+} from "./source.ts";
 
 export interface WindowReport {
     name: WindowName;
@@ -25,18 +26,20 @@ export interface OtherResource {
     name: string;
     used: number | null;
     limit: number | null;
+    // A balance, such as `rateLimitResets`, has an available amount instead of used and limit.
+    available: number | null;
     unit: string;
     evaluated: false;
 }
 
 export interface AccountReport {
     key: string;
-    displayName: string | null;
+    email: string | null;
+    displayName: string;
     plan: string | null;
-    fetchedAt: string | null;
-    expiresAt: string | null;
+    fetchedAt: string;
+    expiresAt: string;
     stale: boolean;
-    errors: string[];
 }
 
 export interface Evaluation {
@@ -48,10 +51,10 @@ export interface Evaluation {
 
 export function evaluateAccount(
     account: AccountReport,
-    provider: OpenUsageProvider | undefined,
+    quota: QuotaAccount,
     now: Date,
 ): Evaluation {
-    const resources = provider?.resources ?? {};
+    const { resources } = quota;
     const windows = EVALUATED_WINDOWS.map((name) => evaluateWindow(name, resources[name], now));
     const otherResources = Object.entries(resources)
         .filter(([name]) => !(EVALUATED_WINDOWS as readonly string[]).includes(name))
@@ -59,15 +62,16 @@ export function evaluateAccount(
             name,
             used: r.used ?? null,
             limit: r.limit ?? null,
+            available: r.available ?? null,
             unit: r.unit,
             evaluated: false as const,
         }));
-    return { ...decide(account, provider !== undefined, windows), windows, otherResources };
+    return { ...decide(account, windows), windows, otherResources };
 }
 
 function evaluateWindow(
     name: WindowName,
-    resource: OpenUsageResource | undefined,
+    resource: QuotaResource | undefined,
     now: Date,
 ): WindowReport {
     if (resource === undefined) {
@@ -112,7 +116,7 @@ function exhaustion(
     if (used < limit) return { problem: null, exhausted: false };
     if (now.getTime() < Date.parse(resetsAt)) return { problem: null, exhausted: true };
     return {
-        problem: `outdated (exhausted, but its reset time ${resetsAt} has passed; refresh with --force)`,
+        problem: `outdated (exhausted, but its reset time ${resetsAt} has passed; OpenUsage refreshes on its own schedule, or refresh the account in its app)`,
         exhausted: false,
     };
 }
@@ -137,7 +141,7 @@ const UNKNOWN_VALUES: WindowValues = {
     windowSeconds: null,
 };
 
-function windowValues(resource: OpenUsageResource): WindowValues {
+function windowValues(resource: QuotaResource): WindowValues {
     return {
         used: resource.used ?? null,
         limit: resource.limit ?? null,
@@ -148,14 +152,14 @@ function windowValues(resource: OpenUsageResource): WindowValues {
 }
 
 // Precedence (design D6): exhausted → wait; missing, incomplete, invalid,
-// outdated, stale or error → not-evaluable; otherwise advance. Projection
-// never affects the outcome.
+// outdated or stale → not-evaluable; otherwise advance. Projection never
+// affects the outcome. OpenUsage 0.8 reports an account whose refreshes fail
+// only as stale, so staleness alone decides whether the data is fresh.
 function decide(
     account: AccountReport,
-    hasData: boolean,
     windows: WindowReport[],
 ): Pick<Evaluation, "outcome" | "reasons"> {
-    const fresh = hasData && !account.stale && account.errors.length === 0;
+    const fresh = !account.stale;
 
     const exhausted = fresh ? windows.filter((w) => w.problem === null && w.exhausted) : [];
     if (exhausted.length > 0) {
@@ -169,12 +173,10 @@ function decide(
     }
 
     const blockers = [
-        ...account.errors.map(
-            (message) => `OpenUsage reported an error for ${account.key}: ${message}`,
-        ),
-        ...(hasData ? [] : [`OpenUsage returned no data for ${account.key}`]),
-        ...(hasData && account.stale
-            ? [`data is stale: fetched at ${account.fetchedAt}, expired at ${account.expiresAt}`]
+        ...(account.stale
+            ? [
+                  `data is stale: fetched at ${account.fetchedAt}, expired at ${account.expiresAt}; OpenUsage is not running or its refreshes of ${account.key} are failing`,
+              ]
             : []),
         ...windows.filter((w) => w.problem !== null).map((w) => `${w.name} window ${w.problem}`),
     ];

@@ -5,7 +5,14 @@
 
 import type { ContractLabel, SourceRules } from "../config.ts";
 import type { TrackerTask } from "../label-triage/trackers/tracker.ts";
-import { GROUPS, type Group, isContractLabel, isValidGroup, optionsFor } from "./contract.ts";
+import {
+    GROUPS,
+    type Group,
+    isContractLabel,
+    isValidGroup,
+    optionsFor,
+    TRIAGE_LABEL,
+} from "./contract.ts";
 
 export interface Evidence {
     label: ContractLabel;
@@ -24,12 +31,14 @@ export type GroupState =
 export interface Detection {
     task: TrackerTask;
     groups: Record<Group, GroupState>;
+    marked: boolean; // the task carries `triage-me`, whoever set it
 }
 
 export function detect(task: TrackerTask, rules: SourceRules): Detection {
     const present = task.labels.filter(isContractLabel);
     return {
         task,
+        marked: isMarked(task.labels),
         groups: {
             scope: groupState("scope", present, task, rules),
             autonomy: isDeferred(present)
@@ -38,6 +47,18 @@ export function detect(task: TrackerTask, rules: SourceRules): Detection {
             stage: groupState("stage", present, task, rules),
         },
     };
+}
+
+export function isMarked(labels: readonly string[]): boolean {
+    return labels.includes(TRIAGE_LABEL);
+}
+
+// Spec label-triage, "Remove the mark from a complete task": a scope label, and either an
+// autonomy label with a stage label or the stage `grill-me`, with no group in conflict.
+export function isCompleteLabelSet(labels: readonly string[]): boolean {
+    const present = labels.filter(isContractLabel);
+    const valid = (group: Group) => isValidGroup(group, labelsOf(group, present));
+    return valid("scope") && valid("stage") && (valid("autonomy") || isDeferred(present));
 }
 
 export function isComplete(state: GroupState): boolean {

@@ -19,7 +19,9 @@ const EMPTY: SelectData = {
     machineScope: null,
     selected: null,
     candidates: [],
+    setAside: [],
     excluded: [],
+    readyToClose: [],
     notEvaluated: [],
     comparison: null,
 };
@@ -218,7 +220,7 @@ describe("select: outcome", () => {
                     fakeReader(
                         "beads",
                         ["B-1", "B-2", "B-3"].map((id) =>
-                            workTask("beads", id, ["personal", "AFK", "proposal"]),
+                            workTask("beads", id, ["personal", "AFK", "implement"]),
                         ),
                         calls,
                     ),
@@ -398,14 +400,55 @@ describe("select: JSON data", () => {
                     stage: "grill-me",
                 },
             ],
+            setAside: [],
             excluded: [
                 { source: "beads", id: "B-1", title: "Task B-1", reason: "classification" },
                 { source: "beads", id: "B-2", title: "Task B-2", reason: "blocked" },
                 { source: "linear", id: "DOT-4", title: "Task DOT-4", reason: "split" },
             ],
+            readyToClose: [],
             notEvaluated: GITHUB_NOTE,
             comparison: null,
         });
+    });
+
+    it("carries each split parent whose subtasks are all closed, and writes nothing for it", async () => {
+        const calls: string[] = [];
+        const result = await selectStep.run(
+            selectContext({
+                calls,
+                readers: [
+                    fakeReader(
+                        "linear",
+                        [
+                            workTask("linear", "DOT-8", ["personal", "AFK", "proposal"]),
+                            workTask("linear", "DOT-9", ["personal", "AFK", "proposal"]),
+                        ],
+                        calls,
+                        {
+                            details: {
+                                "DOT-8": { children: [], childCount: 2 },
+                                "DOT-9": { children: ["DOT-10"], childCount: 2 },
+                            },
+                        },
+                    ),
+                ],
+                args: { json: true },
+            }),
+        );
+        const data = JSON.parse(JSON.stringify(result.data)) as SelectData;
+        expect(data.readyToClose).toEqual([{ source: "linear", id: "DOT-8", title: "Task DOT-8" }]);
+        expect(data.excluded.map(({ id, reason }) => [id, reason])).toEqual([
+            ["DOT-8", "split"],
+            ["DOT-9", "split"],
+        ]);
+        expect(calls).toEqual([
+            "chezmoi data --format json",
+            "work",
+            "linear:list",
+            "linear:detail:DOT-8",
+            "linear:detail:DOT-9",
+        ]);
     });
 
     it("carries a null autonomy for a selected task in grill-me without one", async () => {

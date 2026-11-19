@@ -1,7 +1,14 @@
 import { describe, expect, it } from "vitest";
 
 import type { Detection, Evidence, GroupState } from "../label-contract/detect.ts";
-import { decide, orderForJudgement, selectForJudgement, violation } from "./decide.ts";
+import {
+    decide,
+    MARKED_REASON,
+    markedRecords,
+    orderForJudgement,
+    selectForJudgement,
+    violation,
+} from "./decide.ts";
 import type { Derivation } from "./rules.ts";
 import type { TrackerTask } from "./trackers/tracker.ts";
 
@@ -24,6 +31,7 @@ const detection = (
     scope: GroupState = missing(),
 ): Detection => ({
     task: task(overrides),
+    marked: false,
     groups: { scope, autonomy: missing(), stage: missing() },
 });
 
@@ -83,6 +91,27 @@ describe("decide: confidence threshold per group", () => {
         ).toEqual({
             status: "asked",
             reason: "invalid under the contract: grill-me with a stage label: proposal",
+        });
+    });
+});
+
+describe("decide: autonomy in implement", () => {
+    it("Task in implement: HITL is eligible and grill-me is asked as invalid", () => {
+        expect(
+            decide(derivation({ group: "autonomy", labels: ["HITL"] }), 0.95, [
+                "personal",
+                "implement",
+            ]),
+        ).toEqual({ status: "eligible", reason: "" });
+        expect(
+            decide(
+                derivation({ group: "autonomy", labels: ["grill-me"], confidence: 0.99 }),
+                0.95,
+                ["personal", "implement"],
+            ),
+        ).toEqual({
+            status: "asked",
+            reason: "invalid under the contract: grill-me with a stage label: implement",
         });
     });
 });
@@ -243,5 +272,90 @@ describe("selectForJudgement", () => {
         const { selected, remainder } = selectForJudgement(detections, 0);
         expect(selected).toEqual([]);
         expect(remainder).toBe(2);
+    });
+});
+
+const marked = (
+    overrides: Partial<TrackerTask> = {},
+    scope: GroupState = missing(),
+): Detection => ({
+    ...detection({ labels: ["triage-me"], ...overrides }, scope),
+    marked: true,
+});
+
+// Spec label-triage, "A marked task is not judged".
+describe("selectForJudgement: a marked task is not judged", () => {
+    it("Second run: a task with personal and triage-me and no autonomy is not selected", () => {
+        const second = marked(
+            { id: "bd-2", labels: ["personal", "triage-me"] },
+            { status: "present", labels: ["personal"] },
+        );
+        expect(selectForJudgement([second], 25)).toEqual({ selected: [], remainder: 0 });
+    });
+
+    it("Cap: 30 unmarked and 10 marked with a cap of 25 select 25, leave 5, and count no marked one", () => {
+        const unmarked = Array.from({ length: 30 }, (_, i) =>
+            detection({ id: `u-${String(i).padStart(2, "0")}` }),
+        );
+        const markedTasks = Array.from({ length: 10 }, (_, i) =>
+            marked({ id: `m-${String(i).padStart(2, "0")}` }),
+        );
+        const { selected, remainder } = selectForJudgement([...markedTasks, ...unmarked], 25);
+        expect(selected.length).toBe(25);
+        expect(remainder).toBe(5);
+        expect(selected.some((d) => d.marked)).toBe(false);
+    });
+});
+
+// Spec label-triage, "Questions of marked tasks".
+describe("markedRecords", () => {
+    it("Listed without a judgement: the autonomy group of a personal marked task is asked as marked", () => {
+        const second = marked(
+            { id: "bd-2", labels: ["personal", "triage-me"] },
+            { status: "present", labels: ["personal"] },
+        );
+        expect(markedRecords([second])).toEqual([
+            {
+                source: "beads",
+                taskId: "bd-2",
+                title: "A task",
+                group: "autonomy",
+                labels: [],
+                confidence: null,
+                reason: MARKED_REASON,
+                tier: "marked",
+                status: "asked",
+                detail: null,
+            },
+        ]);
+        expect(MARKED_REASON).toContain("triage-me");
+    });
+
+    it("lists the scope group too when both are missing without evidence, scope first", () => {
+        expect(markedRecords([marked()]).map((r) => r.group)).toEqual(["scope", "autonomy"]);
+    });
+
+    it("gives no record to a group with evidence, present, in conflict or deferred", () => {
+        const evidence: Evidence[] = [{ label: "work", kind: "alias", detail: "alias nazaries" }];
+        const groups = (scope: GroupState, autonomy: GroupState): Detection => ({
+            ...marked(),
+            groups: { scope, autonomy, stage: missing() },
+        });
+        const present = (label: "work" | "AFK"): GroupState => ({
+            status: "present",
+            labels: [label],
+        });
+        expect(
+            markedRecords([
+                groups(missing(evidence), present("AFK")),
+                groups(present("work"), { status: "conflict", labels: ["AFK", "HITL"] }),
+                groups(present("work"), { status: "deferred" }),
+                groups(present("work"), missing(evidence)),
+            ]),
+        ).toEqual([]);
+    });
+
+    it("gives no record to an unmarked task", () => {
+        expect(markedRecords([detection()])).toEqual([]);
     });
 });

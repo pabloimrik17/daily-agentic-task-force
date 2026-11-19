@@ -17,7 +17,7 @@ import { join } from "node:path";
 import type { ActiveRun, RunMode } from "./domain.ts";
 
 /** Captures older than this are ignored (design D6). */
-export const RUN_EXPIRY_MS = 6 * 60 * 60 * 1000;
+const RUN_EXPIRY_MS = 6 * 60 * 60 * 1000;
 
 const DIR_MODE = 0o700;
 const FILE_MODE = 0o600;
@@ -35,7 +35,7 @@ export function resolveStateDir(env: Record<string, string | undefined>): string
 }
 
 export const activePath = (stateDir: string): string => join(stateDir, "active.json");
-export const runsDir = (stateDir: string): string => join(stateDir, "runs");
+const runsDir = (stateDir: string): string => join(stateDir, "runs");
 export const runDir = (stateDir: string, runId: string): string => join(runsDir(stateDir), runId);
 export const rawDir = (stateDir: string, runId: string): string =>
     join(runDir(stateDir, runId), "raw");

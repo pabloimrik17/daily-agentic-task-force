@@ -6,10 +6,12 @@ import type { Excluded, Exclusion, SelectData, SelectedUnit } from "./types.ts";
 const EXCLUSION_NAMES: Record<Exclusion, string> = {
     classification: "classification",
     taken: "taken",
+    "triage-me": "triage-me",
     "labelled-this-run": "labelled this run",
     "unsupported-stage": "unsupported stage",
     blocked: "blocked",
     split: "split",
+    "no-free-slot": "no free slot",
 };
 
 const EXCLUSIONS = Object.keys(EXCLUSION_NAMES) as Exclusion[];
@@ -23,7 +25,16 @@ export function byReason(excluded: readonly Excluded[]): { name: string; tasks: 
 }
 
 export function renderSelect(result: StepResult<SelectData>): string {
-    const { machineScope, selected, candidates, excluded, notEvaluated, comparison } = result.data;
+    const {
+        machineScope,
+        selected,
+        candidates,
+        setAside,
+        excluded,
+        readyToClose,
+        notEvaluated,
+        comparison,
+    } = result.data;
     const lines = [`[${result.step}] ${result.outcome} (${result.tier})`];
 
     if (machineScope !== null) {
@@ -32,14 +43,8 @@ export function renderSelect(result: StepResult<SelectData>): string {
     if (selected !== null) {
         lines.push(...renderSelected(selected));
     }
-    if (candidates.length > 0) {
-        lines.push(
-            `  candidates: ${plural(candidates.length, "task")}`,
-            ...candidates.map(
-                (c) => `    ${c.source} → ${c.id} → ${c.title} (${c.scope}, ${c.stage})`,
-            ),
-        );
-    }
+    lines.push(...renderCandidates("candidates", candidates));
+    lines.push(...renderCandidates("set aside for a candidate at a more advanced stage", setAside));
     if (excluded.length > 0) {
         lines.push(`  excluded: ${plural(excluded.length, "task")}`);
         for (const group of byReason(excluded)) {
@@ -49,12 +54,28 @@ export function renderSelect(result: StepResult<SelectData>): string {
             );
         }
     }
+    if (readyToClose.length > 0) {
+        lines.push(
+            `  ready to close: ${plural(readyToClose.length, "task")}`,
+            ...readyToClose.map((t) => `    ${t.source} → ${t.id} → ${t.title}`),
+        );
+    }
     lines.push(...notEvaluated.map((part) => `  not evaluated: ${part}`));
     if (comparison !== null) {
         lines.push(`  comparison: ${comparison.model} (${comparison.effort})`);
     }
     lines.push("  reasons:", ...result.reasons.map((r) => `    - ${r}`));
     return lines.join("\n");
+}
+
+function renderCandidates(heading: string, list: SelectData["candidates"]): string[] {
+    if (list.length === 0) {
+        return [];
+    }
+    return [
+        `  ${heading}: ${plural(list.length, "task")}`,
+        ...list.map((c) => `    ${c.source} → ${c.id} → ${c.title} (${c.scope}, ${c.stage})`),
+    ];
 }
 
 function renderSelected(selected: SelectedUnit): string[] {

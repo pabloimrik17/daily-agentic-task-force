@@ -12,12 +12,7 @@ import { exitCodeFor } from "../report.ts";
 import autolink from "./fixtures/linear-autolink.json";
 import rewrite from "./fixtures/linear-rewrite.json";
 import { headerOf, RECEIPT_SCHEMA, runPersist } from "./persist.ts";
-import {
-    PERSIST_SCHEMA,
-    renderPersistJson,
-    renderPersistText,
-    unconfiguredPersist,
-} from "./report.ts";
+import { renderPersistJson, renderPersistText, unconfiguredPersist } from "./report.ts";
 import { spliceDefinition } from "./splice.ts";
 import {
     type AttemptOptions,
@@ -165,7 +160,7 @@ describe("persist: Persistence is read back and leaves a receipt", () => {
         const { run, fake, dir, id } = await arrange();
         const report = await run();
         expect(report).toMatchObject({
-            schema: PERSIST_SCHEMA,
+            schema: "autonomous.persist.v1",
             startedAt: STARTED.toISOString(),
             outcome: "advance",
             attempt: id,
@@ -633,12 +628,12 @@ describe("persist: Persist preconditions", () => {
         expect(fake.calls).toEqual([]);
     });
 
-    it("an attempt of another stage is refused", async () => {
+    it("Test stage: nothing is written and the attempt is refused", async () => {
         const { run, fake, dir, id } = await arrange({ stage: "test" });
         const report = await run();
         expectNothingWritten(report, fake, dir);
         expect(report.reasons).toEqual([
-            `attempt ${id} is a test attempt: persist mode takes only grill-me attempts`,
+            `attempt ${id} is a test attempt: persist mode takes only grill-me and proposal attempts`,
         ]);
     });
 
@@ -673,6 +668,115 @@ describe("persist: Persist preconditions", () => {
         expect(report.reasons).toEqual([error]);
         expect(report.task).toBeNull();
         expect(fake.calls).toEqual(["readTask DOT-121"]);
+        expect(existsSync(receiptPath(dir))).toBe(false);
+    });
+});
+
+describe("persist: Proposal attempts", () => {
+    const PROPOSAL = "linear:DOT-121:proposal:1";
+    const PROPOSAL_HEADER = `autonomous · proposal · ${PROPOSAL} · stage summary saved`;
+
+    // A proposal attempt holds a stage summary and no definition.
+    const arrangeProposal = (script: DocumentScript = {}, options: AttemptOptions = {}) =>
+        arrange({ stage: "proposal", definition: null, ...options }, script);
+
+    it("Proposal attempt persisted: the comment is written and read back, the description is unchanged and the receipt is written", async () => {
+        const { run, fake, dir, id } = await arrangeProposal();
+        const report = await run();
+        expect(id).toBe(PROPOSAL);
+        expect(report).toMatchObject({
+            outcome: "advance",
+            attempt: PROPOSAL,
+            task: { source: "linear", id: "DOT-121", title: "Fix the login" },
+            written: { description: false, comment: "posted" },
+            readBack: { description: false, comment: true },
+            notes: [],
+            reasons: [],
+            receipt: receiptPath(dir),
+        });
+        expect(exitCodeFor(report.outcome)).toBe(0);
+        expect(fake.description()).toBe("Fix the login");
+        expect(existsSync(join(dir, "description.md"))).toBe(false);
+        expect(readJson(receiptPath(dir))).toEqual({
+            schema: RECEIPT_SCHEMA,
+            attempt: PROPOSAL,
+            task: { source: "linear", id: "DOT-121" },
+            at: STARTED.toISOString(),
+            header: PROPOSAL_HEADER,
+        });
+        expect(fake.calls).toEqual([
+            "readTask DOT-121",
+            "readComments DOT-121",
+            "addComment DOT-121",
+            "readComments DOT-121",
+        ]);
+    });
+
+    it("Comment header: the first line is the header, a blank line follows, and the description is unchanged", async () => {
+        const { run, fake, dir } = await arrangeProposal({}, { summary: SUMMARY });
+        await run();
+        expect(headerOf(PROPOSAL)).toBe(PROPOSAL_HEADER);
+        expect(fake.comments()).toEqual([`${PROPOSAL_HEADER}\n\n${SUMMARY}`]);
+        expect(readFileSync(join(dir, "comment.md"), "utf8")).toBe(
+            `${PROPOSAL_HEADER}\n\n${SUMMARY}`,
+        );
+        expect(fake.description()).toBe("Fix the login");
+    });
+
+    it("Persisted twice: no second comment is posted and the receipt exists", async () => {
+        const { run, fake, dir } = await arrangeProposal();
+        await run();
+        const report = await run();
+        expect(report.outcome).toBe("advance");
+        expect(report.written.comment).toBe("existing");
+        expect(fake.comments()).toHaveLength(1);
+        expect(fake.calls.filter((call) => call.startsWith("addComment"))).toHaveLength(1);
+        expect(existsSync(receiptPath(dir))).toBe(true);
+    });
+
+    it("a comment of the grill-me attempt does not stand in for the proposal's", async () => {
+        const grill = headerOf("linear:DOT-121:grill-me:1");
+        const { run, fake } = await arrangeProposal({ comments: [`${grill}\n\nearlier`] });
+        expect((await run()).written.comment).toBe("posted");
+        expect(fake.comments()).toHaveLength(2);
+    });
+
+    it("Proposal attempt without a definition file: the definition is not reported missing", async () => {
+        const { run, dir } = await arrangeProposal();
+        expect(existsSync(join(dir, "definition.md"))).toBe(false);
+        const report = await run();
+        expect(report.reasons).toEqual([]);
+        expect(report.outcome).toBe("advance");
+    });
+
+    it("a definition file in a proposal attempt is not spliced into the description", async () => {
+        const { run, fake } = await arrangeProposal({}, { definition: DEFINITION });
+        expect((await run()).outcome).toBe("advance");
+        expect(fake.description()).toBe("Fix the login");
+    });
+
+    it.each([
+        ["", "is empty"],
+        ["  \n", "is empty"],
+        [null, "is missing"],
+    ] as const)(
+        "a stage summary of %j is refused and nothing is written",
+        async (summary, what) => {
+            const { run, fake, dir } = await arrangeProposal({}, { summary });
+            const report = await run();
+            expect(report.outcome).toBe("not-evaluable");
+            expect(report.reasons).toEqual([`${join(dir, "stage-summary.md")} ${what}`]);
+            expect(fake.calls).toEqual([]);
+            expect(existsSync(receiptPath(dir))).toBe(false);
+        },
+    );
+
+    it("a comment the tracker accepts but does not list leaves no receipt", async () => {
+        const { run, dir } = await arrangeProposal({ forgetsComments: true });
+        const report = await run();
+        expect(report.outcome).toBe("not-evaluable");
+        expect(report.reasons).toEqual([NOT_FOUND(PROPOSAL_HEADER)]);
+        expect(report.readBack.comment).toBe(false);
         expect(existsSync(receiptPath(dir))).toBe(false);
     });
 });

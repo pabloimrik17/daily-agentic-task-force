@@ -11,6 +11,7 @@ import { ATTEMPT_SCHEMA, type AttemptId, type AttemptRecord } from "../../attemp
 import {
     attemptDir,
     definitionPath,
+    logbookEntryPath,
     promptPath,
     resultPath,
     stageSummaryPath,
@@ -23,6 +24,7 @@ import { fakeReader, selectContext, workTask } from "../../select/test-fixtures.
 import type { SelectData, WorkTask } from "../../select/types.ts";
 import type { SessionSpec, SessionTool } from "../../sessions/manager.ts";
 import type { StagePromptInput } from "../stage.ts";
+import { stageEnv } from "../test-fixtures.ts";
 import { SKILLS_PLUGIN } from "./prompt.ts";
 import { grillMeStage } from "./stage.ts";
 
@@ -120,6 +122,7 @@ function attempt(id: AttemptId, ref: { source: "linear" | "github" | "beads"; id
         observed: null,
         cleanup: null,
         retained: null,
+        agentArgs: null,
     };
     return record;
 }
@@ -184,7 +187,7 @@ describe("grill-me prerequisites", () => {
     it("refuses codex, naming the configured tool, before any skill is read", async () => {
         install();
 
-        expect(await grillMeStage.prerequisites({ tool: "codex", home })).toEqual({
+        expect(await grillMeStage.prerequisites(stageEnv({ tool: "codex", home }))).toEqual({
             ok: false,
             reason: "grill-me runs only with claude; sessions.tool is codex",
         });
@@ -193,7 +196,7 @@ describe("grill-me prerequisites", () => {
     it("holds for claude with both skill bodies, without their frontmatter, as the context", async () => {
         install();
 
-        const ready = await grillMeStage.prerequisites({ tool: "claude", home });
+        const ready = await grillMeStage.prerequisites(stageEnv({ tool: "claude", home }));
 
         expect(ready.ok).toBe(true);
         const context = ready.ok ? ready.context : {};
@@ -205,7 +208,7 @@ describe("grill-me prerequisites", () => {
     it("names the plugin when it is not installed", async () => {
         writeRegistry({ "other@market": [{ scope: "user", installPath: "/elsewhere" }] });
 
-        const ready = await grillMeStage.prerequisites({ tool: "claude", home });
+        const ready = await grillMeStage.prerequisites(stageEnv({ tool: "claude", home }));
 
         expect(ready).toMatchObject({ ok: false });
         expect(ready.ok ? "" : ready.reason).toContain(
@@ -216,7 +219,7 @@ describe("grill-me prerequisites", () => {
     it("names handoff when that skill is missing", async () => {
         install({ "engineering/grill-with-docs": GRILL_BODY });
 
-        const ready = await grillMeStage.prerequisites({ tool: "claude", home });
+        const ready = await grillMeStage.prerequisites(stageEnv({ tool: "claude", home }));
 
         expect(ready.ok ? "" : ready.reason).toContain("the skill handoff is not found");
     });
@@ -224,7 +227,9 @@ describe("grill-me prerequisites", () => {
     it("finds the skills of a new plugin version under other category directories", async () => {
         install({ "core/grill-with-docs": GRILL_BODY, "writing/handoff": HANDOFF_BODY }, "1.4.0");
 
-        expect((await grillMeStage.prerequisites({ tool: "claude", home })).ok).toBe(true);
+        expect((await grillMeStage.prerequisites(stageEnv({ tool: "claude", home }))).ok).toBe(
+            true,
+        );
     });
 });
 
@@ -260,15 +265,21 @@ describe("the grill-me prompt", () => {
         );
     });
 
-    it("names the persist and transition commands of the attempt", () => {
+    it("names the persist, transition, pull-request and log commands of the attempt", () => {
         const prompt = grillMeStage.prompt(linearInput());
 
         expect(prompt).toContain("`/autonomous:run --apply --persist linear:DOT-121:grill-me:1`");
         expect(prompt).toContain("`/autonomous:run --apply --transition linear:DOT-121`");
-        expect(prompt).toContain("Only once the transition is applied, write the result marker.");
+        expect(prompt).toContain(
+            '`/autonomous:run --apply --pull-request linear:DOT-121:grill-me:1 --title "<title>"`',
+        );
+        expect(prompt).toContain("`/autonomous:run --apply --log linear:DOT-121:grill-me:1`");
+        expect(prompt).toContain(
+            "9. Only once the entry is published (or step 8 was skipped because the task needs no pull request), write the result marker.",
+        );
     });
 
-    it("orders the seven closing steps", () => {
+    it("orders the nine closing steps", () => {
         const prompt = grillMeStage.prompt(linearInput());
 
         const steps = positions(prompt, [
@@ -278,29 +289,77 @@ describe("the grill-me prompt", () => {
             "4. Run `/autonomous:run --apply --persist",
             "5. Show the human the task's URL, or its id when the task has no URL.",
             "6. Run `/autonomous:run --apply --transition",
-            "7. Only once the transition is applied, write the result marker.",
+            "7. Run `/autonomous:run --apply --pull-request",
+            "8. Write the logbook entry's body to",
+            "9. Only once the entry is published",
         ]);
         expect(steps, String(steps)).toSatisfy(ascending);
     });
 
-    it("skips persist and the transition and writes the marker when the human closes the task", () => {
+    it("points the title at the repository's conventions and leaves the task id to the code", () => {
+        const prompt = grillMeStage.prompt(linearInput());
+
+        expect(prompt).toContain("in this repository's own conventions");
+        expect(prompt).toContain("contributor instructions (AGENTS.md, CONTRIBUTING or the like)");
+        expect(prompt).toContain("recent commit subjects");
+        expect(prompt).toContain("Do not add the task's id to the title: the command appends it.");
+    });
+
+    it("hands a failed pull-request mode, a failed push included, to the human", () => {
+        expect(grillMeStage.prompt(linearInput())).toContain(
+            "If it exits non-zero, tell the human what it reported (a failed push included), and continue only as the human decides.",
+        );
+    });
+
+    it("skips every later step when the human closes the task, and writes the marker", () => {
         const prompt = grillMeStage.prompt(linearInput());
 
         const exception = prompt.split("\n").find((line) => line.startsWith("The one exception:"));
         expect(exception).toContain("the human closes it in its tracker, or tells you to");
         expect(exception).toContain(
-            "skip steps 2 to 6 (no docs commit, no definition, no persist, no transition), write the result marker with a summary saying the task was closed, and stop",
+            "skip steps 2 to 8 (no docs commit, no definition, no persist, no transition, no pull request, no logbook entry), write the result marker with a summary saying the task was closed, and stop",
         );
-        expect(positions(prompt, ["7. Only once the transition", exception ?? ""])).toSatisfy(
-            ascending,
-        );
+        expect(positions(prompt, ["9. Only once the entry", exception ?? ""])).toSatisfy(ascending);
         expect(positions(prompt, [exception ?? "", "Definition template."])).toSatisfy(ascending);
     });
 
-    it("leaves the marker unwritten and the session open on a Later answer", () => {
+    it("leaves the pull request, the entry and the marker undone and the session open on a Later answer", () => {
         expect(grillMeStage.prompt(linearInput())).toContain(
-            'When the human answers "Later", or the answer is not applied, do not write the marker, and leave this session open.',
+            'When the human answers "Later" to the transition question, or the answer is not applied, do not run steps 7 to 9: open no pull request, publish no entry, do not write the marker, and leave this session open.',
         );
+    });
+
+    it("has the agent correct a rejected entry and run log mode again before the marker", () => {
+        const prompt = grillMeStage.prompt(linearInput());
+
+        const rule = `If log mode rejects the body, correct \`${logbookEntryPath(DIR)}\` as it reports and run it again.`;
+        expect(prompt).toContain(rule);
+        expect(positions(prompt, ["8. Write the logbook entry", rule, "9. Only once"])).toSatisfy(
+            ascending,
+        );
+    });
+
+    it("describes the logbook entry's body: path, sections, limit and authorship", () => {
+        const prompt = grillMeStage.prompt(linearInput());
+
+        expect(logbookEntryPath(DIR)).toMatch(/^\/state\/attempts\/.+\/logbook-entry\.md$/);
+        expect(prompt).toContain(`Write the logbook entry's body to \`${logbookEntryPath(DIR)}\``);
+        const sections = positions(prompt, [
+            "`### What I did`",
+            "`### Decisions`",
+            "`### Assumptions`",
+            "`### Next stage`",
+        ]);
+        expect(sections, String(sections)).toSatisfy(ascending);
+        expect(prompt).toContain("a stage may add its own");
+        expect(prompt).toContain("It holds at most 300 words.");
+        expect(prompt).toContain("a person catching up on the pull request, not the next agent");
+        expect(prompt).toContain("Mark each decision as the agent's or the human's.");
+        expect(prompt).toContain(
+            "Next stage links this task's stage summary without repeating it.",
+        );
+        expect(prompt).toContain("`none` is fine for Decisions or Assumptions");
+        expect(prompt).toContain("log mode writes it");
     });
 
     it("forbids the transition when persist exits non-zero", () => {
@@ -365,8 +424,9 @@ describe("the grill-me prompt", () => {
             "Commit and push only the glossary and ADR files the grill changed, on this workspace's current branch.",
         );
         expect(prompt).toContain(
-            "Open no pull request, never force a push and never pass `--no-verify`.",
+            "Open no pull request yourself: pull-request mode opens it. Never force a push and never pass `--no-verify`.",
         );
+        expect(prompt).not.toContain("Open no pull request, never");
         expect(prompt).toContain("When the grill changed no such file, commit and push nothing.");
     });
 
@@ -376,7 +436,7 @@ describe("the grill-me prompt", () => {
         );
     });
 
-    it("creates a split's subtasks through labelling-new-tasks, the parent still persisted and transitioned", () => {
+    it("creates a split's subtasks through labelling-new-tasks, the parent still persisted, transitioned and given pull-request mode", () => {
         const prompt = grillMeStage.prompt(beadsInput());
 
         expect(prompt).toContain(
@@ -385,12 +445,22 @@ describe("the grill-me prompt", () => {
         expect(prompt).toContain("Each subtask's description holds its own definition");
         expect(prompt).toContain("each subtask gets its own autonomy");
         expect(prompt).toContain(
-            "This task keeps the overall definition and still goes through its own persist and transition (steps 4 to 6).",
+            "This task keeps the overall definition and still goes through its own persist, transition and pull-request mode (steps 4 to 7); pull-request mode opens a pull request for it only when the grill committed documentation.",
         );
         expect(prompt).toContain(
             "`/autonomous:run --apply --persist beads:agentic-task-x1:grill-me:1`",
         );
         expect(prompt).toContain("`/autonomous:run --apply --transition beads:agentic-task-x1`");
+    });
+
+    it("skips the logbook entry and writes the marker when a split's parent needs no pull request", () => {
+        const prompt = grillMeStage.prompt(beadsInput());
+
+        expect(prompt).toContain(
+            "If it reports that the task needs no pull request (the parent of a split, when the grill committed no documentation), skip step 8.",
+        );
+        expect(prompt).toContain("or step 8 was skipped because the task needs no pull request");
+        expect(positions(prompt, ["skip step 8.", "9. Only once the entry"])).toSatisfy(ascending);
     });
 
     it("asks to count the Linear issues of a Linear split", () => {
@@ -399,26 +469,28 @@ describe("the grill-me prompt", () => {
         );
     });
 
-    it("forbids absolute paths and machine details in a GitHub task's definition and stage summary", () => {
-        const prompt = grillMeStage.prompt(githubInput());
-
-        const rules = prompt.split("\n").filter((line) => line.includes("The issue may be public"));
-        expect(rules).toHaveLength(1);
-        expect(rules[0]).toContain(
-            "write no absolute path and no other detail of this machine (user name, home directory, host name) in the definition or in the stage summary",
-        );
-        expect(positions(prompt, ["### 4. Constraints", rules[0] ?? ""])).toSatisfy(ascending);
-        expect(prompt).toContain("`/autonomous:run --apply --transition github:owner/repo#7`");
-    });
-
     it.each([
+        ["github", githubInput],
         ["linear", linearInput],
         ["beads", beadsInput],
-    ])("carries no such restriction for a %s task", (_source, input) => {
-        const prompt = grillMeStage.prompt(input());
+    ])(
+        "forbids absolute paths and machine details in a %s task's definition, stage summary and logbook entry",
+        (_source, input) => {
+            const prompt = grillMeStage.prompt(input());
 
-        expect(prompt).not.toContain("The issue may be public");
-        expect(prompt).not.toContain("no absolute path");
+            const rules = prompt.split("\n").filter((line) => line.includes("may be public"));
+            expect(rules).toHaveLength(1);
+            expect(rules[0]).toContain(
+                "write no absolute path and no other detail of this machine (user name, home directory, host name) in the definition, the stage summary or the logbook entry",
+            );
+            expect(positions(prompt, ["### 4. Constraints", rules[0] ?? ""])).toSatisfy(ascending);
+        },
+    );
+
+    it("names the transition of a GitHub task", () => {
+        expect(grillMeStage.prompt(githubInput())).toContain(
+            "`/autonomous:run --apply --transition github:owner/repo#7`",
+        );
     });
 });
 
@@ -488,7 +560,9 @@ describe("launch: a grill-me unit", () => {
                 exception: null,
             },
             candidates: [],
+            setAside: [],
             excluded: [],
+            readyToClose: [],
             notEvaluated: [],
             comparison: null,
         },
@@ -529,6 +603,7 @@ describe("launch: a grill-me unit", () => {
                 ? { apply: true, task: { source: "linear", id: "DOT-121" }, stage: "grill-me" }
                 : { apply: true },
         });
+        const env = stageEnv().readers;
         const ctx: RunContext = {
             ...base,
             io: {
@@ -537,6 +612,8 @@ describe("launch: a grill-me unit", () => {
                 sessions: () => sessions,
                 workspace: () => workspace,
                 naming: answering("Login fix"),
+                context: () => ({ beads: env.context, github: env.context, linear: env.context }),
+                pullRequests: () => env.pullRequests,
                 state,
                 home,
             },

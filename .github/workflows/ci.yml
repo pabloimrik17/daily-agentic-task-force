@@ -42,8 +42,11 @@ jobs:
             - name: 🔍 Type check
               run: bun run typecheck
 
+            - name: 🔍 Check Markdown schema version
+              run: bun run lint:markdownlint:schema
+
             - name: 🔍 Lint Markdown
-              run: bun run lint:markdown
+              run: bun run lint:markdownlint
 
             - name: 🔍 Unused code and dependencies
               run: bun run lint:knip

@@ -9,12 +9,25 @@ export default {
         ".junie/**",
         ".opencode/**",
         ".pi/**",
+        ".agent/**",
+        ".amazonq/**",
+        ".codex/**",
+        ".cursor/**",
+        ".gemini/**",
+        ".github/agents/**",
+        ".github/prompts/**",
+        ".github/skills/**",
+        ".github/copilot-instructions.md",
         "coverage/**",
         // loaded by the husky pre-commit hook, not by an import
         "validate-branch-name.config.cjs",
     ],
-    // pinned per-invocation via `bunx --package renovate@<version>`, never installed
-    ignoreDependencies: ["renovate"],
+    ignoreDependencies: [
+        // pinned per-invocation via `bunx --package renovate@<version>`, never installed
+        "renovate",
+        // exact engine pin that scripts/check-markdownlint-schema.cjs compares with the .markdownlint.jsonc $schema version
+        "markdownlint",
+    ],
     workspaces: {
         ".": {
             entry: ["scripts/*.ts", "scripts/**/*.test.ts"],
@@ -25,6 +38,11 @@ export default {
             entry: ["scripts/**/*.ts", "**/*.test.ts"],
             project: ["**/*.ts"],
         },
+        // Production entries are the files commands, skills and hooks run with `bun`.
+        "plugins/autonomous": {
+            entry: ["src/run.ts!", "src/label-at-creation/cli.ts!"],
+            project: ["src/**/*.ts!", "!src/**/*.test.ts!", "!src/**/*fixtures.ts!"],
+        },
         // The stonks hooks module is loaded by Claude Code from hooks.json
         // `modules`; `claude-code` is the engine's own module, present at run
         // time and vendored as types under mod/types/ (design D17).
@@ -32,11 +50,20 @@ export default {
             entry: [
                 "scripts/**/*.ts",
                 "**/*.test.ts",
-                "mod/register.ts",
                 // The PostToolUse command hook, run from hooks.json (design D5).
-                "src/capture.ts",
+                "src/capture.ts!",
+                "mod/register.ts!",
+                "src/cli.ts!",
             ],
-            project: ["**/*.ts", "!mod/types/claude-code.d.ts"],
+            project: [
+                "scripts/**/*.ts",
+                "*.ts",
+                "src/**/*.ts!",
+                "mod/**/*.ts!",
+                "!mod/types/claude-code.d.ts",
+                "!src/**/*.test.ts!",
+                "!mod/**/*.test.ts!",
+            ],
             ignoreDependencies: ["claude-code"],
         },
     },

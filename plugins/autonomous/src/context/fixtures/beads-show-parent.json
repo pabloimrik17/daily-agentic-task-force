@@ -1,0 +1,43 @@
+{
+    "id": "demo-2",
+    "title": "Synthetic parent task",
+    "description": "Synthetic description.",
+    "status": "open",
+    "priority": 2,
+    "issue_type": "epic",
+    "labels": ["personal"],
+    "dependencies": [
+        {
+            "id": "demo-7",
+            "title": "Synthetic related task",
+            "description": "x",
+            "status": "open",
+            "priority": 2,
+            "issue_type": "task",
+            "dependency_type": "related"
+        }
+    ],
+    "dependents": [
+        {
+            "id": "demo-2.1",
+            "title": "Synthetic closed child",
+            "status": "closed",
+            "priority": 2,
+            "issue_type": "task",
+            "dependency_type": "parent-child"
+        },
+        {
+            "id": "demo-2.2",
+            "title": "Synthetic open child",
+            "status": "open",
+            "priority": 2,
+            "issue_type": "task",
+            "dependency_type": "parent-child"
+        }
+    ],
+    "comments": [],
+    "parent": null,
+    "dependent_count": 2,
+    "dependency_count": 1,
+    "comment_count": 0
+}

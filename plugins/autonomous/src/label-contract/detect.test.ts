@@ -2,7 +2,7 @@ import type { SourceRules } from "../config.ts";
 import type { TrackerTask } from "../label-triage/trackers/tracker.ts";
 import { describe, expect, it } from "vitest";
 
-import { detect, isComplete } from "./detect.ts";
+import { detect, isComplete, isCompleteLabelSet } from "./detect.ts";
 
 const rules = (overrides: Partial<SourceRules> = {}): SourceRules => ({
     enabled: true,
@@ -94,6 +94,25 @@ describe("detect: three label groups", () => {
         const detection = detect(task(["AFK", "HITL"]), rules());
         expect(detection.groups.autonomy).toEqual({ status: "conflict", labels: ["AFK", "HITL"] });
         expect(isComplete(detection.groups.autonomy)).toBe(false);
+    });
+
+    it("Task ready to implement: personal, AFK and implement are complete for all three groups", () => {
+        const detection = detect(task(["personal", "AFK", "implement"]), rules());
+        expect(detection.groups).toEqual({
+            scope: { status: "present", labels: ["personal"] },
+            autonomy: { status: "present", labels: ["AFK"] },
+            stage: { status: "present", labels: ["implement"] },
+        });
+        expect(Object.values(detection.groups).every(isComplete)).toBe(true);
+    });
+
+    it("proposal with implement: a stage conflict for a human to resolve", () => {
+        const detection = detect(task(["proposal", "implement"]), rules());
+        expect(detection.groups.stage).toEqual({
+            status: "conflict",
+            labels: ["proposal", "implement"],
+        });
+        expect(isComplete(detection.groups.stage)).toBe(false);
     });
 
     it("Two stages: grill-me and proposal are a stage conflict for a human to resolve", () => {
@@ -229,5 +248,74 @@ describe("isComplete", () => {
         expect(isComplete({ status: "deferred" })).toBe(true);
         expect(isComplete({ status: "missing", evidence: [] })).toBe(false);
         expect(isComplete({ status: "conflict", labels: ["AFK", "HITL"] })).toBe(false);
+    });
+});
+
+// Spec label-contract, "The triage label" and "Who sets the triage label".
+describe("detect: the triage label", () => {
+    it("Task without the label: work, AFK and proposal are complete and nothing reports triage-me missing", () => {
+        const detection = detect(task(["work", "AFK", "proposal"]), rules());
+        expect(Object.values(detection.groups).every(isComplete)).toBe(true);
+        expect(detection.marked).toBe(false);
+        expect(JSON.stringify(detection.groups)).not.toContain("triage-me");
+    });
+
+    it("Group in doubt: personal and triage-me leave autonomy missing", () => {
+        const detection = detect(task(["personal", "triage-me"]), rules());
+        expect(detection.marked).toBe(true);
+        expect(detection.groups.scope).toEqual({ status: "present", labels: ["personal"] });
+        expect(detection.groups.autonomy).toEqual({ status: "missing", evidence: [] });
+    });
+
+    it("Label set by a person: the label alone marks a task that lacks a scope label", () => {
+        const detection = detect(task(["triage-me"]), rules());
+        expect(detection.marked).toBe(true);
+        expect(detection.groups.scope).toEqual({ status: "missing", evidence: [] });
+    });
+
+    it("never makes a group missing or in conflict", () => {
+        const detection = detect(task(["work", "AFK", "proposal", "triage-me"]), rules());
+        expect(detection.groups).toEqual({
+            scope: { status: "present", labels: ["work"] },
+            autonomy: { status: "present", labels: ["AFK"] },
+            stage: { status: "present", labels: ["proposal"] },
+        });
+    });
+
+    it("is not marked by a task without the label", () => {
+        expect(detect(task(["work", "taken"]), rules()).marked).toBe(false);
+    });
+});
+
+describe("isCompleteLabelSet", () => {
+    it("is true with a scope, an autonomy and a stage", () => {
+        expect(isCompleteLabelSet(["work", "AFK", "proposal"])).toBe(true);
+    });
+
+    it("is true with a scope and grill-me alone", () => {
+        expect(isCompleteLabelSet(["personal", "grill-me"])).toBe(true);
+    });
+
+    it.each([
+        ["scope", ["AFK", "proposal"]],
+        ["autonomy", ["work", "proposal"]],
+        ["stage", ["work", "AFK"]],
+    ])("is false with the %s group missing", (_group, labels) => {
+        expect(isCompleteLabelSet(labels)).toBe(false);
+    });
+
+    it.each([
+        ["two scopes", ["work", "personal", "AFK", "proposal"]],
+        ["AFK with HITL", ["work", "AFK", "HITL", "proposal"]],
+        ["two stages", ["work", "AFK", "proposal", "implement"]],
+    ])("is false with a group in conflict: %s", (_name, labels) => {
+        expect(isCompleteLabelSet(labels)).toBe(false);
+    });
+
+    it("ignores triage-me, taken and labels outside the contract", () => {
+        const extras = ["triage-me", "taken", "bug"];
+        expect(isCompleteLabelSet(["work", "AFK", "proposal", ...extras])).toBe(true);
+        expect(isCompleteLabelSet(["work", "AFK", ...extras])).toBe(false);
+        expect(isCompleteLabelSet(["personal", "grill-me", ...extras])).toBe(true);
     });
 });

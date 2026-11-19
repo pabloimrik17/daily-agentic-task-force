@@ -8,7 +8,7 @@ import {
     selectContext,
     workTask,
 } from "./test-fixtures.ts";
-import type { SelectionAnswer } from "./types.ts";
+import type { SelectData, SelectionAnswer } from "./types.ts";
 
 // Two candidates of either scope and one task excluded under each of three reasons.
 function readers(calls: string[]) {
@@ -30,8 +30,8 @@ function readers(calls: string[]) {
                 workTask("linear", "DOT-4", ["personal", "grill-me", "taken"], {
                     title: "Being worked on",
                 }),
-                workTask("linear", "DOT-5", ["personal", "AFK", "proposal"], {
-                    title: "Write the proposal",
+                workTask("linear", "DOT-5", ["personal", "AFK", "implement"], {
+                    title: "Build the feature",
                 }),
             ],
             calls,
@@ -58,7 +58,7 @@ const OTHER_SECTIONS = [
     "    taken: 1",
     "      linear → DOT-4 → Being worked on",
     "    unsupported stage: 1",
-    "      linear → DOT-5 → Write the proposal",
+    "      linear → DOT-5 → Build the feature",
     "  not evaluated: github: dependencies",
     "  comparison: sonnet (high)",
 ];
@@ -168,7 +168,7 @@ describe("renderSelect", () => {
                     fakeReader(
                         "beads",
                         ["B-1", "B-2", "B-3"].map((id) =>
-                            workTask("beads", id, ["personal", "AFK", "proposal"]),
+                            workTask("beads", id, ["personal", "AFK", "implement"]),
                         ),
                         calls,
                     ),
@@ -199,6 +199,50 @@ describe("renderSelect", () => {
         );
     });
 
+    it("lists a split parent whose subtasks are all closed as ready to close, under its own heading", async () => {
+        const calls: string[] = [];
+        const result = await selectStep.run(
+            selectContext({
+                calls,
+                readers: [
+                    fakeReader(
+                        "linear",
+                        [
+                            workTask("linear", "DOT-8", ["personal", "AFK", "proposal"], {
+                                title: "Parent of finished work",
+                            }),
+                            workTask("linear", "DOT-9", ["personal", "AFK", "proposal"], {
+                                title: "Parent with work left",
+                            }),
+                        ],
+                        calls,
+                        {
+                            details: {
+                                "DOT-8": { children: [], childCount: 2 },
+                                "DOT-9": { children: ["DOT-10"], childCount: 2 },
+                            },
+                        },
+                    ),
+                ],
+            }),
+        );
+        expect(selectStep.render(result)).toBe(
+            [
+                "[select] wait (code)",
+                "  machine scope  personal",
+                "  excluded: 2 tasks",
+                "    split: 2",
+                "      linear → DOT-8 → Parent of finished work",
+                "      linear → DOT-9 → Parent with work left",
+                "  ready to close: 1 task",
+                "    linear → DOT-8 → Parent of finished work",
+                "  not evaluated: github: dependencies",
+                "  reasons:",
+                "    - 2 split",
+            ].join("\n"),
+        );
+    });
+
     it("shows only the header and the reason when the machine scope cannot be read", async () => {
         const calls: string[] = [];
         const result = await selectStep.run(
@@ -215,5 +259,96 @@ describe("renderSelect", () => {
                 "    - chezmoi data: chezmoi CLI not found on PATH",
             ].join("\n"),
         );
+    });
+});
+
+describe("renderSelect: candidates set aside", () => {
+    const data: SelectData = {
+        machineScope: "personal",
+        selected: null,
+        candidates: [
+            {
+                source: "linear",
+                id: "P-1",
+                title: "Write it",
+                scope: "personal",
+                stage: "proposal",
+            },
+        ],
+        setAside: [
+            { source: "beads", id: "G-1", title: "Think it", scope: "personal", stage: "grill-me" },
+        ],
+        excluded: [{ source: "linear", id: "T-1", title: "Busy", reason: "taken" }],
+        readyToClose: [],
+        notEvaluated: [],
+        comparison: null,
+    };
+
+    it("lists a set-aside candidate with its stage, apart from the excluded tasks", () => {
+        const lines = selectStep
+            .render({ step: "select", tier: "code", outcome: "advance", reasons: [], data })
+            .split("\n");
+
+        const heading = lines.findIndex((line) => line.includes("set aside"));
+        expect(lines.slice(heading, heading + 2)).toEqual([
+            "  set aside for a candidate at a more advanced stage: 1 task",
+            "    beads → G-1 → Think it (personal, grill-me)",
+        ]);
+        expect(heading).toBeGreaterThan(lines.indexOf("  candidates: 1 task"));
+        expect(heading).toBeLessThan(lines.indexOf("  excluded: 1 task"));
+        expect(lines.slice(lines.indexOf("  excluded: 1 task"))).not.toContain(
+            "      beads → G-1 → Think it",
+        );
+    });
+
+    it("leaves the heading out when nothing is set aside", () => {
+        const text = selectStep.render({
+            step: "select",
+            tier: "code",
+            outcome: "advance",
+            reasons: [],
+            data: { ...data, setAside: [] },
+        });
+
+        expect(text).not.toContain("set aside");
+    });
+
+    it("names the triage-me exclusion after taken", () => {
+        const text = selectStep.render({
+            step: "select",
+            tier: "code",
+            outcome: "advance",
+            reasons: [],
+            data: {
+                ...data,
+                excluded: [
+                    { source: "linear", id: "M-1", title: "Doubtful", reason: "triage-me" },
+                    { source: "linear", id: "T-1", title: "Busy", reason: "taken" },
+                    { source: "linear", id: "L-1", title: "Done now", reason: "labelled-this-run" },
+                ],
+            },
+        });
+
+        expect(text).toContain("    triage-me: 1\n      linear → M-1 → Doubtful");
+        expect(text.indexOf("triage-me: 1")).toBeGreaterThan(text.indexOf("taken: 1"));
+        expect(text.indexOf("triage-me: 1")).toBeLessThan(text.indexOf("labelled this run: 1"));
+    });
+
+    it("names the no-free-slot exclusion last", () => {
+        const text = selectStep.render({
+            step: "select",
+            tier: "code",
+            outcome: "wait",
+            reasons: [],
+            data: {
+                ...data,
+                excluded: [
+                    { source: "linear", id: "N-1", title: "Full", reason: "no-free-slot" },
+                    { source: "linear", id: "T-1", title: "Busy", reason: "taken" },
+                ],
+            },
+        });
+
+        expect(text.indexOf("no free slot: 1")).toBeGreaterThan(text.indexOf("taken: 1"));
     });
 });

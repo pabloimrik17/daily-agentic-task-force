@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import { type DecidedGroup, MEANINGS } from "../label-contract/contract.ts";
-import type { GroupAnswer, JudgementAnswer, JudgementRequest } from "./judgement.ts";
+import type { JudgementAnswer, JudgementRequest } from "./judgement.ts";
 import { labelTriageStep } from "./step.ts";
 import { config, triageContext, fakeJudgement, task, trackers } from "./test-fixtures.ts";
 
@@ -13,6 +13,9 @@ const EMPTY = {
     remainder: 0,
     judgement: null,
     failures: [],
+    marked: [],
+    unmarked: [],
+    markedRead: 0,
 };
 
 const ANSWERS: Record<DecidedGroup, string[]> = { scope: ["work"], autonomy: ["AFK"] };
@@ -38,7 +41,7 @@ function judgeAll(confidence = 0.97, calls?: string[]) {
 }
 
 // Answers every requested group of every task with the judgement given for that group.
-function judgeWith(given: Partial<Record<DecidedGroup, GroupAnswer>>) {
+function judgeWith(given: Partial<Record<DecidedGroup, NonNullable<JudgementAnswer["scope"]>>>) {
     return fakeJudgement((request: JudgementRequest) => ({
         ok: true,
         answers: request.tasks.map((t) => {
@@ -862,7 +865,9 @@ describe("label triage: the stage follows the autonomy", () => {
         expect(result.data.records.map((r) => [r.group, r.labels, r.status])).toEqual([
             ["autonomy", ["AFK"], "asked"],
         ]);
-        expect(calls.filter((call) => call.includes("addLabel"))).toEqual([]);
+        expect(calls.filter((call) => call.includes("addLabel"))).toEqual([
+            "beads:addLabel:B-1:triage-me",
+        ]);
         expect(result.questions?.map((q) => q.id)).toEqual(["label-triage:beads:B-1:autonomy"]);
     });
 });
@@ -931,7 +936,9 @@ describe("label triage: confidence threshold per group", () => {
                 detail: "invalid under the contract: grill-me with a stage label: proposal",
             },
         ]);
-        expect(calls.filter((call) => call.includes("addLabel"))).toEqual([]);
+        expect(calls.filter((call) => call.includes("addLabel"))).toEqual([
+            "beads:addLabel:B-1:triage-me",
+        ]);
         expect(result.questions?.[0]?.options.map((o) => o.label)).toEqual([
             "AFK",
             "HITL",
@@ -1136,5 +1143,385 @@ describe("label triage: labels missing on a tracker are not written", () => {
             "beads:addLabel:B-1:proposal",
             "beads:readTask:B-1",
         ]);
+    });
+});
+
+const addCalls = (calls: string[]) => calls.filter((call) => call.includes(":addLabel:"));
+const removeCalls = (calls: string[]) => calls.filter((call) => call.includes(":removeLabel:"));
+
+async function labelsOf(
+    listing: ReturnType<typeof trackers>,
+    source: "beads" | "linear",
+    id: string,
+): Promise<string[]> {
+    const read = await listing[source].readTask(id);
+    return read.ok ? read.value.labels : [];
+}
+
+describe("label triage: mark the tasks left for the human", () => {
+    it("Doubt in a run with apply: triage-me is added, the other labels remain and the group is listed", async () => {
+        const calls: string[] = [];
+        const listing = trackers(calls, { beads: [task("beads", "B-1", ["personal"])] });
+        const result = await labelTriageStep.run(
+            triageContext({
+                trackers: listing,
+                judgement: judgeWith(UNSURE_HITL),
+                args: { apply: true },
+            }),
+        );
+        expect(addCalls(calls)).toEqual(["beads:addLabel:B-1:triage-me"]);
+        expect(removeCalls(calls)).toEqual([]);
+        expect(await labelsOf(listing, "beads", "B-1")).toEqual(["personal", "triage-me"]);
+        expect(result.data.marked).toEqual([
+            { source: "beads", taskId: "B-1", status: "applied", detail: null },
+        ]);
+        expect(result.data.records.map((r) => [r.taskId, r.group, r.status])).toEqual([
+            ["B-1", "autonomy", "asked"],
+        ]);
+        expect(result.questions?.map((q) => q.id)).toEqual(["label-triage:beads:B-1:autonomy"]);
+        expect(result.reasons).toContain("marked 1 task triage-me");
+        expect(result.reasons).toContain("1 group for the human");
+    });
+
+    it("Run without apply: the mark is proposed and no write is issued", async () => {
+        const calls: string[] = [];
+        const result = await labelTriageStep.run(
+            triageContext({
+                trackers: trackers(calls, { beads: [task("beads", "B-1", ["personal"])] }),
+                judgement: judgeWith(UNSURE_HITL),
+            }),
+        );
+        expect(addCalls(calls)).toEqual([]);
+        expect(removeCalls(calls)).toEqual([]);
+        expect(result.data.marked).toEqual([
+            { source: "beads", taskId: "B-1", status: "proposed", detail: null },
+        ]);
+        expect(result.reasons).toContain("proposed marking 1 task triage-me");
+        expect(result.questions?.map((q) => q.id)).toEqual(["label-triage:beads:B-1:autonomy"]);
+    });
+
+    it("One group written, one in doubt: the task gains work and triage-me", async () => {
+        const calls: string[] = [];
+        const listing = trackers(calls, { beads: [task("beads", "B-1", ["nazaries"])] });
+        const result = await labelTriageStep.run(
+            triageContext({
+                trackers: listing,
+                judgement: judgeWith({
+                    autonomy: { labels: ["AFK"], confidence: 0.7, reason: "Maybe routine" },
+                }),
+                args: { apply: true },
+            }),
+        );
+        expect(addCalls(calls)).toEqual([
+            "beads:addLabel:B-1:work",
+            "beads:addLabel:B-1:triage-me",
+        ]);
+        expect(await labelsOf(listing, "beads", "B-1")).toEqual(["nazaries", "work", "triage-me"]);
+        expect(result.data.marked.map((m) => [m.taskId, m.status])).toEqual([["B-1", "applied"]]);
+    });
+
+    it("Conflicting evidence asked by rule marks the task as well", async () => {
+        const settings = config();
+        settings.sources.beads.scope = "personal";
+        const calls: string[] = [];
+        const result = await labelTriageStep.run(
+            triageContext({
+                config: settings,
+                trackers: trackers(calls, { beads: [task("beads", "X-12", ["nazaries"])] }),
+                judgement: judgeAll(),
+                args: { apply: true },
+            }),
+        );
+        expect(addCalls(calls)).toContain("beads:addLabel:X-12:triage-me");
+        expect(result.data.marked.map((m) => m.taskId)).toEqual(["X-12"]);
+    });
+
+    it("an invalid judgement marks the task", async () => {
+        const calls: string[] = [];
+        await labelTriageStep.run(
+            triageContext({
+                trackers: trackers(calls, { beads: [task("beads", "B-1", ["personal"])] }),
+                judgement: judgeWith({
+                    autonomy: { labels: ["AFK", "HITL"], confidence: 0.99, reason: "Both" },
+                }),
+                args: { apply: true },
+            }),
+        );
+        expect(addCalls(calls)).toEqual(["beads:addLabel:B-1:triage-me"]);
+    });
+});
+
+describe("label triage: doubts that are not marked", () => {
+    it("Present labels in conflict: triage-me is not added", async () => {
+        const calls: string[] = [];
+        const result = await labelTriageStep.run(
+            triageContext({
+                trackers: trackers(calls, {
+                    beads: [task("beads", "B-1", ["personal", "AFK", "HITL", "proposal"])],
+                }),
+                judgement: judgeAll(),
+                args: { apply: true },
+            }),
+        );
+        expect(result.data.conflicts.map((c) => [c.taskId, c.group])).toEqual([
+            ["B-1", "autonomy"],
+        ]);
+        expect(addCalls(calls)).toEqual([]);
+        expect(result.data.marked).toEqual([]);
+    });
+
+    it("Judgement unavailable: triage-me is not added", async () => {
+        const calls: string[] = [];
+        const result = await labelTriageStep.run(
+            triageContext({
+                trackers: trackers(calls, { beads: [task("beads", "B-1", ["personal"])] }),
+                judgement: fakeJudgement(() => ({ ok: false, error: "claude: timed out" })),
+                args: { apply: true },
+            }),
+        );
+        expect(result.data.notJudged.map((n) => n.taskId)).toEqual(["B-1"]);
+        expect(addCalls(calls)).toEqual([]);
+        expect(result.data.marked).toEqual([]);
+    });
+
+    it("a task beyond the cap is not marked, the judged one in doubt is", async () => {
+        const settings = config();
+        settings.judgement.cap = 1;
+        const calls: string[] = [];
+        const result = await labelTriageStep.run(
+            triageContext({
+                config: settings,
+                trackers: trackers(calls, {
+                    beads: [
+                        task("beads", "B-1", ["personal"], { updatedAt: "2026-09-21T10:00:00Z" }),
+                        task("beads", "B-2", ["personal"], { updatedAt: "2026-09-20T10:00:00Z" }),
+                    ],
+                }),
+                judgement: judgeWith(UNSURE_HITL),
+                args: { apply: true },
+            }),
+        );
+        expect(result.data.remainder).toBe(1);
+        expect(addCalls(calls)).toEqual(["beads:addLabel:B-1:triage-me"]);
+        expect(result.data.marked.map((m) => m.taskId)).toEqual(["B-1"]);
+    });
+});
+
+describe("label triage: a marked task is not judged", () => {
+    it("Second run: no judgement is requested, no batch, tier code", async () => {
+        const calls: string[] = [];
+        const judgement = judgeAll();
+        const result = await labelTriageStep.run(
+            triageContext({
+                trackers: trackers(calls, {
+                    beads: [task("beads", "B-1", ["personal", "triage-me"])],
+                }),
+                judgement,
+                args: { apply: true },
+            }),
+        );
+        expect(judgement.requests).toEqual([]);
+        expect(result.tier).toBe("code");
+        expect(result.data.judgement?.batches).toBe(0);
+        expect(result.data.notJudged).toEqual([]);
+        expect(calls.filter((call) => call.includes("readTask"))).toEqual([]);
+    });
+
+    it("Cap: 25 of 30 unmarked tasks are judged, 5 remain, no marked task is judged or counted", async () => {
+        const unmarked = Array.from({ length: 30 }, (_, n) =>
+            task("beads", `U-${n}`, ["personal"], {
+                updatedAt: `2026-09-01T10:${String(n).padStart(2, "0")}:00Z`,
+            }),
+        );
+        const marked = Array.from({ length: 10 }, (_, n) =>
+            task("beads", `M-${n}`, ["personal", "triage-me"], {
+                updatedAt: "2026-10-01T10:00:00Z",
+            }),
+        );
+        const judgement = judgeAll();
+        const result = await labelTriageStep.run(
+            triageContext({
+                trackers: trackers([], { beads: [...unmarked, ...marked] }),
+                judgement,
+            }),
+        );
+        const requested = judgement.requests.flatMap((request) => request.tasks.map((t) => t.id));
+        expect(requested).toHaveLength(25);
+        expect(requested.some((id) => id.startsWith("M-"))).toBe(false);
+        expect(result.data.remainder).toBe(5);
+        expect(result.data.notJudged).toEqual([]);
+        expect(result.data.markedRead).toBe(10);
+    });
+
+    it("Rule on a marked task: proposal is derived by rule and written, the mark stays while scope is missing", async () => {
+        const calls: string[] = [];
+        const result = await labelTriageStep.run(
+            triageContext({
+                trackers: trackers(calls, {
+                    beads: [task("beads", "B-1", ["AFK", "triage-me"])],
+                }),
+                judgement: judgeAll(),
+                args: { apply: true },
+            }),
+        );
+        const stage = result.data.records.find((r) => r.group === "stage");
+        expect(stage).toMatchObject({
+            labels: ["proposal"],
+            confidence: 1,
+            tier: "code",
+            status: "applied",
+        });
+        expect(addCalls(calls)).toEqual(["beads:addLabel:B-1:proposal"]);
+        expect(removeCalls(calls)).toEqual([]);
+    });
+
+    it("Rule on a marked task: with scope present too, triage-me is removed in the same run", async () => {
+        const calls: string[] = [];
+        const listing = trackers(calls, {
+            beads: [task("beads", "B-1", ["work", "AFK", "triage-me"])],
+        });
+        const result = await labelTriageStep.run(
+            triageContext({ trackers: listing, judgement: judgeAll(), args: { apply: true } }),
+        );
+        expect(addCalls(calls)).toEqual(["beads:addLabel:B-1:proposal"]);
+        expect(removeCalls(calls)).toEqual(["beads:removeLabel:B-1:triage-me"]);
+        expect(await labelsOf(listing, "beads", "B-1")).toEqual(["work", "AFK", "proposal"]);
+        expect(result.data.unmarked).toEqual([
+            { source: "beads", taskId: "B-1", status: "applied", detail: null },
+        ]);
+        expect(result.reasons).toContain("unmarked 1 task triage-me");
+    });
+});
+
+describe("label triage: questions of marked tasks", () => {
+    it("Listed without a judgement: asked with tier marked and no confidence, and a question", async () => {
+        const result = await labelTriageStep.run(
+            triageContext({
+                trackers: trackers([], {
+                    beads: [task("beads", "B-1", ["personal", "triage-me"])],
+                }),
+                judgement: judgeAll(),
+                args: { apply: true },
+            }),
+        );
+        expect(result.data.records).toEqual([
+            expect.objectContaining({
+                taskId: "B-1",
+                group: "autonomy",
+                status: "asked",
+                tier: "marked",
+                confidence: null,
+            }),
+        ]);
+        expect(result.questions?.map((q) => q.id)).toEqual(["label-triage:beads:B-1:autonomy"]);
+        expect(result.reasons).toContain("1 group for the human");
+        expect(result.questions?.[0]?.options.some((o) => o.description.startsWith("judged"))).toBe(
+            false,
+        );
+    });
+
+    it("a marked task is never marked again, with or without evidence in doubt", async () => {
+        const settings = config();
+        settings.sources.beads.scope = "personal";
+        const calls: string[] = [];
+        const result = await labelTriageStep.run(
+            triageContext({
+                config: settings,
+                trackers: trackers(calls, {
+                    beads: [
+                        task("beads", "B-1", ["personal", "triage-me"]),
+                        task("beads", "B-2", ["nazaries", "triage-me"]),
+                    ],
+                }),
+                judgement: judgeAll(),
+                args: { apply: true },
+            }),
+        );
+        expect(result.data.records.filter((r) => r.status === "asked").length).toBeGreaterThan(1);
+        expect(addCalls(calls)).toEqual([]);
+        expect(removeCalls(calls)).toEqual([]);
+        expect(result.data.marked).toEqual([]);
+    });
+});
+
+describe("label triage: remove the mark from a complete task", () => {
+    it("Label added by the person: triage-me is removed and nothing else", async () => {
+        const calls: string[] = [];
+        const listing = trackers(calls, {
+            beads: [task("beads", "B-1", ["personal", "HITL", "proposal", "triage-me"])],
+        });
+        const result = await labelTriageStep.run(
+            triageContext({ trackers: listing, judgement: judgeAll(), args: { apply: true } }),
+        );
+        expect(removeCalls(calls)).toEqual(["beads:removeLabel:B-1:triage-me"]);
+        expect(addCalls(calls)).toEqual([]);
+        expect(await labelsOf(listing, "beads", "B-1")).toEqual(["personal", "HITL", "proposal"]);
+        expect(result.data.unmarked.map((m) => [m.taskId, m.status])).toEqual([["B-1", "applied"]]);
+    });
+
+    it("without --apply the removal is proposed", async () => {
+        const calls: string[] = [];
+        const result = await labelTriageStep.run(
+            triageContext({
+                trackers: trackers(calls, {
+                    beads: [task("beads", "B-1", ["personal", "HITL", "proposal", "triage-me"])],
+                }),
+            }),
+        );
+        expect(removeCalls(calls)).toEqual([]);
+        expect(result.data.unmarked.map((m) => m.status)).toEqual(["proposed"]);
+        expect(result.reasons).toContain("proposed unmarking 1 task triage-me");
+    });
+
+    it("Still in doubt: triage-me stays", async () => {
+        const calls: string[] = [];
+        const result = await labelTriageStep.run(
+            triageContext({
+                trackers: trackers(calls, { beads: [task("beads", "B-1", ["work", "triage-me"])] }),
+                judgement: judgeAll(),
+                args: { apply: true },
+            }),
+        );
+        expect(removeCalls(calls)).toEqual([]);
+        expect(result.data.unmarked).toEqual([]);
+    });
+});
+
+describe("label triage: marks in the triage report", () => {
+    it("Marks in JSON: the data lists the tasks marked, unmarked and the marked tasks read", async () => {
+        const result = await labelTriageStep.run(
+            triageContext({
+                trackers: trackers([], {
+                    beads: [
+                        task("beads", "B-1", ["personal"]),
+                        task("beads", "B-2", ["personal", "HITL", "proposal", "triage-me"]),
+                        task("beads", "B-3", ["personal", "triage-me"]),
+                    ],
+                }),
+                judgement: judgeWith(UNSURE_HITL),
+                args: { apply: true, json: true },
+            }),
+        );
+        expect(result.data.marked).toEqual([
+            { source: "beads", taskId: "B-1", status: "applied", detail: null },
+        ]);
+        expect(result.data.unmarked).toEqual([
+            { source: "beads", taskId: "B-2", status: "applied", detail: null },
+        ]);
+        expect(result.data.markedRead).toBe(2);
+    });
+
+    it("Newly marked: the report names Linear, DOT-130 and triage-me as marked", async () => {
+        const result = await labelTriageStep.run(
+            triageContext({
+                trackers: trackers([], { linear: [task("linear", "DOT-130", ["personal"])] }),
+                judgement: judgeWith(UNSURE_HITL),
+                args: { apply: true },
+            }),
+        );
+        expect(result.data.marked.map((m) => [m.source, m.taskId, m.status])).toEqual([
+            ["linear", "DOT-130", "applied"],
+        ]);
+        expect(labelTriageStep.render(result)).toContain("linear → DOT-130 → triage-me → marked");
     });
 });

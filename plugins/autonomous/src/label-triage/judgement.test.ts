@@ -11,7 +11,6 @@ import {
     type JudgementAnswer,
     type JudgementRequest,
     JUDGEMENT_SCHEMA,
-    JUDGEMENT_TIMEOUT_MS,
 } from "./judgement.ts";
 
 function fakeExec(
@@ -149,10 +148,6 @@ describe("JUDGEMENT_SCHEMA", () => {
 });
 
 describe("claudeJudgement", () => {
-    it("allows 300 s per batch", () => {
-        expect(JUDGEMENT_TIMEOUT_MS).toBe(300_000);
-    });
-
     it("calls claude in print mode, isolated, with the schema and passes the prompt on stdin", async () => {
         const exec = succeeding(envelopeFor({ tasks: ANSWERS }));
         await claudeJudgement(exec)(REQUEST);

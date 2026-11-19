@@ -2,8 +2,10 @@
 // sessions are untouched"; design D8). Without `--apply` it writes nothing. It
 // acts only on session ids recorded in an attempt, and never waits.
 
-import { writeFile } from "node:fs/promises";
+import { access, writeFile } from "node:fs/promises";
+import { basename } from "node:path";
 
+import { isStageLabel, type StageLabel } from "../label-contract/contract.ts";
 import { plural } from "../label-triage/render.ts";
 import type { TrackerTask, Trackers } from "../label-triage/trackers/tracker.ts";
 import type { Result } from "../result.ts";
@@ -14,7 +16,14 @@ import type { StageId } from "../stages/stage.ts";
 import type { AttemptId, AttemptRecord, AttemptSession, AttemptState } from "./record.ts";
 import { renderReconcile } from "./reconcile-render.ts";
 import { readMarker } from "./result.ts";
-import { attemptDir, capturePath, listRecords, resultPath, writeRecord } from "./state.ts";
+import {
+    attemptDir,
+    capturePath,
+    listRecords,
+    logbookReceiptPath,
+    resultPath,
+    writeRecord,
+} from "./state.ts";
 import { removeTaken } from "./taken.ts";
 
 const RECONCILE = "reconcile";
@@ -47,6 +56,9 @@ export interface ReconciledAttempt {
     marker: { ok: true } | { ok: false; reason: string } | null; // null when not checked
     action: ReconcileAction; // what was done; without --apply what would be done
     detail: string | null; // the retention reason, the cleanup error, the adopted id…
+    // What the task carried when the stage's tracker check passed: its stage label, or `closed`.
+    // Set only for an attempt finalised (or that would be); null when the task has no single stage label.
+    stageNow: StageLabel | "closed" | null;
 }
 
 export interface ReconcileData {
@@ -153,6 +165,7 @@ function reported(
             session: null,
             marker: null,
             detail: null,
+            stageNow: null,
             ...parts,
         },
         record: after,
@@ -273,6 +286,7 @@ interface Proofs {
     marker: { ok: true } | { ok: false; reason: string };
     holds: boolean;
     failure: string | null; // why the proofs do not hold
+    stageNow: ReconciledAttempt["stageNow"]; // read from the task the check passed on
     error: string | null; // the tracker read that failed
 }
 
@@ -280,15 +294,24 @@ async function checkProofs(r: Reconciler, record: AttemptRecord): Promise<Proofs
     const read = await readMarker(resultPath(attemptDir(r.state, record.id)), record.id);
     if (!read.ok) {
         const marker = { ok: false as const, reason: read.reason };
-        return { marker, holds: false, failure: read.reason, error: null };
+        return { marker, holds: false, failure: read.reason, stageNow: null, error: null };
     }
     const marker = { ok: true as const };
     const task = await r.trackers[record.task.source].readTask(record.task.id);
     if (!task.ok) {
-        return { marker, holds: false, failure: null, error: task.error };
+        return { marker, holds: false, failure: null, stageNow: null, error: task.error };
     }
     const failure = stageCheck(record.stage, task.value);
-    return { marker, holds: failure === null, failure, error: null };
+    const stageNow = failure === null ? stageOf(task.value) : null;
+    return { marker, holds: failure === null, failure, stageNow, error: null };
+}
+
+function stageOf({ closed, labels }: TrackerTask): ReconciledAttempt["stageNow"] {
+    const [stage, ...rest] = labels.filter(isStageLabel);
+    if (closed) {
+        return "closed";
+    }
+    return stage !== undefined && rest.length === 0 ? stage : null;
 }
 
 // null when the stage's own tracker check holds; an unregistered stage never does.
@@ -354,16 +377,25 @@ async function reconcileStarted(r: Reconciler, record: AttemptRecord): Promise<R
         ? await save(r, record, { observed: observation(r, observed) })
         : record;
     const proofs = await checkProofs(r, record);
-    const parts = { session: sessionView(observed), marker: proofs.marker };
+    const decision = decide(observed, proofs.holds);
+    const parts = viewParts(observed, proofs, decision);
     if (proofs.error !== null) {
         return failed(current, proofs.error, parts);
     }
-    const decision = decide(observed, proofs.holds);
     if (!r.apply || decision === "completing" || decision === "observe") {
         return reported(record, current, { ...parts, action: DRY_ACTIONS[decision] });
     }
     const target = { record, current, id, observed, parts };
     return decision === "finalise" ? finalise(r, target) : retain(r, target, proofs.failure);
+}
+
+function viewParts(
+    observed: Observed,
+    proofs: Proofs,
+    decision: Decision,
+): Partial<ReconciledAttempt> {
+    const parts = { session: sessionView(observed), marker: proofs.marker };
+    return decision === "finalise" ? { ...parts, stageNow: proofs.stageNow } : parts;
 }
 
 function observation(r: Reconciler, observed: Observed): AttemptRecord["observed"] {
@@ -399,6 +431,17 @@ async function saveCapture(
     return [];
 }
 
+// Only a note: it never changes the action, the state or the outcome.
+async function missingLogbook(r: Reconciler, record: AttemptRecord): Promise<string[]> {
+    const receipt = logbookReceiptPath(attemptDir(r.state, record.id));
+    try {
+        await access(receipt);
+        return [];
+    } catch {
+        return [`attempt ${record.id} left no logbook entry (no ${basename(receipt)})`];
+    }
+}
+
 function joined(notes: string[]): string | null {
     return notes.length > 0 ? notes.join("; ") : null;
 }
@@ -421,7 +464,10 @@ async function retain(r: Reconciler, target: Target, failure: string | null): Pr
 // cleanup pending for every later run to retry (reconcileCleanup).
 async function finalise(r: Reconciler, target: Target): Promise<Reconciled> {
     const { record, id, observed, parts } = target;
-    const notes = await saveCapture(r, target.current, target);
+    const notes = [
+        ...(await saveCapture(r, target.current, target)),
+        ...(await missingLogbook(r, record)),
+    ];
     const current = await saveConversation(r, target.current, observed);
     const removed = await removeUnlessGone(r, id, observed);
     if (!removed.ok) {

@@ -5,14 +5,16 @@
 // failed or rejected comparison makes the step not evaluable with no fallback
 // order. It never writes and never contributes questions.
 
+import type { CapacityData } from "../capacity/step.ts";
 import type { Scope, SelectionConfig } from "../config.ts";
 import { plural } from "../label-triage/render.ts";
 import type { TrackerResult } from "../label-triage/trackers/tracker.ts";
-import type { Step, StepResult, StepTier } from "../runner.ts";
-import { labelledThisRun, selectCandidates } from "./candidates.ts";
+import type { RunContext, Step, StepResult, StepTier } from "../runner.ts";
+import { labelledThisRun, selectCandidates, type SlotsFull } from "./candidates.ts";
 import { choose } from "./compare.ts";
 import { readMachineScope } from "./machine-scope.ts";
 import { byReason, renderSelect } from "./render.ts";
+import { splitByStage } from "./stage.ts";
 import type {
     Candidate,
     Excluded,
@@ -30,7 +32,9 @@ const EMPTY: SelectData = {
     machineScope: null,
     selected: null,
     candidates: [],
+    setAside: [],
     excluded: [],
+    readyToClose: [],
     notEvaluated: [],
     comparison: null,
 };
@@ -69,19 +73,39 @@ export const selectStep: Step<SelectData> = {
             config,
             labelledThisRun: labelledThisRun(ctx.results),
             detail: read.value.detail,
+            ...slots(ctx),
         });
         if (!found.ok) {
             return result("not-evaluable", [found.error], known);
         }
-        const { candidates, excluded } = found.value;
-        const data = { ...known, candidates: candidates.map(summary), excluded };
+        const { candidates, excluded, readyToClose } = found.value;
         if (candidates.length === 0) {
-            return result("wait", waitReasons(excluded), data);
+            return result("wait", waitReasons(excluded), { ...known, excluded, readyToClose });
         }
-        return compare(candidates, scope.scope, config.selection, ctx.io.selection, data);
+        const { kept, setAside } = splitByStage(candidates);
+        const data = {
+            ...known,
+            candidates: kept.map(summary),
+            setAside: setAside.map(summary),
+            excluded,
+            readyToClose,
+        };
+        return compare(kept, scope.scope, config.selection, ctx.io.selection, data);
     },
     render: renderSelect,
 };
+
+// Only an iteration of the loop binds the slots, and only when `capacity` could tell.
+export function slots(ctx: RunContext): { full?: SlotsFull } {
+    const capacity = ctx.results.find((r) => r.step === "capacity")?.data as
+        | CapacityData
+        | null
+        | undefined;
+    if (!ctx.args.loop || capacity === null || capacity === undefined) {
+        return {};
+    }
+    return { full: { grill: capacity.grill.full, work: capacity.work.full } };
+}
 
 // A read error carries the command; the source in front of it names the
 // tracker, as label-triage does.

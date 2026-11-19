@@ -1,57 +1,46 @@
-import type { OpenUsageLimits, OpenUsageProvider } from "./parse.ts";
+import type { QuotaAccount } from "./source.ts";
 
 export interface Account {
     key: string;
-    displayName: string | null;
+    email: string | null;
+    displayName: string;
 }
 
 export type Selection =
-    | {
-          ok: true;
-          key: string;
-          provider: OpenUsageProvider | undefined;
-          errors: string[];
-          accounts: Account[];
-      }
+    | { ok: true; account: QuotaAccount; accounts: Account[] }
     | { ok: false; reason: string; accounts: Account[] };
 
-function isClaudeKey(key: string): boolean {
-    return key === "claude" || key.startsWith("claude@");
+export function listAccounts(accounts: readonly QuotaAccount[]): Account[] {
+    return accounts.map(({ id, email, displayName }) => ({ key: id, email, displayName }));
 }
 
-// Accounts come from providers and from errors: an account whose refresh failed
-// may appear only in `errors`, and must still be selectable so the failure is reported.
-export function selectAccount(limits: OpenUsageLimits, requested: string | undefined): Selection {
-    const keys = [
-        ...new Set([...Object.keys(limits.providers), ...limits.errors.map((e) => e.providerId)]),
-    ]
-        .filter(isClaudeKey)
-        .sort();
-    const accounts = keys.map((key) => ({
-        key,
-        displayName: limits.providers[key]?.displayName ?? null,
-    }));
+function sameEmail(a: string, b: string): boolean {
+    return a.toLowerCase() === b.toLowerCase();
+}
 
-    if (requested !== undefined && !keys.includes(requested)) {
-        return { ok: false, reason: `unknown account "${requested}"`, accounts };
+// The gate evaluates the active account and no other (ADR 0006): with one account or with
+// several, the account is the one whose email address is the login's. Two matches are refused,
+// since one email address can belong to two organisations and the login names neither.
+export function selectAccount(accounts: readonly QuotaAccount[], email: string): Selection {
+    const listed = listAccounts(accounts);
+    if (accounts.length === 0) {
+        return { ok: false, reason: "the quota source reported no Claude account", accounts: [] };
     }
-    if (requested === undefined && keys.length > 1) {
+    const matches = accounts.filter((a) => a.email !== null && sameEmail(a.email, email));
+    const [match] = matches;
+    if (match === undefined) {
         return {
             ok: false,
-            reason: `ambiguous account: ${keys.length} Claude accounts present, pass --account <provider-key>`,
-            accounts,
+            reason: `the active account ${email} is not reported`,
+            accounts: listed,
         };
     }
-    const key = requested ?? keys[0];
-    if (key === undefined) {
-        return { ok: false, reason: "OpenUsage reported no Claude account", accounts };
+    if (matches.length > 1) {
+        return {
+            ok: false,
+            reason: `the active account ${email} is reported by ${matches.length} accounts, so none can be chosen: ${matches.map((a) => a.id).join(", ")}`,
+            accounts: listed,
+        };
     }
-
-    return {
-        ok: true,
-        key,
-        provider: limits.providers[key],
-        errors: limits.errors.filter((e) => e.providerId === key).map((e) => e.message),
-        accounts,
-    };
+    return { ok: true, account: match, accounts: listed };
 }

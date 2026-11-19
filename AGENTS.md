@@ -59,25 +59,29 @@ version and no changelog — only plugins are versioned.
 
 ## Toolchain
 
-| Command                    | What it checks                                                     |
-| -------------------------- | ------------------------------------------------------------------ |
-| `bun run lint:oxfmt`       | Formatting (`:fix` to apply)                                       |
-| `bun run lint:eslint`      | ESLint, including type-aware rules                                 |
-| `bun run lint:markdown`    | Markdown                                                           |
-| `bun run lint:knip`        | Unused files, exports and dependencies; more than one import cycle |
-| `bun run lint:fallow`      | Dead code, full repository                                         |
-| `bun run lint:marketplace` | Marketplace consistency and version agreement                      |
-| `bun run typecheck`        | TypeScript                                                         |
-| `bun run test`             | Vitest, across repo scripts and every plugin workspace             |
+| Command                     | What it checks                                                     |
+| --------------------------- | ------------------------------------------------------------------ |
+| `bun run lint:oxfmt`        | Formatting (`:fix` to apply)                                       |
+| `bun run lint:eslint`       | ESLint, including type-aware rules                                 |
+| `bun run lint:markdownlint` | Markdown                                                           |
+| `bun run lint:knip`         | Unused files, exports and dependencies; more than one import cycle |
+| `bun run lint:fallow`       | Dead code, full repository                                         |
+| `bun run lint:marketplace`  | Marketplace consistency and version agreement                      |
+| `bun run typecheck`         | TypeScript                                                         |
+| `bun run test`              | Vitest, across repo scripts and every plugin workspace             |
 
 Type-aware linting is real here: the root `tsconfig.json` uses
 `include: ["**/*.ts"]` with no exclusions for config files, so a new `.ts` file
 outside that glob fails the parser rather than being skipped quietly.
 
-The agent scaffolding — `openspec/`, `.agents/`, `.claude/`, `.junie/`,
-`.opencode/`, `.pi/` — is excluded from oxfmt, ESLint, knip, fallow and
-markdownlint. Those five ignore lists must stay identical; divergence shows up
-as one tool failing on files the others skip.
+The agent scaffolding — `openspec/`, `.agent/`, `.agents/`, `.amazonq/`,
+`.claude/`, `.codex/`, `.cursor/`, `.gemini/`, `.junie/`, `.opencode/`, `.pi/`,
+`.github/agents/`, `.github/prompts/`, `.github/skills/` and
+`.github/copilot-instructions.md` — is excluded from oxfmt, ESLint, knip,
+fallow and markdownlint. Those five ignore lists must stay identical;
+divergence shows up as one tool failing on files the others skip. Only
+markdownlint also excludes `node_modules/`, `dist/`, `.git/` and `.worktrees/`,
+which the other tools skip on their own, and `AGENTS.md` itself stays linted.
 
 Oxfmt reads exclusions from `oxfmt.config.ts`, including explicit file and
 directory arguments. For selected files, run

@@ -1,7 +1,8 @@
 import { existsSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { mkdir } from "node:fs/promises";
 
-import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { STAGES } from "../stages/registry.ts";
 
 import type { ConfigLoad } from "../config.ts";
 import { task, trackers, triageContext } from "../label-triage/test-fixtures.ts";
@@ -18,6 +19,7 @@ import {
     capturePath,
     readRecord,
     recordPath,
+    logbookReceiptPath,
     resultPath,
     writeJsonAtomic,
     writeRecord,
@@ -29,6 +31,7 @@ const SESSION = "ef3fde3ca69c4b8b";
 const AGENT = "4daf1b40-6249-4a25-bdd7-0a69bc77e342";
 const ID = "linear:DOT-109:test:1";
 const PATH = "/w/dotfiles-worktrees/feature-DOT-109-stage-session-manager";
+const NOTE = `attempt ${ID} left no logbook entry (no logbook.json)`;
 const TITLE = "auto 🧪 Stage session manager (DOT-109)";
 
 // A session listed at the workspace path, titled as the record names it unless told otherwise.
@@ -41,6 +44,7 @@ beforeEach(() => {
 });
 
 afterEach(() => {
+    vi.restoreAllMocks();
     rmSync(state, { recursive: true, force: true });
 });
 
@@ -338,6 +342,8 @@ describe("reconcile: completion needs two proofs", () => {
 
     it("does not complete a stage without an implementation", async () => {
         const unknown = record({ id: "linear:DOT-109:proposal:1", stage: "proposal" });
+        // Every stage id is registered, so the registry is made to lack this one.
+        vi.spyOn(STAGES, "get").mockReturnValue(undefined);
         await given(unknown);
         await marker(unknown.id);
         const sessions = fakeSessions({
@@ -470,7 +476,7 @@ describe("reconcile: finalisation", () => {
         const result = await reconcileStep.run(context({ sessions, trackers: linear([]) }));
         expect(result.data.attempts[0]).toMatchObject({
             action: "finalised",
-            detail: "capture failed: aoe session capture: pane gone",
+            detail: `capture failed: aoe session capture: pane gone; ${NOTE}`,
         });
         expect(result.outcome).toBe("advance");
     });
@@ -494,6 +500,94 @@ describe("reconcile: finalisation", () => {
             `remove ${SESSION}`,
         ]);
         expect((await stored()).state).toBe("completed");
+    });
+});
+
+describe("reconcile: a completed attempt without a logbook entry", () => {
+    const finalise = async (receipt: boolean) => {
+        await given(record());
+        await marker();
+        if (receipt) {
+            await writeJsonAtomic(logbookReceiptPath(attemptDir(state, ID)), { schema: "x" });
+        }
+        const sessions = fakeSessions({ observe: () => ok(seen("gone")) });
+        return reconcileStep.run(context({ sessions, trackers: linear([]) }));
+    };
+
+    it("is noted when the task closed in the grill and no entry was published", async () => {
+        const result = await finalise(false);
+        expect(result.data.attempts[0]).toMatchObject({
+            state: "completed",
+            action: "finalised",
+            detail: NOTE,
+        });
+        expect((await stored()).state).toBe("completed");
+    });
+
+    it("is not noted when its directory holds the logbook receipt", async () => {
+        const result = await finalise(true);
+        expect(result.data.attempts[0]).toMatchObject({ action: "finalised", detail: null });
+    });
+
+    it("leaves the step's outcome and reasons the same with and without the note", async () => {
+        const without = await finalise(false);
+        rmSync(state, { recursive: true, force: true });
+        state = tempState();
+        const withReceipt = await finalise(true);
+        expect(without.outcome).toBe(withReceipt.outcome);
+        expect(without.reasons).toEqual(withReceipt.reasons);
+    });
+
+    it("is not noted for a retained attempt", async () => {
+        await given(record());
+        const sessions = fakeSessions({ observe: () => ok(seen("stopped")) });
+        const result = await reconcileStep.run(context({ sessions, trackers: linear([]) }));
+        expect(result.data.attempts[0]?.action).toBe("retained");
+        expect(result.data.attempts[0]?.detail).not.toContain("logbook");
+    });
+});
+
+describe("reconcile: the stage the task carries after finalisation", () => {
+    const GRILL: AttemptId = "linear:DOT-109:grill-me:1";
+
+    async function finalised(fakes: Trackers, dry = false) {
+        await given(record({ id: GRILL, stage: "grill-me" }));
+        await marker(GRILL);
+        const sessions = fakeSessions({
+            observe: () => ok(seen("idle")),
+            capture: () => ok("pane"),
+            remove: () => ok(undefined),
+        });
+        const result = await reconcileStep.run(context({ sessions, trackers: fakes, apply: !dry }));
+        return result.data.attempts[0];
+    }
+
+    it("is the stage label the task now carries", async () => {
+        const fakes = linear([], ["taken", "proposal", "AFK"]);
+        expect(await finalised(fakes)).toMatchObject({ action: "finalised", stageNow: "proposal" });
+    });
+
+    it("is closed when the task is closed", async () => {
+        const closed = task("linear", "DOT-109", ["taken", "grill-me"], { closed: true });
+        const fakes = trackers([], { linear: [closed] });
+        expect(await finalised(fakes)).toMatchObject({ action: "finalised", stageNow: "closed" });
+    });
+
+    it("is reported by a dry run too", async () => {
+        const fakes = linear([], ["taken", "proposal", "AFK"]);
+        expect(await finalised(fakes, true)).toMatchObject({
+            action: "finalised",
+            stageNow: "proposal",
+        });
+    });
+
+    it("is null for an attempt that is not finalised", async () => {
+        await given(record());
+        const sessions = fakeSessions({ observe: () => ok(seen("running")) });
+        const result = await reconcileStep.run(
+            context({ sessions, trackers: linear([], ["taken", "grill-me"]) }),
+        );
+        expect(result.data.attempts[0]?.stageNow).toBeNull();
     });
 });
 

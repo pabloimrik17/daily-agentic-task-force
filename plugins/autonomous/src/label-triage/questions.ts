@@ -81,14 +81,10 @@ function question(
     descriptions: ReadonlyMap<TaskKey, string>,
 ): HandoffQuestion {
     const { task } = detection;
-    const confidence = record.confidence.toFixed(2);
-    const seen = record.labels.length > 0 ? record.labels.join(", ") : "no label";
-    const added = written.length > 0 ? ` + written [${written.join(", ")}]` : "";
-    // A rule computes no confidence, so only a judgement shows one.
-    const tier = record.tier === "llm" ? `llm, ${confidence}` : record.tier;
+    const confidence = judgedConfidence(record);
     const lines = [
         `${record.source} ${record.taskId} "${record.title}": which ${record.group} label?`,
-        `Seen: labels [${task.labels.join(", ")}]${added} → ${seen} (${tier}) → ${record.detail ?? ""} — ${record.reason}`,
+        seenLine(record, task.labels, written, confidence),
     ];
     const description = excerpt(
         task.description ?? descriptions.get(taskKey(task.source, task.id)) ?? "",
@@ -101,7 +97,7 @@ function question(
         .filter(isContractLabel)
         .map((label): HandoffOption => {
             // Only a judgement chooses an option; a rule record's evidence is already in the text.
-            const judged = record.tier === "llm" && record.labels.includes(label);
+            const judged = confidence !== null && record.labels.includes(label);
             const prefix = judged ? `judged ${confidence} · ${record.reason} — ` : "";
             return { label, value: label, description: `${prefix}${MEANINGS[label]}` };
         });
@@ -113,6 +109,25 @@ function question(
         options: [...options, LATER],
         multiSelect: false,
     };
+}
+
+// A rule computes no confidence and a marked group is not judged, so only a judgement has one.
+function judgedConfidence(record: TriageRecord): string | null {
+    return record.tier === "llm" ? (record.confidence ?? 0).toFixed(2) : null;
+}
+
+function seenLine(
+    record: TriageRecord,
+    taskLabels: readonly string[],
+    written: readonly string[],
+    confidence: string | null,
+): string {
+    const seen = record.labels.length > 0 ? record.labels.join(", ") : "no label";
+    const added = written.length > 0 ? ` + written [${written.join(", ")}]` : "";
+    const tier = confidence === null ? record.tier : `llm, ${confidence}`;
+    // A marked group was not judged, so it has no detail to show.
+    const detail = record.detail === null ? "" : ` → ${record.detail}`;
+    return `Seen: labels [${taskLabels.join(", ")}]${added} → ${seen} (${tier})${detail} — ${record.reason}`;
 }
 
 // Cut by code points, so a character outside the BMP (an emoji) is never split in two.

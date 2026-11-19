@@ -1,7 +1,8 @@
 import type { StepResult } from "../runner.ts";
-import type { WindowReport } from "./decide.ts";
+import type { OtherResource, WindowReport } from "./decide.ts";
 import type { Projection } from "./project.ts";
-import type { QuotaGateData } from "./step.ts";
+import type { Account } from "./select.ts";
+import type { CapacityAccount, QuotaGateData } from "./step.ts";
 
 const PROJECTION_REASONS: Record<Extract<Projection, { available: false }>["reason"], string> = {
     "non-positive-limit": "limit is not positive",
@@ -12,12 +13,11 @@ const PROJECTION_REASONS: Record<Extract<Projection, { available: false }>["reas
 };
 
 export function renderQuotaGate(result: StepResult<QuotaGateData>): string {
-    const { account, accounts, windows, otherResources } = result.data;
+    const { account, accounts, windows, otherResources, accountsWithCapacity = [] } = result.data;
     const lines = [`[${result.step}] ${result.outcome} (${result.tier})`];
 
     if (account) {
-        const name = [account.displayName, account.plan].filter(Boolean).join(" · ");
-        lines.push(`  account   ${account.key}${name ? ` — ${name}` : ""}`);
+        lines.push(`  account   ${describe(account, [account.plan])}`);
         if (account.fetchedAt) {
             lines.push(
                 `  fetched   ${account.fetchedAt}${account.stale ? "  [STALE — values below are last known]" : ""}`,
@@ -28,16 +28,36 @@ export function renderQuotaGate(result: StepResult<QuotaGateData>): string {
         lines.push(`  ${w.name.padEnd(9)} ${renderWindow(w)}`);
     }
     for (const r of otherResources) {
-        lines.push(`  ${r.name.padEnd(9)} ${amount(r.used, r.limit, r.unit)}  not evaluated`);
+        lines.push(`  ${r.name.padEnd(9)} ${current(r)}  not evaluated`);
     }
     if (!account && accounts.length > 0) {
+        lines.push("  accounts:", ...accounts.map((a) => `    - ${describe(a)}`));
+    }
+    if (accountsWithCapacity.length > 0) {
         lines.push(
-            "  accounts:",
-            ...accounts.map((a) => `    - ${a.key}${a.displayName ? ` — ${a.displayName}` : ""}`),
+            "  capacity elsewhere (Claude Code is not logged in as these):",
+            ...accountsWithCapacity.map((a) => `    - ${elsewhere(a)}`),
         );
     }
     lines.push("  reasons:", ...result.reasons.map((r) => `    - ${r}`));
     return lines.join("\n");
+}
+
+// The email address leads, since it is how the account is known outside the quota source.
+function describe(account: Account, extra: (string | null)[] = []): string {
+    const name = [account.displayName, ...extra].filter(Boolean).join(" · ");
+    if (account.email === null) return `${account.key}${name ? ` — ${name}` : ""}`;
+    return `${account.email} — ${[account.key, name].filter(Boolean).join(" · ")}`;
+}
+
+function elsewhere(account: CapacityAccount): string {
+    return account.email ?? account.key;
+}
+
+// A balance shows what is available; anything else shows used over limit.
+function current(r: OtherResource): string {
+    if (r.used === null && r.available !== null) return `${value(r.available, r.unit)} available`;
+    return amount(r.used, r.limit, r.unit);
 }
 
 function renderWindow(w: WindowReport): string {

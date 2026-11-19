@@ -1,87 +1,82 @@
 import { describe, expect, it } from "vitest";
 
-import { parseLimits } from "./parse.ts";
 import { selectAccount } from "./select.ts";
-import { limits, provider, session } from "./test-fixtures.ts";
+import { ACCOUNT, ANA, LUIS, provider, quotaAccounts, session } from "./test-fixtures.ts";
 
-function parsed(input: unknown) {
-    const result = parseLimits(input);
-    if (!result.ok) throw new Error(result.error);
-    return result.value;
+const WORK = "claude@9f8e7d6c";
+const OTHER = "claude@5e6f7a8b";
+const named = (displayName: string) => provider({ session: session(10) }, { displayName });
+const ana = named(`Claude · ${ANA}`);
+const luis = named(`Claude · ${LUIS}`);
+
+async function select(providers: Record<string, unknown>, email = ANA) {
+    return selectAccount(await quotaAccounts(providers), email);
 }
 
-const personal = provider({ session: session(10) });
-const work = provider({ session: session(20) }, { displayName: "Claude: Work (me@work.example)" });
-
 describe("selectAccount", () => {
-    it("uses the only Claude account", () => {
-        const selection = selectAccount(
-            parsed(limits({ claude: personal, codex: personal })),
-            undefined,
-        );
-        expect(selection.ok && selection.key).toBe("claude");
+    it("evaluates the account of the active email address among several", async () => {
+        const selection = await select({
+            [WORK]: luis,
+            [ACCOUNT]: ana,
+            [OTHER]: named("Claude · eva@example.com"),
+        });
+        expect(selection.ok && selection.account.id).toBe(ACCOUNT);
+        expect(selection.accounts).toHaveLength(3);
     });
 
-    it("refuses to choose between several accounts and lists them", () => {
-        const selection = selectAccount(
-            parsed(limits({ claude: personal, "claude@123": work })),
-            undefined,
-        );
+    it("evaluates a single account that is the active one", async () => {
+        const selection = await select({ [ACCOUNT]: ana, "codex@0a0b0c0d": ana });
+        expect(selection.ok && selection.account.id).toBe(ACCOUNT);
+    });
+
+    it("does not evaluate a single account that is not the active one", async () => {
+        const selection = await select({ [WORK]: luis });
         expect(selection).toEqual({
             ok: false,
-            reason: "ambiguous account: 2 Claude accounts present, pass --account <provider-key>",
+            reason: `the active account ${ANA} is not reported`,
+            accounts: [{ key: WORK, email: LUIS, displayName: `Claude · ${LUIS}` }],
+        });
+    });
+
+    it("names the active email address and lists the accounts with theirs", async () => {
+        const selection = await select({ [ACCOUNT]: named("Claude · Personal"), [WORK]: luis });
+        expect(selection).toEqual({
+            ok: false,
+            reason: `the active account ${ANA} is not reported`,
             accounts: [
-                { key: "claude", displayName: "Claude: Personal (me@example.com)" },
-                { key: "claude@123", displayName: "Claude: Work (me@work.example)" },
+                { key: ACCOUNT, email: null, displayName: "Claude · Personal" },
+                { key: WORK, email: LUIS, displayName: `Claude · ${LUIS}` },
             ],
         });
     });
 
-    it("uses an explicit key", () => {
-        const selection = selectAccount(
-            parsed(limits({ claude: personal, "claude@123": work })),
-            "claude@123",
-        );
-        expect(selection.ok && selection.provider?.displayName).toBe(
-            "Claude: Work (me@work.example)",
+    it("compares email addresses without regard to case", async () => {
+        const selection = await select({ [WORK]: luis, [ACCOUNT]: ana }, "Ana@Example.com");
+        expect(selection.ok && selection.account.id).toBe(ACCOUNT);
+    });
+
+    it("refuses two accounts with the active email address, listing both ids", async () => {
+        const selection = await select({ [ACCOUNT]: ana, [WORK]: named(`Claude · ${ANA}`) });
+        expect(selection.ok).toBe(false);
+        expect(!selection.ok && selection.reason).toBe(
+            `the active account ${ANA} is reported by 2 accounts, so none can be chosen: ${ACCOUNT}, ${WORK}`,
         );
     });
 
-    it("reports an unknown key with the available ones", () => {
-        const selection = selectAccount(
-            parsed(limits({ claude: personal, "claude@123": work })),
-            "claude@999",
-        );
+    it("never matches an account whose display name carries no email address", async () => {
+        const selection = await select({ [ACCOUNT]: named("Claude") });
         expect(selection.ok).toBe(false);
-        expect(!selection.ok && selection.reason).toBe('unknown account "claude@999"');
-        expect(!selection.ok && selection.accounts.map((a) => a.key)).toEqual([
-            "claude",
-            "claude@123",
-        ]);
+        expect(!selection.ok && selection.reason).toBe(`the active account ${ANA} is not reported`);
     });
 
     it.each([
         ["no provider at all", {}],
-        ["only a non-Claude provider", { codex: personal }],
-    ])("reports no Claude account when OpenUsage has %s", (_, providers) => {
-        const selection = selectAccount(parsed(limits(providers)), undefined);
-        expect(selection).toEqual({
+        ["only a non-Claude provider", { "codex@0a0b0c0d": ana }],
+    ])("reports no Claude account when the source has %s", async (_, providers) => {
+        expect(await select(providers)).toEqual({
             ok: false,
-            reason: "OpenUsage reported no Claude account",
+            reason: "the quota source reported no Claude account",
             accounts: [],
-        });
-    });
-
-    it("selects an account known only from an error, carrying the error", () => {
-        const selection = selectAccount(
-            parsed(limits({}, [{ providerId: "claude", message: "token expired" }])),
-            undefined,
-        );
-        expect(selection).toMatchObject({
-            ok: true,
-            key: "claude",
-            provider: undefined,
-            errors: ["token expired"],
         });
     });
 });

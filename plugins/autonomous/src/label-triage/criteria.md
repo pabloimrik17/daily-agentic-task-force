@@ -8,8 +8,8 @@ to a task; a task carrying both is in conflict.
 The autonomy group holds `AFK` and `HITL`. Exactly one of the two applies to
 a task; a task carrying both is in conflict.
 
-The stage group holds `grill-me` and `proposal`. Exactly one of the two
-applies to a task; a task carrying both is in conflict.
+The stage group holds `grill-me`, `proposal` and `implement`. Exactly one of
+the three applies to a task; a task carrying two is in conflict.
 
 `work` is Nazaries work.
 
@@ -26,6 +26,8 @@ anyone works on it.
 `proposal` means the task is ready for proposal preparation, its autonomy
 decided and any grill it needed over.
 
+`implement` means the task has a proposal and is ready to implement.
+
 Two things are decided for a task: its scope and its autonomy. The stage is
 never decided on its own; it follows the autonomy decision.
 
@@ -37,7 +39,8 @@ decides it. A task with no stage label that is decided `AFK` or `HITL` gets
 `proposal` as its stage.
 
 `grill-me` is an option only when the task has no stage label. A task that
-already carries `grill-me` or `proposal` is decided `AFK` or `HITL`.
+already carries `grill-me`, `proposal` or `implement` is decided `AFK` or
+`HITL`.
 
 Constraints: exactly one scope label applies to a task. Exactly one of `AFK`
 and `HITL` applies to a task, except that a task whose stage is `grill-me`
