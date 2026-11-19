@@ -3,9 +3,17 @@
 // deterministic for a given input so the report is reproducible, and
 // validity is checked before the confidence threshold.
 
-import { GROUPS, type Group, isStageLabel, isValidDecision } from "../label-contract/contract.ts";
+import {
+    DECIDED_GROUPS,
+    GROUPS,
+    type Group,
+    isStageLabel,
+    isValidDecision,
+    TRIAGE_LABEL,
+} from "../label-contract/contract.ts";
 import type { Detection } from "../label-contract/detect.ts";
 import type { Derivation } from "./rules.ts";
+import type { TriageRecord } from "./write.ts";
 
 // A task already labelled `work` keeps its priority once its scope group is written.
 function hasWorkEvidence(detection: Detection): boolean {
@@ -46,15 +54,42 @@ export function orderForJudgement(detections: Detection[]): Detection[] {
     return [...detections].sort(compareForJudgement);
 }
 
+// A marked task is already left for the human: it is neither judged nor counted against the cap.
 export function selectForJudgement(
     detections: Detection[],
     cap: number,
 ): { selected: Detection[]; remainder: number } {
-    const ordered = orderForJudgement(detections);
+    const ordered = orderForJudgement(detections.filter((detection) => !detection.marked));
     return {
         selected: ordered.slice(0, cap),
         remainder: Math.max(0, ordered.length - cap),
     };
+}
+
+export const MARKED_REASON = `carries ${TRIAGE_LABEL}: left for the human, not judged again`;
+
+// Spec label-triage, "Questions of marked tasks": a missing scope or autonomy group of a
+// marked task that no rule or alias decides is listed for the human without a judgement.
+export function markedRecords(detections: readonly Detection[]): TriageRecord[] {
+    return detections
+        .filter((detection) => detection.marked)
+        .flatMap((detection) =>
+            DECIDED_GROUPS.filter((group) => {
+                const state = detection.groups[group];
+                return state.status === "missing" && state.evidence.length === 0;
+            }).map((group): TriageRecord => ({
+                source: detection.task.source,
+                taskId: detection.task.id,
+                title: detection.task.title,
+                group,
+                labels: [],
+                confidence: null,
+                reason: MARKED_REASON,
+                tier: "marked",
+                status: "asked",
+                detail: null,
+            })),
+        );
 }
 
 export function violation(
@@ -98,10 +133,12 @@ export function decide(
             reason: `invalid under the contract: ${violation(derivation.group, derivation.labels, taskLabels)}`,
         };
     }
-    if (derivation.confidence < threshold) {
+    // Only a `marked` record has no confidence, and it is never decided here.
+    const confidence = derivation.confidence ?? 0;
+    if (confidence < threshold) {
         return {
             status: "asked",
-            reason: `below threshold ${threshold.toFixed(2)}: ${derivation.confidence.toFixed(2)}`,
+            reason: `below threshold ${threshold.toFixed(2)}: ${confidence.toFixed(2)}`,
         };
     }
     return { status: "eligible", reason: "" };
