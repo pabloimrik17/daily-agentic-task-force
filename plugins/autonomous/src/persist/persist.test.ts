@@ -633,7 +633,7 @@ describe("persist: Persist preconditions", () => {
         const report = await run();
         expectNothingWritten(report, fake, dir);
         expect(report.reasons).toEqual([
-            `attempt ${id} is a test attempt: persist mode takes only grill-me and proposal attempts`,
+            `attempt ${id} is a test attempt: persist mode takes only grill-me, proposal and implement attempts`,
         ]);
     });
 
@@ -777,6 +777,81 @@ describe("persist: Proposal attempts", () => {
         expect(report.outcome).toBe("not-evaluable");
         expect(report.reasons).toEqual([NOT_FOUND(PROPOSAL_HEADER)]);
         expect(report.readBack.comment).toBe(false);
+        expect(existsSync(receiptPath(dir))).toBe(false);
+    });
+});
+
+describe("persist: Implementation attempts", () => {
+    const IMPLEMENT = "linear:DOT-121:implement:1";
+    const IMPLEMENT_HEADER = `autonomous · implement · ${IMPLEMENT} · stage summary saved`;
+
+    // An implementation attempt holds a stage summary and no definition.
+    const arrangeImplement = (script: DocumentScript = {}, options: AttemptOptions = {}) =>
+        arrange({ stage: "implement", definition: null, ...options }, script);
+
+    it("Implementation attempt persisted: the comment is written and read back, the description is unchanged and the receipt is written", async () => {
+        const { run, fake, dir, id } = await arrangeImplement();
+        const report = await run();
+        expect(id).toBe(IMPLEMENT);
+        expect(report).toMatchObject({
+            outcome: "advance",
+            attempt: IMPLEMENT,
+            task: { source: "linear", id: "DOT-121", title: "Fix the login" },
+            written: { description: false, comment: "posted" },
+            readBack: { description: false, comment: true },
+            notes: [],
+            reasons: [],
+            receipt: receiptPath(dir),
+        });
+        expect(fake.description()).toBe("Fix the login");
+        expect(existsSync(join(dir, "description.md"))).toBe(false);
+        expect(readJson(receiptPath(dir))).toEqual({
+            schema: RECEIPT_SCHEMA,
+            attempt: IMPLEMENT,
+            task: { source: "linear", id: "DOT-121" },
+            at: STARTED.toISOString(),
+            header: IMPLEMENT_HEADER,
+        });
+        expect(fake.calls).toEqual([
+            "readTask DOT-121",
+            "readComments DOT-121",
+            "addComment DOT-121",
+            "readComments DOT-121",
+        ]);
+    });
+
+    it("Comment header: the first line is the header, a blank line follows, and the description is unchanged", async () => {
+        const { run, fake } = await arrangeImplement({}, { summary: SUMMARY });
+        await run();
+        expect(headerOf(IMPLEMENT)).toBe(IMPLEMENT_HEADER);
+        expect(fake.comments()).toEqual([`${IMPLEMENT_HEADER}\n\n${SUMMARY}`]);
+        expect(fake.description()).toBe("Fix the login");
+    });
+
+    it("Comment header: the same header is not posted twice", async () => {
+        const { run, fake, dir } = await arrangeImplement();
+        await run();
+        const report = await run();
+        expect(report.outcome).toBe("advance");
+        expect(report.written.comment).toBe("existing");
+        expect(fake.comments()).toHaveLength(1);
+        expect(existsSync(receiptPath(dir))).toBe(true);
+    });
+
+    it("Implement attempt without a definition file: the definition is not reported missing", async () => {
+        const { run, dir } = await arrangeImplement();
+        expect(existsSync(join(dir, "definition.md"))).toBe(false);
+        const report = await run();
+        expect(report.reasons).toEqual([]);
+        expect(report.outcome).toBe("advance");
+    });
+
+    it("Implement attempt without a stage summary: the missing file is reported and nothing is written", async () => {
+        const { run, fake, dir } = await arrangeImplement({}, { summary: null });
+        const report = await run();
+        expect(report.outcome).toBe("not-evaluable");
+        expect(report.reasons).toEqual([`${join(dir, "stage-summary.md")} is missing`]);
+        expect(fake.calls).toEqual([]);
         expect(existsSync(receiptPath(dir))).toBe(false);
     });
 });

@@ -68,20 +68,28 @@ interface Plan {
     saved: string; // ends the comment's header
 }
 
+// Proposal preparation and the implementation stage leave the description alone.
+const SUMMARY_ONLY: Plan = {
+    requires: ["summary"],
+    steps: [readTask, saveComment, writeReceipt],
+    saved: "stage summary saved",
+};
+
 const PLANS: Readonly<Partial<Record<StageId, Plan>>> = {
     "grill-me": {
         requires: ["definition", "summary"],
         steps: [readTask, saveDescription, saveComment, writeReceipt],
         saved: "definition saved",
     },
-    proposal: {
-        requires: ["summary"],
-        steps: [readTask, saveComment, writeReceipt],
-        saved: "stage summary saved",
-    },
+    proposal: SUMMARY_ONLY,
+    implement: SUMMARY_ONLY,
 };
 
-const supportedStages = () => Object.keys(PLANS).join(" and ");
+const supportedStages = () => {
+    const names = Object.keys(PLANS);
+    const last = names.pop();
+    return names.length === 0 ? (last ?? "") : `${names.join(", ")} and ${last}`;
+};
 
 const messageOf = (error: unknown) => (error instanceof Error ? error.message : String(error));
 

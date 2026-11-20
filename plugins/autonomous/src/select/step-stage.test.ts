@@ -43,6 +43,25 @@ describe("select: most advanced stage first", () => {
         expect(selection.requests).toEqual([]);
     });
 
+    it("Implementation before proposal: selects the implement candidate and sets the proposal one aside", async () => {
+        const calls: string[] = [];
+        const selection = fakeSelection(() => ({ ok: false, error: "not expected" }));
+        const result = await selectStep.run(
+            selectContext({
+                calls,
+                readers: readers(calls, [
+                    workTask("linear", "P-1", PROPOSAL),
+                    workTask("linear", "I-1", ["personal", "AFK", "implement"]),
+                ]),
+                selection,
+            }),
+        );
+
+        expect(result.outcome).toBe("advance");
+        expect(result.data.selected).toMatchObject({ id: "I-1", stage: "implement" });
+        expect(result.data.setAside.map((c) => c.id)).toEqual(["P-1"]);
+    });
+
     it("gives the LLM the two proposal candidates only", async () => {
         const calls: string[] = [];
         const selection = fakeSelection(() => ({

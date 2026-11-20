@@ -8,7 +8,7 @@ The label vocabulary shared by every tracker the autonomous loop reads — which
 
 ### Requirement: Three label groups
 
-Every task SHALL carry labels from three groups. The **scope** group is `work` and `personal`. The **autonomy** group is `AFK` and `HITL`. The **stage** group is `grill-me`, `proposal` and `implement`. Each group SHALL hold exactly one label on a task: two labels of the same group are a conflict. A task without a label of a group is untagged for that group, except that a task whose stage is `grill-me` MAY lack autonomy. Missing groups and conflicts SHALL be detected and reported per group, and SHALL NOT be resolved by the system removing or replacing a label.
+Every task SHALL carry labels from three groups. The **scope** group is `work` and `personal`. The **autonomy** group is `AFK` and `HITL`. The **stage** group is `grill-me`, `proposal`, `implement` and `verify`. Each group SHALL hold exactly one label on a task: two labels of the same group are a conflict. A task without a label of a group is untagged for that group, except that a task whose stage is `grill-me` MAY lack autonomy. Missing groups and conflicts SHALL be detected and reported per group, and SHALL NOT be resolved by the system removing or replacing a label.
 
 #### Scenario: Complete task
 
@@ -18,6 +18,11 @@ Every task SHALL carry labels from three groups. The **scope** group is `work` a
 #### Scenario: Task ready to implement
 
 - **WHEN** a task carries `personal`, `AFK` and `implement`
+- **THEN** it is complete for all three groups
+
+#### Scenario: Task ready to verify
+
+- **WHEN** a task carries `personal`, `HITL` and `verify`
 - **THEN** it is complete for all three groups
 
 #### Scenario: Grill without autonomy
@@ -65,9 +70,14 @@ Every task SHALL carry labels from three groups. The **scope** group is `work` a
 - **WHEN** a task carries `proposal` and `implement`
 - **THEN** it is reported as a stage conflict for a human to resolve
 
+#### Scenario: implement with verify
+
+- **WHEN** a task carries `implement` and `verify`
+- **THEN** it is reported as a stage conflict for a human to resolve
+
 ### Requirement: Meaning of each label
 
-The contract SHALL fix one meaning per label: `work` is Nazaries work; `personal` is the user's own work; `AFK` means an agent may advance the task without a human; `HITL` means an agent may advance the task but a human intervenes during or at the end of each stage; `grill-me` means the task must be refined with a human in a grill before anyone works on it; `proposal` means the task is ready for proposal preparation, its autonomy decided and any grill it needed over; `implement` means the task has a proposal and is ready to implement; `taken` means an agent or a person is advancing the task now. Scope and autonomy are properties, kept for the whole life of a task; the stage says where the task is and is replaced by each transition. While a task is in `grill-me`, its autonomy, when it has one, is provisional until the grill confirms it. No scope has priority over the other in the contract. What each label implies for selecting work, including the preference for the machine's scope, is defined by the capability that selects work, not by this contract.
+The contract SHALL fix one meaning per label: `work` is Nazaries work; `personal` is the user's own work; `AFK` means an agent may advance the task without a human; `HITL` means an agent may advance the task but a human intervenes during or at the end of each stage; `grill-me` means the task must be refined with a human in a grill before anyone works on it; `proposal` means the task is ready for proposal preparation, its autonomy decided and any grill it needed over; `implement` means the task has a proposal and is ready to implement; `verify` means the task is implemented and ready to verify against its proposal; `taken` means an agent or a person is advancing the task now. Scope and autonomy are properties, kept for the whole life of a task; the stage says where the task is and is replaced by each transition. While a task is in `grill-me`, its autonomy, when it has one, is provisional until the grill confirms it. No scope has priority over the other in the contract. What each label implies for selecting work, including the preference for the machine's scope, is defined by the capability that selects work, not by this contract.
 
 #### Scenario: grill-me with AFK
 
@@ -84,6 +94,11 @@ The contract SHALL fix one meaning per label: `work` is Nazaries work; `personal
 - **WHEN** a task carries `AFK` and `implement`
 - **THEN** the contract reads it as having a proposal and being ready for an agent to implement without a human
 
+#### Scenario: verify with HITL
+
+- **WHEN** a task carries `HITL` and `verify`
+- **THEN** the contract reads it as implemented and ready to verify against its proposal, with a human intervening in each stage
+
 #### Scenario: Meaning of work in a triage question
 
 - **WHEN** triage offers `work` as an option
@@ -91,7 +106,7 @@ The contract SHALL fix one meaning per label: `work` is Nazaries work; `personal
 
 ### Requirement: One spelling and one colour per label
 
-Each label SHALL have exactly one spelling, used verbatim on every tracker: `work`, `personal`, `AFK`, `HITL`, `grill-me`, `proposal`, `implement`, `taken`. Matching SHALL be exact and case-sensitive; a label that differs only in case or spacing (for example `Grill Me`) is not the contract label. Each label SHALL have one colour, applied on trackers that support colour: `AFK` `#5e6ad2`, `HITL` `#eb5757`, `grill-me` `#f2994a`, `proposal` `#bb87fc`, `implement` `#26b5ce`, `work` `#2f80ed`, `personal` `#27ae60`, `taken` `#95a2b3`. A tracker without label colours carries the name only.
+Each label SHALL have exactly one spelling, used verbatim on every tracker: `work`, `personal`, `AFK`, `HITL`, `grill-me`, `proposal`, `implement`, `verify`, `taken`. Matching SHALL be exact and case-sensitive; a label that differs only in case or spacing (for example `Grill Me`) is not the contract label. Each label SHALL have one colour, applied on trackers that support colour: `AFK` `#5e6ad2`, `HITL` `#eb5757`, `grill-me` `#f2994a`, `proposal` `#bb87fc`, `implement` `#26b5ce`, `verify` `#d6409f`, `work` `#2f80ed`, `personal` `#27ae60`, `taken` `#95a2b3`. A tracker without label colours carries the name only.
 
 #### Scenario: Near-miss spelling
 
@@ -117,6 +132,11 @@ Each label SHALL have exactly one spelling, used verbatim on every tracker: `wor
 
 - **WHEN** Linear lacks `implement` and the bootstrap runs
 - **THEN** `implement` is created at workspace level with colour `#26b5ce` and reported as created
+
+#### Scenario: verify bootstrapped
+
+- **WHEN** Linear lacks `verify` and the bootstrap runs
+- **THEN** `verify` is created at workspace level with colour `#d6409f` and reported as created
 
 ### Requirement: Aliases are evidence, never removed
 
@@ -282,7 +302,7 @@ The configuration SHALL NOT declare aliases for `taken`. The label bootstrap SHA
 
 ### Requirement: A transition replaces the stage
 
-A transition SHALL move a task out of its stage. It adds the next stage and, when the stage decided it, the answered autonomy; then it removes the stage it leaves and, when an autonomy was answered, every other autonomy label; and it reads the task back. Labels SHALL be added before any is removed. It is the first exception to the rule that the loop never removes a label, and it removes nothing else. There SHALL be two transitions: from `grill-me` to `proposal`, on a human's answer that sets the autonomy, and from `proposal` to `implement`, which changes no autonomy.
+A transition SHALL move a task out of its stage. It adds the next stage and, when the stage decided it, the answered autonomy; then it removes the stage it leaves and, when an autonomy was answered, every other autonomy label; and it reads the task back. Labels SHALL be added before any is removed. It is the first exception to the rule that the loop never removes a label, and it removes nothing else. There SHALL be three transitions: from `grill-me` to `proposal`, on a human's answer that sets the autonomy; from `proposal` to `implement`; and from `implement` to `verify`. The last two change no autonomy.
 
 #### Scenario: Grill ends with AFK
 
@@ -308,6 +328,11 @@ A transition SHALL move a task out of its stage. It adds the next stage and, whe
 
 - **WHEN** the transition out of `proposal` is applied to a task carrying `personal`, `HITL` and `proposal`
 - **THEN** the task carries `personal`, `HITL` and `implement`, and `proposal` was removed
+
+#### Scenario: Implementation done
+
+- **WHEN** the transition out of `implement` is applied to a task carrying `personal`, `HITL` and `implement`
+- **THEN** the task carries `personal`, `HITL` and `verify`, and `implement` was removed
 
 ### Requirement: The autonomy decides whether leaving proposal needs an answer
 
@@ -383,3 +408,22 @@ The configuration SHALL NOT declare aliases for `triage-me`. The label bootstrap
 
 - **WHEN** Linear lacks `triage-me` and the bootstrap runs
 - **THEN** `triage-me` is created at workspace level with colour `#f2c94c` and reported as created
+
+### Requirement: The autonomy decides whether leaving implement needs an answer
+
+The transition from `implement` to `verify` SHALL be applied without a human's answer for a task carrying `AFK`, and only on a human's approval for a task carrying `HITL`. A task in `implement` whose autonomy is missing or in conflict SHALL NOT be transitioned.
+
+#### Scenario: AFK task
+
+- **WHEN** the transition out of `implement` is requested for a task carrying `work`, `AFK` and `implement`, and its work is finished
+- **THEN** it is applied with no question, and the task carries `work`, `AFK` and `verify`
+
+#### Scenario: HITL task not approved
+
+- **WHEN** the human answers "Later" for a task carrying `HITL` and `implement`
+- **THEN** the task keeps `implement` and nothing is written
+
+#### Scenario: Autonomy missing
+
+- **WHEN** the transition out of `implement` is requested for a task carrying `personal` and `implement` only
+- **THEN** nothing is written and the reason names the missing autonomy

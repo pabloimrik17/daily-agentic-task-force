@@ -16,9 +16,15 @@ describe("nextStage", () => {
         expect(stage !== null && isSupported(stage)).toBe(true);
     });
 
-    it("gives implement, which is not supported, for a task ready to implement", () => {
+    it("Task ready to implement: gives implement, which is supported", () => {
         const stage = nextStage(["personal", "AFK", "implement"]);
         expect(stage).toBe("implement");
+        expect(stage !== null && isSupported(stage)).toBe(true);
+    });
+
+    it("Task ready to verify: gives verify, which is not supported", () => {
+        const stage = nextStage(["personal", "AFK", "verify"]);
+        expect(stage).toBe("verify");
         expect(stage !== null && isSupported(stage)).toBe(false);
     });
 
@@ -49,6 +55,15 @@ describe("splitByStage", () => {
         const grill = at("a", "grill-me");
         const proposal = at("b", "proposal");
         expect(splitByStage([grill, proposal])).toEqual({ kept: [proposal], setAside: [grill] });
+    });
+
+    it("Implementation before proposal: keeps the implement candidate and sets the proposal one aside", () => {
+        const proposal = at("a", "proposal");
+        const implement = at("b", "implement");
+        expect(splitByStage([proposal, implement])).toEqual({
+            kept: [implement],
+            setAside: [proposal],
+        });
     });
 
     it("keeps every candidate of the most advanced stage, in order", () => {

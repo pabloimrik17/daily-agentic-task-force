@@ -320,6 +320,7 @@ function stageEnv(
             context: io.context(config)[task.source],
             pullRequests: io.pullRequests(repository),
             openspec: io.openspec,
+            git: io.git,
         },
     };
 }

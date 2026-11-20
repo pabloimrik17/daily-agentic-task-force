@@ -5,7 +5,7 @@
 // labels is derived from these.
 const SCOPE_LABELS = ["work", "personal"] as const;
 const AUTONOMY_LABELS = ["AFK", "HITL"] as const;
-const STAGE_LABELS = ["grill-me", "proposal", "implement"] as const;
+const STAGE_LABELS = ["grill-me", "proposal", "implement", "verify"] as const;
 export const TAKEN_LABEL = "taken";
 export const TRIAGE_LABEL = "triage-me";
 // The labels outside every group: never required, never missing, never in conflict,
@@ -48,6 +48,7 @@ export const COLOURS: Record<ContractLabel, string> = {
     "grill-me": "#f2994a",
     proposal: "#bb87fc",
     implement: "#26b5ce",
+    verify: "#d6409f",
     work: "#2f80ed",
     personal: "#27ae60",
     taken: "#95a2b3",
@@ -63,6 +64,7 @@ export const MEANINGS: Record<ContractLabel, string> = {
     proposal:
         "The task is ready for proposal preparation, its autonomy decided and any grill it needed over.",
     implement: "The task has a proposal and is ready to implement.",
+    verify: "The task is implemented and ready to verify against its proposal.",
     taken: "An agent or a person is advancing the task now; it is not selected until the label is removed.",
     "triage-me":
         "The task's scope or autonomy could not be decided without the human; it is neither judged again nor selected until the label is removed.",

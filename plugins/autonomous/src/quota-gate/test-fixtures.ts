@@ -193,6 +193,7 @@ export function context(
                 throw new Error("unused");
             },
             openspec: () => Promise.resolve({ ok: false, error: "unused" }),
+            git: () => Promise.resolve({ ok: false, error: "unused" }),
             state: "/unused/state",
             home: "/unused/home",
         },

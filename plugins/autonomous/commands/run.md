@@ -1,5 +1,5 @@
 ---
-description: Run the autonomous loop's reconcile, gate, triage, select and launch steps, or launch a supplied task, or discard an attempt, or bootstrap the label contract, or hand off the transition question of a task in grill-me or proposal, or move an AFK task in proposal, or save a grill-me or proposal attempt's stage summary, and a grill's definition, to its task, or open the pull request of an attempt's branch, or publish an attempt's logbook entry, or list the questions of the tasks marked `triage-me`, report the outcome, and ask the user the questions the run hands off
+description: Run the autonomous loop's reconcile, gate, triage, select and launch steps, or launch a supplied task, or discard an attempt, or bootstrap the label contract, or hand off the transition question of a task in grill-me, proposal or implement, or move an AFK task in proposal or implement, or save a grill-me, proposal or implementation attempt's stage summary, and a grill's definition, to its task, or open the pull request of an attempt's branch, or publish an attempt's logbook entry, or list the questions of the tasks marked `triage-me`, report the outcome, and ask the user the questions the run hands off
 argument-hint: "[--task <source>:<id> [--stage <stage>]] [--force] [--json] [--apply] [--no-handoff] | --apply --discard <attempt> [--release-workspace] [--json] | --bootstrap-labels [--json] | --triage-questions [--json] | --apply --transition <source>:<task> [--json] | --apply --persist <attempt> [--json] | --apply --pull-request <attempt> [--title <title>] [--json] | --apply --log <attempt> [--json]"
 allowed-tools: Bash(bun:*)
 ---
@@ -21,11 +21,14 @@ for it. `--task` supplies a task to `launch` in place of `label-triage` and
 `label-triage` step write labels and hand off questions, which `--no-handoff`
 suppresses; `--bootstrap-labels` creates missing labels on every enabled
 tracker and exits instead of running the steps. `--transition` reads a task in
-`grill-me` or `proposal`, running no step: for `grill-me` it hands off the
-autonomy question, for an `HITL` task in `proposal` the approval question, and
-an `AFK` task in `proposal` it moves to `implement` itself, with no question.
-`--persist` saves a `grill-me` or `proposal` attempt's stage summary, and a
-grill's definition, to its task and writes the receipt the transition waits
+`grill-me`, `proposal` or `implement`, running no step: for `grill-me` it hands
+off the autonomy question, for an `HITL` task in `proposal` or `implement` the
+approval question, and an `AFK` task in `proposal` it moves to `implement`
+itself, and one in `implement` to `verify`, with no question. A task in
+`implement` whose workspace has unchecked tasks of its change, uncommitted
+changes or unpushed commits is refused, with no question, and exit code 3.
+`--persist` saves a `grill-me`, `proposal` or `implement` attempt's stage
+summary, and a grill's definition, to its task and writes the receipt the transition waits
 for, running no step. `--pull-request`
 finds or opens the draft pull request of an attempt's workspace branch and
 writes its cover, running no step; `--title` gives its title. `--log` publishes
@@ -56,13 +59,15 @@ task that is complete.
 2. Relay the script's stdout and stderr verbatim, in a code block, followed by
    its exit code: 0 advance, 2 wait, 3 not evaluable, 1 usage or runner error.
    With `--transition`, 0 means a handoff was emitted or an `AFK` task was
-   moved to `implement`, and 3 means the task is in neither `grill-me` nor
-   `proposal`, a task in `proposal` has no single autonomy, its source is
-   disabled, it could not be read, an open attempt of the stage the task is
-   leaving has no persistence receipt, the `AFK` transition was not applied or
-   the configuration could not be loaded. With `--persist`, 0 means the receipt
-   was written and 3 means it was not: the attempt is unknown, not open or not
-   a `grill-me` or `proposal` attempt, a file is missing or empty, a tracker call or read-back
+   moved to `implement` or `verify`, and 3 means the task is in none of
+   `grill-me`, `proposal` and `implement`, a task in `proposal` or `implement`
+   has no single autonomy, its source is disabled, it could not be read, an
+   open attempt of the stage the task is leaving has no persistence receipt,
+   the guards refused a task in `implement` whose work is unfinished, the
+   `AFK` transition was not applied or the configuration could not be loaded.
+   With `--persist`, 0 means the receipt was written and 3 means it was not:
+   the attempt is unknown, not open or not a `grill-me`, `proposal` or
+   `implement` attempt, a file is missing or empty, a tracker call or read-back
    failed, or the configuration could not be loaded. With `--pull-request`, 0
    means a pull request is reported or the task needs none, and 3 means the
    attempt is unknown or not open, a title is missing for a pull request to
@@ -113,8 +118,9 @@ task that is complete.
     gave `--json`. Add nothing else, not even a `--force` the
     user typed: answer mode rejects it. Relay the script's stdout and stderr
     verbatim, in a code block, followed by its exit code: 0 every answer
-    applied or skipped, 3 an answer rejected or failed or the configuration
-    could not be loaded, 1 usage or runner error. Then end the command,
+    applied or skipped, 3 an answer rejected or failed (such as a `verify`
+    approval the guards refuse because the implementation is unfinished) or the
+    configuration could not be loaded, 1 usage or runner error. Then end the command,
     writing nothing after it.
 
 ## Rules

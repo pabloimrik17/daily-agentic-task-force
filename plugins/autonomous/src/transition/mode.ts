@@ -1,6 +1,7 @@
 // Transition mode (spec autonomous-run, "Transition mode", "Transition question", "Approval
-// question", "Transition report"). It writes only for an AFK task leaving proposal; every other
-// answer comes back through answer mode (./answer.ts).
+// question", "Transition report"). It writes only for an AFK task leaving a stage left on
+// approval, proposal or implement; every other answer comes back through answer mode
+// (./answer.ts).
 
 import { isSource, taskKey, type TaskRef } from "../attempts/record.ts";
 import type { AutonomousConfig, Source } from "../config.ts";
@@ -17,6 +18,7 @@ import { buildHandoff, type Handoff, renderHandoffLine } from "../report.ts";
 import type { Result } from "../result.ts";
 import type { HandoffOption, HandoffQuestion } from "../runner.ts";
 import { applyTransition } from "./apply.ts";
+import { type GuardTools, guardsOnLeaving } from "./guards.ts";
 import { awaitedDetail, awaitedReceipt } from "./receipt.ts";
 import { recordTransition } from "./transitioned.ts";
 
@@ -33,9 +35,10 @@ interface TransitionTarget {
     asks: TransitionQuestion;
 }
 
-export const TRANSITIONS = {
+const TRANSITIONS = {
     "grill-me": { to: "proposal", asks: "autonomy" },
     proposal: { to: "implement", asks: "approval" },
+    implement: { to: "verify", asks: "approval" },
 } as const satisfies Partial<Record<StageLabel, TransitionTarget>>;
 
 export type TransitionStage = keyof typeof TRANSITIONS;
@@ -57,16 +60,26 @@ export function rowOf(labels: readonly string[]): TransitionRow | null {
     return from === undefined ? null : transitionRow(from);
 }
 
-// An autonomy answers the way out of grill-me; the next stage approves the way out of proposal.
+// An autonomy answers the way out of grill-me; the next stage approves the way out of the others.
 export function accepts(row: TransitionRow, value: string): boolean {
     return row.asks === "autonomy" ? isAutonomyLabel(value) : value === row.to;
 }
 
 export const AUTONOMY_OPTIONS: readonly AutonomyLabel[] = GROUPS.autonomy.filter(isAutonomyLabel);
 
-// The autonomy that decides how a task leaves proposal (spec label-contract, "The autonomy
-// decides whether leaving proposal needs an answer"): exactly one, or the reason there is none.
-export function proposalAutonomy(ref: TaskRef, labels: readonly string[]): Result<AutonomyLabel> {
+// What an approval answers with: the stage each approval row leads to.
+export const APPROVAL_VALUES: readonly StageLabel[] = TRANSITION_STAGES.map(transitionRow)
+    .filter((row) => row.asks === "approval")
+    .map((row) => row.to);
+
+// The autonomy that decides how a task leaves a stage left on approval, `proposal` or `implement`
+// (spec label-contract, "The autonomy decides whether leaving ... needs an answer"): exactly one,
+// or the reason there is none.
+export function stageAutonomy(
+    ref: TaskRef,
+    labels: readonly string[],
+    stage: TransitionStage,
+): Result<AutonomyLabel> {
     const found = labels.filter(isAutonomyLabel);
     const [only] = found;
     if (found.length === 1 && only !== undefined) {
@@ -75,7 +88,7 @@ export function proposalAutonomy(ref: TaskRef, labels: readonly string[]): Resul
     const expected = `expected one of ${AUTONOMY_OPTIONS.join(", ")}`;
     const problem =
         found.length === 0 ? "has no autonomy" : `has conflicting autonomy [${found.join(", ")}]`;
-    return { ok: false, error: `${ref.source} ${ref.id} in proposal ${problem}: ${expected}` };
+    return { ok: false, error: `${ref.source} ${ref.id} in ${stage} ${problem}: ${expected}` };
 }
 
 interface TransitionTask {
@@ -90,7 +103,7 @@ export interface TransitionReport {
     startedAt: string;
     // advance exactly when a handoff is emitted or the transition was applied
     outcome: "advance" | "not-evaluable";
-    applied: boolean; // true only for an AFK task the mode moved out of proposal
+    applied: boolean; // true only for an AFK task the mode moved out of a stage left on approval
     task: TransitionTask | null; // null when the task was not read
     reasons: string[];
     handoff?: Handoff;
@@ -98,7 +111,7 @@ export interface TransitionReport {
     config?: { path: string; error: string };
 }
 
-export interface TransitionDeps {
+export interface TransitionDeps extends GuardTools {
     config: AutonomousConfig;
     trackers: Trackers;
     state: string; // where the attempts are read, without the run lock
@@ -115,6 +128,13 @@ const later = (from: TransitionStage): HandoffOption => ({
 });
 
 const CURRENT = "current · ";
+
+// What the question says about the stage it asks to leave.
+const READY: Record<TransitionStage, string> = {
+    "grill-me": "the grill is over",
+    proposal: "the proposal is ready",
+    implement: "the implementation is ready",
+};
 
 // Task ids carry no `:`.
 export function transitionQuestionId(ref: TaskRef): string {
@@ -172,8 +192,7 @@ export async function runTransition(
     const task: TransitionTask = { source, id, title, labels: [...labels] };
     const row = rowOf(labels);
     if (row === null) {
-        const stages = TRANSITION_STAGES.join(" nor ");
-        const reason = `${source} ${id} is in neither ${stages} (labels [${labels.join(", ")}])`;
+        const reason = `${source} ${id} is in none of ${stageList()} (labels [${labels.join(", ")}])`;
         return { ...report, task, reasons: [reason] };
     }
     const awaited = await awaitedReceipt(deps.state, ref, row.from);
@@ -186,7 +205,13 @@ export async function runTransition(
     if (row.asks === "autonomy") {
         return asking(report, task, transitionQuestion(ref, task));
     }
-    return leaveProposal({ ...report, task }, ref, task, deps);
+    return leaveStage({ ...report, task }, { ref, row, task }, deps);
+}
+
+// "grill-me, proposal and implement"
+function stageList(): string {
+    const last = TRANSITION_STAGES.at(-1);
+    return `${TRANSITION_STAGES.slice(0, -1).join(", ")} and ${last}`;
 }
 
 function asking(
@@ -197,20 +222,23 @@ function asking(
     return { ...report, outcome: "advance", task, handoff: buildHandoff([question]) };
 }
 
-async function leaveProposal(
+async function leaveStage(
     report: TransitionReport,
-    ref: TaskRef,
-    task: TransitionTask,
+    { ref, row, task }: { ref: TaskRef; row: TransitionRow; task: TransitionTask },
     deps: TransitionDeps,
 ): Promise<TransitionReport> {
-    const autonomy = proposalAutonomy(ref, task.labels);
+    const autonomy = stageAutonomy(ref, task.labels, row.from);
     if (!autonomy.ok) {
         return { ...report, reasons: [autonomy.error] };
     }
-    if (autonomy.value === "HITL") {
-        return asking(report, task, approvalQuestion(ref, task));
+    // Unfinished work is refused before the human is asked to approve it, and before a write.
+    const unfinished = await guardsOnLeaving(row.from, ref, deps.state, deps);
+    if (unfinished.length > 0) {
+        return { ...report, reasons: unfinished };
     }
-    const row = transitionRow("proposal");
+    if (autonomy.value === "HITL") {
+        return asking(report, task, approvalQuestion(ref, task, row));
+    }
     const tracker = deps.trackers[ref.source];
     const settled = await applyTransition({
         tracker,
@@ -268,7 +296,7 @@ function transitionQuestion(ref: TaskRef, task: TransitionTask): HandoffQuestion
         step: TRANSITION,
         header: header(task, "autonomy"),
         question: [
-            `${task.source} ${task.id} "${task.title}": the grill is over. Which autonomy does the task keep?`,
+            `${task.source} ${task.id} "${task.title}": ${READY["grill-me"]}. Which autonomy does the task keep?`,
             labelsLine(task),
         ].join("\n"),
         options: [...options, later("grill-me")],
@@ -276,15 +304,15 @@ function transitionQuestion(ref: TaskRef, task: TransitionTask): HandoffQuestion
     };
 }
 
-// The approval changes no autonomy and no scope: it only lets the task leave proposal.
-function approvalQuestion(ref: TaskRef, task: TransitionTask): HandoffQuestion {
-    const { from, to } = transitionRow("proposal");
+// The approval changes no autonomy and no scope: it only lets the task leave the stage.
+function approvalQuestion(ref: TaskRef, task: TransitionTask, row: TransitionRow): HandoffQuestion {
+    const { from, to } = row;
     return {
         id: transitionQuestionId(ref),
         step: TRANSITION,
         header: header(task, "approval"),
         question: [
-            `${task.source} ${task.id} "${task.title}": the proposal is ready. Approve it to move the task to ${to}?`,
+            `${task.source} ${task.id} "${task.title}": ${READY[from]}. Approve it to move the task to ${to}?`,
             labelsLine(task),
         ].join("\n"),
         options: [
