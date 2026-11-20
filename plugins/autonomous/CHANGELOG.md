@@ -1,5 +1,19 @@
 # Changelog
 
+## [2.4.0](https://github.com/pabloimrik17/daily-agentic-task-force/compare/autonomous--v2.3.0...autonomous--v2.4.0) (2026-11-20)
+
+
+### Features
+
+* **autonomous:** add the implementation stage ([#100](https://github.com/pabloimrik17/daily-agentic-task-force/issues/100)) ([109b7e3](https://github.com/pabloimrik17/daily-agentic-task-force/commit/109b7e3daab00c49030134983f4a10146ab1024a))
+* **autonomous:** add the loop stop command ([#94](https://github.com/pabloimrik17/daily-agentic-task-force/issues/94)) ([c2a9c6b](https://github.com/pabloimrik17/daily-agentic-task-force/commit/c2a9c6b7e24fda76f7326037674dac6ba0542df3))
+* **autonomous:** evaluate the active account in the quota gate ([#96](https://github.com/pabloimrik17/daily-agentic-task-force/issues/96)) ([4e3b017](https://github.com/pabloimrik17/daily-agentic-task-force/commit/4e3b017c9fd41a8313d95efd54cedacbf971f003))
+
+
+### Bug Fixes
+
+* **autonomous:** support the OpenSpec 2 skills in the proposal stage ([#99](https://github.com/pabloimrik17/daily-agentic-task-force/issues/99)) ([a293f67](https://github.com/pabloimrik17/daily-agentic-task-force/commit/a293f6784c5bc609690aeec990a318d02ea7540e))
+
 ## [2.3.0](https://github.com/pabloimrik17/daily-agentic-task-force/compare/autonomous--v2.2.0...autonomous--v2.3.0) (2026-11-15)
 
 
