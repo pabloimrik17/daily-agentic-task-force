@@ -296,7 +296,7 @@ With `--discard <attempt-id>`, the run SHALL discard that attempt and exit, and 
 
 ### Requirement: Transition mode
 
-With `--transition <source>:<task>`, the run SHALL run no step: it reads the task and acts by the stage label it carries. For `grill-me` it emits a handoff with the transition question and exits 0. For `proposal` with `HITL` it emits a handoff with the approval question and exits 0. For `proposal` with `AFK` it applies the transition to `implement` itself, reads it back, emits no handoff and exits 0 when applied and 3 otherwise. The mode SHALL require `--apply` and MAY be combined with `--json` only. Any other combination, or a value without `:` or with an unknown source, is a usage error. A task in neither stage, a task in `proposal` whose autonomy is missing or in conflict, a task from a disabled source, or one that cannot be read SHALL be reported with the reason, with no handoff, and exit code 3.
+With `--transition <source>:<task>`, the run SHALL run no step: it reads the task and acts by the stage label it carries. For `grill-me` it emits a handoff with the transition question and exits 0. For `proposal` or `implement` with `HITL` it emits a handoff with the approval question and exits 0. For `proposal` or `implement` with `AFK` it applies the transition to the next stage, `implement` or `verify`, itself, reads it back, emits no handoff and exits 0 when applied and 3 otherwise. The mode SHALL require `--apply` and MAY be combined with `--json` only. Any other combination, or a value without `:` or with an unknown source, is a usage error. A task in none of these stages, a task in `proposal` or `implement` whose autonomy is missing or in conflict, a task from a disabled source, or one that cannot be read SHALL be reported with the reason, with no handoff, and exit code 3.
 
 #### Scenario: Task in grill-me
 
@@ -313,14 +313,29 @@ With `--transition <source>:<task>`, the run SHALL run no step: it reads the tas
 - **WHEN** the run is invoked with `--apply --transition linear:DOT-110` and DOT-110 carries `personal`, `AFK` and `proposal`
 - **THEN** DOT-110 carries `personal`, `AFK` and `implement`, the report says the transition was applied and carries no handoff, and the process exits with code 0
 
+#### Scenario: AFK task in implement
+
+- **WHEN** the run is invoked with `--apply --transition linear:DOT-121`, DOT-121 carries `personal`, `AFK` and `implement`, and its work is finished
+- **THEN** DOT-121 carries `personal`, `AFK` and `verify`, the report says the transition was applied and carries no handoff, and the process exits with code 0
+
+#### Scenario: HITL task in implement
+
+- **WHEN** the run is invoked with `--apply --transition linear:DOT-121`, DOT-121 carries `personal`, `HITL` and `implement`, and its work is finished
+- **THEN** no step runs, the report carries a handoff with the approval question, nothing is written, and the process exits with code 0
+
 #### Scenario: Task not in grill-me
 
-- **WHEN** the run is invoked with `--apply --transition linear:DOT-110` and DOT-110 carries `personal`, `AFK` and `implement`
-- **THEN** the report says DOT-110 is in neither `grill-me` nor `proposal`, carries no handoff, and the process exits with code 3
+- **WHEN** the run is invoked with `--apply --transition linear:DOT-110` and DOT-110 carries `personal`, `AFK` and `verify`
+- **THEN** the report says DOT-110 is in none of `grill-me`, `proposal` and `implement`, carries no handoff, and the process exits with code 3
 
 #### Scenario: implement not bootstrapped
 
 - **WHEN** the mode would apply the transition of an `AFK` task whose tracker has no `implement` label
+- **THEN** nothing is written, the report names `--bootstrap-labels`, and the process exits with code 3
+
+#### Scenario: verify not bootstrapped
+
+- **WHEN** the mode would apply the transition of an `AFK` task in `implement` whose tracker has no `verify` label
 - **THEN** nothing is written, the report names `--bootstrap-labels`, and the process exits with code 3
 
 #### Scenario: Transition without apply
@@ -344,7 +359,7 @@ The transition question SHALL have an id that names the transition, the source a
 
 ### Requirement: Transition answers
 
-Answer mode SHALL route an answer whose id names the transition to it, and SHALL read the task again to know which transition it answers. For a task in `grill-me`, only a single `AFK` or `HITL` is valid. For a task in `proposal`, only a single `implement` is valid. Any other value, a malformed id or a disabled source is `rejected`. A task that carries neither stage, or no longer the one the value answers, is `skipped`. A tracker lacking a label the transition adds makes the answer `failed`, naming `--bootstrap-labels`, before any write. Otherwise the transition is applied and read back; a failed write or read-back is `failed`.
+Answer mode SHALL route an answer whose id names the transition to it, and SHALL read the task again to know which transition it answers. For a task in `grill-me`, only a single `AFK` or `HITL` is valid. For a task in `proposal`, only a single `implement` is valid. For a task in `implement`, only a single `verify` is valid. Any other value, a malformed id or a disabled source is `rejected`. A task that carries none of these stages, or no longer the one the value answers, is `skipped`. A tracker lacking a label the transition adds makes the answer `failed`, naming `--bootstrap-labels`, before any write. Otherwise the transition is applied and read back; a failed write or read-back is `failed`.
 
 #### Scenario: Transition applied
 
@@ -355,6 +370,11 @@ Answer mode SHALL route an answer whose id names the transition to it, and SHALL
 
 - **WHEN** the answer `implement` arrives for a task carrying `personal`, `HITL` and `proposal`
 - **THEN** the task carries `personal`, `HITL` and `implement`, and the answer is `applied`
+
+#### Scenario: Implementation approved
+
+- **WHEN** the answer `verify` arrives for a task carrying `personal`, `HITL` and `implement` whose work is finished
+- **THEN** the task carries `personal`, `HITL` and `verify`, and the answer is `applied`
 
 #### Scenario: Already moved on
 
@@ -392,7 +412,7 @@ With `--json`, transition mode SHALL print one JSON document identified by `sche
 
 ### Requirement: Persist mode
 
-With `--persist <attempt-id>`, the run SHALL run no step and SHALL persist what that attempt's stage defines: for `grill-me`, the definition and the stage summary; for `proposal`, the stage summary only. It SHALL require `--apply` and MAY be combined with `--json` only; any other flag with it, or a malformed attempt id, is a usage error. It SHALL exit 0 when the receipt is written and 3 otherwise. It takes no run lock.
+With `--persist <attempt-id>`, the run SHALL run no step and SHALL persist what that attempt's stage defines: for `grill-me`, the definition and the stage summary; for `proposal` and `implement`, the stage summary only. It SHALL require `--apply` and MAY be combined with `--json` only; any other flag with it, or a malformed attempt id, is a usage error. It SHALL exit 0 when the receipt is written and 3 otherwise. It takes no run lock.
 
 #### Scenario: Persisted
 
@@ -404,6 +424,11 @@ With `--persist <attempt-id>`, the run SHALL run no step and SHALL persist what 
 - **WHEN** the run is invoked with `--apply --persist linear:DOT-121:proposal:1` for a started attempt whose directory holds `stage-summary.md`
 - **THEN** the comment is written and read back, the task's description is unchanged, the receipt is written and the process exits with code 0
 
+#### Scenario: Implementation attempt persisted
+
+- **WHEN** the run is invoked with `--apply --persist linear:DOT-121:implement:1` for a started attempt whose directory holds `stage-summary.md`
+- **THEN** the comment is written and read back, the task's description is unchanged, the receipt is written and the process exits with code 0
+
 #### Scenario: Persist without apply
 
 - **WHEN** the run is invoked with `--persist linear:DOT-121:grill-me:1` and without `--apply`
@@ -411,7 +436,7 @@ With `--persist <attempt-id>`, the run SHALL run no step and SHALL persist what 
 
 ### Requirement: Persist preconditions
 
-Persist mode SHALL write nothing when the attempt is unknown, is not open, or belongs to a stage other than `grill-me` and `proposal`, or when its directory lacks a file its stage persists, or that file is empty: `definition.md` and `stage-summary.md` for `grill-me`, `stage-summary.md` for `proposal`. It SHALL report the reason and exit 3.
+Persist mode SHALL write nothing when the attempt is unknown, is not open, or belongs to a stage other than `grill-me`, `proposal` and `implement`, or when its directory lacks a file its stage persists, or that file is empty: `definition.md` and `stage-summary.md` for `grill-me`, `stage-summary.md` for `proposal` and `implement`. It SHALL report the reason and exit 3.
 
 #### Scenario: Missing stage summary
 
@@ -454,7 +479,7 @@ With `--json`, persist mode SHALL print one JSON document identified by `schema:
 
 ### Requirement: The transition waits for the persistence receipt
 
-Transition mode and a transition answer SHALL refuse a task that has an open attempt of the stage it is leaving, `grill-me` or `proposal`, whose directory holds no persistence receipt. Transition mode reports it with no handoff and exit code 3, and applies nothing. The answer is `rejected`, naming the attempt. A task with no open attempt of that stage SHALL be transitioned as before.
+Transition mode and a transition answer SHALL refuse a task that has an open attempt of the stage it is leaving, `grill-me`, `proposal` or `implement`, whose directory holds no persistence receipt. Transition mode reports it with no handoff and exit code 3, and applies nothing. The answer is `rejected`, naming the attempt. A task with no open attempt of that stage SHALL be transitioned as before.
 
 #### Scenario: Definition not persisted
 
@@ -475,6 +500,11 @@ Transition mode and a transition answer SHALL refuse a task that has an open att
 
 - **WHEN** a task in `grill-me` has no open attempt
 - **THEN** transition mode emits its question without checking any receipt
+
+#### Scenario: Implementation summary not persisted
+
+- **WHEN** `--apply --transition linear:DOT-121` runs for an `AFK` task in `implement` while attempt `linear:DOT-121:implement:1` is started and has no receipt
+- **THEN** the report names the attempt and the missing receipt, nothing is written, and the process exits with code 3
 
 ### Requirement: Read-backs allow for a tracker's read lag
 
@@ -591,7 +621,7 @@ When a transition answer is applied to a task that has an open attempt, answer m
 
 ### Requirement: Approval question
 
-The question for an `HITL` task in `proposal` SHALL have the same id shape and step as the transition question, and the same header rule with `approval` in place of `autonomy`. Its text names the source, task id, title and labels, and says that the proposal is ready. Its options SHALL be `Approve`, with the value `implement`, and `Later`, with a null value, and it SHALL accept a single choice. It SHALL NOT ask for autonomy or scope.
+The question for an `HITL` task in `proposal` or `implement` SHALL have the same id shape and step as the transition question, and the same header rule with `approval` in place of `autonomy`. Its text names the source, task id, title and labels, and says that the proposal is ready, for a task in `proposal`, or that the implementation is ready, for a task in `implement`. Its options SHALL be `Approve`, with the value of the next stage, `implement` or `verify`, and `Later`, with a null value, and it SHALL accept a single choice. It SHALL NOT ask for autonomy or scope.
 
 #### Scenario: Options
 
@@ -602,6 +632,11 @@ The question for an `HITL` task in `proposal` SHALL have the same id shape and s
 
 - **WHEN** the human answers `Later`
 - **THEN** no answer is applied and the task keeps `proposal`
+
+#### Scenario: Implementation ready
+
+- **WHEN** the approval question is composed for a task carrying `personal`, `HITL` and `implement`
+- **THEN** it says the implementation is ready, and `Approve` carries the value `verify`
 
 ### Requirement: Triage questions mode
 
@@ -673,3 +708,32 @@ The run SHALL NOT accept `--account`, in any mode. Passing it SHALL be a usage e
 
 - **WHEN** the step runner is invoked with `--loop --apply --account claude@1a2b3c4d`
 - **THEN** it starts no loop, prints the same message, and exits with code 1
+
+### Requirement: Leaving implement needs the work finished
+
+Transition mode and a transition answer SHALL refuse a task in `implement` while, in the task's workspace, the change the stage implements has an unchecked task, the working tree has uncommitted changes, or the branch has commits its remote branch lacks. The change SHALL be found as the stage's prerequisites find it. Transition mode reports every reason that holds, with no handoff and exit code 3; the answer is `rejected`, naming them. Nothing SHALL be written.
+
+#### Scenario: Unchecked task
+
+- **WHEN** `--apply --transition linear:DOT-121` runs for an `AFK` task in `implement` whose change has 11 of 12 tasks checked
+- **THEN** the report names the change and the count of unchecked tasks, nothing is written, and the process exits with code 3
+
+#### Scenario: Uncommitted changes
+
+- **WHEN** the workspace of an `HITL` task in `implement` has an uncommitted change
+- **THEN** transition mode emits no approval question, names the uncommitted changes, and exits with code 3
+
+#### Scenario: Unpushed commits
+
+- **WHEN** the answer `verify` arrives for a task in `implement` whose branch has two commits its remote branch lacks
+- **THEN** the answer is `rejected`, naming the unpushed commits, and the task keeps `implement`
+
+#### Scenario: No workspace
+
+- **WHEN** the transition out of `implement` is requested for a task that has no workspace
+- **THEN** nothing is written and the reason says there is no workspace to check
+
+#### Scenario: Work finished
+
+- **WHEN** every task of the change is checked, the working tree is clean and the branch is pushed
+- **THEN** the guards pass and the transition proceeds by the task's autonomy
