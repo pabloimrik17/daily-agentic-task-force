@@ -77,6 +77,14 @@ Proposals often end with end-to-end checks that need the user's go-ahead, such a
 
 The plan is proposal's: the stage summary only, no description change, header `autonomous · implement · <attempt-id> · stage summary saved`.
 
+### D9. An AFK orchestrator whose transition is refused retries once, then announces the block
+
+Nobody watches an `AFK` session, so leaving it open after a refusal is a silent block: the stage summary already says the work is finished. The prompt now tells the agent to fix what the refusal names and run the transition once more. Fixing means committing and pushing an uncommitted change, pushing unpushed commits, and checking a task only when it is done; a failed read or write (`git fetch`, `gh`, the tracker) needs no fix, only the second run. When what it names cannot be fixed (a task that needs a human, unfinished work), or the second run is refused too, the agent publishes a logbook entry that says the attempt is blocked and why, quoting the transition's reason, writes no result marker and stops. The task keeps `implement` and `reconcile` retains the attempt once the session ends, as in the blocked path.
+
+A transient failure clears on the retry, and a real one is announced on the pull request and in the kept attempt. The agent does not run persist mode again: it would post nothing, since a comment with the attempt's header is skipped (`saveComment` in `persist/persist.ts`), so the logbook entry carries the notice. `HITL` is unchanged: "Later" or a refusal still leaves the session open, because a human follows it.
+
+Proposal preparation has the same gap in its `AFK` transition. It is left to its own ticket, DOT-145.
+
 ## Risks / Trade-offs
 
 - [The orchestrator cannot see its own context, so the 30% target is a request, not a limit] → It is stated as the goal in the prompt; measuring it and handing over is DOT-138.

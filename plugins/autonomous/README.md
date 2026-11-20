@@ -3513,10 +3513,22 @@ pull-request mode: the pull request already exists.
 6. Write the result marker, only once the entry is published.
 
 A failed persist mode or push is a blocker for an `AFK` task and goes to the
-human for an `HITL` task; no transition runs. When the transition is not
+human for an `HITL` task; no transition runs. When an `HITL` transition is not
 applied, or the human answers `Later`, the orchestrator publishes no entry,
-writes no result marker and leaves the session open, so a human finds it
-waiting. The task keeps `implement`.
+writes no result marker and leaves the session open, so the human can come back
+to it. The task keeps `implement`.
+
+Nobody watches an `AFK` session, so a refused `AFK` transition is not left
+open. The orchestrator fixes what the refusal names and runs the transition once
+more: it commits and pushes an uncommitted change, pushes the commits that are
+not pushed, and checks a task only when it is done, never one it did not do. A
+failed read or write, such as the fetch, the pull request or the tracker, needs
+no fix, only the second run. When what the refusal names cannot be fixed, or the
+second run is refused too, the task is blocked, as in
+[A blocked AFK orchestrator](#a-blocked-afk-orchestrator): the orchestrator
+publishes a logbook entry that says the attempt is blocked and why, quoting the
+transition's reason, writes no result marker and stops. The task keeps
+`implement`.
 
 Code enforces the order that matters. The transition refuses without the receipt
 that persist mode writes (see
@@ -3557,6 +3569,12 @@ task keeps `implement`, the work done is pushed, its tracker holds the comment,
 and `reconcile` retains the attempt once its session ends, so a human finds it
 (see [What it does to each attempt](#what-it-does-to-each-attempt)). An `HITL`
 prompt has no blocked section: the orchestrator asks the human.
+
+The same ending follows a refused transition, once the second run is refused or
+the refusal names something that cannot be fixed. The stage summary is already
+posted by then, and persist mode would not post it twice, because a comment with
+the attempt's header is skipped, so the orchestrator does not run it again: the
+logbook entry carries the notice, with the transition's reason.
 
 ### Resuming an implementation
 

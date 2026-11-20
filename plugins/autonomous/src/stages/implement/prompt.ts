@@ -4,7 +4,6 @@
 // received. The orchestration is stated as intent: how many teammates, and how they are briefed,
 // is the orchestrator's call.
 
-import type { TaskKey } from "../../attempts/record.ts";
 import type { AutonomyLabel } from "../../label-contract/contract.ts";
 import type { PullRequest } from "../../pull-request/port.ts";
 import {
@@ -47,7 +46,7 @@ interface Autonomy {
     deviation: string;
     review: string | null;
     blocked: boolean; // whether the prompt gives the blocked path
-    transition: (task: TaskKey) => string;
+    transition: (paths: Paths) => string;
     onFailure: string;
 }
 
@@ -68,8 +67,8 @@ const AFK: Autonomy = {
         "Decide the deviation yourself, without asking, and record it as an assumption as well.",
     review: null,
     blocked: true,
-    transition: (task) =>
-        `Run \`/autonomous:run --apply --transition ${task}\`. For an \`AFK\` task it asks no one: it moves the task to \`verify\` itself, once it finds every task of the change checked and every commit pushed. If it exits non-zero, the transition was not applied: publish no logbook entry, do not write the result marker, and leave this session open, so a human finds it waiting.`,
+    transition: ({ task, attempt, entry }) =>
+        `Run \`/autonomous:run --apply --transition ${task}\`. For an \`AFK\` task it asks no one: it moves the task to \`verify\` itself, once it finds every task of the change checked and every commit pushed. If it exits non-zero, the transition was not applied: fix what its reason names, then run it once more. You may commit an uncommitted change by the rules of the commits section and push it, push the commits it names, and check a task of the change only when it is done, never one you did not do. A failed read or write (the fetch, the pull request, the tracker) needs no fix, only the second run. When what it names cannot be fixed (a task that needs a human, unfinished work), or the second run is refused too, the task is blocked: the stage summary is already posted, so do not post it again, and write a logbook entry to \`${entry}\` that says the attempt is blocked and why, quoting the transition's reason, then run \`/autonomous:run --apply --log ${attempt}\`. Write no result marker and stop: the task stays in \`implement\`, and the attempt is kept once this session ends, so a human finds it with the notice.`,
     onFailure: `treat it as a blocker: follow the section "${BLOCKED_TITLE}", and run no transition`,
 };
 
@@ -87,7 +86,7 @@ const HITL: Autonomy = {
     deviation: "Ask the human before you change the proposal, and change it only as they decide.",
     review: "Review the implementation with the human: show them the implementation and the pull request's URL, and commit and push each round of their feedback as a new commit. Go on only when the human is done with it.",
     blocked: false,
-    transition: (task) =>
+    transition: ({ task }) =>
         `Run \`/autonomous:run --apply --transition ${task}\`. It asks the human whether to approve the implementation and move the task to \`verify\`, and applies the answer. When the human answers "Later", or the answer is not applied, stop here: publish no logbook entry, do not write the result marker, and leave this session open, so the human can come back to it.`,
     onFailure: "tell the human what it reported, and continue only as the human decides",
 };
@@ -147,14 +146,14 @@ const COMMITS: Section = {
     ],
 };
 
-function closing({ task }: Paths, autonomy: Autonomy): Closing {
+function closing(paths: Paths, autonomy: Autonomy): Closing {
     return {
         done: "When every task of the change is done",
         steps: [
             `Confirm that every check the repository defines passes, that every task of the change is checked in its \`tasks.md\`, that nothing is left uncommitted, and that every commit is pushed. If something is not, finish it first; if a check cannot be made to pass, or a push fails, ${autonomy.onFailure}.`,
             ...(autonomy.review === null ? [] : [autonomy.review]),
         ],
-        transition: autonomy.transition(task),
+        transition: autonomy.transition(paths),
         onFailure: autonomy.onFailure,
         logbook: {
             name: "Implementation",

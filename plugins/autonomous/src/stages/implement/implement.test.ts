@@ -859,12 +859,33 @@ describe("The implementation closing order", () => {
         expect(inOrder(closing, [rule, "--log linear:DOT-121:implement:1"])).toBe(true);
     });
 
-    it("Transition refused: leaves the entry unpublished and the marker unwritten", () => {
-        const closing = section(prompt({ autonomy: "AFK" }), "Closing");
-        const rule =
-            "If it exits non-zero, the transition was not applied: publish no logbook entry, do not write the result marker, and leave this session open";
+    it("Transition refused: the HITL prompt leaves the session open, with no entry and no marker", () => {
+        const closing = section(prompt({ autonomy: "HITL" }), "Closing");
 
-        expect(inOrder(closing, [rule, "--log linear:DOT-121:implement:1"])).toBe(true);
+        expect(closing).not.toContain("run it once more");
+        expect(closing).toContain("and leave this session open, so the human can come back to it");
+    });
+
+    it("Transition refused once: the AFK prompt fixes what it names and runs it once more", () => {
+        const closing = section(prompt({ autonomy: "AFK" }), "Closing");
+
+        expect(
+            inOrder(closing, [
+                "If it exits non-zero, the transition was not applied: fix what its reason names, then run it once more.",
+                "check a task of the change only when it is done, never one you did not do",
+                "A failed read or write (the fetch, the pull request, the tracker) needs no fix, only the second run.",
+                "--log linear:DOT-121:implement:1",
+            ]),
+        ).toBe(true);
+        expect(closing).not.toContain("leave this session open");
+    });
+
+    it("Transition refused again: the AFK prompt publishes a blocked entry, writes no marker and stops", () => {
+        const closing = section(prompt({ autonomy: "AFK" }), "Closing");
+        const blocked = `or the second run is refused too, the task is blocked: the stage summary is already posted, so do not post it again, and write a logbook entry to \`${logbookEntryPath(DIR)}\` that says the attempt is blocked and why, quoting the transition's reason, then run \`/autonomous:run --apply --log linear:DOT-121:implement:1\`. Write no result marker and stop: the task stays in \`implement\`, and the attempt is kept once this session ends`;
+
+        expect(closing).toContain(blocked);
+        expect(closing).toContain("a task that needs a human, unfinished work");
     });
 
     it("Logbook section: ### Implementation lists the tasks done and the commits by subject", () => {

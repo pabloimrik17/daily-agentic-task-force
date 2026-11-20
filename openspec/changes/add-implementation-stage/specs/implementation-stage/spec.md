@@ -191,10 +191,20 @@ The prompt SHALL tell the agent to end the stage in this order:
 - **WHEN** the human answers "Later" to the approval question
 - **THEN** the prompt's order leaves the entry unpublished, the result marker unwritten and the session open
 
-#### Scenario: Transition refused
+#### Scenario: Transition refused, HITL
 
-- **WHEN** the transition is refused because a task of the change is unchecked
-- **THEN** the prompt's order leaves the entry unpublished and the result marker unwritten
+- **WHEN** the transition of an `HITL` task is refused because a task of the change is unchecked
+- **THEN** the prompt's order leaves the entry unpublished, the result marker unwritten and the session open
+
+#### Scenario: Transition refused once, AFK
+
+- **WHEN** the transition of an `AFK` task is refused because a task of the change is unchecked, an uncommitted change is left or a commit is unpushed
+- **THEN** the prompt tells the agent to fix what the refusal names, checking a task only when it is done, and to run the transition once more
+
+#### Scenario: Transition refused again, AFK
+
+- **WHEN** the transition of an `AFK` task is refused a second time, or the refusal names something the agent cannot fix, such as a task that needs a human
+- **THEN** the prompt tells the agent not to post the stage summary again, to publish a logbook entry that says the attempt is blocked and why, quoting the transition's reason, to write no result marker and to stop, so the task keeps `implement` and reconcile retains the attempt once the session ends
 
 #### Scenario: Logbook section
 
