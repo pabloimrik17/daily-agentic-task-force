@@ -145,19 +145,19 @@ When the human confirms a split, the prompt SHALL have the agent create each sub
 - **WHEN** the human confirms a split and the grill changed no glossary or ADR file
 - **THEN** pull-request mode reports that the parent needs no pull request, and the agent writes the result marker without a logbook entry
 
-### Requirement: Public GitHub summaries
+### Requirement: Public summaries
 
-For a GitHub task, the prompt SHALL forbid absolute paths and other details of the machine in the definition and in the stage summary, because an issue in a public repository is public, and the definition becomes its description.
+For every source, the prompt SHALL forbid absolute paths and other details of the machine in the definition, the stage summary and the logbook entry, because the pull request may be public, and so may a GitHub issue, whose description the definition becomes.
 
 #### Scenario: GitHub task
 
 - **WHEN** a grill-me prompt is written for a GitHub task
-- **THEN** it forbids absolute paths and machine details in `definition.md` and in `stage-summary.md`
+- **THEN** it forbids absolute paths and machine details in `definition.md`, `stage-summary.md` and `logbook-entry.md`
 
 #### Scenario: Linear task
 
 - **WHEN** a grill-me prompt is written for a Linear task
-- **THEN** it carries no such restriction
+- **THEN** it holds the same rule
 
 ### Requirement: Definition layout
 
