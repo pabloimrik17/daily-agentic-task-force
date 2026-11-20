@@ -863,6 +863,9 @@ describe("The implementation closing order", () => {
         const closing = section(prompt({ autonomy: "HITL" }), "Closing");
 
         expect(closing).not.toContain("run it once more");
+        expect(closing).toContain(
+            'If it exits non-zero, the transition was refused (for example a task of the change is unchecked or a commit is unpushed) and it asked no question: tell the human what it reported and stop as for "Later".',
+        );
         expect(closing).toContain("and leave this session open, so the human can come back to it");
     });
 

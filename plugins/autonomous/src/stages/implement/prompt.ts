@@ -87,7 +87,7 @@ const HITL: Autonomy = {
     review: "Review the implementation with the human: show them the implementation and the pull request's URL, and commit and push each round of their feedback as a new commit. Go on only when the human is done with it.",
     blocked: false,
     transition: ({ task }) =>
-        `Run \`/autonomous:run --apply --transition ${task}\`. It asks the human whether to approve the implementation and move the task to \`verify\`, and applies the answer. When the human answers "Later", or the answer is not applied, stop here: publish no logbook entry, do not write the result marker, and leave this session open, so the human can come back to it.`,
+        `Run \`/autonomous:run --apply --transition ${task}\`. It asks the human whether to approve the implementation and move the task to \`verify\`, and applies the answer. If it exits non-zero, the transition was refused (for example a task of the change is unchecked or a commit is unpushed) and it asked no question: tell the human what it reported and stop as for "Later". When the human answers "Later", or the answer is not applied, stop here: publish no logbook entry, do not write the result marker, and leave this session open, so the human can come back to it.`,
     onFailure: "tell the human what it reported, and continue only as the human decides",
 };
 
