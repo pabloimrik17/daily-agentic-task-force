@@ -8,17 +8,17 @@ The single entry point of the autonomous loop: runs the loop's steps in order an
 
 ### Requirement: Single entry command
 
-The `autonomous` plugin SHALL expose two commands: `/autonomous:run`, which advances one task by one stage, and `/autonomous:loop`, the continuous mode. Both SHALL execute the same step runner. The arguments of `/autonomous:run` SHALL be passed through to the step runner unchanged.
+The `autonomous` plugin SHALL expose three commands: `/autonomous:run`, which advances one task by one stage, `/autonomous:loop`, the continuous mode, and `/autonomous:loop-stop`, which stops a running loop. All three SHALL execute the same step runner. The arguments of `/autonomous:run` SHALL be passed through to the step runner unchanged.
 
 #### Scenario: Command invocation
 
 - **WHEN** the user runs `/autonomous:run --apply --json`
 - **THEN** the step runner is executed with `--apply --json`
 
-#### Scenario: Two commands
+#### Scenario: Three commands
 
 - **WHEN** the plugin is installed
-- **THEN** it offers `/autonomous:run` and `/autonomous:loop` and no other command
+- **THEN** it offers `/autonomous:run`, `/autonomous:loop` and `/autonomous:loop-stop` and no other command
 
 ### Requirement: Ordered steps stop at the first non-advance
 
@@ -572,12 +572,17 @@ With `--json`, log mode SHALL print one JSON document identified by `schema: "au
 
 ### Requirement: An applied transition leaves a record in the open attempt
 
-When a transition answer is applied to a task that has an open attempt, answer mode SHALL write, in that attempt's directory, a record of the answer: the labels answered and the time. The record SHALL be written only after the transition is applied and read back, and a failure to write it SHALL NOT change the status of the answer. A task with no open attempt leaves no record.
+When a transition is applied to a task that has an open attempt of the stage it leaves, the run SHALL write, in that attempt's directory, a record of the transition: the labels it set, the time, and whether the human or the agent decided it. The record SHALL be written only after the transition is applied and read back, and a failure to write it SHALL NOT change the status of the answer. A task with no open attempt of the stage it leaves gets no record.
 
 #### Scenario: Autonomy answered in a grill
 
 - **WHEN** the human answers `HITL` to the transition question of a task whose grill-me attempt is started, and the transition is applied
-- **THEN** that attempt's directory holds a record of the answer `HITL` and its time
+- **THEN** that attempt's directory holds a record of the answer `HITL`, its time, and that the human decided it
+
+#### Scenario: AFK task leaves proposal
+
+- **WHEN** transition mode moves an `AFK` task from `proposal` to `implement` while its proposal attempt is open
+- **THEN** that attempt's directory holds a record of `implement`, its time, and that the agent decided it
 
 #### Scenario: Manual transition
 
