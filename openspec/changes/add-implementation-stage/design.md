@@ -101,3 +101,5 @@ Proposal preparation has the same gap in its `AFK` transition. It is left to its
 4. Accept the change with one real `HITL` run on DOT-121 (pull request #90), launched by hand after the user's go-ahead; restart the loop afterwards.
 
 Rollback: revert the release, but first relabel by hand every task already in `verify`. An older version does not know `verify`, sees those tasks as missing a stage, and its label triage would derive `proposal` for them.
+
+An older release without `implement` (2.3.0 reads `STAGE_IDS` as `test`, `grill-me`, `proposal`) cannot read `implement` attempt records. Its `readRecord` throws on the unknown stage and `listRecords` propagates the error, so its reconcile and launch steps report `not-evaluable` and stop for as long as such a record exists. `listRecords` reads every record whatever its state, so finishing or discarding an attempt does not help. Before rolling back, finish or discard every `implement` attempt, then move each `attempts/<source>/<task>/implement/` directory out of the state directory, and restore them when a release with `implement` is installed again.

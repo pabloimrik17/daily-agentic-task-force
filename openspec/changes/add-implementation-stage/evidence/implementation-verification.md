@@ -73,6 +73,11 @@ The transcript's Agent calls confirm the three names and definitions and carry n
 and the review was asked in the Plannotator Inbox at 2026-11-16 23:24 UTC, with all 10 tasks
 checked, every repository check passing and 2003 tests.
 
+Two things 9.2 did not exercise. The session set no model or effort override per teammate, so the
+prompt's grant to set any effort (design D5) was not exercised. The retry of a refused AFK
+transition (design D9, task 7.4, commit `8f58970`) came after the runs of 9.2 and 9.3 (commit
+`6639718`), so no end-to-end run covers it; only the unit tests in `implement.test.ts` do.
+
 ### Commits
 
 Five commits on pull request #90 after the proposal (`pr90-before-reconcile.json` lists eight in
@@ -204,8 +209,9 @@ stage summary and logbook in place.
 
 ### Case 2: the guards refuse the transition
 
-Run on case 4's task `agentic-task-eiyr` (change `sbx-resume`) after its discard, with the
-transition command and no `--apply`.
+Run on case 4's task `agentic-task-eiyr` (change `sbx-resume`) after its discard, with
+`run.ts --apply --transition beads:agentic-task-eiyr --json`. The account comes from the
+operator's transcript, because the raw files were lost with the restart.
 
 | Step | Setup                             | Exit | `outcome`       | Reason, verbatim                                   |
 | ---- | --------------------------------- | ---- | --------------- | -------------------------------------------------- |
@@ -214,7 +220,13 @@ transition command and no `--apply`.
 
 Both outputs have `applied` `false` and one reason only. The labels in both were `AFK`,
 `grill-sandbox`, `implement`, `personal`, so nothing changed. The operator restored `tasks.md`
-after 2b. The exit codes are from the operator's report; the raw files hold the `outcome`.
+after 2b with `git checkout`. The exit codes, `outcome` and reasons are from the command outputs
+in the transcript.
+
+The worktree held no other uncommitted change during these runs: attempt 1 had committed task 1.1
+and left nothing else, and `git status --short` was empty before 2a. The operator appended
+`s4 marker two` to `README.md` only after the refusals. The guards report every reason that
+applies (`transition/guards.ts`); only one applied in each run.
 
 PASS: each guard refused alone, with its own reason, and left the labels as they were.
 
@@ -240,12 +252,13 @@ PASS: the attempt ended retained, with `taken` kept, the blocker named and the w
 
 Task `agentic-task-eiyr`, change `sbx-resume`, pull request #12.
 
-- Attempt 1 committed task 1.1 (`59d180b`), pushed, and was steered to leave task 1.2's README
-  line uncommitted. The operator discarded it without `--release-workspace`. The discard removed
+- Attempt 1 committed task 1.1 (`59d180b`) and pushed. The operator discarded it without
+  `--release-workspace`, with nothing uncommitted. The discard removed
   the session and `taken` (`removed` `{"session":true,"taken":true,"workspace":false}`), and a
   discard comment went to the pull request. Labels: `AFK`, `grill-sandbox`, `implement`,
-  `personal`. The worktree was kept, with the line `s4 marker two` uncommitted.
-- The case 2 refusals ran here (above). The first launch of attempt 2 waited on a GitHub 503 (F2).
+  `personal`. The worktree was kept.
+- The case 2 refusals ran here (above). Afterwards the operator appended `s4 marker two` to
+  `README.md` and left it uncommitted. The first launch of attempt 2 waited on a GitHub 503 (F2).
   The retry launched `beads:agentic-task-eiyr:implement:2` with `workspace.created` `false`.
 - Attempt 2 committed the uncommitted line as `a38c20e`, then the assumptions as `eb975b8`. It did
   not redo task 1.1: `git log` holds one commit for it. It moved the task to `verify`
@@ -278,7 +291,7 @@ PASS: the stage waited, and the reason names the skill and the command.
   (README, launch step; `plugins/autonomous/src/select/candidates.ts`, `isUnsupportedStage`).
   The run finalised attempt 1, then launched `implement:2` on a task already in `verify`. The
   operator discarded it (`s1-attempt2-discard.json`). The correct reconcile omits `--stage`. That
-  `--stage` does not check that the task carries the stage is a hazard noted for a follow-up, not
+  `--stage` does not check that the task carries the stage is a hazard, followed up in DOT-144 and not
   fixed here. This is why case 1's labels in `s1-bd-after.json` still show `taken`: `implement:2`
   had just added it. The operator's final report marks case 1 "FAIL on reconcile"; the finalising
   itself is correct in the raw output.
