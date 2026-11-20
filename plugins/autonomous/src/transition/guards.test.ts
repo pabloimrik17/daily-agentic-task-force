@@ -60,11 +60,11 @@ describe("guards: Leaving implement needs the work finished", () => {
 
         expect(await leaving({}, calls)).toEqual([]);
         expect(calls).toEqual([
-            "git fetch origin",
+            "git fetch --prune origin",
             `git merge-base origin/main HEAD`,
             "git diff --name-only --no-renames --diff-filter=A 5ca1ab1e HEAD -- openspec/changes/",
             "openspec list --json",
-            "git status --porcelain",
+            "git status --porcelain --untracked-files=normal",
             `git rev-parse --verify --quiet origin/${BRANCH}`,
             `git rev-list --count origin/${BRANCH}..HEAD`,
         ]);

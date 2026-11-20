@@ -28,7 +28,7 @@ export const NO_TOOLS: GuardTools = {
 export interface Work {
     completed?: number;
     total?: number;
-    status?: string; // `git status --porcelain`
+    status?: string; // `git status --porcelain --untracked-files=normal`
     remote?: boolean; // whether origin/<branch> exists
     ahead?: number;
     fetchError?: string;

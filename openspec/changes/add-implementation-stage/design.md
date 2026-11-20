@@ -56,8 +56,8 @@ The prompt describes the orchestration as intent (see the spec's "Orchestration 
 A guard module, called by transition mode before it acts and by answer mode before it applies, checks the three conditions of "Leaving implement needs the work finished" and returns every reason that holds:
 
 - **unchecked tasks**: `openspec list --json` in the workspace, the found change's `completedTasks` against `totalTasks`;
-- **uncommitted changes**: `git status --porcelain` in the workspace is not empty;
-- **unpushed commits**: after `git fetch`, `git rev-list --count origin/<branch>..HEAD` is not zero, and a branch with no remote branch counts as unpushed.
+- **uncommitted changes**: `git status --porcelain --untracked-files=normal` in the workspace is not empty (the explicit mode overrides `status.showUntrackedFiles=no`);
+- **unpushed commits**: after `git fetch --prune`, `git rev-list --count origin/<branch>..HEAD` is not zero, and a branch with no remote branch counts as unpushed.
 
 The workspace is the path recorded in the task's latest attempt record, which every stage of a task shares; a path that no longer exists, or a task with no attempt, is "no workspace to check". The guards run before the approval question is emitted, so an `HITL` human is never asked to approve unfinished work, and again when the answer arrives, since the workspace may have changed in between. They take injected `git` and `openspec` execs, so tests run on fakes.
 
@@ -79,7 +79,7 @@ The plan is proposal's: the stage summary only, no description change, header `a
 
 ### D9. An AFK orchestrator whose transition is refused retries once, then announces the block
 
-Nobody watches an `AFK` session, so leaving it open after a refusal is a silent block: the stage summary already says the work is finished. The prompt now tells the agent to fix what the refusal names and run the transition once more. Fixing means committing and pushing an uncommitted change, pushing unpushed commits, and checking a task only when it is done; a failed read or write (`git fetch`, `gh`, the tracker) needs no fix, only the second run. When what it names cannot be fixed (a task that needs a human, unfinished work), or the second run is refused too, the agent publishes a logbook entry that says the attempt is blocked and why, quoting the transition's reason, writes no result marker and stops. The task keeps `implement` and `reconcile` retains the attempt once the session ends, as in the blocked path.
+Nobody watches an `AFK` session, so leaving it open after a refusal is a silent block: the stage summary already says the work is finished. The prompt now tells the agent to fix what the refusal names and run the transition once more. Fixing means committing and pushing an uncommitted change, pushing unpushed commits, and checking a task only when it is done; a failed read or write (`git fetch`, `gh`, the tracker) needs no fix, only the second run. The stage label goes last, so a first run whose read-back fails after the removal has already moved the task: a second run refused because the task carries `verify` and no `implement` means the transition is applied, and the agent goes on. When what it names cannot be fixed (a task that needs a human, unfinished work), or the second run is refused too, the agent publishes a logbook entry that says the attempt is blocked and why, quoting the transition's reason, writes no result marker and stops. The task keeps `implement` and `reconcile` retains the attempt once the session ends, as in the blocked path.
 
 A transient failure clears on the retry, and a real one is announced on the pull request and in the kept attempt. The agent does not run persist mode again: it would post nothing, since a comment with the attempt's header is skipped (`saveComment` in `persist/persist.ts`), so the logbook entry carries the notice. `HITL` is unchanged: "Later" or a refusal still leaves the session open, because a human follows it.
 
@@ -98,7 +98,7 @@ Proposal preparation has the same gap in its `AFK` transition. It is left to its
 1. Release as a `feat(autonomous):` minor; no configuration changes.
 2. Before installing it, stop the loop (`/autonomous:loop-stop`). DOT-121 already carries `implement`: once the stage exists it becomes a candidate, ahead of every `proposal` task, and a running loop would launch it before the agreed manual run. Adding `taken` to DOT-121 instead also works, but `taken` also blocks the manual launch, so it must be removed right before it.
 3. Run `/autonomous:run --bootstrap-labels` once per tracker, so `verify` exists before the first transition out of `implement`.
-4. Accept the change with one real `HITL` run on DOT-121 (pull request #90), launched by hand after the user's go-ahead; restart the loop afterwards.
+4. Accept the change with one real `HITL` run on DOT-121 (pull request #90), launched by hand after the user's go-ahead. Restart the loop only once the release with this change is installed: an older release cannot read the `implement` attempt records the run leaves (see the rollback note below).
 
 Rollback: revert the release, but first relabel by hand every task already in `verify`. An older version does not know `verify`, sees those tasks as missing a stage, and its label triage would derive `proposal` for them.
 

@@ -68,7 +68,7 @@ const AFK: Autonomy = {
     review: null,
     blocked: true,
     transition: ({ task, attempt, entry }) =>
-        `Run \`/autonomous:run --apply --transition ${task}\`. For an \`AFK\` task it asks no one: it moves the task to \`verify\` itself, once it finds every task of the change checked and every commit pushed. If it exits non-zero, the transition was not applied: fix what its reason names, then run it once more. You may commit an uncommitted change by the rules of the commits section and push it, push the commits it names, and check a task of the change only when it is done, never one you did not do. A failed read or write (the fetch, the pull request, the tracker) needs no fix, only the second run. When what it names cannot be fixed (a task that needs a human, unfinished work), or the second run is refused too, the task is blocked: the stage summary is already posted, so do not post it again, and write a logbook entry to \`${entry}\` that says the attempt is blocked and why, quoting the transition's reason, then run \`/autonomous:run --apply --log ${attempt}\`. Write no result marker and stop: the task stays in \`implement\`, and the attempt is kept once this session ends, so a human finds it with the notice.`,
+        `Run \`/autonomous:run --apply --transition ${task}\`. For an \`AFK\` task it asks no one: it moves the task to \`verify\` itself, once it finds every task of the change checked and every commit pushed. If it exits non-zero, the transition was not applied: fix what its reason names, then run it once more. You may commit an uncommitted change by the rules of the commits section and push it, push the commits it names, and check a task of the change only when it is done, never one you did not do. A failed read or write (the fetch, the pull request, the tracker) needs no fix, only the second run. If the second run is refused because the task is in none of the stages it can leave, and the labels it lists show \`verify\` and no \`implement\`, the first run moved the task and only its read-back failed: the transition is applied, so go on to the next step. When what it names cannot be fixed (a task that needs a human, unfinished work), or the second run is refused too, the task is blocked: the stage summary is already posted, so do not post it again, and write a logbook entry to \`${entry}\` that says the attempt is blocked and why, quoting the transition's reason, then run \`/autonomous:run --apply --log ${attempt}\`. Write no result marker and stop: the task stays in \`implement\`, and the attempt is kept once this session ends, so a human finds it with the notice.`,
     onFailure: `treat it as a blocker: follow the section "${BLOCKED_TITLE}", and run no transition`,
 };
 
@@ -84,7 +84,7 @@ const HITL: Autonomy = {
         ],
     }),
     deviation: "Ask the human before you change the proposal, and change it only as they decide.",
-    review: "Review the implementation with the human: show them the implementation and the pull request's URL, and commit and push each round of their feedback as a new commit. Go on only when the human is done with it.",
+    review: "Review the implementation with the human: show them the implementation and the pull request's URL, and commit and push each round of their feedback as a new commit. Go on only when the human is done with it, and once a round changed anything, confirm again, as in the step before, that every check passes, nothing is left uncommitted and every commit is pushed.",
     blocked: false,
     transition: ({ task }) =>
         `Run \`/autonomous:run --apply --transition ${task}\`. It asks the human whether to approve the implementation and move the task to \`verify\`, and applies the answer. If it exits non-zero, the transition was refused (for example a task of the change is unchecked or a commit is unpushed) and it asked no question: tell the human what it reported and stop as for "Later". When the human answers "Later", or the answer is not applied, stop here: publish no logbook entry, do not write the result marker, and leave this session open, so the human can come back to it.`,
@@ -166,7 +166,7 @@ const BLOCKED = {
     stage: "implement",
     when: "When you cannot finish the implementation (the proposal contradicts itself, a check cannot be made to pass, or a task needs a human), do not force it: a human settles it from your explanation, and a forced implementation costs more than a late one. Instead:",
     steps: [
-        "Commit and push what is done, by the rules of the commits section, so no work is lost. Leave unchecked every task that is not done.",
+        "Commit and push what is done, by the rules of the commits section, so no work is lost. Leave unchecked every task that is not done. If the push fails, do not retry it and do not start this section over: keep the commits, and name the push's error and the unpushed commits in the stage summary and the logbook entry.",
     ],
     blocks: "the implementation",
     pullRequest: "always",

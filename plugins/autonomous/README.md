@@ -1034,15 +1034,16 @@ that no longer exists, for instance after `--release-workspace`, gives
 `there is no workspace to check: <path> no longer exists`. Nothing else is
 checked then.
 
-Otherwise, every command runs in the workspace. `git fetch origin` runs first;
-a fetch that fails is a reason, `fetching origin in the workspace: <error>`, and
-the three checks still run. Each check gives at most one reason, and every
+Otherwise, every command runs in the workspace. `git fetch --prune origin` runs
+first, so a deleted remote branch leaves no stale `origin/<branch>`; a fetch that
+fails is a reason, `fetching origin in the workspace: <error>`, and the three
+checks still run. Each check gives at most one reason, and every
 reason that holds is reported, so one run names all there is to finish:
 
 | Check               | How                                                                                                                                                                                                                | Reason                                                                                  |
 | ------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | --------------------------------------------------------------------------------------- |
 | Unchecked tasks     | The repository's default branch is read through `gh`, the change is found as the [prerequisites](#implementation-prerequisites) find it, on `HEAD`, and `openspec list --json` gives its completed and total tasks | `the change <name> has <n> of <total> tasks unchecked`                                  |
-| Uncommitted changes | `git status --porcelain` prints a line per change                                                                                                                                                                  | `the working tree has <n> uncommitted changes`                                          |
+| Uncommitted changes | `git status --porcelain --untracked-files=normal` prints a line per change                                                                                                                                         | `the working tree has <n> uncommitted changes`                                          |
 | Unpushed commits    | `git rev-parse --verify --quiet origin/<branch>`, then `git rev-list --count origin/<branch>..HEAD`, with the branch of the attempt record                                                                         | `the branch <branch> has <n> commits origin/<branch> lacks`                             |
 | No remote branch    | `origin/<branch>` does not exist; it counts as unpushed                                                                                                                                                            | `the branch <branch> has no remote branch origin/<branch>, so its commits are unpushed` |
 
@@ -3614,6 +3615,13 @@ when such a task is ready for it.
 To roll back, relabel by hand every task already in `verify` first, then revert
 the release. An older version does not know `verify`: it sees those tasks as
 missing a stage, and its label triage would derive `proposal` for them.
+
+An older version also cannot read `implement` attempt records: its reconcile
+and launch steps report `not-evaluable` and stop for as long as one exists in
+the state directory, whatever its state. So before reverting, finish or discard
+every `implement` attempt, move each `attempts/<source>/<task>/implement/`
+directory out of the state directory, and put them back once a release with
+`implement` is installed again.
 
 ## Discard mode
 

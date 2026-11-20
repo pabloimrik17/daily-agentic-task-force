@@ -44,7 +44,8 @@ async function implementGuards(ref: TaskRef, state: string, tools: GuardTools): 
         return [found.error];
     }
     const { path, branch } = found.value;
-    const fetched = await tools.git(["-C", path, "fetch", "origin"]);
+    // Pruned, so a deleted remote branch cannot pass the unpushed check through a stale ref.
+    const fetched = await tools.git(["-C", path, "fetch", "--prune", "origin"]);
     const reasons: (string | null)[] = [
         fetched.ok ? null : `fetching origin in the workspace: ${fetched.error}`,
     ];
@@ -129,7 +130,8 @@ function countOf(stdout: string, name: string): Result<TaskCount> {
 }
 
 async function uncommittedChanges(path: string, git: Exec): Promise<string | null> {
-    const status = await git(["-C", path, "status", "--porcelain"]);
+    // An explicit mode, so status.showUntrackedFiles=no cannot hide new files.
+    const status = await git(["-C", path, "status", "--porcelain", "--untracked-files=normal"]);
     if (!status.ok) {
         return `reading the working tree status: ${status.error}`;
     }

@@ -809,6 +809,9 @@ describe("The implementation prompt follows the autonomy", () => {
         expect(closing).toContain(
             "2. Review the implementation with the human: show them the implementation and the pull request's URL, and commit and push each round of their feedback as a new commit.",
         );
+        expect(closing).toContain(
+            "once a round changed anything, confirm again, as in the step before, that every check passes, nothing is left uncommitted and every commit is pushed.",
+        );
         expect(
             inOrder(closing, ["2. Review the implementation", "--transition linear:DOT-121"]),
         ).toBe(true);
@@ -891,6 +894,18 @@ describe("The implementation closing order", () => {
         expect(closing).toContain("a task that needs a human, unfinished work");
     });
 
+    it("Transition applied but not read back: the AFK prompt goes on, not to the blocked path", () => {
+        const closing = section(prompt({ autonomy: "AFK" }), "Closing");
+
+        expect(
+            inOrder(closing, [
+                "only the second run.",
+                "If the second run is refused because the task is in none of the stages it can leave, and the labels it lists show `verify` and no `implement`, the first run moved the task and only its read-back failed: the transition is applied, so go on to the next step.",
+                "or the second run is refused too, the task is blocked",
+            ]),
+        ).toBe(true);
+    });
+
     it("Logbook section: ### Implementation lists the tasks done and the commits by subject", () => {
         const closing = section(prompt(), "Closing");
 
@@ -943,6 +958,14 @@ describe("A blocked AFK orchestrator ends without a transition", () => {
             ]),
         ).toBe(true);
         expect(blocked).not.toContain("--transition");
+    });
+
+    it("Push that fails: the blocked path reports it rather than retrying it", () => {
+        const blocked = section(prompt({ autonomy: "AFK" }), "If you are blocked");
+
+        expect(blocked).toContain(
+            "If the push fails, do not retry it and do not start this section over: keep the commits, and name the push's error and the unpushed commits in the stage summary and the logbook entry.",
+        );
     });
 });
 

@@ -158,7 +158,7 @@ The prompt SHALL tell the agent to run every check the repository defines, such 
 
 ### Requirement: The implementation prompt follows the autonomy
 
-The prompt SHALL be written for the task's autonomy. For `AFK` it SHALL tell the agent never to ask the human anything and to record each assumption in the change's design, the stage summary and the logbook entry. For `HITL` it SHALL let the agent ask, and SHALL tell it to show the human the implementation and its pull request and to iterate on the feedback, each round as a new commit, before the transition.
+The prompt SHALL be written for the task's autonomy. For `AFK` it SHALL tell the agent never to ask the human anything and to record each assumption in the change's design, the stage summary and the logbook entry. For `HITL` it SHALL let the agent ask, and SHALL tell it to show the human the implementation and its pull request and to iterate on the feedback, each round as a new commit, running the checks again after the last round that changed anything, before the transition.
 
 #### Scenario: AFK task
 
@@ -206,6 +206,11 @@ The prompt SHALL tell the agent to end the stage in this order:
 - **WHEN** the transition of an `AFK` task is refused a second time, or the refusal names something the agent cannot fix, such as a task that needs a human
 - **THEN** the prompt tells the agent not to post the stage summary again, to publish a logbook entry that says the attempt is blocked and why, quoting the transition's reason, to write no result marker and to stop, so the task keeps `implement` and reconcile retains the attempt once the session ends
 
+#### Scenario: Transition applied but not read back, AFK
+
+- **WHEN** the first transition of an `AFK` task moves its labels but cannot read them back, and the second run is refused because the task carries `verify` and no `implement`
+- **THEN** the prompt tells the agent the transition is applied and to go on to the logbook entry, not to the blocked path
+
 #### Scenario: Logbook section
 
 - **WHEN** an implementation prompt is written
@@ -228,6 +233,11 @@ For an `AFK` task, the prompt SHALL tell the agent what to do when it cannot fin
 
 - **WHEN** an `AFK` orchestrator cannot make the repository's tests pass
 - **THEN** the task keeps `implement`, the work done is pushed, the task's tracker holds a comment explaining the blocker, no result marker exists, and reconcile retains the attempt once its session ends
+
+#### Scenario: Push that fails
+
+- **WHEN** the push of the work done fails on the blocked path of an `AFK` orchestrator
+- **THEN** the prompt tells the agent not to retry it, to keep the commits, and to name the push's error and the unpushed commits in the stage summary and the logbook entry
 
 ### Requirement: Tasks that need a human
 
