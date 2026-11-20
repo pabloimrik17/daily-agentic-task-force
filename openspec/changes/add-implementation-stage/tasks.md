@@ -42,9 +42,9 @@
 
 Results go to `openspec/changes/add-implementation-stage/evidence/implementation-verification.md`. Every tracker or repository write here needs the user's go-ahead first.
 
-- [ ] 9.1 With the loop stopped, bootstrap `verify` on the trackers with the user's go-ahead, and record the bootstrap report.
-- [ ] 9.2 Real task: run the stage on DOT-121 (`HITL`, pull request #90) by hand, through the orchestration, the commits, the review, the `Approve` answer, the logbook entry and the reconcile run that removes the session. Record the teammates' models and efforts as the session reports them, the commits, the stage summary comment, the labels and the pull request's draft state.
-- [ ] 9.3 Sandbox cases, each recorded with its tracker state and the reconcile result:
+- [x] 9.1 With the loop stopped, bootstrap `verify` on the trackers with the user's go-ahead, and record the bootstrap report.
+- [x] 9.2 Real task: run the stage on DOT-121 (`HITL`, pull request #90) by hand, through the orchestration, the commits, the review, the `Approve` answer, the logbook entry and the reconcile run that removes the session. Record the teammates' models and efforts as the session reports them, the commits, the stage summary comment, the labels and the pull request's draft state.
+- [x] 9.3 Sandbox cases, each recorded with its tracker state and the reconcile result:
     1. an `AFK` task from launch to `verify` with no question;
     2. the guards refusing a transition with an unchecked task, then with an uncommitted change;
     3. a blocked `AFK` orchestrator whose check cannot pass, ending retained with its work pushed;
@@ -57,4 +57,4 @@ Results go to `openspec/changes/add-implementation-stage/evidence/implementation
 
 - Commit as `feat(autonomous): …`, a minor with no `BREAKING CHANGE` footer, excluding `bun.lock`.
 - Run `/opsx:verify` on this change, then archive it.
-- Restart the loop after 9.2.
+- Keep the loop stopped after 9.2 until the release with this change is installed: the installed version does not know `verify`, sees DOT-121 as missing a stage, and its triage would derive `proposal` (design, rollback note). Restart it then.
