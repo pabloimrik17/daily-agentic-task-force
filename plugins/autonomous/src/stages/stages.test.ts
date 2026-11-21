@@ -9,6 +9,7 @@ import { STAGES, stageFor } from "./registry.ts";
 import type { StagePromptInput } from "./stage.ts";
 import { stageEnv } from "./test-fixtures.ts";
 import { testStage } from "./test.ts";
+import { verifyStage } from "./verify/stage.ts";
 
 const ID = "linear:DOT-109:test:1";
 const RESULT_PATH = "/state/attempts/linear/DOT-109/test/1/result.json";
@@ -48,12 +49,13 @@ function input(description: string | null = "Do the thing."): StagePromptInput {
 }
 
 describe("the stage registry", () => {
-    it("holds the test, grill-me, proposal and implement stages", () => {
-        expect([...STAGES.keys()]).toEqual(["test", "grill-me", "proposal", "implement"]);
+    it("holds the test, grill-me, proposal, implement and verify stages", () => {
+        expect([...STAGES.keys()]).toEqual(["test", "grill-me", "proposal", "implement", "verify"]);
         expect(stageFor("test")).toBe(testStage);
         expect(stageFor("grill-me")).toBe(grillMeStage);
         expect(stageFor("proposal")).toBe(proposalStage);
         expect(stageFor("implement")).toBe(implementStage);
+        expect(stageFor("verify")).toBe(verifyStage);
     });
 });
 
