@@ -10,26 +10,31 @@ import {
     BLOCKED_TITLE,
     type Blocked,
     blockedSection,
+    CHANGE_KEY,
     type Closing,
     closingSection,
+    commitsSection,
+    constraintsSection,
     contextSection,
     contextValue,
-    NO_FORCE_PUSH,
+    DEVIATION,
+    hitlTransition,
+    afkTransition,
+    type Move,
     openspecPrompt,
+    orchestrationSection,
     type Paths,
     promptAutonomy,
     promptPaths,
     PULL_REQUEST_KEY,
-    publicRepository,
     type Section,
     summarySection,
 } from "../openspec-stage.ts";
 import type { StageContext, StagePromptInput } from "../stage.ts";
 
-export { CONTEXT_KEY, HANDOFF_SKILL, PULL_REQUEST_KEY } from "../openspec-stage.ts";
+export { CHANGE_KEY, CONTEXT_KEY, HANDOFF_SKILL, PULL_REQUEST_KEY } from "../openspec-stage.ts";
 export const APPLY_WORKFLOW_KEY = "applyWorkflow"; // `/openspec-apply-change` or `/opsx:apply`
 export const UPDATE_WORKFLOW_KEY = "updateWorkflow"; // `/openspec-update-change` or `/opsx:update`
-export const CHANGE_KEY = "change"; // the name of the OpenSpec change the branch adds
 
 // What the prompt names, read by the prerequisites.
 interface Work {
@@ -39,11 +44,13 @@ interface Work {
     pullRequest: PullRequest;
 }
 
-// What changes with the task's autonomy: its own section, how a deviation is decided, the review
-// step, the closing transition, and what to do when a command or a check fails.
+// The transition the implementation closes with.
+const MOVE: Move = { left: "implement", reached: "verify" };
+
+// What changes with the task's autonomy: its own section, the review step, the closing transition,
+// and what to do when a command or a check fails; the deviation rule is shared (DEVIATION).
 interface Autonomy {
     section: (work: Work) => Section;
-    deviation: string;
     review: string | null;
     blocked: boolean; // whether the prompt gives the blocked path
     transition: (paths: Paths) => string;
@@ -63,12 +70,9 @@ const AFK: Autonomy = {
             `- If you cannot finish the implementation, do not force it: follow the section "${BLOCKED_TITLE}".`,
         ],
     }),
-    deviation:
-        "Decide the deviation yourself, without asking, and record it as an assumption as well.",
     review: null,
     blocked: true,
-    transition: ({ task, attempt, entry }) =>
-        `Run \`/autonomous:run --apply --transition ${task}\`. For an \`AFK\` task it asks no one: it moves the task to \`verify\` itself, once it finds every task of the change checked and every commit pushed. If it exits non-zero, the transition was not applied: fix what its reason names, then run it once more. You may commit an uncommitted change by the rules of the commits section and push it, push the commits it names, and check a task of the change only when it is done, never one you did not do. A failed read or write (the fetch, the pull request, the tracker) needs no fix, only the second run. If the second run is refused because the task is in none of the stages it can leave, and the labels it lists show \`verify\` and no \`implement\`, the first run moved the task and only its read-back failed: the transition is applied, so go on to the next step. When what it names cannot be fixed (a task that needs a human, unfinished work), or the second run is refused too, the task is blocked: the stage summary is already posted, so do not post it again, and write a logbook entry to \`${entry}\` that says the attempt is blocked and why, quoting the transition's reason, then run \`/autonomous:run --apply --log ${attempt}\`. Write no result marker and stop: the task stays in \`implement\`, and the attempt is kept once this session ends, so a human finds it with the notice.`,
+    transition: (paths) => afkTransition(paths, MOVE),
     onFailure: `treat it as a blocker: follow the section "${BLOCKED_TITLE}", and run no transition`,
 };
 
@@ -83,11 +87,9 @@ const HITL: Autonomy = {
             "- The transition question comes only after the human has seen the implementation, because it asks them to approve the implementation as it stands.",
         ],
     }),
-    deviation: "Ask the human before you change the proposal, and change it only as they decide.",
     review: "Give the human a quick look at the implementation: show them the implementation and the pull request's URL for anything that jars, and tell them that verification, code review and QA follow. Fix only what the human clearly asks for, and commit and push each round as a new commit. Go on only when the human is done with it, and once a round changed anything, confirm again, as in the step before, that every check passes, nothing is left uncommitted and every commit is pushed.",
     blocked: false,
-    transition: ({ task }) =>
-        `Run \`/autonomous:run --apply --transition ${task}\`. It asks the human whether to approve the implementation and move the task to \`verify\`, and applies the answer. If it exits non-zero, the transition was refused (for example a task of the change is unchecked or a commit is unpushed) and it asked no question: tell the human what it reported and stop as for "Later". When the human answers "Later", or the answer is not applied, stop here: publish no logbook entry, do not write the result marker, and leave this session open, so the human can come back to it.`,
+    transition: (paths) => hitlTransition(paths, MOVE, "the implementation"),
     onFailure: "tell the human what it reported, and continue only as the human decides",
 };
 
@@ -107,7 +109,7 @@ function workOf(context: StageContext): Work {
     };
 }
 
-function implementationSection(work: Work, autonomy: Autonomy): Section {
+function implementationSection(work: Work, autonomy: Autonomy, deviation: string): Section {
     const { change, apply, update, pullRequest } = work;
     const { number, title, url } = pullRequest;
     return {
@@ -117,7 +119,7 @@ function implementationSection(work: Work, autonomy: Autonomy): Section {
             "",
             `1. Before you implement anything, look for what an earlier attempt of this task left in this workspace: the checked tasks in \`openspec/changes/${change}/tasks.md\`, the branch's commits since the proposal (\`git log\`), and the uncommitted changes (\`git status\`). Continue from the checked tasks and the commits; do not redo them. Treat uncommitted changes as partial work on the next unchecked tasks: finish them, check their tasks and commit them. Never discard them: no \`git checkout --\`, \`git restore\`, \`git reset --hard\`, \`git clean\` or stash.`,
             `2. Run \`${apply}\` on the change \`${change}\`, and implement every task of its \`tasks.md\`, one coherent unit of work at a time (see the commits section).`,
-            `3. When the implementation shows the proposal is wrong (a task cannot work as written, or the design misses a case), change the change's artifacts with \`${update}\` on this same branch, and record the deviation, with its reason, in the change's \`design.md\`, the stage summary and the logbook entry. ${autonomy.deviation}`,
+            `3. When the implementation shows the proposal is wrong (a task cannot work as written, or the design misses a case), change the change's artifacts with \`${update}\` on this same branch, and record the deviation, with its reason, in the change's \`design.md\`, the stage summary and the logbook entry. ${deviation}`,
             `4. Once every task is done, run every check the repository defines: its tests, linters and type checks, and whatever its contributor instructions or scripts name. Fix what fails, commit and push the fix, and run them again until they all pass. If a check cannot be made to pass, ${autonomy.onFailure}.`,
             "",
             "Verifying the change against its proposal, reviewing the code's quality, running what the task delivers as its end user would, and archiving the change belong to later stages (verification, code review and QA), and you do none of them. Run neither OpenSpec's verify workflow nor its archive workflow, even when the apply workflow suggests verifying or archiving once every task is done. The repository's checks, and the review of each teammate's block, stay yours.",
@@ -125,28 +127,15 @@ function implementationSection(work: Work, autonomy: Autonomy): Section {
     };
 }
 
-const ORCHESTRATION: Section = {
-    title: "Orchestration",
-    lines: [
-        "You are the orchestrator: you plan the work, delegate it to teammates, review what they hand back, and commit it. Every teammate is a Claude agent you start from this session.",
-        "",
-        "- Delegate the work to as many teammates as you see fit, each on a block of the change.",
-        "- Give each teammate the model and the effort level its block needs. You may set any model and any effort level for a teammate, from the cheapest up, not only levels near your own. No block should cost more than it needs: choose the cheapest that does it well.",
-        "- Keep your own context under about 30% until the implementation ends: leave the reading, the writing and the checking to teammates, and keep for yourself the plan, the review of their work and the commits.",
-    ],
-};
+const ORCHESTRATION = orchestrationSection({
+    each: "a block of the change",
+    ends: "the implementation ends",
+});
 
-const COMMITS: Section = {
-    title: "Commits",
-    lines: [
-        "- Only you commit, never a teammate: a teammate changes files and never stages, commits or pushes. Tell each teammate so.",
-        "- Commit one coherent unit of work at a time: its code, its tests, and the change's task checkboxes it completes, in the same commit. Stage by path, never with `git add -A` or `git add .`, so no other file reaches the commit.",
-        "- Write each message as a conventional commit, in this repository's conventions: take the type and the scope from its contributor instructions (AGENTS.md, CONTRIBUTING or the like), its commit rules (a commitlint configuration or the like) and its recent history. In a monorepo, give every commit a scope.",
-        "- Mark a commit breaking (`!` after the type and scope, or a `BREAKING CHANGE` footer) only when the change's proposal declares the change breaking. Otherwise no commit carries either.",
-        "- Push each commit before you start the next unit of work, so the pull request always shows the work done.",
-        "- Never amend a commit and never rewrite one already pushed.",
-    ],
-};
+const COMMITS = commitsSection({
+    unit: "one coherent unit of work at a time: its code, its tests, and the change's task checkboxes it completes",
+    next: "the next unit of work",
+});
 
 function closing(paths: Paths, autonomy: Autonomy): Closing {
     return {
@@ -174,23 +163,11 @@ const BLOCKED = {
     pullRequest: "always",
 } as const satisfies Blocked;
 
-function constraintsSection(autonomy: Autonomy): Section {
-    return {
-        title: "Constraints",
-        lines: [
-            "- Commit and push only on this workspace's current branch.",
-            NO_FORCE_PUSH,
-            "- Leave the task's pull request a draft: never mark it ready for review, and open no other pull request.",
-            `- If a push fails, ${autonomy.onFailure}.`,
-            publicRepository("the commits, the change's artifacts"),
-        ],
-    };
-}
-
 export function implementPrompt(input: StagePromptInput): string {
     const { context } = input;
     const paths = promptPaths(input);
-    const autonomy = AUTONOMIES[promptAutonomy(input, "implement")];
+    const label = promptAutonomy(input, "implement");
+    const autonomy = AUTONOMIES[label];
     const work = workOf(context);
     const sections = [
         contextSection(
@@ -198,7 +175,7 @@ export function implementPrompt(input: StagePromptInput): string {
             "implement",
             "The proposal's stage summary, and a grill's when the task had one, are among the comments. Weigh it all with the description above and the change's artifacts before you implement.",
         ),
-        implementationSection(work, autonomy),
+        implementationSection(work, autonomy, DEVIATION[label]),
         ORCHESTRATION,
         COMMITS,
         autonomy.section(work),
@@ -210,7 +187,7 @@ export function implementPrompt(input: StagePromptInput): string {
             "Name in it the pull request's URL, the OpenSpec change, the commits, and each deviation from the proposal, with its reason.",
         ),
         ...(autonomy.blocked ? [blockedSection(paths, BLOCKED)] : []),
-        constraintsSection(autonomy),
+        constraintsSection(autonomy.onFailure, "the commits, the change's artifacts"),
     ];
     return openspecPrompt(
         input,
