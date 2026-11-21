@@ -7,11 +7,11 @@ attempt to advance a stage.
 Labels come in three groups: scope, autonomy and stage. Scope and autonomy are
 properties that persist, and each transition replaces the stage
 ([ADR 0001](docs/adr/0001-properties-persist-stages-replace.md)). The grill,
-proposal preparation and the implementation run as stages (see the README's
-[grill-me stage](README.md#the-grill-me-stage),
-[proposal stage](README.md#the-proposal-stage) and
-[implementation stage](README.md#the-implementation-stage)); verification does
-not yet.
+proposal preparation, the implementation and the verification run as stages
+(see the README's [grill-me stage](README.md#the-grill-me-stage),
+[proposal stage](README.md#the-proposal-stage),
+[implementation stage](README.md#the-implementation-stage) and
+[verification stage](README.md#the-verification-stage)).
 
 ## Language
 
@@ -71,7 +71,8 @@ reviewer reports findings, the orchestrator triages them, other teammates try
 to refute each one it keeps, others fix those that survive, and others judge
 each fix. Nobody judges their own work. Its
 phases are the report, the finding triage, the refutation, the fix and the fix
-check.
+check (see the README's
+[adversarial review](README.md#the-adversarial-review)).
 
 **Finding triage**:
 The phase of an adversarial review in which the orchestrator makes the
