@@ -116,13 +116,20 @@ describe("detect: three label groups", () => {
         expect(Object.values(detection.groups).every(isComplete)).toBe(true);
     });
 
-    it("Task ready for code review: personal, HITL and code-review are complete for all three groups", () => {
-        const detection = detect(task(["personal", "HITL", "code-review"]), rules());
+    it("Task ready for code review: personal, AFK and code-review are complete for all three groups", () => {
+        const detection = detect(task(["personal", "AFK", "code-review"]), rules());
         expect(detection.groups).toEqual({
             scope: { status: "present", labels: ["personal"] },
-            autonomy: { status: "present", labels: ["HITL"] },
+            autonomy: { status: "present", labels: ["AFK"] },
             stage: { status: "present", labels: ["code-review"] },
         });
+        expect(Object.values(detection.groups).every(isComplete)).toBe(true);
+    });
+
+    it("code-review with HITL: complete for all three groups", () => {
+        const detection = detect(task(["personal", "HITL", "code-review"]), rules());
+        expect(detection.groups.autonomy).toEqual({ status: "present", labels: ["HITL"] });
+        expect(detection.groups.stage).toEqual({ status: "present", labels: ["code-review"] });
         expect(Object.values(detection.groups).every(isComplete)).toBe(true);
     });
 
@@ -186,6 +193,15 @@ describe("detect", () => {
     it("does not treat a near-miss spelling as the contract label", () => {
         const detection = detect(task(["Grill Me"], { source: "linear" }), rules());
         expect(detection.groups.stage).toEqual({ status: "missing", evidence: [] });
+    });
+
+    it("Near-miss code-review: Code Review is untagged for the stage group only", () => {
+        const detection = detect(task(["work", "AFK", "Code Review"]), rules());
+        expect(detection.groups).toEqual({
+            scope: { status: "present", labels: ["work"] },
+            autonomy: { status: "present", labels: ["AFK"] },
+            stage: { status: "missing", evidence: [] },
+        });
     });
 
     it("does not treat Proposal as proposal", () => {
