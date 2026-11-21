@@ -121,7 +121,7 @@ A teammate SHALL fix each surviving finding sent to fix, and SHALL NOT change it
 
 ### Requirement: The fix check
 
-Teammates SHALL judge each fix: its reproduction no longer holds, a reproduction test fails without the fix and passes with it, and the fix does no more than its finding asks. A rejected fix SHALL go back to the fix with the reasons, at most twice; a fix still rejected then SHALL block the review when no human follows it, and go to the human otherwise.
+Teammates SHALL judge each fix: its reproduction no longer holds, a reproduction test fails without the fix and passes with it, and the fix does no more than its finding asks. A fix SHALL get at most two fix checks: a fix rejected by its first SHALL go back to the fix with the reasons; a fix rejected by its second SHALL block the review when no human follows it, and go to the human otherwise.
 
 #### Scenario: Accepted fix
 
