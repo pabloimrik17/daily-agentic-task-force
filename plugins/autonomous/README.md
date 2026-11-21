@@ -2017,6 +2017,11 @@ advances without real credentials, and enables only a scaffolded Beads
 database. The run that built it is recorded in
 `openspec/changes/archive/2026-10-04-add-interactive-handoff/evidence/interactive-check.md`.
 
+The two adversarial review cases scaffold a working `git` ahead of the macOS
+`xcrun` shim at `/usr/bin/git`, which cannot write its cache in the eval
+sandbox. Without it every `git` call fails and each session spends its turns
+on git instead of the review.
+
 ## The `label-triage` step
 
 Fourth in the run, after `reconcile`, `capacity` and `quota-gate`. It reads the open tasks of every
