@@ -80,7 +80,7 @@ The orchestrator SHALL make the reported findings its own: it MAY merge duplicat
 
 ### Requirement: The severity floor
 
-A finding at the caller's severity floor SHALL be sent only to fix, and SHALL leave the review unfixed only when the refutation shows it does not hold.
+A finding at or above the caller's severity floor SHALL be sent only to fix, and SHALL leave the review unfixed only when the refutation shows it does not hold.
 
 #### Scenario: Critical finding
 
