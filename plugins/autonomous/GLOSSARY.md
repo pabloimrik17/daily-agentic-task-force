@@ -45,9 +45,53 @@ to verify.
 _Avoid_: apply, implement stage
 
 **Verification**:
-The stage that checks a task's implementation against its proposal and
-corrects what is missing.
+The stage that checks a task's implementation against its proposal, and
+against the acceptance criteria and non-goals of its definition, and corrects
+what does not match. It ends with every finding it chose to fix fixed,
+committed on the task's branch, and the task ready for code review.
 _Avoid_: review, code review
+
+**Code review**:
+The stage that judges the quality of the code a task's implementation
+changed, not its match with the proposal. It does not exist yet.
+_Avoid_: review, verification
+
+**QA**:
+The stage that runs what a task delivers, when it can be run, as its end user
+would, to see that it works. It does not exist yet.
+_Avoid_: acceptance, testing, end-to-end
+
+**Review stage**:
+A stage that judges what a task's implementation produced, each from its own
+angle: verification, code review and QA.
+
+**Adversarial review**:
+The way a review stage, or any other review, handles what it finds: a
+reviewer reports findings, the orchestrator triages them, other teammates try
+to refute each one it keeps, others fix those that survive, and others judge
+each fix. Nobody judges their own work. Its
+phases are the report, the finding triage, the refutation, the fix and the fix
+check.
+
+**Finding triage**:
+The phase of an adversarial review in which the orchestrator makes the
+reported findings its own: it merges and splits them, and sends each one to be
+fixed now, passed on to a later review, deferred to a follow-up task, or
+dismissed. It never changes a finding's severity.
+_Avoid_: triage (alone), ruling, routing
+
+**Finding**:
+One thing a review reports as wrong or missing, with the evidence for it.
+_Avoid_: issue, problem
+
+**Reproduction**:
+The evidence that a finding holds: a test that fails because of it, or the
+exact text the work contradicts or misses beside the place that does so.
+
+**Follow-up task**:
+A task proposed from a finding that is real but deferred: not for this task,
+not now. It is related to the task it comes from, never its subtask.
+_Avoid_: subtask, child task
 
 **Proposal**:
 The planning documents of a task, written before any code: what changes and
@@ -247,12 +291,13 @@ the whole life of the task, and provisional while the task is in its grill.
 _Avoid_: participation mode
 
 **Stage label**:
-Where a task is in the process: `grill-me`, `proposal`, `implement` or
-`verify`. Every task has exactly one, and each transition replaces it. A task
-whose autonomy is decided starts at `proposal`, a task in `grill-me` moves to
-`proposal` when the grill ends, a task in `proposal` moves to `implement` when
-its proposal preparation ends, and a task in `implement` moves to `verify` when
-its implementation ends.
+Where a task is in the process: `grill-me`, `proposal`, `implement`, `verify`
+or `code-review`. Every task has exactly one, and each transition replaces it.
+A task whose autonomy is decided starts at `proposal`, a task in `grill-me`
+moves to `proposal` when the grill ends, a task in `proposal` moves to
+`implement` when its proposal preparation ends, a task in `implement` moves to
+`verify` when its implementation ends, and a task in `verify` moves to
+`code-review` when its verification ends.
 
 **Taken label**:
 `taken`: marks a taken task for as long as an agent or a person advances it.
@@ -279,7 +324,8 @@ to the human.
 A task leaving its stage: its stage label is replaced and, when the stage
 decided it, its autonomy label is set. It follows the human's answer to a
 question at the end of the stage, except when an `AFK` task leaves proposal
-preparation or implementation, which needs no answer. A script applies it.
+preparation, implementation or verification, which needs no answer. A script
+applies it.
 
 ### Talking to the human
 
