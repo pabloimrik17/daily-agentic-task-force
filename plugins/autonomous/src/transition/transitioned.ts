@@ -16,8 +16,8 @@ import {
 
 export const TRANSITIONED_SCHEMA = "autonomous.transitioned.v1";
 
-// Who decided the transition: a human's answer, or the agent of an AFK task leaving proposal
-// or implement.
+// Who decided the transition: a human's answer, or the agent of an AFK task leaving proposal,
+// implement or verify.
 export type TransitionedBy = "agent" | "human";
 
 export interface Transitioned {

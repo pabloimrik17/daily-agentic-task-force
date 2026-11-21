@@ -24,7 +24,7 @@ function normalise(text: string): string {
 }
 
 describe("LABELS, GROUPS and COLOURS", () => {
-    it("lists exactly the ten contract labels", () => {
+    it("lists exactly the eleven contract labels", () => {
         expect(LABELS).toEqual([
             "work",
             "personal",
@@ -34,6 +34,7 @@ describe("LABELS, GROUPS and COLOURS", () => {
             "proposal",
             "implement",
             "verify",
+            "code-review",
             "taken",
             "triage-me",
         ]);
@@ -43,7 +44,7 @@ describe("LABELS, GROUPS and COLOURS", () => {
         expect(GROUPS).toEqual({
             scope: ["work", "personal"],
             autonomy: ["AFK", "HITL"],
-            stage: ["grill-me", "proposal", "implement", "verify"],
+            stage: ["grill-me", "proposal", "implement", "verify", "code-review"],
         });
     });
 
@@ -59,6 +60,7 @@ describe("LABELS, GROUPS and COLOURS", () => {
             proposal: "#bb87fc",
             implement: "#26b5ce",
             verify: "#d6409f",
+            "code-review": "#a3e635",
             work: "#2f80ed",
             personal: "#27ae60",
             taken: "#95a2b3",
@@ -95,6 +97,10 @@ describe("LABELS, GROUPS and COLOURS", () => {
         expect(MEANINGS.verify).toBe(
             "The task is implemented and ready to verify against its proposal.",
         );
+    });
+
+    it("states that code-review means the task is verified and ready for code review", () => {
+        expect(MEANINGS["code-review"]).toBe("The task is verified and ready for code review.");
     });
 
     it("states grill-me without any precedence over AFK and HITL", () => {
@@ -144,6 +150,13 @@ describe("isContractLabel", () => {
         expect(isContractLabel("grill-me")).toBe(true);
         expect(isContractLabel("proposal")).toBe(true);
         expect(isContractLabel("implement")).toBe(true);
+    });
+
+    it("accepts code-review and rejects its near-miss spellings", () => {
+        expect(isContractLabel("code-review")).toBe(true);
+        expect(isContractLabel("Code Review")).toBe(false);
+        expect(isContractLabel("code_review")).toBe(false);
+        expect(isContractLabel("codereview")).toBe(false);
     });
 
     it("rejects a near-miss spelling", () => {
@@ -233,6 +246,12 @@ describe("optionsFor", () => {
 
     it("Task in verify: its autonomy is AFK or HITL, never grill-me", () => {
         expect(optionsFor("autonomy", ["work", "verify"])).toEqual(["AFK", "HITL"]);
+    });
+});
+
+describe("optionsFor in code-review", () => {
+    it("Task in code-review: its autonomy is AFK or HITL, never grill-me", () => {
+        expect(optionsFor("autonomy", ["work", "code-review"])).toEqual(["AFK", "HITL"]);
     });
 });
 

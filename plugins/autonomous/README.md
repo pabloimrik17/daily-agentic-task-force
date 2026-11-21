@@ -2540,8 +2540,8 @@ identical to the one written.
 A proposal attempt's directory holds `stage-summary.md`, which the agent writes,
 and `comment.md` and `persisted.json`, which persist mode writes, then
 `transition.json` and `logbook-entry.md` and `logbook.json` as for a grill. It
-holds no `definition.md`. An implementation attempt's directory holds the same
-files as a proposal attempt's.
+holds no `definition.md`. An implementation or verification
+attempt's directory holds the same files as a proposal attempt's.
 
 A GitHub id contains a `/`, so its directory nests one level deeper:
 `<state>/attempts/github/owner/name#12/test/1/`. Writes go through a temporary

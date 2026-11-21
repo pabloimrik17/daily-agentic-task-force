@@ -76,15 +76,15 @@ const HITL: Autonomy = {
     section: () => ({
         title: "Working with the human (HITL)",
         lines: [
-            "This task carries `HITL`: a human follows this session and reviews the implementation before the task moves on.",
+            "This task carries `HITL`: a human follows this session and takes a quick look at the implementation before the task moves on.",
             "",
             "- Ask the human when the proposal leaves a gap or a choice is theirs to make, rather than guessing.",
-            "- Once every task is committed and pushed and the checks pass, show the human the implementation and the pull request's URL, and iterate on their feedback. Commit and push each round as a new commit, and never amend or rewrite a pushed commit, so the pull request keeps the history of the review.",
+            "- Once every task is committed and pushed and the checks pass, show the human the implementation and the pull request's URL for a quick look at anything that jars, and tell them that verification, code review and QA follow. Fix only what the human clearly asks for. Commit and push each round as a new commit, and never amend or rewrite a pushed commit, so the pull request keeps the history of the review. Once a round changed anything, run the checks again before the transition.",
             "- The transition question comes only after the human has seen the implementation, because it asks them to approve the implementation as it stands.",
         ],
     }),
     deviation: "Ask the human before you change the proposal, and change it only as they decide.",
-    review: "Review the implementation with the human: show them the implementation and the pull request's URL, and commit and push each round of their feedback as a new commit. Go on only when the human is done with it, and once a round changed anything, confirm again, as in the step before, that every check passes, nothing is left uncommitted and every commit is pushed.",
+    review: "Give the human a quick look at the implementation: show them the implementation and the pull request's URL for anything that jars, and tell them that verification, code review and QA follow. Fix only what the human clearly asks for, and commit and push each round as a new commit. Go on only when the human is done with it, and once a round changed anything, confirm again, as in the step before, that every check passes, nothing is left uncommitted and every commit is pushed.",
     blocked: false,
     transition: ({ task }) =>
         `Run \`/autonomous:run --apply --transition ${task}\`. It asks the human whether to approve the implementation and move the task to \`verify\`, and applies the answer. If it exits non-zero, the transition was refused (for example a task of the change is unchecked or a commit is unpushed) and it asked no question: tell the human what it reported and stop as for "Later". When the human answers "Later", or the answer is not applied, stop here: publish no logbook entry, do not write the result marker, and leave this session open, so the human can come back to it.`,
@@ -119,6 +119,8 @@ function implementationSection(work: Work, autonomy: Autonomy): Section {
             `2. Run \`${apply}\` on the change \`${change}\`, and implement every task of its \`tasks.md\`, one coherent unit of work at a time (see the commits section).`,
             `3. When the implementation shows the proposal is wrong (a task cannot work as written, or the design misses a case), change the change's artifacts with \`${update}\` on this same branch, and record the deviation, with its reason, in the change's \`design.md\`, the stage summary and the logbook entry. ${autonomy.deviation}`,
             `4. Once every task is done, run every check the repository defines: its tests, linters and type checks, and whatever its contributor instructions or scripts name. Fix what fails, commit and push the fix, and run them again until they all pass. If a check cannot be made to pass, ${autonomy.onFailure}.`,
+            "",
+            "Verifying the change against its proposal, reviewing the code's quality, running what the task delivers as its end user would, and archiving the change belong to later stages (verification, code review and QA), and you do none of them. Run neither OpenSpec's verify workflow nor its archive workflow, even when the apply workflow suggests verifying or archiving once every task is done. The repository's checks, and the review of each teammate's block, stay yours.",
         ],
     };
 }

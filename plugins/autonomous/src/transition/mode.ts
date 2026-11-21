@@ -1,6 +1,6 @@
 // Transition mode (spec autonomous-run, "Transition mode", "Transition question", "Approval
 // question", "Transition report"). It writes only for an AFK task leaving a stage left on
-// approval, proposal or implement; every other answer comes back through answer mode
+// approval, proposal, implement or verify; every other answer comes back through answer mode
 // (./answer.ts).
 
 import { isSource, taskKey, type TaskRef } from "../attempts/record.ts";
@@ -39,6 +39,7 @@ const TRANSITIONS = {
     "grill-me": { to: "proposal", asks: "autonomy" },
     proposal: { to: "implement", asks: "approval" },
     implement: { to: "verify", asks: "approval" },
+    verify: { to: "code-review", asks: "approval" },
 } as const satisfies Partial<Record<StageLabel, TransitionTarget>>;
 
 export type TransitionStage = keyof typeof TRANSITIONS;
@@ -72,7 +73,7 @@ export const APPROVAL_VALUES: readonly StageLabel[] = TRANSITION_STAGES.map(tran
     .filter((row) => row.asks === "approval")
     .map((row) => row.to);
 
-// The autonomy that decides how a task leaves a stage left on approval, `proposal` or `implement`
+// The autonomy that decides how a task leaves a stage left on approval, `proposal`, `implement` or `verify`
 // (spec label-contract, "The autonomy decides whether leaving ... needs an answer"): exactly one,
 // or the reason there is none.
 export function stageAutonomy(
@@ -134,6 +135,7 @@ const READY: Record<TransitionStage, string> = {
     "grill-me": "the grill is over",
     proposal: "the proposal is ready",
     implement: "the implementation is ready",
+    verify: "the verification is ready",
 };
 
 // Task ids carry no `:`.
@@ -208,7 +210,7 @@ export async function runTransition(
     return leaveStage({ ...report, task }, { ref, row, task }, deps);
 }
 
-// "grill-me, proposal and implement"
+// "grill-me, proposal, implement and verify"
 function stageList(): string {
     const last = TRANSITION_STAGES.at(-1);
     return `${TRANSITION_STAGES.slice(0, -1).join(", ")} and ${last}`;

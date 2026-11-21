@@ -1,7 +1,7 @@
-// The guards on leaving implement (spec autonomous-run, "Leaving implement needs the work
-// finished"; design D6): in the task's workspace, the change has no unchecked task, the working
-// tree is clean and the branch is pushed. Every reason that holds comes back, so one run tells
-// the human all there is to finish.
+// The guards on leaving implement or verify (spec autonomous-run, "Leaving implement needs the
+// work finished" and "Leaving verify needs the work finished"; design D6): in the task's
+// workspace, the change has no unchecked task, the working tree is clean and the branch is
+// pushed. Every reason that holds comes back, so one run tells the human all there is to finish.
 
 import { access } from "node:fs/promises";
 
@@ -35,10 +35,10 @@ export async function guardsOnLeaving(
     state: string,
     tools: GuardTools,
 ): Promise<string[]> {
-    return from === "implement" ? implementGuards(ref, state, tools) : [];
+    return from === "implement" || from === "verify" ? workGuards(ref, state, tools) : [];
 }
 
-async function implementGuards(ref: TaskRef, state: string, tools: GuardTools): Promise<string[]> {
+async function workGuards(ref: TaskRef, state: string, tools: GuardTools): Promise<string[]> {
     const found = await workspaceOf(state, ref);
     if (!found.ok) {
         return [found.error];
