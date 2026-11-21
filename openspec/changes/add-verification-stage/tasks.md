@@ -17,7 +17,7 @@
 
 - [x] 4.1 Write `plugins/autonomous/skills/adversarial-review/SKILL.md` (design D4): a description that claims only a request naming an adversarial review, and a body that takes every parameter from its caller and holds the phases, the independence of who judges, the finding triage and its four outcomes, the severity floor, the human's say on the triage, the refutation and the reproduction, the fix and its untouched test, the fix check and its bound of two rejections, the follow-ups and the record, with no fact about the verification. Verify with a test that reads the body and finds each of those rules, one per scenario of the adversarial-review spec that the text itself decides, and with `bun run lint:markdownlint`.
 - [x] 4.2 Implement the loader that reads a skill of the autonomous plugin from the running module's directory and returns its body without frontmatter (design D3). Verify with a test that it reads `adversarial-review` from the source tree, that the body has no frontmatter, and that a missing file gives a reason naming its path, one per scenario of the verification-stage requirement "The adversarial review is the running plugin's".
-- [ ] 4.3 Add two eval cases under `plugins/autonomous/evals/`: a session asked for an adversarial review by name, where the skill fires, and one asked to review a pull request, where it does not. Document the adversarial review in the README, its own section linked from the glossary's term. Verify by running both cases with the local eval suite and `bun run lint:markdownlint`.
+- [x] 4.3 Add two eval cases under `plugins/autonomous/evals/`: a session asked for an adversarial review by name, where the skill fires, and one asked to review a pull request, where it does not. Document the adversarial review in the README, its own section linked from the glossary's term. Verify by running both cases with the local eval suite and `bun run lint:markdownlint`.
 
 ## 5. Transitions
 
@@ -51,7 +51,7 @@
 
 Results go to `openspec/changes/add-verification-stage/evidence/verification-verification.md`. Every tracker or repository write here needs the user's go-ahead first.
 
-- [ ] 11.1 With the loop stopped, bootstrap `code-review` on the trackers with the user's go-ahead, and record the bootstrap report.
+- [x] 11.1 With the loop stopped, bootstrap `code-review` on the trackers with the user's go-ahead, and record the bootstrap report.
 - [ ] 11.2 Real task: run the stage on DOT-121 (`HITL`, pull request #90, in `verify`) by hand from this branch, through the report, the finding triage the human reviews, the refutation, the fixes and their checks, the review, the `Approve` answer, the logbook entry and the reconcile run that removes the session. Record the teammates' models and efforts as the session reports them, the record of findings, the commits, the stage summary comment, the labels and the pull request's draft state.
 - [ ] 11.3 Sandbox cases, each recorded with its tracker state and the reconcile result:
     1. an `AFK` task from launch to `code-review` with no question, and no follow-up task created;
