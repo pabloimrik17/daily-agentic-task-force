@@ -66,10 +66,9 @@ Make the reported findings your own:
 Send a finding at or above the floor only to fix. It leaves the review
 unfixed only when the refutation shows it does not hold.
 
-Your caller may set the floor by where a finding comes from, and may name the
-findings that go to a later review whatever their severity. Follow it: a
-finding your caller passes on goes to that later review, and the floor holds
-for every other finding.
+Your caller may name the findings that go to a later review whatever their
+severity. Follow it: such a finding goes to that later review, and the floor
+holds for every other finding.
 
 ## A human changes the finding triage
 
@@ -87,9 +86,9 @@ reason in the record as an assumption.
   misses, beside the place that does so.
 - A finding with no reproduction does not survive. Write in the record why it
   does not hold.
-- A reproduction test of a finding that is not fixed, refuted or deferred,
-  never reaches a commit: once the record holds its path and its text, remove
-  it from the working tree.
+- A reproduction test of a finding left unfixed, because it was refuted or
+  deferred, never reaches a commit: once the record holds its path and its
+  text, remove it from the working tree.
 
 ## The fix
 

@@ -3775,8 +3775,9 @@ Its boundary is narrow. A deeper review of the code's quality is code review's,
 and running what the task delivers as its end user would is QA's. A finding that
 belongs to either is passed on, not fixed, whatever its severity: the stage
 summary lists it under a heading for that stage. A finding the verify workflow
-reports is the exception: it is the verification's own, whatever it concerns,
-and goes to fix at any severity, never to a later stage. After the fixes, every check the repository defines
+reports is the exception: it is the verification's own, whatever it concerns.
+The finding triage decides it here, like any other finding, and never passes it
+on. After the fixes, every check the repository defines
 passes before the transition. A check that cannot pass is a blocker for an `AFK`
 task and goes to the human for an `HITL` task.
 
@@ -3791,7 +3792,7 @@ caller, right before the skill's body:
 | Subject                 | The implementation                                                                                        |
 | References              | The proposal and the task's definition                                                                    |
 | Procedure of the report | The verify workflow                                                                                       |
-| Severity floor          | Every finding the verify workflow reports, whatever its severity; `CRITICAL` for every other finding      |
+| Severity floor          | `CRITICAL`                                                                                                |
 | Later reviews           | Code review and QA, each with its heading in the stage summary, for any finding but the verify workflow's |
 | Record of the findings  | `findings.md` in the attempt's directory                                                                  |
 | Whether a human follows | Yes for `HITL`, no for `AFK`                                                                              |
@@ -4085,10 +4086,9 @@ as an assumption.
 A finding at or above the caller's floor is sent only to fix. It leaves the
 review unfixed only when the refutation shows that it does not hold.
 
-The caller may set the floor by where a finding comes from, and may name the
-findings that go to a later review whatever their severity. The orchestrator
-follows it: a finding the caller passes on goes to that later review, and the
-floor holds for every other finding.
+The caller may name the findings that go to a later review whatever their
+severity. The orchestrator follows it: such a finding goes to that later review,
+and the floor holds for every other finding.
 
 ### The refutation and the reproduction
 
@@ -4100,8 +4100,8 @@ when a test can show it, or else the exact text it contradicts or misses, beside
 the place that does so. A finding with no reproduction does not survive, and the
 record says why it does not hold.
 
-A reproduction test of a finding that is not fixed, refuted or deferred, never
-reaches a commit: once the record holds its path and its text, the orchestrator
+A reproduction test of a finding left unfixed, because it was refuted or
+deferred, never reaches a commit: once the record holds its path and its text, the orchestrator
 removes it from the working tree.
 
 ### The fix and the fix check

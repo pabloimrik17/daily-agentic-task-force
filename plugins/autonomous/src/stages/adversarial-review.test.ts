@@ -123,12 +123,12 @@ describe("the adversarial review skill", () => {
         );
     });
 
-    it("Floor set by the caller: the caller may set the floor by source and pass findings on whatever their severity", () => {
+    it("Passed on whatever its severity: the caller may name findings that go to a later review", () => {
         expect(body).toContain(
-            "Your caller may set the floor by where a finding comes from, and may name the findings that go to a later review whatever their severity.",
+            "Your caller may name the findings that go to a later review whatever their severity.",
         );
         expect(body).toContain(
-            "a finding your caller passes on goes to that later review, and the floor holds for every other finding.",
+            "such a finding goes to that later review, and the floor holds for every other finding.",
         );
     });
 
@@ -157,7 +157,7 @@ describe("the adversarial review skill", () => {
 
     it("Unfixed reproduction test removed: a refuted or deferred finding's test never reaches a commit", () => {
         expect(body).toContain(
-            "A reproduction test of a finding that is not fixed, refuted or deferred, never reaches a commit: once the record holds its path and its text, remove it from the working tree.",
+            "A reproduction test of a finding left unfixed, because it was refuted or deferred, never reaches a commit: once the record holds its path and its text, remove it from the working tree.",
         );
     });
 

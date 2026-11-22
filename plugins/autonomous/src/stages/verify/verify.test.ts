@@ -475,7 +475,7 @@ describe("The verification corrects through one adversarial review", () => {
     const review = (autonomy: "AFK" | "HITL" = "AFK") =>
         section(prompt({ autonomy }), "The adversarial review");
 
-    it("Parameters named: subject, references, procedure, floors, later reviews and record, right before the skill's body", () => {
+    it("Parameters named: subject, references, procedure, floor CRITICAL, later reviews and record, right before the skill's body", () => {
         const findings = join(DIR, "findings.md");
 
         expect(
@@ -483,8 +483,8 @@ describe("The verification corrects through one adversarial review", () => {
                 "- Subject: the implementation on this workspace's branch.",
                 `- References: the change's proposal, its artifacts under \`openspec/changes/${CHANGE}/\`, and the task's definition, its description above.`,
                 `- The report's procedure: \`${VERIFY_SKILL}\` on the change \`${CHANGE}\`, with all its checks.`,
-                `- Severity scale: the verify workflow's \`CRITICAL\`, \`WARNING\` and \`SUGGESTION\`. Every finding \`${VERIFY_SKILL}\` reports is at or above the floor, whatever its severity, so each one goes to fix; for every other finding, the floor is \`CRITICAL\`.`,
-                `- Later reviews: code review, under the heading \`Code review\` in the stage summary, and QA, under the heading \`QA\`. A finding that belongs to either goes to it whatever its severity, unless \`${VERIFY_SKILL}\` reported it: that one is the verification's own, and is never passed on.`,
+                "- Severity scale: the verify workflow's `CRITICAL`, `WARNING` and `SUGGESTION`. The floor is `CRITICAL`.",
+                `- Later reviews: code review, under the heading \`Code review\` in the stage summary, and QA, under the heading \`QA\`. A finding that belongs to either goes to it whatever its severity, unless \`${VERIFY_SKILL}\` reported it: that one is the verification's own, decided here like any other finding, and never passed on.`,
                 `- Record: \`${findings}\`, in this attempt's directory. It stays outside the repository and every tracker: never commit it and never post it.`,
                 "- Whether a human follows the review: no: this task carries `AFK`.",
                 REVIEW_BODY,
@@ -518,14 +518,14 @@ describe("The verification's boundary", () => {
         );
     });
 
-    it("Verify workflow's own finding: whatever it concerns, it goes to fix and is never passed on", () => {
+    it("Verify workflow's finding on code quality: decided in the verification like any other finding, never passed on", () => {
         const text = prompt();
 
         expect(section(text, "Verification")).toContain(
-            `Every finding \`${VERIFY_SKILL}\` reports is the verification's own, whatever it concerns: it goes to fix, never to a later stage.`,
+            `Every finding \`${VERIFY_SKILL}\` reports is the verification's own, whatever it concerns: weigh it and decide it here, as any other finding, and never pass it on to a later stage.`,
         );
         expect(section(text, "The adversarial review")).toContain(
-            `unless \`${VERIFY_SKILL}\` reported it: that one is the verification's own, and is never passed on.`,
+            `unless \`${VERIFY_SKILL}\` reported it: that one is the verification's own, decided here like any other finding, and never passed on.`,
         );
     });
 
