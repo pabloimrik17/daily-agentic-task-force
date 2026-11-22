@@ -15,7 +15,7 @@
                 {
                     "id": "I_demo_one_3",
                     "number": 3,
-                    "title": "Blocker 3",
+                    "title": "Closed as completed",
                     "url": "https://github.com/demo/one/issues/3",
                     "state": "CLOSED",
                     "repository": {
@@ -25,7 +25,7 @@
                 {
                     "id": "I_demo_one_4",
                     "number": 4,
-                    "title": "Blocker 4",
+                    "title": "Closed as not planned",
                     "url": "https://github.com/demo/one/issues/4",
                     "state": "CLOSED",
                     "repository": {
