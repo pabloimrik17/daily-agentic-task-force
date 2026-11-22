@@ -25,7 +25,7 @@ The skill SHALL take from its caller: the subject of the review, the references 
 #### Scenario: Verification as caller
 
 - **WHEN** the verification stage inlines the skill
-- **THEN** its own prompt supplies the implementation as subject, the proposal and the definition as references, the verify workflow as the report's procedure, every finding of the verify workflow at or above the floor and `CRITICAL` as the floor for the rest, code review and QA as later reviews, and the attempt's directory for the record
+- **THEN** its own prompt supplies the implementation as subject, the proposal and the definition as references, the verify workflow as the report's procedure, `CRITICAL` as the floor, code review and QA as later reviews, and the attempt's directory for the record
 
 ### Requirement: The phases
 
@@ -80,16 +80,11 @@ The orchestrator SHALL make the reported findings its own: it MAY merge duplicat
 
 ### Requirement: The severity floor
 
-A finding at or above the caller's severity floor SHALL be sent only to fix, and SHALL leave the review unfixed only when the refutation shows it does not hold. The caller MAY set the floor by where a finding comes from, and MAY name the findings that go to a later review whatever their severity: a finding the caller passes on SHALL go to that later review, and the floor SHALL hold for every other finding.
+A finding at or above the caller's severity floor SHALL be sent only to fix, and SHALL leave the review unfixed only when the refutation shows it does not hold. The caller MAY name the findings that go to a later review whatever their severity: such a finding SHALL go to that later review, and the floor SHALL hold for every other finding.
 
 #### Scenario: Critical finding
 
 - **WHEN** the report holds a `CRITICAL` finding and the floor is `CRITICAL`
-- **THEN** the finding triage sends it to fix
-
-#### Scenario: Floor set by source
-
-- **WHEN** the caller puts every finding of its procedure at or above the floor, and the procedure reports a `SUGGESTION`
 - **THEN** the finding triage sends it to fix
 
 #### Scenario: Passed on whatever its severity
@@ -122,7 +117,7 @@ Teammates SHALL try to refute each finding sent to fix or to defer; findings pas
 
 ### Requirement: An unfixed finding's test stays out of the commits
 
-A reproduction test of a finding that is not fixed, refuted or deferred, SHALL NOT reach a commit: once the record holds its path and its text, the orchestrator SHALL remove it from the working tree.
+A reproduction test of a finding left unfixed, because it was refuted or deferred, SHALL NOT reach a commit: once the record holds its path and its text, the orchestrator SHALL remove it from the working tree.
 
 #### Scenario: Deferred finding's test
 

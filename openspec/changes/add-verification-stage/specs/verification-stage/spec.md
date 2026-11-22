@@ -100,12 +100,12 @@ The prompt SHALL tell the agent to check the implementation against the proposal
 
 ### Requirement: The verification corrects through one adversarial review
 
-The prompt SHALL tell the agent to correct what it finds by running one round of the adversarial review, with the implementation as its subject, the proposal and the definition as its references, the verify workflow as the report's procedure, every finding the verify workflow reports at or above the severity floor, whatever its severity, and `CRITICAL` as the floor for every other finding, and code review and QA as the later reviews a finding can be passed on to.
+The prompt SHALL tell the agent to correct what it finds by running one round of the adversarial review, with the implementation as its subject, the proposal and the definition as its references, the verify workflow as the report's procedure, `CRITICAL` as the severity floor, and code review and QA as the later reviews a finding can be passed on to.
 
 #### Scenario: Parameters named
 
 - **WHEN** a verification prompt is written
-- **THEN** it names the subject, the references, the report's procedure, every finding the verify workflow reports at or above the floor, `CRITICAL` as the floor for every other finding, and code review and QA as the later reviews
+- **THEN** it names the subject, the references, the report's procedure, the severity floor `CRITICAL`, and code review and QA as the later reviews
 
 #### Scenario: One round
 
@@ -133,12 +133,12 @@ The prompt SHALL tell the agent that a deeper review of the code's quality is co
 
 ### Requirement: The verify workflow's findings are the verification's own
 
-A finding the verify workflow reports SHALL be the verification's own, whatever it concerns and whatever its severity: the prompt SHALL tell the agent to send it to fix and never to pass it on to a later stage.
+A finding the verify workflow reports SHALL be the verification's own, whatever it concerns: the prompt SHALL tell the agent to decide it in the finding triage like any other finding, under the `CRITICAL` floor, and never to pass it on to a later stage.
 
 #### Scenario: Verify workflow's finding on code quality
 
 - **WHEN** the verify workflow reports a `SUGGESTION` under Code Pattern Consistency
-- **THEN** the prompt's instructions lead the agent to send it to fix, not to pass it on to code review
+- **THEN** the prompt's instructions lead the agent to fix, defer or dismiss it in the verification, not to pass it on to code review
 
 ### Requirement: Which way a fix goes
 
