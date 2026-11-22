@@ -1,5 +1,12 @@
 # Changelog
 
+## [2.5.0](https://github.com/pabloimrik17/daily-agentic-task-force/compare/autonomous--v2.4.0...autonomous--v2.5.0) (2026-11-22)
+
+
+### Features
+
+* **autonomous:** add the verification stage ([#105](https://github.com/pabloimrik17/daily-agentic-task-force/issues/105)) ([4ddeb93](https://github.com/pabloimrik17/daily-agentic-task-force/commit/4ddeb9333358434fc391de7664568d38b9477767))
+
 ## [2.4.0](https://github.com/pabloimrik17/daily-agentic-task-force/compare/autonomous--v2.3.0...autonomous--v2.4.0) (2026-11-20)
 
 
