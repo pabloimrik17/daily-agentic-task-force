@@ -53,7 +53,7 @@ Results go to `openspec/changes/add-verification-stage/evidence/verification-ver
 
 - [x] 11.1 With the loop stopped, bootstrap `code-review` on the trackers with the user's go-ahead, and record the bootstrap report.
 - [ ] 11.2 Real task: run the stage on DOT-121 (`HITL`, pull request #90, in `verify`) by hand from this branch, through the report, the finding triage the human reviews, the refutation, the fixes and their checks, the review, the `Approve` answer, the logbook entry and the reconcile run that removes the session. Record the teammates' models and efforts as the session reports them, the record of findings, the commits, the stage summary comment, the labels and the pull request's draft state.
-- [ ] 11.3 Sandbox cases, each recorded with its tracker state and the reconcile result:
+- [x] 11.3 Sandbox cases, each recorded with its tracker state and the reconcile result:
     1. an `AFK` task from launch to `code-review` with no question, and no follow-up task created;
     2. the guards refusing a transition out of `verify` with an uncommitted fix, then with an unpushed one;
     3. a dry run on a repository with neither the skill `openspec-verify-change` nor the command `/opsx:verify`, which waits with the reason naming both;
