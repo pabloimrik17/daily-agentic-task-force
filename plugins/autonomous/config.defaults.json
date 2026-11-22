@@ -2,5 +2,51 @@
     "sessions": { "tool": "claude", "profile": null, "binary": null },
     "workspace": { "root": "~/WebstormProjects" },
     "naming": { "model": "haiku", "effort": "low" },
-    "runner": { "grills": 1, "parallel": 2, "intervalMinutes": 10 }
+    "runner": { "grills": 1, "parallel": 2, "intervalMinutes": 10 },
+    "review": {
+        "tiers": {
+            "S": { "maxLines": 150, "maxFiles": 5 },
+            "M": { "maxLines": 600, "maxFiles": 20 }
+        },
+        "team": {
+            "S": [
+                { "reviewer": "walkthrough" },
+                { "reviewer": "code-review", "level": "medium" },
+                { "reviewer": "codex", "effort": "medium" }
+            ],
+            "M": [
+                { "reviewer": "walkthrough" },
+                { "reviewer": "code-review", "level": "high" },
+                { "reviewer": "codex", "effort": "medium" },
+                { "reviewer": "coderabbit" },
+                { "reviewer": "fallow-review" }
+            ],
+            "L": [
+                { "reviewer": "walkthrough" },
+                { "reviewer": "code-review", "level": "xhigh" },
+                { "reviewer": "codex", "effort": "high" },
+                { "reviewer": "coderabbit" },
+                { "reviewer": "fallow-review" },
+                { "reviewer": "tests-lens" }
+            ]
+        },
+        "security": {
+            "pathPatterns": [
+                "auth",
+                "token",
+                "secret",
+                "credential",
+                "crypto",
+                "permission",
+                "(^|/)\\.env(\\.|$)"
+            ],
+            "linePatterns": [
+                "\\b(exec|execFile|execSync|execFileSync|spawn|spawnSync)\\s*\\(",
+                "\\bBun\\.spawn(Sync)?\\s*\\(",
+                "\\beval\\s*\\(",
+                "\\bnew\\s+Function\\s*\\(",
+                "\\b(readFile|writeFile|readdir|createReadStream|createWriteStream)\\w*\\s*\\([^)]*\\b(req|request|params|query|body|userInput)\\b"
+            ]
+        }
+    }
 }

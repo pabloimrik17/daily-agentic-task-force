@@ -11,7 +11,20 @@ import {
     loadConfig,
     parseConfig,
     resolveConfigPath,
+    shippedReview,
 } from "./config.ts";
+import type { Tier } from "./review-team/types.ts";
+import type { Json } from "./validate.ts";
+
+const REVIEW = {
+    tiers: { S: { maxLines: 150, maxFiles: 5 }, M: { maxLines: 600, maxFiles: 20 } },
+    team: {
+        S: [{ reviewer: "walkthrough" }, { reviewer: "code-review", level: "medium" }],
+        M: [{ reviewer: "walkthrough" }, { reviewer: "codex", effort: "medium" }],
+        L: [{ reviewer: "walkthrough" }, { reviewer: "tests-lens" }],
+    },
+    security: { pathPatterns: ["auth"], linePatterns: ["\\beval\\s*\\("] },
+};
 
 const valid = () => ({
     schema: CONFIG_SCHEMA,
@@ -30,6 +43,7 @@ const valid = () => ({
     workspace: { root: "/home/me/WebstormProjects" },
     naming: { model: "haiku", effort: "low" },
     runner: { grills: 1, parallel: 2, intervalMinutes: 10 },
+    review: structuredClone(REVIEW),
 });
 
 const withoutOptional = (): Record<string, unknown> => {
@@ -38,6 +52,7 @@ const withoutOptional = (): Record<string, unknown> => {
     delete input.workspace;
     delete input.naming;
     delete input.runner;
+    delete input.review;
     return input;
 };
 
@@ -51,6 +66,9 @@ const ALL_DEFAULTED = [
     "runner.grills",
     "runner.parallel",
     "runner.intervalMinutes",
+    "review.tiers",
+    "review.team",
+    "review.security",
 ];
 const MISMATCH = "configuration does not match autonomous.config.v1: ";
 
@@ -318,6 +336,38 @@ describe("optional blocks", () => {
             workspace: { root: "~/WebstormProjects" },
             naming: { model: "haiku", effort: "low" },
             runner: { grills: 1, parallel: 2, intervalMinutes: 10 },
+            review: {
+                tiers: { S: { maxLines: 150, maxFiles: 5 }, M: { maxLines: 600, maxFiles: 20 } },
+                team: {
+                    S: [
+                        { reviewer: "walkthrough" },
+                        { reviewer: "code-review", level: "medium" },
+                        { reviewer: "codex", effort: "medium" },
+                    ],
+                    M: [
+                        { reviewer: "walkthrough" },
+                        { reviewer: "code-review", level: "high" },
+                        { reviewer: "codex", effort: "medium" },
+                        { reviewer: "coderabbit" },
+                        { reviewer: "fallow-review" },
+                    ],
+                    L: [
+                        { reviewer: "walkthrough" },
+                        { reviewer: "code-review", level: "xhigh" },
+                        { reviewer: "codex", effort: "high" },
+                        { reviewer: "coderabbit" },
+                        { reviewer: "fallow-review" },
+                        { reviewer: "tests-lens" },
+                    ],
+                },
+                security: {
+                    pathPatterns: expect.arrayContaining([
+                        "auth",
+                        "(^|/)\\.env(\\.|$)",
+                    ]) as string[],
+                    linePatterns: expect.arrayContaining(["\\beval\\s*\\("]) as string[],
+                },
+            },
         });
     });
 
@@ -333,6 +383,7 @@ describe("optional blocks", () => {
             ...ALL_DEFAULTED.slice(0, 6),
             "runner.grills",
             "runner.intervalMinutes",
+            ...ALL_DEFAULTED.slice(9),
         ]);
     });
 
@@ -359,6 +410,7 @@ describe("optional blocks", () => {
             workspace: { root: "/srv" },
             naming: { model: "m", effort: "max" },
             runner: { grills: 4, parallel: 5, intervalMinutes: 6 },
+            review: REVIEW,
         };
         const result = parseConfig(withoutOptional(), defaults);
         expect(result.ok && result.value.sessions).toEqual({
@@ -375,6 +427,182 @@ describe("optional blocks", () => {
     });
 });
 
+describe("the review block", () => {
+    it("takes the shipped review keys when the block is omitted, and lists them", () => {
+        const result = parseConfig(withoutOptional(), undefined, "/home/me");
+        expect(result.ok && result.defaulted.filter((key) => key.startsWith("review."))).toEqual([
+            "review.tiers",
+            "review.team",
+            "review.security",
+        ]);
+        expect(result.ok && result.value.review.tiers.S).toEqual({ maxLines: 150, maxFiles: 5 });
+        expect(result.ok && result.value.review.team.M.map((row) => row.reviewer)).toEqual([
+            "walkthrough",
+            "code-review",
+            "codex",
+            "coderabbit",
+            "fallow-review",
+        ]);
+    });
+
+    it("lets a user's team replace the whole table and keeps the other keys shipped", () => {
+        const team = { ...REVIEW.team, S: [{ reviewer: "codex", model: "gpt-x" }] };
+        const result = parseConfig({ ...withoutOptional(), review: { team } });
+        expect(result.ok && result.value.review.team).toEqual(team);
+        expect(result.ok && result.value.review.tiers.M.maxFiles).toBe(20);
+        expect(result.ok && result.defaulted.filter((key) => key.startsWith("review."))).toEqual([
+            "review.tiers",
+            "review.security",
+        ]);
+    });
+
+    it("lists nothing for the review block when the file sets every key", () => {
+        const result = parseConfig(valid());
+        expect(result.ok && result.value.review).toEqual(REVIEW);
+        expect(result.ok && result.defaulted).toEqual([]);
+    });
+
+    it("rejects a mistyped review key with its path", () => {
+        const review = {
+            ...REVIEW,
+            tiers: { ...REVIEW.tiers, M: { maxLines: "many", maxFiles: 20 } },
+        };
+        expect(parseConfig({ ...valid(), review })).toEqual({
+            ok: false,
+            error: `${MISMATCH}$.review.tiers.M.maxLines must be a finite number`,
+        });
+    });
+
+    it("rejects an unknown key of the review block with its path", () => {
+        const result = parseConfig({ ...valid(), review: { ...REVIEW, tier: {} } });
+        expect(result).toEqual({
+            ok: false,
+            error: `${MISMATCH}$.review.tier is not a recognised field`,
+        });
+    });
+
+    it("rejects a review block that is not an object", () => {
+        expect(parseConfig({ ...valid(), review: [] })).toEqual({
+            ok: false,
+            error: `${MISMATCH}$.review must be an object`,
+        });
+    });
+});
+
+describe("review block validation", () => {
+    const shipped = shippedReview();
+    // The shipped block with some of its keys replaced: `change` holds the replacements.
+    const mistake = (change: Json): string => {
+        const result = parseConfig({ ...valid(), review: { ...shipped, ...change } });
+        if (result.ok) {
+            throw new Error("accepted");
+        }
+        return result.error.replace(MISMATCH, "");
+    };
+    const withRow = (tier: Tier, index: number, row: unknown): Json => ({
+        team: {
+            ...shipped.team,
+            [tier]: shipped.team[tier].map((r, i) => (i === index ? row : r)),
+        },
+    });
+    const withSecurity = (change: Json): Json => ({ security: { ...shipped.security, ...change } });
+    const { M: _m, ...onlyS } = shipped.tiers;
+    const { L: _l, ...withoutL } = shipped.team;
+
+    it("accepts the shipped block", () => {
+        const result = parseConfig({ ...valid(), review: { ...shipped } });
+        expect(result.ok && result.value.review).toEqual(shipped);
+    });
+
+    it.each([
+        ["a zero", 0],
+        ["a fraction", 1.5],
+        ["a negative", -1],
+    ])("rejects %s as a maxFiles", (_name, value) => {
+        const tiers = { ...shipped.tiers, M: { ...shipped.tiers.M, maxFiles: value } };
+        expect(mistake({ tiers })).toBe("$.review.tiers.M.maxFiles must be an integer >= 1");
+    });
+
+    it("rejects a missing tier threshold, an unknown tier and an unknown threshold key", () => {
+        expect(mistake({ tiers: onlyS })).toBe("$.review.tiers.M must be an object");
+        expect(mistake({ tiers: { ...shipped.tiers, L: {} } })).toBe(
+            "$.review.tiers.L is not a recognised field",
+        );
+        const tiers = { ...shipped.tiers, S: { ...shipped.tiers.S, maxBytes: 1 } };
+        expect(mistake({ tiers })).toBe("$.review.tiers.S.maxBytes is not a recognised field");
+    });
+
+    it("rejects a team without one of S, M or L, and an extra tier", () => {
+        expect(mistake({ team: withoutL })).toBe("$.review.team.L must be an array");
+        expect(mistake({ team: { ...shipped.team, XL: [] } })).toBe(
+            "$.review.team.XL is not a recognised field",
+        );
+    });
+
+    it("rejects an empty tier", () => {
+        expect(mistake({ team: { ...shipped.team, S: [] } })).toBe(
+            "$.review.team.S must not be empty",
+        );
+    });
+
+    it.each([
+        [{ reviewer: "bugbot" }, "$.review.team.S[1].reviewer must be one of "],
+        [{ reviewer: 3 }, "$.review.team.S[1].reviewer must be a string"],
+        [
+            { reviewer: "codex", effort: "fast" },
+            "$.review.team.S[1].effort must be one of low, medium, high, xhigh, max",
+        ],
+        [
+            { reviewer: "code-review", level: "ultra" },
+            "$.review.team.S[1].level must be one of low, medium, high, xhigh, max",
+        ],
+        [{ reviewer: "codex", model: "" }, "$.review.team.S[1].model must not be empty"],
+        [{ reviewer: "codex", model: 4 }, "$.review.team.S[1].model must be a string"],
+        [{ reviewer: "codex", flags: [] }, "$.review.team.S[1].flags is not a recognised field"],
+    ])("rejects the row %j", (row, message) => {
+        expect(mistake(withRow("S", 1, row))).toContain(message);
+    });
+
+    it("rejects a row that is not an object", () => {
+        expect(mistake(withRow("S", 0, "codex"))).toBe("$.review.team.S[0] must be an object");
+    });
+
+    it("accepts a row with a model, an effort and a level", () => {
+        const row = { reviewer: "code-review", model: "opus", effort: "max", level: "max" };
+        const result = parseConfig({ ...valid(), review: { ...shipped, ...withRow("S", 1, row) } });
+        expect(result.ok && result.value.review.team.S[1]).toEqual(row);
+    });
+
+    it("rejects a pattern that does not compile, with its index", () => {
+        const linePatterns = [...shipped.security.linePatterns];
+        linePatterns[1] = "(unclosed";
+        expect(mistake(withSecurity({ linePatterns }))).toBe(
+            "$.review.security.linePatterns[1] must be a valid regular expression",
+        );
+    });
+
+    it("rejects an empty pattern, which would match every path", () => {
+        expect(mistake(withSecurity({ pathPatterns: [""] }))).toBe(
+            "$.review.security.pathPatterns[0] must not be empty",
+        );
+    });
+
+    it("rejects a pattern that is not a string and an unknown security key", () => {
+        expect(mistake(withSecurity({ pathPatterns: [7] }))).toBe(
+            "$.review.security.pathPatterns[0] must be a string",
+        );
+        expect(mistake(withSecurity({ globs: [] }))).toBe(
+            "$.review.security.globs is not a recognised field",
+        );
+    });
+
+    it("accepts empty pattern lists, which turn the security trigger off", () => {
+        const security = { pathPatterns: [], linePatterns: [] };
+        const result = parseConfig({ ...valid(), review: { ...shipped, security } });
+        expect(result.ok && result.value.review.security).toEqual(security);
+    });
+});
+
 describe("loadConfig", () => {
     it("reports a missing file naming the path and the example", () => {
         const env = { AUTONOMOUS_CONFIG: "/does/not/exist.json" };
@@ -385,6 +613,13 @@ describe("loadConfig", () => {
         expect(result.ok).toBe(false);
         expect(!result.ok && result.error).toContain("/does/not/exist.json");
         expect(!result.ok && result.error).toContain(EXAMPLE_PATH);
+        expect(!result.ok && result.missing).toBe(true);
+    });
+
+    it("does not mark a file that fails validation as missing", () => {
+        const result = loadConfig({ AUTONOMOUS_CONFIG: "/fake/config.json" }, () => "{}");
+        expect(result.ok).toBe(false);
+        expect(!result.ok && result.missing).toBeUndefined();
     });
 
     it("loads a valid file", () => {

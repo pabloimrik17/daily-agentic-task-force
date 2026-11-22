@@ -1686,7 +1686,7 @@ that names the limit of 300 and no receipt. The exit codes are in
 Per-user settings live outside the plugin, in one JSON file validated as
 strictly as the OpenUsage document: a missing file, a missing required field,
 a mistyped field or an unknown field is an error naming the path, never a
-default. The one exception is the four [optional blocks](#optional-blocks)
+default. The one exception is the five [optional blocks](#optional-blocks)
 below, whose missing keys take a shipped default. No credentials are stored in
 it.
 
@@ -1750,6 +1750,38 @@ it.
         "grills": 1,
         "parallel": 2,
         "intervalMinutes": 10
+    },
+    "review": {
+        "tiers": {
+            "S": { "maxLines": 150, "maxFiles": 5 },
+            "M": { "maxLines": 600, "maxFiles": 20 }
+        },
+        "team": {
+            "S": [
+                { "reviewer": "walkthrough" },
+                { "reviewer": "code-review", "level": "medium" },
+                { "reviewer": "codex", "effort": "medium" }
+            ],
+            "M": [
+                { "reviewer": "walkthrough" },
+                { "reviewer": "code-review", "level": "high" },
+                { "reviewer": "codex", "effort": "medium" },
+                { "reviewer": "coderabbit" },
+                { "reviewer": "fallow-review" }
+            ],
+            "L": [
+                { "reviewer": "walkthrough" },
+                { "reviewer": "code-review", "level": "xhigh" },
+                { "reviewer": "codex", "effort": "high" },
+                { "reviewer": "coderabbit" },
+                { "reviewer": "fallow-review" },
+                { "reviewer": "tests-lens" }
+            ]
+        },
+        "security": {
+            "pathPatterns": ["auth", "secret", "(^|/)\\.env(\\.|$)"],
+            "linePatterns": ["\\b(execFile|spawn)\\s*\\(", "\\beval\\s*\\("]
+        }
     }
 }
 ```
@@ -1783,7 +1815,7 @@ judged labels, and `/autonomous:run` is not evaluable.
 
 ### Optional blocks
 
-`sessions`, `workspace`, `naming` and `runner` are optional. The plugin ships
+`sessions`, `workspace`, `naming`, `runner` and `review` are optional. The plugin ships
 `plugins/autonomous/config.defaults.json`, and a key missing from the user's
 file, or a whole missing block, takes the shipped value for that key. A
 mistyped or unknown key is still an error naming its path, so a file written
@@ -1801,11 +1833,43 @@ blocks have defaults while `selection` stayed required. The shipped defaults:
 | `runner.grills`          | `1`                  | The limit of [grill slots](#slots-and-the-capacity-step): an integer of 0 or more   |
 | `runner.parallel`        | `2`                  | The limit of work slots: an integer of 0 or more                                    |
 | `runner.intervalMinutes` | `10`                 | The minutes between two iterations of the loop: an integer of 1 or more             |
+| `review.tiers`           | S 150/5, M 600/20    | The changed lines and files a diff may have to stay in tier `S`, then `M`           |
+| `review.team`            | see below            | The reviewers each tier runs, with their model, effort and level                    |
+| `review.security`        | see below            | The path and line patterns that add the security reviewer                           |
 
 When a run used a default, the text report's header gains a third line,
 `defaults: sessions.tool, naming.model`, listing the dotted keys in the order
 of the table; with `--json` the report holds `config.defaulted`, the same list.
 A run whose configuration sets every key shows neither.
+
+The `review` block configures the review team. Its keys overlay one by one, so
+a file that sets `review.team` replaces the whole team table, and a file that
+sets `review.tiers` replaces both thresholds:
+
+- `tiers` — `S` and `M`, each with `maxLines` and `maxFiles`, integers of 1 or
+  more. A diff within both limits of `S` is tier `S`, else within both of `M` is
+  tier `M`, else `L`. Added and deleted lines both count.
+- `team` — exactly `S`, `M` and `L`, each a non-empty list of rows
+  `{ "reviewer", "model"?, "effort"?, "level"? }`. `reviewer` is one of
+  `walkthrough`, `code-review`, `codex`, `coderabbit`, `fallow-review`,
+  `tests-lens` and `security-review`; `effort` and `level` are one of `low`,
+  `medium`, `high`, `xhigh` and `max`. The shipped table sets no `model`:
+  `S` runs `walkthrough`, `code-review` at `medium` and `codex` at `medium`;
+  `M` adds `coderabbit` and `fallow-review` and raises `code-review` to `high`;
+  `L` adds `tests-lens`, `code-review` at `xhigh` and `codex` at `high`.
+- `security` — `pathPatterns`, matched case-insensitively against a changed
+  path, and `linePatterns`, matched against an added line. Each is a JavaScript
+  regular expression source: a pattern that is empty or does not compile is
+  rejected with its path, for example `review.security.linePatterns[1]`. The
+  shipped lists cover auth, token, secret, credential, crypto and permission
+  paths, `.env` files, and added calls to `exec`, `execFile`, `spawn`, `eval`
+  and `new Function`.
+
+The review CLI is the one consumer that works without a configuration file:
+it then runs with the shipped `review` block, and reports `review.tiers`,
+`review.team` and `review.security` as defaulted. A file that exists is still
+validated as a whole, and a bad `review` key stops the review with its path,
+for example `review.tiers.S.maxLines`.
 
 A limit of 0 is valid: that kind of slot is then always full. A negative or
 fractional limit, or an interval below 1 or not an integer, is rejected with

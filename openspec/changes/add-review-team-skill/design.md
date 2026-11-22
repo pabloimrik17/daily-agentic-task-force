@@ -92,6 +92,8 @@ A failure that only shows at run time also makes a reviewer skipped, with its re
 
 `run codex` calls `codex exec review --base <merge-base> -c model_reasoning_effort=<effort> --output-schema <schema> -o <dir>/raw/codex.json --ephemeral`, and adds `-m` only when the plan names a model. `run coderabbit` calls `coderabbit review --agent --base-commit <merge-base>` and keeps the NDJSON. Each run saves the tool's version (`--version`), its stdout and its stderr under `raw/` for diagnosis, then parses into `reviewers/<id>.json`. A parse failure turns into the reviewer's skip reason. Before implementing, the exact flags are checked against each tool's `--help`, and any that differ are recorded in this design.
 
+Checked on 2026-11-22 against `codex-cli 0.169.0` and `coderabbit 0.9.5`. Every flag above exists under that name. `-o` is the short form of `--output-last-message`, and `--base` is documented as taking a branch, so the runner's fixture run confirms that it takes the merge base's commit.
+
 ### D9. The walkthrough writes a Plannotator guide
 
 The walkthrough's brief asks for the authored guide format:
@@ -100,9 +102,9 @@ The walkthrough's brief asks for the authored guide format:
 - `intent`;
 - `sections[{ title, overview, diffs[{ file, summary }] }]`;
 - `unplacedFiles`;
-- an optional mermaid `overview.diagram`.
+- an optional mermaid `diagram` per section, `{ kind: "mermaid", source }`.
 
-It also asks for the findings and doubts the walkthrough meets while explaining the change. `collect` writes the patch (`git diff <merge-base> HEAD`) and validates the guide with `plannotator guide export --guide … --patch … --out <dir>/walkthrough.html`, which leaves an HTML page as a by-product. The format is Plannotator's because the code review stage imports the guide into `plannotator review` and sends it through the Inbox (DOT-164). Findings are added as notes only there, after the fixes.
+It also asks for the findings and doubts the walkthrough meets while explaining the change. `collect` writes the patch (`git diff <merge-base> HEAD`) and validates the guide with `plannotator guide export --guide … --patch … --out <dir>/walkthrough.html`, which leaves an HTML page as a by-product. Checked against plannotator 0.29.2: it keeps a section's `diagram` and silently drops a top-level `overview`; it fails on a file placed twice or absent from the patch, but accepts a changed file that no section and no `unplacedFiles` entry names. `collect` therefore checks itself that every changed file is placed, and records a guide that leaves one out as invalid. The format is Plannotator's because the code review stage imports the guide into `plannotator review` and sends it through the Inbox (DOT-164). Findings are added as notes only there, after the fixes.
 
 ### D10. Grouping is mechanical
 

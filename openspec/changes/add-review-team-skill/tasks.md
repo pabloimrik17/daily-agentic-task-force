@@ -2,41 +2,43 @@
 
 ## 1. Baseline
 
-- [ ] 1.1 Check the starting point.
+- [x] 1.1 Check the starting point.
     - `bun run test`, `bun run typecheck` and `bun run lint:fallow` pass before any code change.
     - The branch already holds the grill's glossary terms (**External review**, **Reviewer**, **Review team**, **Review tier**, **Doubt**, **Finding thread**, **Walkthrough**, and the sharpened **Code review**) and ADR 0008.
     - Record whether DOT-162 is done. Calibration (9.2) waits for it.
 
     Verify by running the three commands and `bun run lint:markdownlint`.
 
+    Recorded on 2026-11-22: the four commands pass (3,019 tests), the glossary terms and ADR 0008 are on the branch, and DOT-162 is not done (Backlog), so 9.2 waits.
+
 ## 2. Schemas and severity
 
-- [ ] 2.1 Add the types and validators of `autonomous.finding.v1` and `autonomous.review-report.v1` in `src/review-team/` on `src/validate.ts` (design D3, D4): the finding and doubt kinds, the three location scopes, the engine with its version, the label, the native severity and the optional suggested fix. Verify with tests for each scenario of "The finding schema" and "Doubts are reported apart", and for a finding missing its location being rejected with its path.
-- [ ] 2.2 Add the severity tables of the registry's reviewers and the identity table of the plugin's own reviewers (design D3). Verify with tests for each scenario of "Severity comes from fixed tables", including an unknown native severity failing validation.
-- [ ] 2.3 Ship `src/review-team/codex-output.schema.json` for Codex's `--output-schema` (design D4). Verify with a test that runs the same fixtures through the JSON Schema and the TypeScript validator and expects the same verdicts.
+- [x] 2.1 Add the types and validators of `autonomous.finding.v1` and `autonomous.review-report.v1` in `src/review-team/` on `src/validate.ts` (design D3, D4): the finding and doubt kinds, the three location scopes, the engine with its version, the label, the native severity and the optional suggested fix. Verify with tests for each scenario of "The finding schema" and "Doubts are reported apart", and for a finding missing its location being rejected with its path.
+- [x] 2.2 Add the severity tables of the registry's reviewers and the identity table of the plugin's own reviewers (design D3). Verify with tests for each scenario of "Severity comes from fixed tables", including an unknown native severity failing validation.
+- [x] 2.3 Ship `src/review-team/codex-output.schema.json` for Codex's `--output-schema` (design D4). Verify with a test that runs the same fixtures through the JSON Schema and the TypeScript validator and expects the same verdicts.
 
 ## 3. Configuration
 
-- [ ] 3.1 Add the optional `review` block: its shipped values in `config.defaults.json`, an example in `config.example.json`, and the key-by-key overlay and strict validation in `src/config.ts` (design D12). Add a loader for the review CLI that falls back to the shipped `review` block when no configuration file exists. Update the README's configuration section. Verify with:
+- [x] 3.1 Add the optional `review` block: its shipped values in `config.defaults.json`, an example in `config.example.json`, and the key-by-key overlay and strict validation in `src/config.ts` (design D12). Add a loader for the review CLI that falls back to the shipped `review` block when no configuration file exists. Update the README's configuration section. Verify with:
     - `config.test.ts`, for the label-contract delta's scenario "Review block omitted" and for a mistyped `review` key being rejected with its path;
     - tests for the review-team scenarios "No configuration file" and "Invalid threshold";
     - `bun run lint:markdownlint`.
 
 ## 4. Subject, tier and security
 
-- [ ] 4.1 Resolve the subject (design D5): the base given, else the open pull request's base, else the default branch, then the merge base, with a dirty tree recorded. Verify with tests on temporary repositories that drop the hook's `GIT_*` variables, and with fakes for `gh`. There is one test per scenario of "The subject of a review".
-- [ ] 4.2 Measure the diff and set the tier (design D5): `git diff --numstat`, the lockfiles and `openspec/changes/**` left out, and a binary file counted as one file and zero lines. Verify with tests for "Small change", "Many files" and "Lockfile excluded", and for a tier exactly at each threshold.
-- [ ] 4.3 Raise the tier with a reason, and refuse to lower it (design D6). Verify with tests for "Raised with a reason" and "Lowering refused", and for a raise with no reason exiting 2.
-- [ ] 4.4 Run the security trigger on changed paths and added lines with the configured patterns, naming each match and where it is. Verify with tests for "Shell execution added" and "Nothing sensitive".
+- [x] 4.1 Resolve the subject (design D5): the base given, else the open pull request's base, else the default branch, then the merge base, with a dirty tree recorded. Verify with tests on temporary repositories that drop the hook's `GIT_*` variables, and with fakes for `gh`. There is one test per scenario of "The subject of a review".
+- [x] 4.2 Measure the diff and set the tier (design D5): `git diff --numstat`, the lockfiles and `openspec/changes/**` left out, and a binary file counted as one file and zero lines. Verify with tests for "Small change", "Many files" and "Lockfile excluded", and for a tier exactly at each threshold.
+- [x] 4.3 Raise the tier with a reason, and refuse to lower it (design D6). Verify with tests for "Raised with a reason" and "Lowering refused", and for a raise with no reason exiting 2.
+- [x] 4.4 Run the security trigger on changed paths and added lines with the configured patterns, naming each match and where it is. Verify with tests for "Shell execution added" and "Nothing sensitive".
 
 ## 5. Registry and availability
 
-- [ ] 5.1 Write the registry as data (design D2): the seven reviewers with their angle, engine kind, invocation or brief, availability check, severity table and whether they are required, and the tier rows that resolve to a team with model, effort and level. Verify with a test for "Tier M" and one that every tier row names a registry entry.
-- [ ] 5.2 Add the availability checks (design D7) with injected command execution, so no real tool runs in a test. Verify with tests for "Codex not logged in", "Built-in shadowed" and "Not a JavaScript repository", and that a check that times out skips the reviewer with that reason.
+- [x] 5.1 Write the registry as data (design D2): the seven reviewers with their angle, engine kind, invocation or brief, availability check, severity table and whether they are required, and the tier rows that resolve to a team with model, effort and level. Verify with a test for "Tier M" and one that every tier row names a registry entry.
+- [x] 5.2 Add the availability checks (design D7) with injected command execution, so no real tool runs in a test. Verify with tests for "Codex not logged in", "Built-in shadowed" and "Not a JavaScript repository", and that a check that times out skips the reviewer with that reason.
 
 ## 6. The CLI reviewers
 
-- [ ] 6.1 Check the flags design D8 uses against `codex exec review --help` and `coderabbit review --help` on the installed versions. Record any difference in design.md before writing the runners. Verify that design.md names the versions it was checked against.
+- [x] 6.1 Check the flags design D8 uses against `codex exec review --help` and `coderabbit review --help` on the installed versions. Record any difference in design.md before writing the runners. Verify that design.md names the versions it was checked against.
 - [ ] 6.2 Write the Codex runner and parser. Save the version, stdout, stderr and raw output under `raw/`, and treat a timeout, a non-zero exit or a parse failure as a skip with its reason. Record a fixture from one real run on a small throwaway repository. Verify with a contract test on the recorded fixture, and with tests for each skip reason on fakes.
 - [ ] 6.3 Write the CodeRabbit runner and NDJSON parser, with its rate-limit message as a skip reason. Record a fixture from one real run. Verify with a contract test on the recorded fixture, and with the scenario "Changed tool output": one unreadable line skips the reviewer and reports none of its lines.
 
@@ -56,7 +58,7 @@
 
 ## 8. The skill
 
-- [ ] 8.1 Write `plugins/autonomous/skills/review-team/SKILL.md` (design D1) and the briefs in `skills/review-team/reviewers/`: `walkthrough.md`, `tests-lens.md` (design D13), `code-review.md`, `security-review.md` and `fallow-review.md`.
+- [x] 8.1 Write `plugins/autonomous/skills/review-team/SKILL.md` (design D1) and the briefs in `skills/review-team/reviewers/`: `walkthrough.md`, `tests-lens.md` (design D13), `code-review.md`, `security-review.md` and `fallow-review.md`.
     - The description claims only a request that names the review team.
     - `allowed-tools` lets the skill run `bun ${CLAUDE_PLUGIN_ROOT}/src/review-team/cli.ts *`.
     - The body runs `plan`, then one fresh read-only teammate per Claude reviewer with the plan's model and effort, then the CLI reviewers in the background, then `collect`, then the summary.

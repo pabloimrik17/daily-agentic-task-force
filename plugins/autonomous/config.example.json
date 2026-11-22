@@ -48,5 +48,37 @@
         "grills": 1,
         "parallel": 2,
         "intervalMinutes": 10
+    },
+    "review": {
+        "tiers": {
+            "S": { "maxLines": 150, "maxFiles": 5 },
+            "M": { "maxLines": 600, "maxFiles": 20 }
+        },
+        "team": {
+            "S": [
+                { "reviewer": "walkthrough" },
+                { "reviewer": "code-review", "level": "medium" },
+                { "reviewer": "codex", "effort": "medium" }
+            ],
+            "M": [
+                { "reviewer": "walkthrough" },
+                { "reviewer": "code-review", "level": "high" },
+                { "reviewer": "codex", "effort": "medium" },
+                { "reviewer": "coderabbit" },
+                { "reviewer": "fallow-review" }
+            ],
+            "L": [
+                { "reviewer": "walkthrough" },
+                { "reviewer": "code-review", "level": "xhigh" },
+                { "reviewer": "codex", "effort": "high" },
+                { "reviewer": "coderabbit" },
+                { "reviewer": "fallow-review" },
+                { "reviewer": "tests-lens" }
+            ]
+        },
+        "security": {
+            "pathPatterns": ["auth", "secret", "(^|/)\\.env(\\.|$)"],
+            "linePatterns": ["\\b(execFile|spawn)\\s*\\(", "\\beval\\s*\\("]
+        }
     }
 }

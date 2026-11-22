@@ -1,5 +1,11 @@
 import type { RunArgs } from "../args.ts";
-import { type AutonomousConfig, CONFIG_SCHEMA, type ConfigLoad, type Source } from "../config.ts";
+import {
+    type AutonomousConfig,
+    CONFIG_SCHEMA,
+    type ConfigLoad,
+    shippedReview,
+    type Source,
+} from "../config.ts";
 import { NOW } from "../quota-gate/test-fixtures.ts";
 import type { RunContext } from "../runner.ts";
 import type { JudgementExec, JudgementRequest } from "./judgement.ts";
@@ -31,6 +37,7 @@ export function config(): AutonomousConfig {
         workspace: { root: "/home/me/WebstormProjects" },
         naming: { model: "haiku", effort: "low" },
         runner: { grills: 1, parallel: 2, intervalMinutes: 10 },
+        review: shippedReview(),
     };
 }
 
