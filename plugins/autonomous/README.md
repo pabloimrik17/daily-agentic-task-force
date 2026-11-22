@@ -4100,15 +4100,19 @@ when a test can show it, or else the exact text it contradicts or misses, beside
 the place that does so. A finding with no reproduction does not survive, and the
 record says why it does not hold.
 
-A reproduction test of a finding left unfixed, because it was refuted or
-deferred, never reaches a commit: once the record holds its path and its text, the orchestrator
-removes it from the working tree.
+Once the record holds a reproduction test's path and its text, the orchestrator
+removes the test from the working tree, so no finding's failing test is in the
+tree while another finding is fixed, checked, committed or pushed: in a
+repository whose pre-push hook runs its tests, a failing test left behind would
+stop the push of every other fix. A test of a finding left unfixed,
+because it was refuted or deferred, never comes back and never reaches a commit.
 
 ### The fix and the fix check
 
 A teammate fixes each surviving finding sent to fix. It never changes the
 finding's reproduction test: the test stays with the fix as a regression test
-and is committed with it.
+and is committed with it. Before the fixer starts, the orchestrator puts that
+test back in the working tree from the record.
 
 The fixes run one at a time: a fix, its fix checks and the commit of an accepted
 fix end before the next fixer starts, so each fix check judges a tree that holds

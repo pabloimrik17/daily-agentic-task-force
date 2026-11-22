@@ -155,9 +155,21 @@ describe("the adversarial review skill", () => {
         expect(body).toContain("Write in the record why it does not hold.");
     });
 
-    it("Unfixed reproduction test removed: a refuted or deferred finding's test never reaches a commit", () => {
+    it("Deferred and refuted finding's test: the record keeps it, and it leaves the tree and every commit", () => {
         expect(body).toContain(
-            "A reproduction test of a finding left unfixed, because it was refuted or deferred, never reaches a commit: once the record holds its path and its text, remove it from the working tree.",
+            "Once the record holds a reproduction test's path and its text, remove the test from the working tree",
+        );
+        expect(body).toContain(
+            "A test of a finding left unfixed, because it was refuted or deferred, never comes back and never reaches a commit.",
+        );
+    });
+
+    it("Another finding's fix pushed: no finding's failing test is in the tree while another is fixed", () => {
+        expect(body).toContain(
+            "so no finding's failing test is in the tree while another finding is fixed, checked, committed or pushed.",
+        );
+        expect(body).toContain(
+            "Before the fixer starts, put that test back in the working tree from the record.",
         );
     });
 

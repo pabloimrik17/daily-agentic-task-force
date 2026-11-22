@@ -86,15 +86,18 @@ reason in the record as an assumption.
   misses, beside the place that does so.
 - A finding with no reproduction does not survive. Write in the record why it
   does not hold.
-- A reproduction test of a finding left unfixed, because it was refuted or
-  deferred, never reaches a commit: once the record holds its path and its
-  text, remove it from the working tree.
+- Once the record holds a reproduction test's path and its text, remove the
+  test from the working tree, so no finding's failing test is in the tree
+  while another finding is fixed, checked, committed or pushed. A test of a
+  finding left unfixed, because it was refuted or deferred, never comes back
+  and never reaches a commit.
 
 ## The fix
 
 A teammate fixes each surviving finding sent to fix. It never changes the
 finding's reproduction test: the test stays with the fix as a regression test
-and is committed with it.
+and is committed with it. Before the fixer starts, put that test back in the
+working tree from the record.
 
 Run the fixes one at a time: a fix, its fix checks and the commit of an
 accepted fix end before the next fixer starts, so each fix check judges a tree
