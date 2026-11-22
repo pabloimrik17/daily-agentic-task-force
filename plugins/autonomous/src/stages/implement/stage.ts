@@ -5,33 +5,14 @@
 import type { TrackerTask } from "../../label-triage/trackers/tracker.ts";
 import type { SessionTool } from "../../sessions/manager.ts";
 import { transitionRow } from "../../transition/mode.ts";
-import { findBranchChange } from "../openspec-change.ts";
-import { type Check, checkAll, openspecChecks } from "../openspec-stage.ts";
+import { type Check, changeCheck, checkAll, openspecChecks } from "../openspec-stage.ts";
 import type { Stage } from "../stage.ts";
-import { APPLY_WORKFLOW_KEY, CHANGE_KEY, implementPrompt, UPDATE_WORKFLOW_KEY } from "./prompt.ts";
+import { APPLY_WORKFLOW_KEY, implementPrompt, UPDATE_WORKFLOW_KEY } from "./prompt.ts";
 
 // No codex flags: the prerequisites never let a codex session start.
 const AGENT_ARGS: Record<SessionTool, string[]> = {
     claude: ["--model", "opus", "--effort", "high"],
     codex: [],
-};
-
-// Design D3: the change the workspace branch adds, compared with the repository's default branch.
-// It runs in the repository, where the branch the proposal stage pushed is a local ref.
-const changeCheck: Check = async ({ repository, branch, readers }) => {
-    const base = await readers.pullRequests.defaultBranch();
-    if (!base.ok) {
-        return {
-            ok: false,
-            error: `cannot read the default branch of ${repository}: ${base.error}`,
-        };
-    }
-    const change = await findBranchChange(readers.git, {
-        directory: repository,
-        base: base.value,
-        ref: branch,
-    });
-    return change.ok ? { ok: true, value: { [CHANGE_KEY]: change.value } } : change;
 };
 
 // The pull request proposal preparation opened is required: the change lives in it.

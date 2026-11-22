@@ -134,6 +134,27 @@ describe("decide: autonomy in verify", () => {
     });
 });
 
+describe("decide: autonomy in code-review", () => {
+    it("Task in code-review: AFK is eligible and grill-me is asked as invalid", () => {
+        expect(
+            decide(derivation({ group: "autonomy", labels: ["AFK"] }), 0.95, [
+                "work",
+                "code-review",
+            ]),
+        ).toEqual({ status: "eligible", reason: "" });
+        expect(
+            decide(
+                derivation({ group: "autonomy", labels: ["grill-me"], confidence: 0.99 }),
+                0.95,
+                ["work", "code-review"],
+            ),
+        ).toEqual({
+            status: "asked",
+            reason: "invalid under the contract: grill-me with a stage label: code-review",
+        });
+    });
+});
+
 describe("decide", () => {
     it("is eligible when confidence is at or above the threshold and the labels are valid", () => {
         expect(decide(derivation({ confidence: 1 }), 0.95, [])).toEqual({

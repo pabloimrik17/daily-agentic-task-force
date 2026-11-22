@@ -129,7 +129,7 @@ async function findSkill(skillsDir: string, name: string): Promise<string | null
 
 const FRONTMATTER = /^---[ \t]*\r?\n(?:[\s\S]*?\r?\n)?---[ \t]*(?:\r?\n|$)/;
 
-function stripFrontmatter(text: string): string {
+export function stripFrontmatter(text: string): string {
     return text.replace(FRONTMATTER, "");
 }
 

@@ -19,10 +19,14 @@ afterEach(() => {
     }
 });
 
-async function leaving(work: Work = {}, calls: string[] = []): Promise<string[]> {
+async function leaving(
+    work: Work = {},
+    calls: string[] = [],
+    stage: "implement" | "verify" = "implement",
+): Promise<string[]> {
     const { state, workspace } = await stateWithWorkspace(TASK);
     kept.push(state, workspace);
-    return guardsOnLeaving("implement", TASK, state, workTools(work, calls));
+    return guardsOnLeaving(stage, TASK, state, workTools(work, calls));
 }
 
 describe("guards: Leaving implement needs the work finished", () => {
@@ -134,5 +138,36 @@ describe("guards: Leaving implement needs the work finished", () => {
 
         expect(await guardsOnLeaving("proposal", TASK, state, workTools({}, calls))).toEqual([]);
         expect(calls).toEqual([]);
+    });
+});
+
+describe("guards: Leaving verify needs the work finished", () => {
+    it("Uncommitted fix: the working tree is named", async () => {
+        expect(await leaving({ status: " M src/a.ts\n" }, [], "verify")).toEqual([
+            "the working tree has 1 uncommitted change",
+        ]);
+    });
+
+    it("Unpushed fix: the count is named", async () => {
+        expect(await leaving({ ahead: 1 }, [], "verify")).toEqual([
+            `the branch ${BRANCH} has 1 commit origin/${BRANCH} lacks`,
+        ]);
+    });
+
+    it("Work finished: every task checked, a clean working tree and a pushed branch pass", async () => {
+        const calls: string[] = [];
+        const reasons = await leaving({}, calls, "verify");
+        const implementCalls: string[] = [];
+        await leaving({}, implementCalls);
+
+        expect(reasons).toEqual([]);
+        expect(calls).toEqual(implementCalls);
+        expect(calls).toContain("openspec list --json");
+    });
+
+    it("an unchecked task of the change is named, as for implement", async () => {
+        expect(await leaving({ completed: 3, total: 4 }, [], "verify")).toEqual([
+            `the change ${CHANGE} has 1 of 4 tasks unchecked`,
+        ]);
     });
 });

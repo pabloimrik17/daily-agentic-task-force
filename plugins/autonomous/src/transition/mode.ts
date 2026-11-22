@@ -1,6 +1,6 @@
 // Transition mode (spec autonomous-run, "Transition mode", "Transition question", "Approval
 // question", "Transition report"). It writes only for an AFK task leaving a stage left on
-// approval, proposal or implement; every other answer comes back through answer mode
+// approval, proposal, implement or verify; every other answer comes back through answer mode
 // (./answer.ts).
 
 import { isSource, taskKey, type TaskRef } from "../attempts/record.ts";
@@ -39,6 +39,7 @@ const TRANSITIONS = {
     "grill-me": { to: "proposal", asks: "autonomy" },
     proposal: { to: "implement", asks: "approval" },
     implement: { to: "verify", asks: "approval" },
+    verify: { to: "code-review", asks: "approval" },
 } as const satisfies Partial<Record<StageLabel, TransitionTarget>>;
 
 export type TransitionStage = keyof typeof TRANSITIONS;
@@ -51,7 +52,11 @@ export function transitionRow(from: TransitionStage): TransitionRow {
     return { from, ...TRANSITIONS[from] };
 }
 
-const TRANSITION_STAGES = Object.keys(TRANSITIONS) as TransitionStage[];
+export const TRANSITION_STAGES = Object.keys(TRANSITIONS) as TransitionStage[];
+
+export function isTransitionStage(value: string): value is TransitionStage {
+    return (TRANSITION_STAGES as readonly string[]).includes(value);
+}
 
 // Table order: a task a cut-short transition left with grill-me beside proposal is still in
 // grill-me, so answering again completes that transition.
@@ -72,7 +77,7 @@ export const APPROVAL_VALUES: readonly StageLabel[] = TRANSITION_STAGES.map(tran
     .filter((row) => row.asks === "approval")
     .map((row) => row.to);
 
-// The autonomy that decides how a task leaves a stage left on approval, `proposal` or `implement`
+// The autonomy that decides how a task leaves a stage left on approval, `proposal`, `implement` or `verify`
 // (spec label-contract, "The autonomy decides whether leaving ... needs an answer"): exactly one,
 // or the reason there is none.
 export function stageAutonomy(
@@ -134,6 +139,7 @@ const READY: Record<TransitionStage, string> = {
     "grill-me": "the grill is over",
     proposal: "the proposal is ready",
     implement: "the implementation is ready",
+    verify: "the verification is ready",
 };
 
 // Task ids carry no `:`.
@@ -175,10 +181,13 @@ function blank(startedAt: Date): TransitionReport {
     };
 }
 
+// `from` is the stage the caller expects the task to leave: a second run after a read-back that
+// failed once the stage was removed must not leave the stage the first run reached.
 export async function runTransition(
     ref: TaskRef,
     deps: TransitionDeps,
     startedAt: Date,
+    from?: TransitionStage,
 ): Promise<TransitionReport> {
     const report = blank(startedAt);
     if (!deps.config.sources[ref.source].enabled) {
@@ -190,11 +199,11 @@ export async function runTransition(
     }
     const { source, id, title, labels } = read.value;
     const task: TransitionTask = { source, id, title, labels: [...labels] };
-    const row = rowOf(labels);
-    if (row === null) {
-        const reason = `${source} ${id} is in none of ${stageList()} (labels [${labels.join(", ")}])`;
-        return { ...report, task, reasons: [reason] };
+    const leaving = rowToLeave(task, from);
+    if (!leaving.ok) {
+        return { ...report, task, reasons: [leaving.error] };
     }
+    const row = leaving.value;
     const awaited = await awaitedReceipt(deps.state, ref, row.from);
     if (!awaited.ok) {
         return { ...report, task, reasons: [awaited.error] };
@@ -208,7 +217,25 @@ export async function runTransition(
     return leaveStage({ ...report, task }, { ref, row, task }, deps);
 }
 
-// "grill-me, proposal and implement"
+// The row the task leaves, or why it leaves none: it is in no stage of the table, or not in the
+// one the caller expects.
+function rowToLeave(
+    task: TransitionTask,
+    from: TransitionStage | undefined,
+): Result<TransitionRow> {
+    const row = rowOf(task.labels);
+    const where = `${task.source} ${task.id} is in`;
+    const labels = `(labels [${task.labels.join(", ")}])`;
+    if (row === null) {
+        return { ok: false, error: `${where} none of ${stageList()} ${labels}` };
+    }
+    if (from !== undefined && row.from !== from) {
+        return { ok: false, error: `${where} ${row.from}, not ${from} ${labels}` };
+    }
+    return { ok: true, value: row };
+}
+
+// "grill-me, proposal, implement and verify"
 function stageList(): string {
     const last = TRANSITION_STAGES.at(-1);
     return `${TRANSITION_STAGES.slice(0, -1).join(", ")} and ${last}`;

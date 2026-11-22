@@ -22,9 +22,15 @@ describe("nextStage", () => {
         expect(stage !== null && isSupported(stage)).toBe(true);
     });
 
-    it("Task ready to verify: gives verify, which is not supported", () => {
+    it("Task ready to verify: gives verify, which is supported", () => {
         const stage = nextStage(["personal", "AFK", "verify"]);
         expect(stage).toBe("verify");
+        expect(stage !== null && isSupported(stage)).toBe(true);
+    });
+
+    it("Task ready for code review: gives code-review, which is not supported", () => {
+        const stage = nextStage(["personal", "AFK", "code-review"]);
+        expect(stage).toBe("code-review");
         expect(stage !== null && isSupported(stage)).toBe(false);
     });
 
@@ -63,6 +69,15 @@ describe("splitByStage", () => {
         expect(splitByStage([proposal, implement])).toEqual({
             kept: [implement],
             setAside: [proposal],
+        });
+    });
+
+    it("Verification before implementation: keeps the verify candidate and sets the implement one aside", () => {
+        const implement = at("a", "implement");
+        const verify = at("b", "verify");
+        expect(splitByStage([implement, verify])).toEqual({
+            kept: [verify],
+            setAside: [implement],
         });
     });
 

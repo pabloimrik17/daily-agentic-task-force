@@ -633,7 +633,7 @@ describe("persist: Persist preconditions", () => {
         const report = await run();
         expectNothingWritten(report, fake, dir);
         expect(report.reasons).toEqual([
-            `attempt ${id} is a test attempt: persist mode takes only grill-me, proposal and implement attempts`,
+            `attempt ${id} is a test attempt: persist mode takes only grill-me, proposal, implement and verify attempts`,
         ]);
     });
 
@@ -848,6 +848,67 @@ describe("persist: Implementation attempts", () => {
 
     it("Implement attempt without a stage summary: the missing file is reported and nothing is written", async () => {
         const { run, fake, dir } = await arrangeImplement({}, { summary: null });
+        const report = await run();
+        expect(report.outcome).toBe("not-evaluable");
+        expect(report.reasons).toEqual([`${join(dir, "stage-summary.md")} is missing`]);
+        expect(fake.calls).toEqual([]);
+        expect(existsSync(receiptPath(dir))).toBe(false);
+    });
+});
+
+describe("persist: Verification attempts", () => {
+    const VERIFY = "linear:DOT-121:verify:1";
+    const VERIFY_HEADER = `autonomous · verify · ${VERIFY} · stage summary saved`;
+
+    // A verification attempt holds a stage summary and no definition.
+    const arrangeVerify = (script: DocumentScript = {}, options: AttemptOptions = {}) =>
+        arrange({ stage: "verify", definition: null, ...options }, script);
+
+    it("Verification attempt persisted: the comment is written and read back, the description is unchanged and the receipt is written", async () => {
+        const { run, fake, dir, id } = await arrangeVerify();
+        const report = await run();
+        expect(id).toBe(VERIFY);
+        expect(report).toMatchObject({
+            outcome: "advance",
+            attempt: VERIFY,
+            task: { source: "linear", id: "DOT-121", title: "Fix the login" },
+            written: { description: false, comment: "posted" },
+            readBack: { description: false, comment: true },
+            notes: [],
+            reasons: [],
+            receipt: receiptPath(dir),
+        });
+        expect(exitCodeFor(report.outcome)).toBe(0);
+        expect(fake.description()).toBe("Fix the login");
+        expect(existsSync(join(dir, "description.md"))).toBe(false);
+        expect(readJson(receiptPath(dir))).toEqual({
+            schema: RECEIPT_SCHEMA,
+            attempt: VERIFY,
+            task: { source: "linear", id: "DOT-121" },
+            at: STARTED.toISOString(),
+            header: VERIFY_HEADER,
+        });
+        expect(fake.calls).toEqual([
+            "readTask DOT-121",
+            "readComments DOT-121",
+            "addComment DOT-121",
+            "readComments DOT-121",
+        ]);
+    });
+
+    it("Comment header: the first line is the header, a blank line follows, and the description is unchanged", async () => {
+        const { run, fake, dir } = await arrangeVerify({}, { summary: SUMMARY });
+        await run();
+        expect(headerOf(VERIFY)).toBe(VERIFY_HEADER);
+        expect(fake.comments()).toEqual([`${VERIFY_HEADER}\n\n${SUMMARY}`]);
+        expect(readFileSync(join(dir, "comment.md"), "utf8")).toBe(
+            `${VERIFY_HEADER}\n\n${SUMMARY}`,
+        );
+        expect(fake.description()).toBe("Fix the login");
+    });
+
+    it("Verification attempt without a stage summary: the missing file is reported and nothing is written", async () => {
+        const { run, fake, dir } = await arrangeVerify({}, { summary: null });
         const report = await run();
         expect(report.outcome).toBe("not-evaluable");
         expect(report.reasons).toEqual([`${join(dir, "stage-summary.md")} is missing`]);

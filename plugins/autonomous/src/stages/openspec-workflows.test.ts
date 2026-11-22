@@ -101,6 +101,29 @@ describe("findWorkflow", () => {
         },
     );
 
+    it("verify: the skill names the skill", async () => {
+        withSkill("openspec-verify-change");
+
+        expect(await findWorkflow(repository, "verify")).toBe("/openspec-verify-change");
+    });
+
+    it("verify: the command names the command", async () => {
+        withCommand("verify");
+
+        expect(await findWorkflow(repository, "verify")).toBe("/opsx:verify");
+    });
+
+    it("verify with both: the skill wins", async () => {
+        withSkill("openspec-verify-change");
+        withCommand("verify");
+
+        expect(await findWorkflow(repository, "verify")).toBe("/openspec-verify-change");
+    });
+
+    it("verify with neither: finds nothing", async () => {
+        expect(await findWorkflow(repository, "verify")).toBeNull();
+    });
+
     it("does not take one workflow's files for another's", async () => {
         withSkill("openspec-propose");
         withCommand("propose");
@@ -113,6 +136,12 @@ describe("missingWorkflow", () => {
     it("names the repository, both forms with their files, and the fix", () => {
         expect(missingWorkflow("/repo", "propose")).toBe(
             "the repository /repo provides neither the skill openspec-propose (/repo/.claude/skills/openspec-propose/SKILL.md) nor the command /opsx:propose (/repo/.claude/commands/opsx/propose.md): update OpenSpec in that repository",
+        );
+    });
+
+    it("verify: names both of its forms", () => {
+        expect(missingWorkflow("/repo", "verify")).toBe(
+            "the repository /repo provides neither the skill openspec-verify-change (/repo/.claude/skills/openspec-verify-change/SKILL.md) nor the command /opsx:verify (/repo/.claude/commands/opsx/verify.md): update OpenSpec in that repository",
         );
     });
 });

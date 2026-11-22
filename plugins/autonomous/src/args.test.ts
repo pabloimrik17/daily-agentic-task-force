@@ -14,6 +14,7 @@ const DEFAULTS: RunArgs = {
     noHandoff: false,
     answers: [],
     transition: undefined,
+    from: undefined,
     persist: undefined,
     pullRequest: undefined,
     title: undefined,
@@ -148,6 +149,26 @@ describe("parseArgs", () => {
         );
     });
 
+    it("reads --apply --transition with --from and --json", () => {
+        expect(
+            parseArgs([
+                "--apply",
+                "--transition",
+                "linear:DOT-110",
+                "--from",
+                "implement",
+                "--json",
+            ]),
+        ).toEqual(
+            accepted({
+                apply: true,
+                json: true,
+                transition: { source: "linear", id: "DOT-110" },
+                from: "implement",
+            }),
+        );
+    });
+
     it("reads --apply --pull-request with and without --title and --json", () => {
         const id = "linear:DOT-121:grill-me:1";
         expect(parseArgs(["--apply", "--pull-request", id])).toEqual(
@@ -263,8 +284,8 @@ describe("parseArgs", () => {
             "--stage given more than once",
         ],
         [
-            ["--task", "linear:A-1", "--stage", "verify"],
-            "--stage verify is not a registered stage (test, grill-me, proposal, implement)",
+            ["--task", "linear:A-1", "--stage", "code-review"],
+            "--stage code-review is not a registered stage (test, grill-me, proposal, implement, verify)",
         ],
         [["--stage", "test"], "--stage requires --task"],
         [
@@ -300,6 +321,24 @@ describe("parseArgs", () => {
             "--discard can only be combined with --apply, --json and --release-workspace",
         ],
         [["--stage", "test", "--apply", "--discard", "beads:X-1"], "--stage requires --task"],
+        [["--apply", "--from", "verify"], "--from requires --transition"],
+        [
+            ["--apply", "--persist", "linear:DOT-121:verify:1", "--from", "verify"],
+            "--from requires --transition",
+        ],
+        [["--apply", "--transition", "linear:DOT-110", "--from"], "--from requires a stage name"],
+        [
+            ["--apply", "--transition", "linear:DOT-110", "--from", "--json"],
+            "--from requires a stage name",
+        ],
+        [
+            ["--apply", "--transition", "linear:DOT-110", "--from", "code-review"],
+            "--from code-review is not a stage a transition leaves (grill-me, proposal, implement, verify)",
+        ],
+        [
+            ["--apply", "--transition", "linear:DOT-110", "--from", "verify", "--from", "verify"],
+            "--from given more than once",
+        ],
         [["--transition"], "--transition requires <source>:<id>"],
         [["--apply", "--transition"], "--transition requires <source>:<id>"],
         [["--apply", "--transition", "--json"], "--transition requires <source>:<id>"],
@@ -327,7 +366,7 @@ describe("parseArgs", () => {
         ],
         [
             ["--apply", "--transition", "linear:DOT-110", "--answer", "a:b=HITL"],
-            "--transition can only be combined with --apply and --json",
+            "--transition can only be combined with --apply, --from and --json",
         ],
         [
             ["--apply", "--transition", "linear:DOT-110", "--task", "linear:DOT-111"],
@@ -347,7 +386,7 @@ describe("parseArgs", () => {
         ],
         [
             ["--apply", "--transition", "linear:DOT-110", "--discard", "beads:X-1"],
-            "--transition can only be combined with --apply and --json",
+            "--transition can only be combined with --apply, --from and --json",
         ],
         [
             ["--apply", "--transition", "linear:DOT-110", "--bootstrap-labels"],
@@ -355,11 +394,11 @@ describe("parseArgs", () => {
         ],
         [
             ["--apply", "--transition", "linear:DOT-110", "--force"],
-            "--transition can only be combined with --apply and --json",
+            "--transition can only be combined with --apply, --from and --json",
         ],
         [
             ["--apply", "--transition", "linear:DOT-110", "--release-workspace"],
-            "--transition can only be combined with --apply and --json",
+            "--transition can only be combined with --apply, --from and --json",
         ],
         [["--apply", "--persist"], "--persist requires an attempt id <source>:<task>:<stage>:<n>"],
         [
@@ -416,7 +455,7 @@ describe("parseArgs", () => {
         ],
         [
             ["--apply", "--persist", "linear:DOT-121:grill-me:1", "--transition", "linear:DOT-121"],
-            "--transition can only be combined with --apply and --json",
+            "--transition can only be combined with --apply, --from and --json",
         ],
         [
             ["--apply", "--persist", "linear:DOT-121:grill-me:1", "--answer", "a:b=HITL"],
@@ -493,7 +532,7 @@ describe("parseArgs", () => {
                 "--transition",
                 "linear:DOT-121",
             ],
-            "--transition can only be combined with --apply and --json",
+            "--transition can only be combined with --apply, --from and --json",
         ],
         [
             ["--apply", "--pull-request", "linear:DOT-121:grill-me:1", "--discard", "beads:X-1"],

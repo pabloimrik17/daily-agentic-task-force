@@ -116,6 +116,32 @@ describe("detect: three label groups", () => {
         expect(Object.values(detection.groups).every(isComplete)).toBe(true);
     });
 
+    it("Task ready for code review: personal, AFK and code-review are complete for all three groups", () => {
+        const detection = detect(task(["personal", "AFK", "code-review"]), rules());
+        expect(detection.groups).toEqual({
+            scope: { status: "present", labels: ["personal"] },
+            autonomy: { status: "present", labels: ["AFK"] },
+            stage: { status: "present", labels: ["code-review"] },
+        });
+        expect(Object.values(detection.groups).every(isComplete)).toBe(true);
+    });
+
+    it("code-review with HITL: complete for all three groups", () => {
+        const detection = detect(task(["personal", "HITL", "code-review"]), rules());
+        expect(detection.groups.autonomy).toEqual({ status: "present", labels: ["HITL"] });
+        expect(detection.groups.stage).toEqual({ status: "present", labels: ["code-review"] });
+        expect(Object.values(detection.groups).every(isComplete)).toBe(true);
+    });
+
+    it("verify with code-review: a stage conflict for a human to resolve", () => {
+        const detection = detect(task(["verify", "code-review"]), rules());
+        expect(detection.groups.stage).toEqual({
+            status: "conflict",
+            labels: ["verify", "code-review"],
+        });
+        expect(isComplete(detection.groups.stage)).toBe(false);
+    });
+
     it("implement with verify: a stage conflict for a human to resolve", () => {
         const detection = detect(task(["implement", "verify"]), rules());
         expect(detection.groups.stage).toEqual({
@@ -167,6 +193,15 @@ describe("detect", () => {
     it("does not treat a near-miss spelling as the contract label", () => {
         const detection = detect(task(["Grill Me"], { source: "linear" }), rules());
         expect(detection.groups.stage).toEqual({ status: "missing", evidence: [] });
+    });
+
+    it("Near-miss code-review: Code Review is untagged for the stage group only", () => {
+        const detection = detect(task(["work", "AFK", "Code Review"]), rules());
+        expect(detection.groups).toEqual({
+            scope: { status: "present", labels: ["work"] },
+            autonomy: { status: "present", labels: ["AFK"] },
+            stage: { status: "missing", evidence: [] },
+        });
     });
 
     it("does not treat Proposal as proposal", () => {

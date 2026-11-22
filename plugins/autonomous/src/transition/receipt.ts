@@ -20,6 +20,7 @@ const PERSISTED: Record<TransitionStage, string> = {
     "grill-me": "definition",
     proposal: "stage summary",
     implement: "stage summary",
+    verify: "stage summary",
 };
 
 // The first open attempt of the stage, for the task, whose directory holds no receipt; null when

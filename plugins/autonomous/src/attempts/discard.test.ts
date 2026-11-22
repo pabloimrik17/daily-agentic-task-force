@@ -68,6 +68,7 @@ function args(discard: string, releaseWorkspace = false): RunArgs {
         stage: undefined,
         discard,
         transition: undefined,
+        from: undefined,
         persist: undefined,
         pullRequest: undefined,
         title: undefined,

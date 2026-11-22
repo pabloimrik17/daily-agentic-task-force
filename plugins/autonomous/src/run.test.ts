@@ -418,7 +418,7 @@ describe("main --bootstrap-labels", () => {
             [
                 `label bootstrap — started ${NOW.toISOString()}`,
                 "outcome: advance",
-                "  linear    workspace: created work, personal, AFK, HITL, grill-me, proposal, implement, verify, taken, triage-me",
+                "  linear    workspace: created work, personal, AFK, HITL, grill-me, proposal, implement, verify, code-review, taken, triage-me",
             ].join("\n"),
         ]);
     });
@@ -453,7 +453,7 @@ describe("main --bootstrap-labels", () => {
             [
                 `label bootstrap — started ${NOW.toISOString()}`,
                 "outcome: not-evaluable",
-                `  linear    workspace: present work, personal, AFK, HITL, grill-me, implement, verify, taken, triage-me; failed proposal (${error})`,
+                `  linear    workspace: present work, personal, AFK, HITL, grill-me, implement, verify, code-review, taken, triage-me; failed proposal (${error})`,
             ].join("\n"),
         ]);
     });
@@ -466,7 +466,7 @@ describe("main --bootstrap-labels", () => {
             [
                 `label bootstrap — started ${NOW.toISOString()}`,
                 "outcome: advance",
-                "  linear    workspace: recoloured AFK (was #000000); present work, personal, HITL, grill-me, proposal, implement, verify, taken, triage-me",
+                "  linear    workspace: recoloured AFK (was #000000); present work, personal, HITL, grill-me, proposal, implement, verify, code-review, taken, triage-me",
             ].join("\n"),
         ]);
     });
@@ -495,7 +495,7 @@ describe("main --bootstrap-labels", () => {
             [
                 `label bootstrap — started ${NOW.toISOString()}`,
                 "outcome: not-evaluable",
-                `  linear    workspace: present work, personal, HITL, grill-me, proposal, implement, verify, taken, triage-me; failed AFK (${error})`,
+                `  linear    workspace: present work, personal, HITL, grill-me, proposal, implement, verify, code-review, taken, triage-me; failed AFK (${error})`,
             ].join("\n"),
         ]);
     });
@@ -1407,6 +1407,15 @@ describe("main --transition", () => {
         expect(calls).toEqual(["beads:readTask:B-1"]);
     });
 
+    it("passes --from on: a task not in the stage named is refused with exit 3", async () => {
+        const { d, out, calls } = transitionDeps(["personal", "grill-me"]);
+        expect(await main(transitionArgs("--from", "proposal", "--json"), d)).toBe(3);
+        expect(documentOf(out).reasons).toEqual([
+            "beads B-1 is in grill-me, not proposal (labels [personal, grill-me])",
+        ]);
+        expect(calls).toEqual(["beads:readTask:B-1"]);
+    });
+
     it("takes no run lock: a lock another run holds does not stop it and is left as it was", async () => {
         const { dir: held } = heldLock();
         const lock = join(held, "run.lock");
@@ -1438,12 +1447,12 @@ describe("main --transition", () => {
     });
 
     it("Task not in grill-me: exits 3 with the reason and no handoff", async () => {
-        const { d, out, calls } = transitionDeps(["personal", "AFK", "verify"]);
+        const { d, out, calls } = transitionDeps(["personal", "AFK", "code-review"]);
         expect(await main(transitionArgs("--json"), d)).toBe(3);
         const report = documentOf(out);
         expect(report.outcome).toBe("not-evaluable");
         expect(report.reasons).toEqual([
-            "beads B-1 is in none of grill-me, proposal and implement (labels [personal, AFK, verify])",
+            "beads B-1 is in none of grill-me, proposal, implement and verify (labels [personal, AFK, code-review])",
         ]);
         expect(report).not.toHaveProperty("handoff");
         expect(calls).toEqual(["beads:readTask:B-1"]);

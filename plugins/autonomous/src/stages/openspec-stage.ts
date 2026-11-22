@@ -1,6 +1,7 @@
-// Design D2: what the stages working on an OpenSpec change share, proposal preparation and the
-// implementation stage, so the two prompts cannot drift on the comments, the stage summary, the
-// logbook entry or the machine's details. Each stage passes its own text where they differ.
+// Design D2: what the stages working on an OpenSpec change share, proposal preparation, the
+// implementation stage and the verification stage, so the prompts cannot drift on the comments,
+// the stage summary, the logbook entry, the machine's details, the orchestration, the commit rules
+// or the transition. Each stage passes its own text where they differ.
 
 import { stat } from "node:fs/promises";
 import { dirname, join } from "node:path";
@@ -15,6 +16,7 @@ import type { PullRequest } from "../pull-request/port.ts";
 import type { Result } from "../result.ts";
 import { stageAutonomy, type TransitionStage } from "../transition/mode.ts";
 import { SKILLS_PLUGIN } from "./grill-me/prompt.ts";
+import { findBranchChange } from "./openspec-change.ts";
 import { findWorkflow, missingWorkflow } from "./openspec-workflows.ts";
 import { renderPrompt } from "./prompt.ts";
 import { loadSkills } from "./skills.ts";
@@ -23,8 +25,9 @@ import type { StageContext, StageEnv, StagePrerequisites, StagePromptInput } fro
 export const HANDOFF_SKILL = "handoff";
 export const CONTEXT_KEY = "context";
 export const PULL_REQUEST_KEY = "pullRequest"; // absent when the branch has no open pull request
+export const CHANGE_KEY = "change"; // the name of the OpenSpec change the branch adds
 
-type OpenspecStage = Extract<TransitionStage, "proposal" | "implement">;
+type OpenspecStage = Extract<TransitionStage, "proposal" | "implement" | "verify">;
 
 type OpenspecWorkflow = Parameters<typeof findWorkflow>[1];
 
@@ -97,7 +100,7 @@ export function contextSection(
 
 // The stage's own logbook section: its name and what it holds.
 interface LogbookSection {
-    name: "Proposal" | "Implementation";
+    name: "Proposal" | "Implementation" | "Verification";
     holds: string;
 }
 
@@ -120,7 +123,7 @@ export function closingSection(paths: Paths, closing: Closing): Section {
     const { attempt, summary, entry } = paths;
     const steps = [
         ...closing.steps,
-        `Write the stage summary to \`${summary}\` (see the stage summary section), then run \`/autonomous:run --apply --persist ${attempt}\`. It posts the stage summary as a comment on the task. If it exits non-zero, do not run the transition: ${closing.onFailure}.`,
+        `Write the stage summary to \`${summary}\` (see the stage summary section) only now, once every step above is done: never before, not even while you wait for the human. Then run \`/autonomous:run --apply --persist ${attempt}\`. It posts the stage summary as a comment on the task. If it exits non-zero, do not run the transition: ${closing.onFailure}.`,
         closing.transition,
         `Write the logbook entry's body to \`${entry}\` (described below), then run \`/autonomous:run --apply --log ${attempt}\`. It publishes the entry as a comment on the pull request. If log mode rejects the body, correct \`${entry}\` as it reports and run it again.`,
         "Only once the entry is published, write the result marker.",
@@ -184,6 +187,83 @@ export const NO_FORCE_PUSH =
 // `written` lists what the stage writes besides the stage summary and the logbook entry.
 export function publicRepository(written: string): string {
     return `- The repository and its pull request may be public: write no absolute path and no other detail of this machine (user name, home directory, host name) in ${written}, the stage summary or the logbook entry; use repository-relative paths and URLs.`;
+}
+
+// What an agent working an OpenSpec change on its own is told about the orchestration: `each` is
+// what a teammate works on, `ends` what the orchestrator keeps its context low until.
+export interface Orchestration {
+    each: string; // e.g. "a block of the change"
+    ends: string; // e.g. "the implementation ends"
+}
+
+export function orchestrationSection({ each, ends }: Orchestration): Section {
+    return {
+        title: "Orchestration",
+        lines: [
+            "You are the orchestrator: you plan the work, delegate it to teammates, review what they hand back, and commit it. Every teammate is a Claude agent you start from this session.",
+            "",
+            `- Delegate the work to as many teammates as you see fit, each on ${each}.`,
+            "- Give each teammate the model and the effort level its block needs. You may set any model and any effort level for a teammate, from the cheapest up, not only levels near your own. No block should cost more than it needs: choose the cheapest that does it well.",
+            `- Keep your own context under about 30% until ${ends}: leave the reading, the writing and the checking to teammates, and keep for yourself the plan, the review of their work and the commits.`,
+        ],
+    };
+}
+
+// `unit` says what one commit holds, `next` what the push comes before.
+export interface CommitUnit {
+    unit: string; // e.g. "one coherent unit of work at a time: its code, its tests, ..."
+    next: string; // e.g. "the next unit of work"
+}
+
+export function commitsSection({ unit, next }: CommitUnit): Section {
+    return {
+        title: "Commits",
+        lines: [
+            "- Only you commit, never a teammate: a teammate changes files and never stages, commits or pushes. Tell each teammate so.",
+            `- Commit ${unit}, in the same commit. Stage by path, never with \`git add -A\` or \`git add .\`, so no other file reaches the commit.`,
+            "- Write each message as a conventional commit, in this repository's conventions: take the type and the scope from its contributor instructions (AGENTS.md, CONTRIBUTING or the like), its commit rules (a commitlint configuration or the like) and its recent history. In a monorepo, give every commit a scope.",
+            "- Mark a commit breaking (`!` after the type and scope, or a `BREAKING CHANGE` footer) only when the change's proposal declares the change breaking. Otherwise no commit carries either.",
+            `- Push each commit before you start ${next}, so the pull request always shows the work done.`,
+            "- Never amend a commit and never rewrite one already pushed.",
+        ],
+    };
+}
+
+// The transition a stage closes with: `left` is the stage the task is in, `reached` the label the
+// transition moves it to.
+export interface Move {
+    left: OpenspecStage;
+    reached: string;
+}
+
+export function afkTransition({ task, attempt, entry }: Paths, { left, reached }: Move): string {
+    return `Run \`/autonomous:run --apply --transition ${task} --from ${left}\`. For an \`AFK\` task it asks no one: it moves the task to \`${reached}\` itself, once it finds every task of the change checked and every commit pushed. If it exits non-zero, the transition was not applied: fix what its reason names, then run it once more. You may commit an uncommitted change by the rules of the commits section and push it, push the commits it names, and check a task of the change only when it is done, never one you did not do. A failed read or write (the fetch, the pull request, the tracker) needs no fix, only the second run. If the second run is refused because the task is no longer in \`${left}\`, and the labels it lists show \`${reached}\` and no \`${left}\`, the first run moved the task and only its read-back failed: the transition is applied, so go on to the next step. When what it names cannot be fixed (a task that needs a human, unfinished work), or the second run is refused too, the task is blocked: the stage summary is already posted, so do not post it again, and write a logbook entry to \`${entry}\` that says the attempt is blocked and why, quoting the transition's reason, then run \`/autonomous:run --apply --log ${attempt}\`. Write no result marker and stop: the task stays in \`${left}\`, and the attempt is kept once this session ends, so a human finds it with the notice.`;
+}
+
+// `approves` is what the human approves, e.g. "the implementation".
+export function hitlTransition({ task }: Paths, { left, reached }: Move, approves: string): string {
+    return `Run \`/autonomous:run --apply --transition ${task} --from ${left}\`. It asks the human whether to approve ${approves} and move the task to \`${reached}\`, and applies the answer. If it exits non-zero, the transition was refused (for example a task of the change is unchecked or a commit is unpushed) and it asked no question: tell the human what it reported and stop as for "Later". When the human answers "Later", or the answer is not applied, stop here: publish no logbook entry, do not write the result marker, and leave this session open, so the human can come back to it.`;
+}
+
+// How a deviation from the proposal is decided, per autonomy.
+export const DEVIATION: Record<AutonomyLabel, string> = {
+    AFK: "Decide the deviation yourself, without asking, and record it as an assumption as well.",
+    HITL: "Ask the human before you change the proposal, and change it only as they decide.",
+};
+
+// `onFailure` says what to do when a push fails; `written` what the stage writes besides the stage
+// summary and the logbook entry.
+export function constraintsSection(onFailure: string, written: string): Section {
+    return {
+        title: "Constraints",
+        lines: [
+            "- Commit and push only on this workspace's current branch.",
+            NO_FORCE_PUSH,
+            "- Leave the task's pull request a draft: never mark it ready for review, and open no other pull request.",
+            `- If a push fails, ${onFailure}.`,
+            publicRepository(written),
+        ],
+    };
 }
 
 function renderSections(sections: readonly Section[]): string {
@@ -281,6 +361,25 @@ const openPullRequest =
             ? failed(`the workspace branch ${branch} has no open pull request`)
             : NOTHING;
     };
+
+// Design D3 of the implementation stage: the change the workspace branch adds, compared with the
+// repository's default branch. It runs in the repository, where the branch the proposal stage
+// pushed is a local ref.
+export const changeCheck: Check = async ({ repository, branch, readers }) => {
+    const base = await readers.pullRequests.defaultBranch();
+    if (!base.ok) {
+        return {
+            ok: false,
+            error: `cannot read the default branch of ${repository}: ${base.error}`,
+        };
+    }
+    const change = await findBranchChange(readers.git, {
+        directory: repository,
+        base: base.value,
+        ref: branch,
+    });
+    return change.ok ? { ok: true, value: { [CHANGE_KEY]: change.value } } : change;
+};
 
 export interface OpenspecChecks {
     stage: OpenspecStage;

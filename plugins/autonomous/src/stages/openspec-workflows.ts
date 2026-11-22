@@ -6,7 +6,7 @@
 import { stat } from "node:fs/promises";
 import { join } from "node:path";
 
-type OpenspecWorkflow = "propose" | "apply" | "update";
+type OpenspecWorkflow = "propose" | "apply" | "update" | "verify";
 
 interface WorkflowForms {
     skill: string;
@@ -17,6 +17,7 @@ const FORMS: Record<OpenspecWorkflow, WorkflowForms> = {
     propose: { skill: "openspec-propose", command: "propose" },
     apply: { skill: "openspec-apply-change", command: "apply" },
     update: { skill: "openspec-update-change", command: "update" },
+    verify: { skill: "openspec-verify-change", command: "verify" },
 };
 
 const skillFile = (repository: string, { skill }: WorkflowForms) =>

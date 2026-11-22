@@ -254,7 +254,7 @@ describe("selectCandidates", () => {
         { labels: ["grill-me", "taken"], reason: "classification" },
         { labels: ["personal", "grill-me", "taken"], reason: "taken" },
         { labels: ["personal", "grill-me"], reason: "labelled-this-run", labelled: true },
-        { labels: ["personal", "AFK", "verify"], reason: "unsupported-stage" },
+        { labels: ["personal", "AFK", "code-review"], reason: "unsupported-stage" },
         { labels: ["personal", "grill-me"], reason: "blocked", blocked: true },
     ])("never reads detail for $reason", async ({ labels, reason, labelled, blocked }) => {
         const task = workTask("linear", "TEST-1", labels, {
@@ -284,8 +284,17 @@ describe("selectCandidates", () => {
         });
     });
 
-    it("excludes a task ready to verify as an unsupported stage", async () => {
+    it("Task ready to verify: is a candidate, not excluded as an unsupported stage", async () => {
         const task = workTask("linear", "TEST-1", ["personal", "AFK", "verify"]);
+
+        expect(await evaluate([task])).toMatchObject({
+            ok: true,
+            value: { candidates: [{ task, autonomy: "AFK", stage: "verify" }], excluded: [] },
+        });
+    });
+
+    it("Task ready for code review: is excluded as an unsupported stage", async () => {
+        const task = workTask("linear", "TEST-1", ["personal", "AFK", "code-review"]);
 
         expect(await evaluate([task])).toMatchObject({
             ok: true,

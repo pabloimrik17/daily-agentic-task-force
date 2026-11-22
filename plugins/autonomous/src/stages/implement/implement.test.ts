@@ -795,29 +795,65 @@ describe("The implementation prompt follows the autonomy", () => {
         expect(text).toContain(
             "Record each assumption you make in three places: the change's design (its `design.md`), the stage summary and the logbook entry's `### Assumptions`.",
         );
-        expect(text).not.toContain("Review the implementation with the human");
+        expect(text).not.toContain("Give the human a quick look at the implementation");
         expect(text).not.toContain("Working with the human (HITL)");
     });
 
-    it("HITL task: has the review step, and asks the approval question only after the human has seen the implementation", () => {
+    it("HITL task: has the review step as a quick look before verification, code review and QA, and asks the approval question only after the human has seen the implementation", () => {
         const text = prompt({ autonomy: "HITL" });
         const closing = section(text, "Closing");
 
         expect(text).toContain(
             "The transition question comes only after the human has seen the implementation",
         );
+        expect(text).toContain(
+            "for a quick look at anything that jars, and tell them that verification, code review and QA follow. Fix only what the human clearly asks for.",
+        );
         expect(closing).toContain(
-            "2. Review the implementation with the human: show them the implementation and the pull request's URL, and commit and push each round of their feedback as a new commit.",
+            "2. Give the human a quick look at the implementation: show them the implementation and the pull request's URL for anything that jars, and tell them that verification, code review and QA follow. Fix only what the human clearly asks for, and commit and push each round as a new commit.",
         );
         expect(closing).toContain(
             "once a round changed anything, confirm again, as in the step before, that every check passes, nothing is left uncommitted and every commit is pushed.",
         );
         expect(
-            inOrder(closing, ["2. Review the implementation", "--transition linear:DOT-121"]),
+            inOrder(closing, ["2. Give the human a quick look", "--transition linear:DOT-121"]),
         ).toBe(true);
         expect(text).not.toContain("Never ask the human anything");
         expect(text).not.toContain("If you are blocked");
     });
+});
+
+describe("The implementation leaves the review stages theirs", () => {
+    it.each(["AFK", "HITL"] as const)(
+        "Apply workflow suggests verifying: the %s prompt runs neither the verify nor the archive workflow",
+        (autonomy) => {
+            const implementation = section(prompt({ autonomy }), "Implementation");
+
+            expect(implementation).toContain(
+                "Verifying the change against its proposal, reviewing the code's quality, running what the task delivers as its end user would, and archiving the change belong to later stages (verification, code review and QA), and you do none of them. Run neither OpenSpec's verify workflow nor its archive workflow, even when the apply workflow suggests verifying or archiving once every task is done.",
+            );
+        },
+    );
+
+    it.each(["AFK", "HITL"] as const)(
+        "Checks kept: the %s prompt still runs every check the repository defines before the transition, and the review of each teammate's block stays the orchestrator's",
+        (autonomy) => {
+            const text = prompt({ autonomy });
+
+            expect(section(text, "Implementation")).toContain(
+                "Once every task is done, run every check the repository defines: its tests, linters and type checks",
+            );
+            expect(section(text, "Implementation")).toContain(
+                "The repository's checks, and the review of each teammate's block, stay yours.",
+            );
+            expect(
+                inOrder(section(text, "Closing"), [
+                    "1. Confirm that every check the repository defines passes",
+                    "--transition linear:DOT-121",
+                ]),
+            ).toBe(true);
+        },
+    );
 });
 
 describe("Tasks that need a human", () => {
@@ -844,7 +880,7 @@ describe("The implementation closing order", () => {
                     "1. Confirm that every check the repository defines passes",
                     `Write the stage summary to \`${stageSummaryPath(DIR)}\``,
                     "`/autonomous:run --apply --persist linear:DOT-121:implement:1`",
-                    "`/autonomous:run --apply --transition linear:DOT-121`",
+                    "`/autonomous:run --apply --transition linear:DOT-121 --from implement`",
                     `Write the logbook entry's body to \`${logbookEntryPath(DIR)}\``,
                     "`/autonomous:run --apply --log linear:DOT-121:implement:1`",
                     "Only once the entry is published, write the result marker.",
@@ -900,7 +936,7 @@ describe("The implementation closing order", () => {
         expect(
             inOrder(closing, [
                 "only the second run.",
-                "If the second run is refused because the task is in none of the stages it can leave, and the labels it lists show `verify` and no `implement`, the first run moved the task and only its read-back failed: the transition is applied, so go on to the next step.",
+                "If the second run is refused because the task is no longer in `implement`, and the labels it lists show `verify` and no `implement`, the first run moved the task and only its read-back failed: the transition is applied, so go on to the next step.",
                 "or the second run is refused too, the task is blocked",
             ]),
         ).toBe(true);

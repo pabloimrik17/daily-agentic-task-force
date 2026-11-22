@@ -10,7 +10,7 @@ import type { WorkTask } from "../select/types.ts";
 import type { SessionTool } from "../sessions/manager.ts";
 
 // Every stage the system knows: the selectable ones (select's `StageName`) and `test`.
-export const STAGE_IDS = ["test", "grill-me", "proposal", "implement"] as const;
+export const STAGE_IDS = ["test", "grill-me", "proposal", "implement", "verify"] as const;
 
 export type StageId = (typeof STAGE_IDS)[number];
 

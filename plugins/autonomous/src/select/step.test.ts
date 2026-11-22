@@ -220,7 +220,7 @@ describe("select: outcome", () => {
                     fakeReader(
                         "beads",
                         ["B-1", "B-2", "B-3"].map((id) =>
-                            workTask("beads", id, ["personal", "AFK", "verify"]),
+                            workTask("beads", id, ["personal", "AFK", "code-review"]),
                         ),
                         calls,
                     ),

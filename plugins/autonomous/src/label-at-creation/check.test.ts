@@ -236,7 +236,7 @@ describe("Helper decides what to apply and what to ask", () => {
         expect(check(input("linear", ["grill-me", "proposal"]), configured, [])).toEqual([
             "apply: personal",
             "ask autonomy: no judgement given; options AFK, HITL",
-            "ask stage: conflicting present labels: grill-me, proposal; options grill-me, proposal, implement, verify",
+            "ask stage: conflicting present labels: grill-me, proposal; options grill-me, proposal, implement, verify, code-review",
         ]);
     });
 

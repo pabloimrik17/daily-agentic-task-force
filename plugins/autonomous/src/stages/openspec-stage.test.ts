@@ -5,7 +5,19 @@ import { describe, expect, it } from "vitest";
 
 import type { PullRequest, PullRequests } from "../pull-request/port.ts";
 import type { Result } from "../result.ts";
-import { blockedSection, type Check, openspecChecks, PULL_REQUEST_KEY } from "./openspec-stage.ts";
+import {
+    afkTransition,
+    blockedSection,
+    type Check,
+    commitsSection,
+    constraintsSection,
+    DEVIATION,
+    hitlTransition,
+    openspecChecks,
+    orchestrationSection,
+    type Paths,
+    PULL_REQUEST_KEY,
+} from "./openspec-stage.ts";
 import type { StageContext } from "./stage.ts";
 import { stageEnv } from "./test-fixtures.ts";
 
@@ -77,5 +89,94 @@ describe("blocked path with a pull request", () => {
             "3. Write a logbook entry to `/state/logbook-entry.md` that says the attempt is blocked and why, then run `/autonomous:run --apply --log linear:DOT-121:implement:1`.",
             "4. Run no transition and write no result marker, then stop. The task stays in `implement`, and the attempt is kept once this session ends, so a human finds it with your explanation.",
         ]);
+    });
+});
+
+const verifyPaths: Paths = {
+    attempt: "linear:DOT-121:verify:1",
+    task: "linear:DOT-121",
+    summary: "/state/stage-summary.md",
+    entry: "/state/logbook-entry.md",
+};
+
+describe("orchestration section", () => {
+    it("what each teammate works on and what ends reach the text", () => {
+        const { title, lines } = orchestrationSection({
+            each: "a phase of the adversarial review",
+            ends: "the verification ends",
+        });
+
+        expect(title).toBe("Orchestration");
+        expect(lines.join("\n")).toContain("each on a phase of the adversarial review.");
+        expect(lines.join("\n")).toContain("until the verification ends:");
+    });
+});
+
+describe("commits section", () => {
+    it("the unit committed and what the push precedes reach the text", () => {
+        const { title, lines } = commitsSection({
+            unit: "each fixed finding on its own: its fix, and its reproduction test when it has one",
+            next: "the next fix",
+        });
+
+        expect(title).toBe("Commits");
+        expect(lines).toContain(
+            "- Commit each fixed finding on its own: its fix, and its reproduction test when it has one, in the same commit. Stage by path, never with `git add -A` or `git add .`, so no other file reaches the commit.",
+        );
+        expect(lines).toContain(
+            "- Push each commit before you start the next fix, so the pull request always shows the work done.",
+        );
+    });
+});
+
+describe("transition steps", () => {
+    const move = { left: "verify", reached: "code-review" } as const;
+
+    it("AFK: names the stage left and the stage reached", () => {
+        const text = afkTransition(verifyPaths, move);
+
+        expect(text).toContain("moves the task to `code-review` itself");
+        expect(text).toContain("labels it lists show `code-review` and no `verify`");
+        expect(text).toContain("the task stays in `verify`");
+        expect(text).toContain("--transition linear:DOT-121 --from verify`");
+        expect(text).toContain("refused because the task is no longer in `verify`");
+        expect(text).toContain("--log linear:DOT-121:verify:1`");
+        expect(text).not.toContain("implement");
+    });
+
+    it("HITL: names the stage reached and what the human approves", () => {
+        const text = hitlTransition(verifyPaths, move, "the verification");
+
+        expect(text).toContain(
+            "asks the human whether to approve the verification and move the task to `code-review`",
+        );
+        expect(text).toContain("--transition linear:DOT-121 --from verify`");
+        expect(text).not.toContain("implement");
+    });
+});
+
+describe("deviation rule", () => {
+    it("holds one sentence per autonomy", () => {
+        expect(DEVIATION.AFK).toBe(
+            "Decide the deviation yourself, without asking, and record it as an assumption as well.",
+        );
+        expect(DEVIATION.HITL).toBe(
+            "Ask the human before you change the proposal, and change it only as they decide.",
+        );
+    });
+});
+
+describe("constraints section", () => {
+    it("the failure handling and what the stage writes reach the text", () => {
+        const { title, lines } = constraintsSection(
+            "tell the human what it reported",
+            "the commits, the change's artifacts, any follow-up task",
+        );
+
+        expect(title).toBe("Constraints");
+        expect(lines).toContain("- If a push fails, tell the human what it reported.");
+        expect(lines.at(-1)).toContain(
+            "in the commits, the change's artifacts, any follow-up task, the stage summary or the logbook entry",
+        );
     });
 });

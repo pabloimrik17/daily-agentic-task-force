@@ -410,7 +410,7 @@ async function runTransitionMode(ref: TaskRef, args: RunArgs, deps: MainDeps): P
         openspecIn: deps.openspecIn,
         pullRequests: deps.pullRequests,
     };
-    const report = await runTransition(ref, transitionDeps, startedAt);
+    const report = await runTransition(ref, transitionDeps, startedAt, args.from);
     deps.stdout(args.json ? renderTransitionJson(report) : renderTransitionText(report));
     return exitCodeFor(report.outcome);
 }
