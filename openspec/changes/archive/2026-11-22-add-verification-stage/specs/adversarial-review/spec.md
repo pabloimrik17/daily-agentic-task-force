@@ -115,9 +115,9 @@ Teammates SHALL try to refute each finding sent to fix or to defer; findings pas
 - **WHEN** the refutation finds the requirement implemented under another name
 - **THEN** the finding does not survive, and the record says why
 
-### Requirement: An unfixed finding's test stays out of the commits
+### Requirement: A reproduction test stays out of the tree until its fix starts
 
-A reproduction test of a finding left unfixed, because it was refuted or deferred, SHALL NOT reach a commit: once the record holds its path and its text, the orchestrator SHALL remove it from the working tree.
+Once the record holds a reproduction test's path and its text, the orchestrator SHALL remove the test from the working tree, and SHALL put it back from the record only when that finding's fix starts. A reproduction test of a finding left unfixed, because it was refuted or deferred, SHALL NOT come back and SHALL NOT reach a commit.
 
 #### Scenario: Deferred finding's test
 
@@ -129,6 +129,11 @@ A reproduction test of a finding left unfixed, because it was refuted or deferre
 - **WHEN** a refutation leaves a test that does not fail
 - **THEN** the finding does not survive, the record holds the test's path and text, and the test is removed from the working tree
 
+#### Scenario: Another finding's fix pushed
+
+- **WHEN** two surviving findings sent to fix each have a failing reproduction test
+- **THEN** neither test is in the working tree once the refutation ends, each comes back from the record only when its own fix starts, and the first fix is committed and pushed with no failing test of the second finding in the tree
+
 ### Requirement: The fix
 
 A teammate SHALL fix each surviving finding sent to fix, and SHALL NOT change its reproduction test. The test SHALL stay with the fix as a regression test. The fixes SHALL run one at a time: a fix, its fix checks and the commit of an accepted fix SHALL end before the next fixer starts.
@@ -136,7 +141,7 @@ A teammate SHALL fix each surviving finding sent to fix, and SHALL NOT change it
 #### Scenario: Reproduction test kept
 
 - **WHEN** a finding's reproduction is a failing test
-- **THEN** the fix leaves that test unchanged and it is committed with the fix
+- **THEN** the orchestrator puts the test back from the record before the fixer starts, the fix leaves it unchanged, and it is committed with the fix
 
 #### Scenario: Two findings to fix
 
