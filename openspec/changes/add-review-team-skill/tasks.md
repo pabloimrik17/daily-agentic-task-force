@@ -69,7 +69,9 @@
 
 ## 9. Integration and calibration
 
-- [ ] 9.1 Run the review team by hand on this branch. Check that the report names the tier, who ran and who was skipped and why, that the guide validated, and that the tree and `HEAD` are unchanged. Verify by reading `report.md` and `git status`.
+- [x] 9.1 Run the review team by hand on this branch. Check that the report names the tier, who ran and who was skipped and why, that the guide validated, and that the tree and `HEAD` are unchanged. Verify by reading `report.md` and `git status`.
+
+    Run on 2026-11-22 at `e56356b`, tier `L` as measured (9,461 lines in 67 files). The walkthrough, `fallow-review`, the tests lens and `/security-review` reported 25 findings and 8 doubts; the guide validated; the tree and `HEAD` were unchanged. Three reviewers were skipped with their reasons: Codex (the configured model is not supported by the account), CodeRabbit (its review asked for a new login although `auth status` reported one) and `/code-review` (shadowed until DOT-162). So neither CLI parser has read a real run on this repository yet. The findings have not been triaged.
 - [ ] 9.2 Calibrate (design D14, HITL, only after DOT-162).
     - Build the reference set of accepted bot findings for five merged pull requests between #94 and #105, and have the user confirm it.
     - Run the full team at `L` on each pull request's commit before ready-for-review.
