@@ -2,6 +2,7 @@ import { parseAttemptId, parseTaskRef, type AttemptId, type TaskRef } from "./at
 import type { Source } from "./config.ts";
 import { STAGES } from "./stages/registry.ts";
 import { isStageId, type StageId } from "./stages/stage.ts";
+import { isTransitionStage, TRANSITION_STAGES, type TransitionStage } from "./transition/mode.ts";
 
 // One answer passed back to a question of a handoff: the question's id and the
 // option values chosen for it (design D3).
@@ -22,6 +23,7 @@ export interface RunArgs {
     noHandoff: boolean;
     answers: Answer[];
     transition: { source: Source; id: string } | undefined;
+    from: TransitionStage | undefined; // only with --transition
     persist: AttemptId | undefined;
     pullRequest: AttemptId | undefined;
     title: string | undefined;
@@ -44,7 +46,7 @@ export const USAGE = [
     "       /autonomous:run --apply --answer <id>=<value>[,<value>]... [--json]",
     "       /autonomous:run --task <source>:<id> [--stage <stage>] [--force] [--json] [--apply] [--no-handoff]",
     "       /autonomous:run --apply --discard <attempt-id|source:id> [--release-workspace] [--json]",
-    "       /autonomous:run --apply --transition <source>:<task> [--json]",
+    "       /autonomous:run --apply --transition <source>:<task> [--from <stage>] [--json]",
     "       /autonomous:run --apply --persist <attempt-id> [--json]",
     "       /autonomous:run --apply --pull-request <attempt-id> [--title <title>] [--json]",
     "       /autonomous:run --apply --log <attempt-id> [--json]",
@@ -79,6 +81,7 @@ const VALUED = new Map<string, (args: RunArgs, value: string | undefined) => str
     ["--stage", readStage],
     ["--discard", readDiscard],
     ["--transition", readTransition],
+    ["--from", readFrom],
     ["--persist", readPersist],
     ["--pull-request", readPullRequest],
     ["--title", readTitle],
@@ -102,6 +105,7 @@ export function parseArgs(argv: readonly string[]): ParseArgsResult {
         noHandoff: false,
         answers: [],
         transition: undefined,
+        from: undefined,
         persist: undefined,
         pullRequest: undefined,
         title: undefined,
@@ -179,6 +183,21 @@ function readTransition(args: RunArgs, value: string | undefined): string | null
         return read.error;
     }
     args.transition = read.ref;
+    return null;
+}
+
+// The stage the caller expects the task to leave, so a second run cannot leave the next one.
+function readFrom(args: RunArgs, value: string | undefined): string | null {
+    if (value === undefined || value === "" || value.startsWith("--")) {
+        return "--from requires a stage name";
+    }
+    if (args.from !== undefined) {
+        return "--from given more than once";
+    }
+    if (!isTransitionStage(value)) {
+        return `--from ${value} is not a stage a transition leaves (${TRANSITION_STAGES.join(", ")})`;
+    }
+    args.from = value;
     return null;
 }
 
@@ -306,6 +325,7 @@ const modeFlags = (args: RunArgs) =>
         args.discard !== undefined,
         args.releaseWorkspace,
         transitioning(args),
+        args.from !== undefined,
         persisting(args),
         pullRequesting(args),
         args.title !== undefined,
@@ -382,10 +402,11 @@ const COMBINATIONS: readonly (readonly [(args: RunArgs) => boolean, string])[] =
             (forcing(args) || args.noHandoff || args.bootstrapLabels || answering(args)),
         "--discard can only be combined with --apply, --json and --release-workspace",
     ],
+    [(args) => args.from !== undefined && !transitioning(args), "--from requires --transition"],
     [(args) => transitioning(args) && !args.apply, "--transition requires --apply"],
     [
         (args) => transitioning(args) && (otherFlags(args) || otherModes(args, transitioning)),
-        "--transition can only be combined with --apply and --json",
+        "--transition can only be combined with --apply, --from and --json",
     ],
     [(args) => persisting(args) && !args.apply, "--persist requires --apply"],
     [

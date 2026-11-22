@@ -66,6 +66,11 @@ Make the reported findings your own:
 Send a finding at or above the floor only to fix. It leaves the review
 unfixed only when the refutation shows it does not hold.
 
+Your caller may set the floor by where a finding comes from, and may name the
+findings that go to a later review whatever their severity. Follow it: a
+finding your caller passes on goes to that later review, and the floor holds
+for every other finding.
+
 ## A human changes the finding triage
 
 When the caller says a human follows the review, show them the finding triage,
@@ -82,12 +87,19 @@ reason in the record as an assumption.
   misses, beside the place that does so.
 - A finding with no reproduction does not survive. Write in the record why it
   does not hold.
+- A reproduction test of a finding that is not fixed, refuted or deferred,
+  never reaches a commit: once the record holds its path and its text, remove
+  it from the working tree.
 
 ## The fix
 
 A teammate fixes each surviving finding sent to fix. It never changes the
 finding's reproduction test: the test stays with the fix as a regression test
 and is committed with it.
+
+Run the fixes one at a time: a fix, its fix checks and the commit of an
+accepted fix end before the next fixer starts, so each fix check judges a tree
+that holds no other fix.
 
 ## The fix check
 
@@ -107,7 +119,8 @@ rejections.
 ## Follow-up tasks
 
 A deferred finding that survives the refutation becomes a proposed follow-up
-task in the record, with a title, its reason and the finding it comes from.
+task in the record, with a title, its reason, the finding it comes from and its
+reproduction.
 Whether a follow-up task is created, and where, is the caller's to decide.
 
 ## The record of the findings

@@ -515,6 +515,80 @@ describe("transition mode: Transition mode", () => {
         ]);
     });
 
+    it("Second run after a lost read-back: with --from implement, a task already in verify is refused and nothing is written", async () => {
+        const calls: string[] = [];
+        const given = linear(calls, ["personal", "AFK", "verify"]);
+
+        const { state, tools } = await guarded("linear", "DOT-110");
+        const report = await runTransition(
+            { source: "linear", id: "DOT-110" },
+            modeDeps(given, config(), state, tools),
+            STARTED,
+            "implement",
+        );
+
+        expect(report).toMatchObject({ outcome: "not-evaluable", applied: false });
+        expect(report.reasons).toEqual([
+            "linear DOT-110 is in verify, not implement (labels [personal, AFK, verify])",
+        ]);
+        expect(report).not.toHaveProperty("handoff");
+        expect(exitCodeFor(report.outcome)).toBe(3);
+        expect(calls).toEqual(["linear:readTask:DOT-110"]);
+    });
+
+    it("--from verify on a task already in code-review: in none of the stages, nothing written", async () => {
+        const calls: string[] = [];
+        const given = linear(calls, ["personal", "AFK", "code-review"]);
+
+        const report = await runTransition(
+            { source: "linear", id: "DOT-110" },
+            modeDeps(given),
+            STARTED,
+            "verify",
+        );
+
+        expect(report.outcome).toBe("not-evaluable");
+        expect(report.reasons).toEqual([
+            "linear DOT-110 is in none of grill-me, proposal, implement and verify (labels [personal, AFK, code-review])",
+        ]);
+        expect(calls).toEqual(["linear:readTask:DOT-110"]);
+    });
+
+    it("--from naming the stage the task is in: the transition is applied as without it", async () => {
+        const calls: string[] = [];
+        const given = linear(calls, ["personal", "AFK", "verify"]);
+
+        const { state, tools } = await guarded("linear", "DOT-110");
+        const report = await runTransition(
+            { source: "linear", id: "DOT-110" },
+            modeDeps(given, config(), state, tools),
+            STARTED,
+            "verify",
+        );
+
+        expect(report).toMatchObject({ outcome: "advance", applied: true, reasons: [] });
+        expect(writes(calls)).toEqual([
+            "linear:addLabel:DOT-110:code-review",
+            "linear:removeLabel:DOT-110:verify",
+        ]);
+    });
+
+    it("--from implement on a task left with implement beside verify: completes the cut-short transition", async () => {
+        const calls: string[] = [];
+        const given = linear(calls, ["personal", "AFK", "implement", "verify"]);
+
+        const { state, tools } = await guarded("linear", "DOT-110");
+        const report = await runTransition(
+            { source: "linear", id: "DOT-110" },
+            modeDeps(given, config(), state, tools),
+            STARTED,
+            "implement",
+        );
+
+        expect(report).toMatchObject({ outcome: "advance", applied: true, reasons: [] });
+        expect(await labelsOf(given, "linear", "DOT-110")).toEqual(["personal", "AFK", "verify"]);
+    });
+
     it("HITL task in verify: the approval question, nothing written and exit 0", async () => {
         const calls: string[] = [];
         const given = linear(calls, ["personal", "HITL", "verify"]);

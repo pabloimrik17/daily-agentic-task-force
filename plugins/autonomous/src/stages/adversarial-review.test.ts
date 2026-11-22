@@ -123,6 +123,15 @@ describe("the adversarial review skill", () => {
         );
     });
 
+    it("Floor set by the caller: the caller may set the floor by source and pass findings on whatever their severity", () => {
+        expect(body).toContain(
+            "Your caller may set the floor by where a finding comes from, and may name the findings that go to a later review whatever their severity.",
+        );
+        expect(body).toContain(
+            "a finding your caller passes on goes to that later review, and the floor holds for every other finding.",
+        );
+    });
+
     it("Human present: the human sees the finding triage before any refutation starts", () => {
         expect(body).toContain(
             "show them the finding triage, each finding with its destination and reason, before any refutation starts, and apply their changes",
@@ -146,6 +155,12 @@ describe("the adversarial review skill", () => {
         expect(body).toContain("Write in the record why it does not hold.");
     });
 
+    it("Unfixed reproduction test removed: a refuted or deferred finding's test never reaches a commit", () => {
+        expect(body).toContain(
+            "A reproduction test of a finding that is not fixed, refuted or deferred, never reaches a commit: once the record holds its path and its text, remove it from the working tree.",
+        );
+    });
+
     it("Reproduction test kept: the fix leaves the test unchanged and it is committed with the fix", () => {
         expect(body).toContain("It never changes the finding's reproduction test");
         expect(body).toContain(
@@ -160,6 +175,12 @@ describe("the adversarial review skill", () => {
         expect(body).toContain("Commit each accepted fix.");
     });
 
+    it("Fixes one at a time: each fix check judges a tree that holds no other fix", () => {
+        expect(body).toContain(
+            "Run the fixes one at a time: a fix, its fix checks and the commit of an accepted fix end before the next fixer starts, so each fix check judges a tree that holds no other fix.",
+        );
+    });
+
     it("Rejected twice: blocks the review with no human, naming the finding and the rejections", () => {
         expect(body).toContain(
             "send a fix rejected by its first fix check back to the fix with the reasons",
@@ -171,7 +192,7 @@ describe("the adversarial review skill", () => {
 
     it("Deferred finding survives: the record proposes a follow-up task, whose creation is the caller's", () => {
         expect(body).toContain(
-            "A deferred finding that survives the refutation becomes a proposed follow-up task in the record, with a title, its reason and the finding it comes from.",
+            "A deferred finding that survives the refutation becomes a proposed follow-up task in the record, with a title, its reason, the finding it comes from and its reproduction.",
         );
         expect(body).toContain(
             "Whether a follow-up task is created, and where, is the caller's to decide.",

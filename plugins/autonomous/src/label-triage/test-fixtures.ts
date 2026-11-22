@@ -196,6 +196,7 @@ export function triageContext(options: {
             noHandoff: false,
             answers: [],
             transition: undefined,
+            from: undefined,
             persist: undefined,
             pullRequest: undefined,
             title: undefined,

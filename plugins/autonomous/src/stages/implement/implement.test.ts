@@ -880,7 +880,7 @@ describe("The implementation closing order", () => {
                     "1. Confirm that every check the repository defines passes",
                     `Write the stage summary to \`${stageSummaryPath(DIR)}\``,
                     "`/autonomous:run --apply --persist linear:DOT-121:implement:1`",
-                    "`/autonomous:run --apply --transition linear:DOT-121`",
+                    "`/autonomous:run --apply --transition linear:DOT-121 --from implement`",
                     `Write the logbook entry's body to \`${logbookEntryPath(DIR)}\``,
                     "`/autonomous:run --apply --log linear:DOT-121:implement:1`",
                     "Only once the entry is published, write the result marker.",
@@ -936,7 +936,7 @@ describe("The implementation closing order", () => {
         expect(
             inOrder(closing, [
                 "only the second run.",
-                "If the second run is refused because the task is in none of the stages it can leave, and the labels it lists show `verify` and no `implement`, the first run moved the task and only its read-back failed: the transition is applied, so go on to the next step.",
+                "If the second run is refused because the task is no longer in `implement`, and the labels it lists show `verify` and no `implement`, the first run moved the task and only its read-back failed: the transition is applied, so go on to the next step.",
                 "or the second run is refused too, the task is blocked",
             ]),
         ).toBe(true);

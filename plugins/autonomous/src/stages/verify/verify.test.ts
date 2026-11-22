@@ -475,7 +475,7 @@ describe("The verification corrects through one adversarial review", () => {
     const review = (autonomy: "AFK" | "HITL" = "AFK") =>
         section(prompt({ autonomy }), "The adversarial review");
 
-    it("Parameters named: subject, references, procedure, floor CRITICAL, later reviews and record, right before the skill's body", () => {
+    it("Parameters named: subject, references, procedure, floors, later reviews and record, right before the skill's body", () => {
         const findings = join(DIR, "findings.md");
 
         expect(
@@ -483,8 +483,8 @@ describe("The verification corrects through one adversarial review", () => {
                 "- Subject: the implementation on this workspace's branch.",
                 `- References: the change's proposal, its artifacts under \`openspec/changes/${CHANGE}/\`, and the task's definition, its description above.`,
                 `- The report's procedure: \`${VERIFY_SKILL}\` on the change \`${CHANGE}\`, with all its checks.`,
-                "- Severity scale: the verify workflow's `CRITICAL`, `WARNING` and `SUGGESTION`. The floor is `CRITICAL`.",
-                "- Later reviews: code review, under the heading `Code review` in the stage summary, and QA, under the heading `QA`.",
+                `- Severity scale: the verify workflow's \`CRITICAL\`, \`WARNING\` and \`SUGGESTION\`. Every finding \`${VERIFY_SKILL}\` reports is at or above the floor, whatever its severity, so each one goes to fix; for every other finding, the floor is \`CRITICAL\`.`,
+                `- Later reviews: code review, under the heading \`Code review\` in the stage summary, and QA, under the heading \`QA\`. A finding that belongs to either goes to it whatever its severity, unless \`${VERIFY_SKILL}\` reported it: that one is the verification's own, and is never passed on.`,
                 `- Record: \`${findings}\`, in this attempt's directory. It stays outside the repository and every tracker: never commit it and never post it.`,
                 "- Whether a human follows the review: no: this task carries `AFK`.",
                 REVIEW_BODY,
@@ -510,11 +510,22 @@ describe("The verification's boundary", () => {
         const text = prompt();
 
         expect(section(text, "Verification")).toContain(
-            "A deeper review of the code's quality is code review's, and running what the task delivers as its end user would is QA's: pass a finding that belongs to either on to that stage, under its heading in the stage summary, and never fix it here.",
+            "A deeper review of the code's quality is code review's, and running what the task delivers as its end user would is QA's: pass a finding that belongs to either on to that stage, whatever its severity, under its heading in the stage summary, and never fix it here.",
         );
         expect(section(text, "The adversarial review")).toContain("and QA, under the heading `QA`");
         expect(section(text, "Stage summary")).toContain(
             "the findings passed on under a heading per later stage (`Code review`, `QA`)",
+        );
+    });
+
+    it("Verify workflow's own finding: whatever it concerns, it goes to fix and is never passed on", () => {
+        const text = prompt();
+
+        expect(section(text, "Verification")).toContain(
+            `Every finding \`${VERIFY_SKILL}\` reports is the verification's own, whatever it concerns: it goes to fix, never to a later stage.`,
+        );
+        expect(section(text, "The adversarial review")).toContain(
+            `unless \`${VERIFY_SKILL}\` reported it: that one is the verification's own, and is never passed on.`,
         );
     });
 
@@ -710,7 +721,7 @@ describe("The verification closing order", () => {
                     "1. Confirm that every check the repository defines passes, that nothing is left uncommitted, and that every commit is pushed.",
                     `Write the stage summary to \`${stageSummaryPath(DIR)}\``,
                     "`/autonomous:run --apply --persist linear:DOT-121:verify:1`",
-                    "`/autonomous:run --apply --transition linear:DOT-121`",
+                    "`/autonomous:run --apply --transition linear:DOT-121 --from verify`",
                     `Write the logbook entry's body to \`${logbookEntryPath(DIR)}\``,
                     "`/autonomous:run --apply --log linear:DOT-121:verify:1`",
                     "Only once the entry is published, write the result marker.",

@@ -1,6 +1,6 @@
 ---
 description: Run the autonomous loop's reconcile, gate, label triage, select and launch steps, or launch a supplied task, or discard an attempt, or bootstrap the label contract, or hand off the transition question of a task in grill-me, proposal, implement or verify, or move an AFK task in proposal, implement or verify, or save a grill-me, proposal, implementation or verification attempt's stage summary, and a grill's definition, to its task, or open the pull request of an attempt's branch, or publish an attempt's logbook entry, or list the questions of the tasks marked `triage-me`, report the outcome, and ask the user the questions the run hands off
-argument-hint: "[--task <source>:<id> [--stage <stage>]] [--force] [--json] [--apply] [--no-handoff] | --apply --discard <attempt> [--release-workspace] [--json] | --bootstrap-labels [--json] | --triage-questions [--json] | --apply --transition <source>:<task> [--json] | --apply --persist <attempt> [--json] | --apply --pull-request <attempt> [--title <title>] [--json] | --apply --log <attempt> [--json]"
+argument-hint: "[--task <source>:<id> [--stage <stage>]] [--force] [--json] [--apply] [--no-handoff] | --apply --discard <attempt> [--release-workspace] [--json] | --bootstrap-labels [--json] | --triage-questions [--json] | --apply --transition <source>:<task> [--from <stage>] [--json] | --apply --persist <attempt> [--json] | --apply --pull-request <attempt> [--title <title>] [--json] | --apply --log <attempt> [--json]"
 allowed-tools: Bash(bun:*)
 ---
 
@@ -29,7 +29,8 @@ task in `proposal` it moves to `implement` itself, one in `implement` to
 `verify` and one in `verify` to `code-review`, with no question. A task in
 `implement` or `verify` whose workspace has unchecked tasks of its change,
 uncommitted changes or unpushed commits is refused, with no question, and exit
-code 3. `--persist` saves a `grill-me`, `proposal`, `implement` or `verify`
+code 3. With `--from <stage>`, a task not in that stage is refused the same way,
+so a second run cannot leave the stage a first one reached. `--persist` saves a `grill-me`, `proposal`, `implement` or `verify`
 attempt's stage summary, and a grill's definition, to its task and writes the
 receipt the transition waits for, running no step. `--pull-request`
 finds or opens the draft pull request of an attempt's workspace branch and

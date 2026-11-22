@@ -144,6 +144,7 @@ export function context(
             stage: undefined,
             discard: undefined,
             transition: undefined,
+            from: undefined,
             persist: undefined,
             pullRequest: undefined,
             title: undefined,

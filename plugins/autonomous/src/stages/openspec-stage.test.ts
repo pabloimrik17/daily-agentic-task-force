@@ -138,7 +138,8 @@ describe("transition steps", () => {
         expect(text).toContain("moves the task to `code-review` itself");
         expect(text).toContain("labels it lists show `code-review` and no `verify`");
         expect(text).toContain("the task stays in `verify`");
-        expect(text).toContain("--transition linear:DOT-121`");
+        expect(text).toContain("--transition linear:DOT-121 --from verify`");
+        expect(text).toContain("refused because the task is no longer in `verify`");
         expect(text).toContain("--log linear:DOT-121:verify:1`");
         expect(text).not.toContain("implement");
     });
@@ -149,6 +150,7 @@ describe("transition steps", () => {
         expect(text).toContain(
             "asks the human whether to approve the verification and move the task to `code-review`",
         );
+        expect(text).toContain("--transition linear:DOT-121 --from verify`");
         expect(text).not.toContain("implement");
     });
 });

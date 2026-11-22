@@ -1407,6 +1407,15 @@ describe("main --transition", () => {
         expect(calls).toEqual(["beads:readTask:B-1"]);
     });
 
+    it("passes --from on: a task not in the stage named is refused with exit 3", async () => {
+        const { d, out, calls } = transitionDeps(["personal", "grill-me"]);
+        expect(await main(transitionArgs("--from", "proposal", "--json"), d)).toBe(3);
+        expect(documentOf(out).reasons).toEqual([
+            "beads B-1 is in grill-me, not proposal (labels [personal, grill-me])",
+        ]);
+        expect(calls).toEqual(["beads:readTask:B-1"]);
+    });
+
     it("takes no run lock: a lock another run holds does not stop it and is left as it was", async () => {
         const { dir: held } = heldLock();
         const lock = join(held, "run.lock");
