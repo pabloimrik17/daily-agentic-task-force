@@ -104,6 +104,7 @@ _Avoid_: agent, bot
 The reviewers one report brings together, each from its own angle, whose
 findings are pooled into that report without being judged. Its review tier
 decides which reviewers it takes.
+See the README's [review team](README.md#the-review-team).
 _Avoid_: panel, review squad
 
 **Review tier**:

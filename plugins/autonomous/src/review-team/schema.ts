@@ -66,7 +66,7 @@ export function nonEmpty(parent: Json, key: string, path: string): string {
     return value;
 }
 
-export function oneLine(parent: Json, key: string, path: string): string {
+function oneLine(parent: Json, key: string, path: string): string {
     const value = nonEmpty(parent, key, path);
     if (/[\r\n]/.test(value)) {
         throw new ParseError(`${path}.${key} must be a single line`);
@@ -159,7 +159,7 @@ const LOCATION_READERS: Readonly<
     Record<(typeof SCOPES)[number], (p: Json, path: string) => Location>
 > = { line: lineLocation, file: fileLocation, change: changeLocation };
 
-export function location(value: unknown, path: string): Location {
+function location(value: unknown, path: string): Location {
     const parent = object(value, path);
     return LOCATION_READERS[choice(parent, "scope", path, SCOPES)](parent, path);
 }
@@ -263,7 +263,7 @@ export function parseReviewerFile(input: unknown): Result<ReviewerFile> {
     return toResult(() => reviewerFile(input));
 }
 
-function engine(value: unknown, path: string): Engine {
+export function engine(value: unknown, path: string): Engine {
     const parent = object(value, path);
     rejectUnknownKeys(parent, ["tool", "version", "model", "effort", "level"], path);
     return {
@@ -328,7 +328,7 @@ function reportedDoubt(value: unknown, path: string): Doubt {
     };
 }
 
-function subject(value: unknown, path: string): Subject {
+export function subject(value: unknown, path: string): Subject {
     const parent = object(value, path);
     rejectUnknownKeys(
         parent,
@@ -346,7 +346,7 @@ function subject(value: unknown, path: string): Subject {
     };
 }
 
-function measure(value: unknown, path: string): Measure {
+export function measure(value: unknown, path: string): Measure {
     const parent = object(value, path);
     rejectUnknownKeys(parent, ["lines", "files"], path);
     return {
@@ -355,7 +355,7 @@ function measure(value: unknown, path: string): Measure {
     };
 }
 
-function tierChoice(value: unknown, path: string): TierChoice {
+export function tierChoice(value: unknown, path: string): TierChoice {
     const parent = object(value, path);
     rejectUnknownKeys(parent, ["measured", "used", "reason"], path);
     return {
@@ -380,7 +380,7 @@ function positive(parent: Json, key: string, path: string): number {
     return integerAtLeast(parent, key, path, 1);
 }
 
-function security(value: unknown, path: string): Report["security"] {
+export function security(value: unknown, path: string): Report["security"] {
     const parent = object(value, path);
     rejectUnknownKeys(parent, ["triggered", "matches"], path);
     return {

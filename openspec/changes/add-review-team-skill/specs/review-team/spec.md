@@ -103,7 +103,7 @@ The security reviewer SHALL join the team at any tier when a changed path, or an
 
 ### Requirement: A reviewer that cannot run is skipped and recorded
 
-A reviewer SHALL be skipped, never failing the review, when it cannot run. That covers a missing tool, a missing login, a rate limit, a skill shadowed by a same-named one, a repository it does not apply to, or output that fails the finding schema. The report SHALL name every skipped reviewer and its reason.
+A reviewer SHALL be skipped, never failing the review, when it cannot run. That covers a missing tool, a missing login, a rate limit, a skill shadowed by a same-named one, a repository or a base it does not apply to, or output that fails the finding schema. The report SHALL name every skipped reviewer and its reason.
 
 #### Scenario: Codex not logged in
 
@@ -119,6 +119,11 @@ A reviewer SHALL be skipped, never failing the review, when it cannot run. That 
 
 - **WHEN** the repository has no `package.json`
 - **THEN** `fallow-review` is skipped as not applicable
+
+#### Scenario: Security review on another base
+
+- **WHEN** the security trigger fires and the subject's base is not the repository's default branch
+- **THEN** `/security-review` is skipped as not applicable, because it always reviews against the default branch
 
 ### Requirement: The plugin's own reviewers are required
 

@@ -4,6 +4,7 @@
 
 export const FINDING_SCHEMA = "autonomous.finding.v1";
 export const REPORT_SCHEMA = "autonomous.review-report.v1";
+export const PLAN_SCHEMA = "autonomous.review-plan.v1";
 
 export const REVIEWER_IDS = [
     "walkthrough",
@@ -143,6 +144,36 @@ export interface SecurityMatch {
     pattern: string;
     file: string;
     line?: number; // the new-side line number, for a line match
+}
+
+export interface PlannedReviewer {
+    reviewer: ReviewerId;
+    angle: string;
+    kind: "cli" | "teammate";
+    required: boolean;
+    engine: Engine;
+    brief?: string; // a teammate's filled brief, relative to the report directory
+    output: string; // `reviewers/<id>.json`, relative to the report directory
+}
+
+export interface SkippedReviewer {
+    reviewer: ReviewerId;
+    reason: string;
+}
+
+// `plan.json`. It holds no absolute path: `run` and `collect` take the report
+// directory as `--dir` and the repository from the working directory.
+export interface Plan {
+    schema: typeof PLAN_SCHEMA;
+    createdAt: string; // ISO 8601, UTC
+    subject: Subject;
+    status: string; // `git status --porcelain` at plan time, for collect's comparison
+    measure: Measure;
+    tier: TierChoice;
+    security: { triggered: boolean; matches: SecurityMatch[] };
+    team: PlannedReviewer[];
+    skipped: SkippedReviewer[];
+    guide: { available: boolean; reason?: string }; // whether `plannotator` can validate the guide
 }
 
 export interface ReviewerOutcome {

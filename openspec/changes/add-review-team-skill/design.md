@@ -6,7 +6,7 @@ See proposal.md, "Why". The current state that shapes the approach:
 - **Configuration.** `src/config.ts` validates the user file strictly with the helpers of `src/validate.ts`. The optional blocks (`sessions`, `workspace`, `naming`, `runner`) take shipped values from `config.defaults.json` key by key (ADR 0003). The plugin has no runtime dependencies, so it has no schema library.
 - **Teammates.** Stages already have their orchestrator start Claude teammates with a model and effort of its choice. The review team's Claude reviewers are teammates of whichever session runs the skill.
 - **The external tools**, as installed on the user's machine on 2026-11-22:
-    - `codex exec review` (codex-cli 0.169) takes `--base`, `-m`, `-c model_reasoning_effort=…`, `--output-schema`, `-o` and `--ephemeral`, and posts nothing.
+    - `codex exec review` (codex-cli 0.169) takes `--base`, `-m`, `-c model_reasoning_effort=…`, `-o` and `--ephemeral`, and posts nothing. It accepts `--output-schema` and ignores it.
     - `coderabbit review --agent` (0.9.5) emits NDJSON with severities `critical`…`none`, and takes `--base` and `--base-commit`.
     - The built-in `/code-review` takes `[low|medium|high|xhigh|max] [<branch>|<path>]`, posts nothing without `--comment`, fixes nothing without `--fix`, and reports `important`, `pre_existing` and `nit`.
     - The built-in `/security-review` reports `High`, `Medium` and `Low` and drops findings with a confidence below 8.
@@ -57,7 +57,7 @@ A teammate or parser writes `nativeSeverity` in the reviewer's own words. `colle
 
 ### D4. The schema without a schema library
 
-`autonomous.finding.v1` and `autonomous.review-report.v1` are TypeScript types validated with `src/validate.ts`, as the configuration is. Codex needs a JSON Schema file for `--output-schema`, so `src/review-team/codex-output.schema.json` ships with the plugin. A test runs the fixtures of the Codex parser through both the JSON Schema and the TypeScript validator, so the two cannot disagree silently.
+`autonomous.finding.v1` and `autonomous.review-report.v1` are TypeScript types validated with `src/validate.ts`, as the configuration is. No JSON Schema file ships. The first design gave Codex one through `--output-schema`, but `codex exec review` ignores that flag (codex-cli 0.169.0, checked with a real run on 2026-11-22), and `--json` carries the same text inside an event. Codex's review therefore reaches the schema through a parser of its text, like any other tool output.
 
 Locations are `{ scope: "line", file, startLine, endLine, side }`, `{ scope: "file", file }` or `{ scope: "change" }`, with repository-relative paths. Ids are `<reviewer>-<n>`.
 
@@ -83,6 +83,7 @@ Each check is a read-only command or a file check, with a short timeout:
 | `codex` | `codex` is on the PATH and `codex login status` exits 0 |
 | `coderabbit` | `coderabbit auth status --agent` reports authenticated |
 | `code-review`, `security-review` | no skill directory with that name in `~/.claude/skills` or the repository's `.claude/skills` (shadowing) |
+| `security-review` | also: the subject's base is the repository's default branch, because the built-in takes no base and always reviews against `origin/HEAD` |
 | `fallow-review` | a `package.json` at the root, `fallow` on the PATH, and the `fallow` plugin installed (through `stages/skills.ts`) |
 | `walkthrough`, `tests-lens` | always available; the walkthrough's guide also needs `plannotator` on the PATH |
 
@@ -90,9 +91,9 @@ A failure that only shows at run time also makes a reviewer skipped, with its re
 
 ### D8. The CLI reviewers
 
-`run codex` calls `codex exec review --base <merge-base> -c model_reasoning_effort=<effort> --output-schema <schema> -o <dir>/raw/codex.json --ephemeral`, and adds `-m` only when the plan names a model. `run coderabbit` calls `coderabbit review --agent --base-commit <merge-base>` and keeps the NDJSON. Each run saves the tool's version (`--version`), its stdout and its stderr under `raw/` for diagnosis, then parses into `reviewers/<id>.json`. A parse failure turns into the reviewer's skip reason. Before implementing, the exact flags are checked against each tool's `--help`, and any that differ are recorded in this design.
+`run codex` calls `codex exec review --base <merge-base> -c model_reasoning_effort=<effort> -o <dir>/raw/codex.last-message.txt --ephemeral`, and adds `-m` only when the plan names a model. The last message is text of a fixed form: a summary, then one entry per finding, `- [P<n>] <title> — <absolute path>:<start>-<end>` followed by an indented paragraph. The parser reads those entries, makes each path relative to the repository, and skips the reviewer when an entry does not fit the form. `run coderabbit` calls `coderabbit review --agent --committed --base-commit <merge-base>` and keeps the NDJSON; `--committed` keeps uncommitted changes out, as the subject does. Each run saves the tool's version (`--version`), its stdout and its stderr under `raw/` for diagnosis, then parses into `reviewers/<id>.json`. A parse failure turns into the reviewer's skip reason. Before implementing, the exact flags are checked against each tool's `--help`, and any that differ are recorded in this design.
 
-Checked on 2026-11-22 against `codex-cli 0.169.0` and `coderabbit 0.9.5`. Every flag above exists under that name. `-o` is the short form of `--output-last-message`, and `--base` is documented as taking a branch, so the runner's fixture run confirms that it takes the merge base's commit.
+Checked on 2026-11-22 against `codex-cli 0.169.0` and `coderabbit 0.9.5`. Every flag above exists under that name. `-o` is the short form of `--output-last-message`, and `--base` is documented as taking a branch, and the fixture run confirmed that it takes the merge base's commit. A model that the account does not support makes Codex exit 1 with its own message, which becomes the skip reason; the shipped team names no model.
 
 ### D9. The walkthrough writes a Plannotator guide
 

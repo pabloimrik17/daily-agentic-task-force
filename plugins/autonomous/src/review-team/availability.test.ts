@@ -112,13 +112,17 @@ describe("checkAvailability", () => {
         it("Built-in shadowed: a user skill directory names itself as the shadow", async () => {
             const shadow = `/home/u/.claude/skills/${id}`;
             const result = await checkAvailability(id, deps({ exists: (p) => p === shadow }));
-            expect(reasonOf(result)).toBe(`a skill named ${id} in ${shadow} shadows the built-in`);
+            expect(reasonOf(result)).toBe(
+                `a skill named ${id} in ~/.claude/skills/${id} shadows the built-in`,
+            );
         });
 
         it("Built-in shadowed: a repository skill directory counts too", async () => {
             const shadow = `/work/repo/.claude/skills/${id}`;
             const result = await checkAvailability(id, deps({ exists: (p) => p === shadow }));
-            expect(reasonOf(result)).toContain(shadow);
+            expect(reasonOf(result)).toBe(
+                `a skill named ${id} in ./.claude/skills/${id} shadows the built-in`,
+            );
         });
     });
 

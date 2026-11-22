@@ -8,7 +8,7 @@ The code review stage (DOT-164) needs a procedure for the report of its adversar
 - **The reviewers**, each a registry entry with an angle and an engine:
     - **walkthrough** (comprehension, Claude): drafts the walkthrough of the change as a Plannotator guide and reports what it cannot explain;
     - **built-in `/code-review`** (correctness, at a level set by the tier);
-    - **Codex** (correctness from another model family, `codex exec review` with this change's output schema);
+    - **Codex** (correctness from another model family, `codex exec review`, whose text a parser reads);
     - **CodeRabbit CLI** (what the CodeRabbit bot would say, earlier);
     - **`fallow-review`** (structure: boundaries, public API, dependencies; TypeScript and JavaScript repositories only);
     - **tests and silent failures** (a lens of the plugin's own);

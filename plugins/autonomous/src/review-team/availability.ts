@@ -57,13 +57,16 @@ async function checkCoderabbit(deps: AvailabilityDeps): Promise<Availability> {
     return isAuthenticated(result.stdout) ? AVAILABLE : skip("not logged in");
 }
 
+// The reason names the directory as a person writes it, never as an absolute path: it is copied
+// into the plan and the report, which hold no path of the machine.
 function checkShadow(id: ReviewerId, deps: AvailabilityDeps): Availability {
-    const shadows = [deps.home, deps.repoRoot]
-        .map((root) => join(root, ".claude", "skills", id))
-        .filter(deps.exists);
-    return shadows.length === 0
+    const shadow = [
+        { root: deps.home, shown: "~" },
+        { root: deps.repoRoot, shown: "." },
+    ].find(({ root }) => deps.exists(join(root, ".claude", "skills", id)));
+    return shadow === undefined
         ? AVAILABLE
-        : skip(`a skill named ${id} in ${shadows[0]} shadows the built-in`);
+        : skip(`a skill named ${id} in ${shadow.shown}/.claude/skills/${id} shadows the built-in`);
 }
 
 async function checkFallow(deps: AvailabilityDeps): Promise<Availability> {

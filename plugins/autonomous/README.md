@@ -4210,6 +4210,190 @@ and its reproduction and, for a fixed one, the fix's commit and its fix check
 verdicts. What the caller writes for a person or the next agent is built from
 the record.
 
+## The review team
+
+The review team is several reviewers, each judging a change from its own angle.
+Their findings and doubts are pooled into one report of a fixed shape, without
+being judged. It ships as a skill of this plugin, `autonomous:review-team`, so a
+person can run it by hand in any repository, and a stage can follow it for the
+report of a code review.
+
+The skill applies only when it is asked for by name, or when a stage or another
+skill says to follow it. Its description never claims a request to review a pull
+request, a change or code in general. Two eval cases cover this: in
+`plugins/autonomous/evals/review-team-named` a session is asked for the review
+team by name and the skill fires, and in
+`plugins/autonomous/evals/review-team-negative` a session is asked to review a
+pull request and it does not.
+
+A tool of the plugin, `src/review-team/cli.ts`, does everything code can do:
+it plans the team, runs the reviewers that are command line tools and collects
+the report. The session starts the reviewers that are Claude teammates, waits
+for all of them and summarises the report. It has three commands:
+
+```bash
+bun plugins/autonomous/src/review-team/cli.ts plan [--base <ref>] [--tier <S|M|L> --reason <text>] [--dir <dir>]
+bun plugins/autonomous/src/review-team/cli.ts run <id> --dir <dir>
+bun plugins/autonomous/src/review-team/cli.ts collect --dir <dir>
+```
+
+It exits 0 when it is done, 1 on an error and 2 when it refuses a request.
+
+### The subject
+
+The subject is the current branch's committed changes: the diff from the merge
+base of `HEAD` with a base ref, to `HEAD`. The base is the one `--base` gives or,
+without it, the base of the branch's open pull request or, when there is none,
+the repository's default branch. Uncommitted changes are left out of the review.
+The plan records that the tree was dirty, and the summary says so.
+
+### The reviewers
+
+| Reviewer          | Angle                                      | Engine                                    |
+| ----------------- | ------------------------------------------ | ----------------------------------------- |
+| `walkthrough`     | comprehension                              | a Claude teammate                         |
+| `code-review`     | correctness                                | Claude Code's built-in `/code-review`     |
+| `codex`           | correctness                                | the Codex CLI, another model family       |
+| `coderabbit`      | what the CodeRabbit bot would say, earlier | the CodeRabbit CLI                        |
+| `fallow-review`   | structure                                  | the `fallow:fallow-review` skill          |
+| `tests-lens`      | tests and silent failures                  | a Claude teammate                         |
+| `security-review` | security                                   | Claude Code's built-in `/security-review` |
+
+`fallow-review` applies only to TypeScript and JavaScript repositories. The
+Codex CLI runs a review of the subject. The `code-review` reviewer is skipped as
+shadowed while a user or project skill named `code-review` is installed, and so
+is `security-review` while one named `security-review` is.
+
+### The tiers
+
+Code measures the subject's diff with `git diff --numstat`, counting added and
+deleted lines and changed files. It sets the review tier: `S` when the diff
+changes at most 150 lines and 5 files, else `M` when it changes at most 600
+lines and 20 files, else `L`. Lockfiles (`bun.lock`, `bun.lockb`,
+`package-lock.json`, `pnpm-lock.yaml`, `yarn.lock`, `Cargo.lock`, `mise.lock`)
+and `openspec/changes/**` are left out of both counts. A binary file counts as
+one file and no lines. The thresholds come from the configuration.
+
+A caller can raise the tier with `--tier`, which needs a `--reason`. A request
+for a tier below the measured one is refused with exit 2 and nothing runs. The
+plan and the report record the measured tier, the tier used and the reason.
+
+Each tier takes the reviewers the configuration lists. The shipped team, before
+the calibration, is:
+
+| Tier | Reviewers                                                                     |
+| ---- | ----------------------------------------------------------------------------- |
+| `S`  | `walkthrough`, `code-review` at `medium`, `codex` at `medium` effort          |
+| `M`  | `S`'s, plus `coderabbit` and `fallow-review`, with `code-review` at `high`    |
+| `L`  | `M`'s, plus `tests-lens`, with `code-review` at `xhigh` and `codex` at `high` |
+
+The calibration sets the shipped table. This table is the one before it.
+
+### The security trigger
+
+`security-review` joins the team at any tier when a changed path, or an added
+line, matches one of the configured security patterns. The report names the
+patterns that matched and where.
+
+### Reviewers that cannot run
+
+A reviewer is skipped, and never fails the review, when it cannot run. The
+causes are:
+
+- a missing tool, or a missing login;
+- a rate limit;
+- a skill that shadows a built-in of the same name;
+- a repository it does not apply to, such as `fallow-review` without a
+  `package.json`;
+- a timeout, or a non-zero exit of a command line reviewer;
+- output that fails the finding schema, in which case none of its findings
+  reach the report.
+
+The report names every skipped reviewer and its reason. A skipped reviewer is
+not replaced.
+
+`walkthrough` and `tests-lens` are required: they need only Claude and the
+plugin, so they run whenever their tier calls for them. When a required
+reviewer fails, for example because its teammate ends without writing its file,
+the report records an error naming it instead of producing a partial report
+silently. A built-in reviewer is not required.
+
+### Findings, severities and doubts
+
+Every finding follows `autonomous.finding.v1`: an id, its kind, its reviewer,
+its engine, a one-line title, a statement, its location (a line range, a file or
+the whole change), its evidence, its Conventional Comments label (`issue` or
+`suggestion`), its native severity and its severity, and optionally a suggested
+fix. Each reviewer's output is validated when the report is collected.
+
+Code sets the severity from the reviewer's native one, through a fixed table
+onto `CRITICAL`, `WARNING` and `SUGGESTION`. Nothing re-rates it. `walkthrough`
+and `tests-lens` report on that scale directly.
+
+| Reviewer          | `CRITICAL`  | `WARNING`      | `SUGGESTION`                       |
+| ----------------- | ----------- | -------------- | ---------------------------------- |
+| `code-review`     | `important` | `pre_existing` | `nit`                              |
+| `codex`           | `P0`, `P1`  | `P2`           | `P3`                               |
+| `coderabbit`      | `critical`  | `major`        | `minor`, `trivial`, `info`, `none` |
+| `security-review` | `High`      | `Medium`       | `Low`                              |
+| `fallow-review`   | `block`     | `address`      | `consider`, `fyi`                  |
+
+A native severity a table does not list fails the validation, and the reviewer
+is skipped with that reason.
+
+What a reviewer cannot judge without knowing the intent is a doubt: kind
+`doubt`, the label `question`, a location and a statement, and no severity. The
+report lists doubts apart from findings.
+
+### Exact duplicates
+
+Findings with the same file, the same line range and the same title, compared
+case-insensitively and ignoring whitespace, are grouped into one entry that
+names every reviewer that reported it. Findings that differ in any of these stay
+separate. Merging by root cause is the finding triage's work.
+
+### The walkthrough guide
+
+`walkthrough` drafts the change's walkthrough as a Plannotator guide: a title,
+an intent and sections that place every changed file. `collect` validates the
+guide against the diff's patch. When Plannotator is not available or the guide
+fails validation, the report records that no guide exists and why. The
+walkthrough's findings and doubts count either way.
+
+### The report
+
+The report directory is the one `--dir` names or, without it, a new directory
+outside the repository. It holds:
+
+- `plan.json`, the plan: the subject, the tiers, the team and the skipped
+  reviewers;
+- `briefs/`, a filled brief for each teammate;
+- `reviewers/<id>.json`, each reviewer's findings;
+- `raw/`, each command line reviewer's version, output and errors, for
+  diagnosis;
+- `walkthrough.json`, `walkthrough.patch` and `walkthrough.html`, the guide, the
+  patch it was validated against and the page validation leaves;
+- `report.json`, which follows `autonomous.review-report.v1`: the subject, the
+  measured and used tiers, every reviewer with its outcome, reason, engine and
+  duration, the findings, the doubts and the guide;
+- `report.md`, a short summary for a person.
+
+By hand, the session also summarises the report in the chat: the tier, who ran
+and who was skipped, the findings by severity and the doubts.
+
+### It only reports
+
+The review team never changes a file of the subject, triages a finding, merges
+findings by root cause, refutes one, fixes one, or posts anything to a pull
+request or a tracker. Those are the work of the
+[adversarial review](#the-adversarial-review)'s finding triage, after the report.
+
+### Configuration
+
+The optional `review` block of the configuration file sets the thresholds, the
+reviewers of each tier with their model, effort and level, and the security
+patterns. See [Optional blocks](#optional-blocks).
+
 ## Discard mode
 
 ```text

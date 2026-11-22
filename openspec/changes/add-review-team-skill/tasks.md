@@ -15,7 +15,7 @@
 
 - [x] 2.1 Add the types and validators of `autonomous.finding.v1` and `autonomous.review-report.v1` in `src/review-team/` on `src/validate.ts` (design D3, D4): the finding and doubt kinds, the three location scopes, the engine with its version, the label, the native severity and the optional suggested fix. Verify with tests for each scenario of "The finding schema" and "Doubts are reported apart", and for a finding missing its location being rejected with its path.
 - [x] 2.2 Add the severity tables of the registry's reviewers and the identity table of the plugin's own reviewers (design D3). Verify with tests for each scenario of "Severity comes from fixed tables", including an unknown native severity failing validation.
-- [x] 2.3 Ship `src/review-team/codex-output.schema.json` for Codex's `--output-schema` (design D4). Verify with a test that runs the same fixtures through the JSON Schema and the TypeScript validator and expects the same verdicts.
+- [x] 2.3 ~~Ship `src/review-team/codex-output.schema.json` for Codex's `--output-schema`.~~ Withdrawn on 2026-11-22: `codex exec review` ignores `--output-schema` (design D4), so no JSON Schema ships. The file written for this task is removed in 6.2, whose contract test covers the parser of Codex's text.
 
 ## 3. Configuration
 
@@ -39,12 +39,12 @@
 ## 6. The CLI reviewers
 
 - [x] 6.1 Check the flags design D8 uses against `codex exec review --help` and `coderabbit review --help` on the installed versions. Record any difference in design.md before writing the runners. Verify that design.md names the versions it was checked against.
-- [ ] 6.2 Write the Codex runner and parser. Save the version, stdout, stderr and raw output under `raw/`, and treat a timeout, a non-zero exit or a parse failure as a skip with its reason. Record a fixture from one real run on a small throwaway repository. Verify with a contract test on the recorded fixture, and with tests for each skip reason on fakes.
-- [ ] 6.3 Write the CodeRabbit runner and NDJSON parser, with its rate-limit message as a skip reason. Record a fixture from one real run. Verify with a contract test on the recorded fixture, and with the scenario "Changed tool output": one unreadable line skips the reviewer and reports none of its lines.
+- [x] 6.2 Write the Codex runner and parser. Save the version, stdout, stderr and raw output under `raw/`, and treat a timeout, a non-zero exit or a parse failure as a skip with its reason. Record a fixture from one real run on a small throwaway repository. Verify with a contract test on the recorded fixture, and with tests for each skip reason on fakes.
+- [x] 6.3 Write the CodeRabbit runner and NDJSON parser, with its rate-limit message as a skip reason. Record a fixture from one real run. Verify with a contract test on the recorded fixture, and with the scenario "Changed tool output": one unreadable line skips the reviewer and reports none of its lines.
 
 ## 7. Collect and report
 
-- [ ] 7.1 Write `collect` (design D3, D10):
+- [x] 7.1 Write `collect` (design D3, D10):
     - validate each `reviewers/<id>.json`;
     - derive each severity;
     - group exact duplicates;
@@ -52,9 +52,9 @@
     - report an error when the tree or `HEAD` changed since the plan.
 
     Verify with tests for "Two reviewers, same finding", "Same place, different claim", "Required reviewer fails" and "A review ends".
-- [ ] 7.2 Validate the walkthrough's guide against the subject's patch with `plannotator guide export`, keeping the HTML page (design D9). Record a missing Plannotator or a failed validation as "no guide" with its reason. Verify with tests on a fake `plannotator` for "Guide written" and "Plannotator missing", and that a guide placing a file twice is recorded as invalid.
-- [ ] 7.3 Write `report.json` and `report.md`, in the directory the caller names or, by default, a new one under the system temp directory (design D11). Verify with tests for "Run by hand" and "Run for a stage", and that no path in the report is absolute or names the home directory.
-- [ ] 7.4 Wire `src/review-team/cli.ts`: `plan`, `run <id>` and `collect`, with a usage text and exit codes 0, 1 (an error) and 2 (a refused request). Verify with `cli.test.ts`: every command on fakes, an unknown reviewer, and a lowered tier exiting 2.
+- [x] 7.2 Validate the walkthrough's guide against the subject's patch with `plannotator guide export`, keeping the HTML page (design D9). Record a missing Plannotator or a failed validation as "no guide" with its reason. Verify with tests on a fake `plannotator` for "Guide written" and "Plannotator missing", and that a guide placing a file twice is recorded as invalid.
+- [x] 7.3 Write `report.json` and `report.md`, in the directory the caller names or, by default, a new one under the system temp directory (design D11). Verify with tests for "Run by hand" and "Run for a stage", and that no path in the report is absolute or names the home directory.
+- [x] 7.4 Wire `src/review-team/cli.ts`: `plan`, `run <id>` and `collect`, with a usage text and exit codes 0, 1 (an error) and 2 (a refused request). Verify with `cli.test.ts`: every command on fakes, an unknown reviewer, and a lowered tier exiting 2.
 
 ## 8. The skill
 
@@ -64,8 +64,8 @@
     - The body runs `plan`, then one fresh read-only teammate per Claude reviewer with the plan's model and effort, then the CLI reviewers in the background, then `collect`, then the summary.
 
     Verify with a test that reads the body and the briefs and finds each rule: only report, change no file, report doubts apart, write the schema to the named path, nothing posted. Also run `bun run lint:markdownlint`.
-- [ ] 8.2 Add the eval cases `evals/review-team-named` and `evals/review-team-negative`, on the model of the adversarial review's. Verify by running both with the local eval suite: the skill fires when named and does not fire on "review this pull request".
-- [ ] 8.3 Document the review team in the README, in its own section: reviewers, tiers, skipped reviewers, the report and the configuration. Link it from the glossary's **Review team**. Verify with `bun run lint:markdownlint`.
+- [x] 8.2 Add the eval cases `evals/review-team-named` and `evals/review-team-negative`, on the model of the adversarial review's. Verify by running both with the local eval suite: the skill fires when named and does not fire on "review this pull request".
+- [x] 8.3 Document the review team in the README, in its own section: reviewers, tiers, skipped reviewers, the report and the configuration. Link it from the glossary's **Review team**. Verify with `bun run lint:markdownlint`.
 
 ## 9. Integration and calibration
 
