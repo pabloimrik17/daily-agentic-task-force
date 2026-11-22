@@ -61,6 +61,10 @@ Results go to `openspec/changes/add-verification-stage/evidence/verification-ver
 
     Clean up the sandbox tasks and pull requests afterwards.
 
+## 12. Fixes from the pull request review
+
+- [x] 12.1 The DOT-121 run wrote `stage-summary.md` before the human answered the outcome review (evidence 11.2, F3). In the shared closing steps (`stages/openspec-stage.ts`, `closingSection`), tell the agent to write the stage summary only once every step above is done, never before, not even while it waits for the human; the wording reaches proposal preparation and the implementation stage too. Verify with the scenario "Summary written after the review" of the verification-stage delta in `verify.test.ts`, every other stage test unchanged, and update the README's three closing lists to match.
+
 ## Workflow follow-up
 
 - Commit as `feat(autonomous): …`, a minor with no `BREAKING CHANGE` footer, excluding `bun.lock`.

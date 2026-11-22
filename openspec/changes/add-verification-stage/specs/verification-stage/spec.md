@@ -219,6 +219,11 @@ The prompt SHALL tell the agent to end the stage in this order: confirm the chec
 - **WHEN** the human answers "Later" to the approval question
 - **THEN** the prompt's order leaves the entry unpublished, the result marker unwritten and the session open
 
+#### Scenario: Summary written after the review
+
+- **WHEN** an `HITL` verification prompt is written
+- **THEN** it tells the agent to write `stage-summary.md` only once the review with the human is over, never before it, not even while it waits for the human's answer
+
 #### Scenario: Transition refused again, AFK
 
 - **WHEN** the transition of an `AFK` task is refused a second time
