@@ -25,7 +25,7 @@ The skill SHALL take from its caller: the subject of the review, the references 
 #### Scenario: Verification as caller
 
 - **WHEN** the verification stage inlines the skill
-- **THEN** its own prompt supplies the implementation as subject, the proposal and the definition as references, the verify workflow as the report's procedure, `CRITICAL` as the floor, code review and QA as later reviews, and the attempt's directory for the record
+- **THEN** its own prompt supplies the implementation as subject, the proposal and the definition as references, the verify workflow as the report's procedure, every finding of the verify workflow at or above the floor and `CRITICAL` as the floor for the rest, code review and QA as later reviews, and the attempt's directory for the record
 
 ### Requirement: The phases
 
@@ -80,12 +80,22 @@ The orchestrator SHALL make the reported findings its own: it MAY merge duplicat
 
 ### Requirement: The severity floor
 
-A finding at or above the caller's severity floor SHALL be sent only to fix, and SHALL leave the review unfixed only when the refutation shows it does not hold.
+A finding at or above the caller's severity floor SHALL be sent only to fix, and SHALL leave the review unfixed only when the refutation shows it does not hold. The caller MAY set the floor by where a finding comes from, and MAY name the findings that go to a later review whatever their severity: a finding the caller passes on SHALL go to that later review, and the floor SHALL hold for every other finding.
 
 #### Scenario: Critical finding
 
 - **WHEN** the report holds a `CRITICAL` finding and the floor is `CRITICAL`
 - **THEN** the finding triage sends it to fix
+
+#### Scenario: Floor set by source
+
+- **WHEN** the caller puts every finding of its procedure at or above the floor, and the procedure reports a `SUGGESTION`
+- **THEN** the finding triage sends it to fix
+
+#### Scenario: Passed on whatever its severity
+
+- **WHEN** the caller passes on the findings that belong to a later review, and such a finding is `CRITICAL`
+- **THEN** the finding triage passes it on to that review, not to fix
 
 ### Requirement: A human changes the finding triage
 
@@ -110,14 +120,33 @@ Teammates SHALL try to refute each finding sent to fix or to defer; findings pas
 - **WHEN** the refutation finds the requirement implemented under another name
 - **THEN** the finding does not survive, and the record says why
 
+### Requirement: An unfixed finding's test stays out of the commits
+
+A reproduction test of a finding that is not fixed, refuted or deferred, SHALL NOT reach a commit: once the record holds its path and its text, the orchestrator SHALL remove it from the working tree.
+
+#### Scenario: Deferred finding's test
+
+- **WHEN** a deferred finding survives the refutation with a failing test
+- **THEN** the record holds the test's path and text, the test is removed from the working tree, and no commit holds it
+
+#### Scenario: Refuted finding's test
+
+- **WHEN** a refutation leaves a test that does not fail
+- **THEN** the finding does not survive, the record holds the test's path and text, and the test is removed from the working tree
+
 ### Requirement: The fix
 
-A teammate SHALL fix each surviving finding sent to fix, and SHALL NOT change its reproduction test. The test SHALL stay with the fix as a regression test.
+A teammate SHALL fix each surviving finding sent to fix, and SHALL NOT change its reproduction test. The test SHALL stay with the fix as a regression test. The fixes SHALL run one at a time: a fix, its fix checks and the commit of an accepted fix SHALL end before the next fixer starts.
 
 #### Scenario: Reproduction test kept
 
 - **WHEN** a finding's reproduction is a failing test
 - **THEN** the fix leaves that test unchanged and it is committed with the fix
+
+#### Scenario: Two findings to fix
+
+- **WHEN** two surviving findings are sent to fix
+- **THEN** the second fixer starts only once the first fix has ended its fix checks, and is committed when accepted, so each fix check judges a tree that holds no other fix
 
 ### Requirement: The fix check
 
@@ -135,7 +164,7 @@ Teammates SHALL judge each fix: its reproduction no longer holds, a reproduction
 
 ### Requirement: Deferred findings become follow-ups
 
-A deferred finding that survives the refutation SHALL become a proposed follow-up, with a title, its reason and the finding it comes from. Whether a follow-up is created, and where, SHALL be the caller's to decide.
+A deferred finding that survives the refutation SHALL become a proposed follow-up, with a title, its reason, the finding it comes from and its reproduction. Whether a follow-up is created, and where, SHALL be the caller's to decide.
 
 #### Scenario: Deferred finding survives
 

@@ -4,7 +4,7 @@
 
 ### Requirement: Transition mode
 
-With `--transition <source>:<task>`, the run SHALL run no step: it reads the task and acts by the stage label it carries. For `grill-me` it emits a handoff with the transition question and exits 0. For `proposal`, `implement` or `verify` with `HITL` it emits a handoff with the approval question and exits 0. For `proposal`, `implement` or `verify` with `AFK` it applies the transition to the next stage, `implement`, `verify` or `code-review`, itself, reads it back, emits no handoff and exits 0 when applied and 3 otherwise. The mode SHALL require `--apply` and MAY be combined with `--json` only. Any other combination, or a value without `:` or with an unknown source, is a usage error. A task in none of these stages, a task in `proposal`, `implement` or `verify` whose autonomy is missing or in conflict, a task from a disabled source, or one that cannot be read SHALL be reported with the reason, with no handoff, and exit code 3.
+With `--transition <source>:<task>`, the run SHALL run no step: it reads the task and acts by the stage label it carries. For `grill-me` it emits a handoff with the transition question and exits 0. For `proposal`, `implement` or `verify` with `HITL` it emits a handoff with the approval question and exits 0. For `proposal`, `implement` or `verify` with `AFK` it applies the transition to the next stage, `implement`, `verify` or `code-review`, itself, reads it back, emits no handoff and exits 0 when applied and 3 otherwise. The mode SHALL require `--apply` and MAY be combined with `--from` and `--json` only. Any other combination, or a value without `:` or with an unknown source, is a usage error. `--from <stage>` names the stage the caller expects the task to leave, `grill-me`, `proposal`, `implement` or `verify`: a task in another stage SHALL be reported with its labels, with no handoff and nothing written, and exit code 3. `--from` without `--transition`, with any other value, or given twice is a usage error. A task in none of these stages, a task in `proposal`, `implement` or `verify` whose autonomy is missing or in conflict, a task from a disabled source, or one that cannot be read SHALL be reported with the reason, with no handoff, and exit code 3.
 
 #### Scenario: Task in grill-me
 
@@ -45,6 +45,21 @@ With `--transition <source>:<task>`, the run SHALL run no step: it reads the tas
 
 - **WHEN** the run is invoked with `--apply --transition linear:DOT-110` and DOT-110 carries `personal`, `AFK` and `code-review`
 - **THEN** the report says DOT-110 is in none of `grill-me`, `proposal`, `implement` and `verify`, carries no handoff, and the process exits with code 3
+
+#### Scenario: Second run after a lost read-back
+
+- **WHEN** the run is invoked with `--apply --transition linear:DOT-121 --from implement` and DOT-121 carries `personal`, `AFK` and `verify`
+- **THEN** nothing is written, the report says DOT-121 is in `verify`, not `implement`, with its labels, carries no handoff, and the process exits with code 3
+
+#### Scenario: From names the stage the task is in
+
+- **WHEN** the run is invoked with `--apply --transition linear:DOT-121 --from verify`, DOT-121 carries `personal`, `AFK` and `verify`, and its work is finished
+- **THEN** DOT-121 carries `personal`, `AFK` and `code-review`, as without `--from`, and the process exits with code 0
+
+#### Scenario: From without transition
+
+- **WHEN** the run is invoked with `--apply --from verify` and without `--transition`
+- **THEN** the run prints a usage message and exits with code 1
 
 #### Scenario: implement not bootstrapped
 
