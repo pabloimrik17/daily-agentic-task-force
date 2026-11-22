@@ -728,6 +728,18 @@ describe("The verification closing order", () => {
         expect(inOrder(closing, [rule, "--log linear:DOT-121:verify:1"])).toBe(true);
     });
 
+    it("Summary written after the review: the HITL prompt writes stage-summary.md only once the review is over", () => {
+        const closing = section(prompt({ autonomy: "HITL" }), "Closing");
+
+        expect(
+            inOrder(closing, [
+                "2. Review the outcome with the human",
+                `3. Write the stage summary to \`${stageSummaryPath(DIR)}\` (see the stage summary section) only now, once every step above is done: never before, not even while you wait for the human.`,
+                "`/autonomous:run --apply --persist linear:DOT-121:verify:1`",
+            ]),
+        ).toBe(true);
+    });
+
     it("Transition refused again, AFK: publishes a blocked entry, writes no marker and stops, so the task keeps verify", () => {
         const closing = section(prompt({ autonomy: "AFK" }), "Closing");
 

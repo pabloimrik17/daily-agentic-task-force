@@ -3313,7 +3313,8 @@ one step fewer and the numbering that follows is shifted by one.
    which is [pull-request mode](#pull-request-mode), with a title in the
    repository's conventions and without the task id.
 3. For `HITL`, review the proposal with the human.
-4. Write `stage-summary.md` in the attempt's directory and run
+4. Only once the steps above are done, write `stage-summary.md` in the
+   attempt's directory and run
    `/autonomous:run --apply --persist <attempt-id>`, which is
    [persist mode](#persist-mode): it posts the stage summary as a comment on
    the task. The stage summary names the pull request's URL, the OpenSpec change
@@ -3555,7 +3556,8 @@ pull-request mode: the pull request already exists.
    its `tasks.md`, that nothing is left uncommitted and that every commit is
    pushed.
 2. For `HITL`, give the human the quick look at the implementation.
-3. Write `stage-summary.md` in the attempt's directory and run
+3. Only once the steps above are done, write `stage-summary.md` in the
+   attempt's directory and run
    `/autonomous:run --apply --persist <attempt-id>`, which is
    [persist mode](#persist-mode): it posts the stage summary as a comment on the
    task. The stage summary names the pull request's URL, the OpenSpec change,
@@ -3843,7 +3845,8 @@ no pull-request mode: the pull request already exists.
 1. Confirm that every check passes, that nothing is left uncommitted and that
    every commit is pushed.
 2. For `HITL`, review the outcome with the human.
-3. Write `stage-summary.md` in the attempt's directory and run
+3. Only once the steps above are done, write `stage-summary.md` in the
+   attempt's directory and run
    `/autonomous:run --apply --persist <attempt-id>`, which is
    [persist mode](#persist-mode): it posts the stage summary as a comment on the
    task. The stage summary names the pull request's URL, the OpenSpec change,

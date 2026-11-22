@@ -123,7 +123,7 @@ export function closingSection(paths: Paths, closing: Closing): Section {
     const { attempt, summary, entry } = paths;
     const steps = [
         ...closing.steps,
-        `Write the stage summary to \`${summary}\` (see the stage summary section), then run \`/autonomous:run --apply --persist ${attempt}\`. It posts the stage summary as a comment on the task. If it exits non-zero, do not run the transition: ${closing.onFailure}.`,
+        `Write the stage summary to \`${summary}\` (see the stage summary section) only now, once every step above is done: never before, not even while you wait for the human. Then run \`/autonomous:run --apply --persist ${attempt}\`. It posts the stage summary as a comment on the task. If it exits non-zero, do not run the transition: ${closing.onFailure}.`,
         closing.transition,
         `Write the logbook entry's body to \`${entry}\` (described below), then run \`/autonomous:run --apply --log ${attempt}\`. It publishes the entry as a comment on the pull request. If log mode rejects the body, correct \`${entry}\` as it reports and run it again.`,
         "Only once the entry is published, write the result marker.",
