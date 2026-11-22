@@ -52,9 +52,10 @@ committed on the task's branch, and the task ready for code review.
 _Avoid_: review, code review
 
 **Code review**:
-The stage that judges the quality of the code a task's implementation
-changed, not its match with the proposal. It does not exist yet.
-_Avoid_: review, verification
+The review stage that judges the quality of the code a task's implementation
+changed, not its match with the proposal, through a review team, before
+anyone outside sees the pull request. It does not exist yet.
+_Avoid_: review, verification, external review, self review
 
 **QA**:
 The stage that runs what a task delivers, when it can be run, as its end user
@@ -64,6 +65,14 @@ _Avoid_: acceptance, testing, end-to-end
 **Review stage**:
 A stage that judges what a task's implementation produced, each from its own
 angle: verification, code review and QA.
+
+**External review**:
+The stage that follows every review stage: it opens a task's pull request to
+the review bots and the human reviewers, waits for what the bots report and
+handles it through an adversarial review. It is not a review stage, since it
+judges what others found, not the work from its own angle. It does not exist
+yet.
+_Avoid_: bot review, pull request review, code review
 
 **Adversarial review**:
 The way a review stage, or any other review, handles what it finds: a
@@ -84,6 +93,44 @@ _Avoid_: triage (alone), ruling, routing
 **Finding**:
 One thing a review reports as wrong or missing, with the evidence for it.
 _Avoid_: issue, problem
+
+**Reviewer**:
+A teammate or tool that reports findings on a subject from one angle, such as
+correctness, security or structure. It only reports: it never triages,
+refutes or fixes.
+_Avoid_: agent, bot
+
+**Review team**:
+The reviewers one report brings together, each from its own angle, whose
+findings are pooled into that report without being judged. Its review tier
+decides which reviewers it takes.
+_Avoid_: panel, review squad
+
+**Review tier**:
+The size class of a change, S, M or L, measured from its diff, that decides
+which reviewers its review team takes. A caller may raise it, never lower it.
+_Avoid_: level, review size
+
+**Doubt**:
+Something a reviewer cannot judge without knowing the intent, when neither the
+definition nor the proposal settles it. It is not a finding: it has no
+reproduction, it is neither refuted nor fixed, and only the human resolves it.
+_Avoid_: question, open question
+
+**Finding thread**:
+The comment thread on a task's pull request where a published finding or
+doubt lives. It is open while someone must act on it before the merge, and
+resolved, with a reply saying how, once it is accounted for. It holds the
+finding's state: every other place that shows the finding is a view of it
+([ADR 0008](docs/adr/0008-findings-live-in-pull-request-threads.md)).
+_Avoid_: review comment, inline comment
+
+**Walkthrough**:
+The explanation of a task's pull request for the human who reviews it: the
+whole change at a glance, then a guided tour of its changes with each
+published finding at its place. Its author is also a reviewer, of
+comprehension: what it cannot explain, it reports.
+_Avoid_: guide, explainer, tour
 
 **Reproduction**:
 The evidence that a finding holds: a test that fails because of it, or the
