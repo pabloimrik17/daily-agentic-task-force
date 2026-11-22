@@ -1,8 +1,11 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 
+import type { Exec } from "../exec.ts";
 import type { LabelTriageData } from "../label-triage/step.ts";
 import { exitCodeFor } from "../report.ts";
 import type { StepResult } from "../runner.ts";
+import blockedByCut from "./readers/fixtures/github-blockedby-cut.json";
+import { githubWorkReader } from "./readers/github.ts";
 import { selectStep } from "./step.ts";
 import {
     fakeChezmoi,
@@ -145,6 +148,25 @@ describe("select: reading the tasks again", () => {
         expect(result.outcome).toBe("not-evaluable");
         expect(result.reasons).toEqual(["beads: bd list --json: bd CLI not found on PATH"]);
         expect(calls).not.toContain("linear:list");
+    });
+
+    it("is not evaluable naming the task when a GitHub blockedBy list is cut short", async () => {
+        const calls: string[] = [];
+        const exec = vi.fn<Exec>().mockResolvedValue({
+            ok: true,
+            stdout: JSON.stringify(blockedByCut),
+        });
+        const result = await selectStep.run(
+            selectContext({
+                calls,
+                readers: [githubWorkReader(exec, { enabled: true, repos: ["demo/one"] })],
+            }),
+        );
+        expect(result.outcome).toBe("not-evaluable");
+        expect(result.reasons).toEqual([
+            expect.stringContaining("demo/one#7 blockedBy has totalCount 51 but 50 nodes"),
+        ]);
+        expect(result.data.selected).toBeNull();
     });
 
     it("details each surviving task through the reader of its own source", async () => {
