@@ -119,13 +119,7 @@ describe("buildPlan", () => {
             baseSource: "default-branch",
             dirty: false,
         });
-        expect(ids(planned)).toEqual([
-            "walkthrough",
-            "code-review",
-            "codex",
-            "coderabbit",
-            "fallow-review",
-        ]);
+        expect(ids(planned)).toEqual(["walkthrough", "code-review", "codex", "coderabbit"]);
         expect(planned.skipped).toEqual([]);
         expect(planned.security).toEqual({ triggered: false, matches: [] });
         expect(planned.guide).toEqual({ available: true });
@@ -134,7 +128,13 @@ describe("buildPlan", () => {
             angle: "correctness",
             kind: "teammate",
             required: false,
-            engine: { tool: "claude-code", version: "2.1.300 (Claude Code)", level: "high" },
+            engine: {
+                tool: "claude-code",
+                version: "2.1.300 (Claude Code)",
+                model: "opus",
+                effort: "high",
+                level: "high",
+            },
             brief: "briefs/code-review.md",
             output: "reviewers/code-review.json",
         });
@@ -147,6 +147,7 @@ describe("buildPlan", () => {
             output: "reviewers/codex.json",
         });
         expect(planned.team[0]?.required).toBe(true);
+        expect(planned.team.some((reviewer) => reviewer.reviewer === "tests-lens")).toBe(false);
         expect(calls.filter((call) => call === "claude --version")).toHaveLength(1);
     });
 
@@ -176,6 +177,19 @@ describe("buildPlan", () => {
         });
     });
 
+    it("Teammate model: the walkthrough's engine names model opus and effort medium", async () => {
+        commit({ "small.ts": lines(10) });
+
+        const { plan: planned } = await plan();
+
+        expect(planned.team[0]?.engine).toEqual({
+            tool: "claude-code",
+            version: "2.1.300 (Claude Code)",
+            model: "opus",
+            effort: "medium",
+        });
+    });
+
     it("Shell execution added: the security reviewer joins, naming the pattern and the line", async () => {
         commit({ "run.ts": 'import { execFile } from "node:child_process";\nexecFile("ls");\n' });
 
@@ -191,6 +205,12 @@ describe("buildPlan", () => {
             line: 2,
         });
         expect(existsSync(join(dir, "briefs", "security-review.md"))).toBe(true);
+        expect(planned.team.at(-1)?.engine).toEqual({
+            tool: "claude-code",
+            version: "2.1.300 (Claude Code)",
+            model: "opus",
+            effort: "high",
+        });
     });
 
     describe("the security reviewer and the base", () => {

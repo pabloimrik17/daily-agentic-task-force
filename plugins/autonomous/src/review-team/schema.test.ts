@@ -122,6 +122,24 @@ describe("parseReviewerFile, doubts", () => {
         );
     });
 
+    it("Doubt without a label: passes validation and is read as a question", () => {
+        const { label: _label, ...unlabelled } = doubt();
+
+        const result = parseReviewerFile(file([unlabelled]));
+
+        expect(result.ok && result.value).toMatchObject({
+            items: [{ kind: "doubt", label: "question" }],
+        });
+    });
+
+    it("does not read a missing label of a finding as anything", () => {
+        const { label: _label, ...unlabelled } = finding();
+
+        expect(error(parseReviewerFile(file([unlabelled])))).toBe(
+            "$.items[0].label must be a string",
+        );
+    });
+
     it.each(["issue", "suggestion"])("rejects a doubt labelled %s", (label) => {
         expect(error(parseReviewerFile(file([doubt({ label })])))).toContain(
             "$.items[0].label must be one of question",
@@ -132,6 +150,58 @@ describe("parseReviewerFile, doubts", () => {
         expect(error(parseReviewerFile(file([finding({ label: "question" })])))).toContain(
             "$.items[0].label must be one of issue, suggestion",
         );
+    });
+});
+
+describe("parseReviewerFile, dropped entries", () => {
+    const dropped = {
+        entry: "- [P1] T — /elsewhere/a.ts:1-1",
+        reason: "/elsewhere/a.ts is not inside the repository",
+    };
+
+    it("accepts a dropped list of entries with a reason", () => {
+        const result = parseReviewerFile(file([], { dropped: [dropped] }));
+
+        expect(result.ok && result.value).toMatchObject({ dropped: [dropped] });
+    });
+
+    it.each([
+        ["not an array", { dropped: "x" }, "$.dropped must be an array"],
+        ["an entry that is not an object", { dropped: ["x"] }, "$.dropped[0] must be an object"],
+        [
+            "an entry with no reason",
+            { dropped: [{ entry: "x" }] },
+            "$.dropped[0].reason must be a string",
+        ],
+        [
+            "an entry with an empty reason",
+            { dropped: [{ entry: "x", reason: " " }] },
+            "$.dropped[0].reason must not be empty",
+        ],
+        [
+            "an empty entry",
+            { dropped: [{ entry: "", reason: "r" }] },
+            "$.dropped[0].entry must not be empty",
+        ],
+        [
+            "an unknown key",
+            { dropped: [{ entry: "x", reason: "r", path: "p" }] },
+            "$.dropped[0].path is not a recognised field",
+        ],
+    ])("rejects a dropped list with %s, naming its path", (_name, extra, message) => {
+        expect(error(parseReviewerFile(file([], extra)))).toBe(message);
+    });
+
+    it("rejects a dropped list in a skipped file", () => {
+        const skipped = {
+            schema: "autonomous.finding.v1",
+            reviewer: "codex",
+            outcome: "skipped",
+            reason: "r",
+            dropped: [dropped],
+        };
+
+        expect(error(parseReviewerFile(skipped))).toBe("$.dropped is not a recognised field");
     });
 });
 
@@ -320,6 +390,19 @@ const report = (extra: Obj = {}): Obj => ({
     ...extra,
 });
 
+describe("parseReport, dropped entries", () => {
+    it("accepts a reviewer outcome with its dropped entries", () => {
+        const dropped = [{ entry: "- [P1] T — /elsewhere/a.ts:1-1", reason: "r" }];
+        const input = report({
+            reviewers: [{ reviewer: "codex", outcome: "reported", required: false, dropped }],
+        });
+
+        const result = parseReport(input);
+
+        expect(result.ok && result.value.reviewers[0]).toMatchObject({ dropped });
+    });
+});
+
 describe("parseReport", () => {
     it("accepts a line finding from Codex with its derived severity and engine", () => {
         const result = parseReport(report());
@@ -457,6 +540,20 @@ describe("parseReport", () => {
             "an unknown reviewer outcome",
             { reviewers: [{ reviewer: "codex", outcome: "crashed", required: false }] },
             "$.reviewers[0].outcome must be one of reported, skipped, failed",
+        ],
+        [
+            "a reviewer outcome whose dropped entry has no reason",
+            {
+                reviewers: [
+                    {
+                        reviewer: "codex",
+                        outcome: "reported",
+                        required: false,
+                        dropped: [{ entry: "x" }],
+                    },
+                ],
+            },
+            "$.reviewers[0].dropped[0].reason must be a string",
         ],
         [
             "an absolute guide path",

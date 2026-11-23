@@ -133,6 +133,7 @@ describe("the review team skill", () => {
             "who ran, and who was skipped and why;",
             "the findings by severity, `CRITICAL` first, each with its location;",
             "the doubts, apart from the findings;",
+            "the entries a reviewer's output dropped, with their reason, if the report names any;",
             "the walkthrough's guide, or why there is none;",
             "the path of the report directory;",
             "that uncommitted changes were left out of the review",

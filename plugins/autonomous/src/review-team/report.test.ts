@@ -1,5 +1,5 @@
 import { readFileSync } from "node:fs";
-import { homedir } from "node:os";
+import { homedir, tmpdir } from "node:os";
 import { join } from "node:path";
 
 import { afterEach, describe, expect, it } from "vitest";
@@ -187,6 +187,30 @@ describe("renderReport (design D11)", () => {
         );
     });
 
+    it("names each dropped entry under its reviewer, with the reason", () => {
+        const dropped = {
+            entry: "- [P1] Await the write — /elsewhere/src/a.ts:13-13",
+            reason: "/elsewhere/src/a.ts is not inside the repository",
+        };
+        const base = report();
+        const withDropped = renderReport({
+            ...base,
+            reviewers: base.reviewers.map((outcome) =>
+                outcome.reviewer === "codex" ? { ...outcome, dropped: [dropped] } : outcome,
+            ),
+        });
+
+        expect(sectionOf(withDropped, "Reviewers")).toContain(
+            [
+                "- `codex` (codex 0.169.0, effort medium, 61.5 s)",
+                `  - dropped "${dropped.entry}": ${dropped.reason}`,
+                "",
+                "Skipped:",
+            ].join("\n"),
+        );
+        expect(sectionOf(markdown, "Reviewers")).not.toContain("dropped");
+    });
+
     it("lists the findings by severity, CRITICAL first, each with its location and reporters", () => {
         expect(sectionOf(markdown, "Findings")).toBe(
             [
@@ -292,6 +316,72 @@ describe("writeReport", () => {
             const text = readFileSync(join(dir, name), "utf8");
             expect(text, name).not.toContain(dir);
             expect(text, name).not.toContain(homedir());
+        }
+    });
+
+    it("names the home directory and the report directory of a dropped entry as ~ and .", () => {
+        const dir = directories.make("dir");
+        const base = report();
+        const quoted = report({
+            reviewers: base.reviewers.map((outcome) =>
+                outcome.reviewer === "codex"
+                    ? {
+                          ...outcome,
+                          dropped: [
+                              {
+                                  entry: `- [P1] T — ${join(homedir(), "x", "a.ts")}:1-1`,
+                                  reason: `${join(dir, "a.ts")} is not inside the repository`,
+                              },
+                          ],
+                      }
+                    : outcome,
+            ),
+        });
+
+        const written = writeReport(dir, quoted);
+
+        expect(written.ok && written.value.reviewers[0]?.dropped).toEqual([
+            { entry: "- [P1] T — ~/x/a.ts:1-1", reason: "a.ts is not inside the repository" },
+        ]);
+        for (const name of ["report.json", "report.md"]) {
+            const text = readFileSync(join(dir, name), "utf8");
+            expect(text, name).not.toContain(dir);
+            expect(text, name).not.toContain(homedir());
+        }
+    });
+
+    it("names the temp directory of a dropped entry as $TMPDIR, in both files", () => {
+        const dir = directories.make("dir");
+        const base = report();
+        const quoted = report({
+            reviewers: base.reviewers.map((outcome) =>
+                outcome.reviewer === "codex"
+                    ? {
+                          ...outcome,
+                          dropped: [
+                              {
+                                  entry: `- [P1] T — ${join(tmpdir(), "wt", "pr-94", "a.ts")}:1-1`,
+                                  reason: "/private/tmp/claude-501/-Users-someone/wt/a.ts is not inside the repository",
+                              },
+                          ],
+                      }
+                    : outcome,
+            ),
+        });
+
+        const written = writeReport(dir, quoted);
+
+        expect(written.ok && written.value.reviewers[0]?.dropped).toEqual([
+            {
+                entry: "- [P1] T — $TMPDIR/wt/pr-94/a.ts:1-1",
+                reason: "$TMPDIR/claude-501/-Users-someone/wt/a.ts is not inside the repository",
+            },
+        ]);
+        for (const name of ["report.json", "report.md"]) {
+            const text = readFileSync(join(dir, name), "utf8");
+            expect(text, name).toContain("$TMPDIR/wt/pr-94/a.ts");
+            expect(text, name).not.toContain(tmpdir());
+            expect(text, name).not.toContain("/private/tmp");
         }
     });
 

@@ -43,16 +43,25 @@ describe("loadReviewConfig", () => {
             M: { maxLines: 600, maxFiles: 20 },
         });
         expect(review?.team.S).toEqual([
-            { reviewer: "walkthrough" },
-            { reviewer: "code-review", level: "medium" },
+            { reviewer: "walkthrough", model: "opus", effort: "medium" },
+            { reviewer: "code-review", level: "medium", model: "opus", effort: "high" },
             { reviewer: "codex", effort: "medium" },
         ]);
-        expect(review?.team.L.at(-1)).toEqual({ reviewer: "tests-lens" });
+        expect(review?.team.L.at(-1)).toEqual({
+            reviewer: "tests-lens",
+            model: "opus",
+            effort: "high",
+        });
+        expect(review?.security).toMatchObject({ model: "opus", effort: "high" });
     });
 
-    it("ships no model for any reviewer", () => {
+    it("names opus for every teammate row and no model for the CLI rows, and lists no fallow-review", () => {
+        const teammates = ["walkthrough", "code-review", "tests-lens"];
         const rows = Object.values(shippedBlock().team).flat();
-        expect(rows.some((row) => row.model !== undefined)).toBe(false);
+        for (const row of rows) {
+            expect(row.model).toBe(teammates.includes(row.reviewer) ? "opus" : undefined);
+        }
+        expect(rows.some((row) => row.reviewer === "fallow-review")).toBe(false);
     });
 
     it("ships patterns that compile and catch an execFile call and an .env path", () => {

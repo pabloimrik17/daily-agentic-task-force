@@ -1758,27 +1758,27 @@ it.
         },
         "team": {
             "S": [
-                { "reviewer": "walkthrough" },
-                { "reviewer": "code-review", "level": "medium" },
+                { "reviewer": "walkthrough", "model": "opus", "effort": "medium" },
+                { "reviewer": "code-review", "level": "medium", "model": "opus", "effort": "high" },
                 { "reviewer": "codex", "effort": "medium" }
             ],
             "M": [
-                { "reviewer": "walkthrough" },
-                { "reviewer": "code-review", "level": "high" },
+                { "reviewer": "walkthrough", "model": "opus", "effort": "medium" },
+                { "reviewer": "code-review", "level": "high", "model": "opus", "effort": "high" },
                 { "reviewer": "codex", "effort": "medium" },
-                { "reviewer": "coderabbit" },
-                { "reviewer": "fallow-review" }
+                { "reviewer": "coderabbit" }
             ],
             "L": [
-                { "reviewer": "walkthrough" },
-                { "reviewer": "code-review", "level": "xhigh" },
+                { "reviewer": "walkthrough", "model": "opus", "effort": "medium" },
+                { "reviewer": "code-review", "level": "xhigh", "model": "opus", "effort": "high" },
                 { "reviewer": "codex", "effort": "high" },
                 { "reviewer": "coderabbit" },
-                { "reviewer": "fallow-review" },
-                { "reviewer": "tests-lens" }
+                { "reviewer": "tests-lens", "model": "opus", "effort": "high" }
             ]
         },
         "security": {
+            "model": "opus",
+            "effort": "high",
             "pathPatterns": ["auth", "secret", "(^|/)\\.env(\\.|$)"],
             "linePatterns": ["\\b(execFile|spawn)\\s*\\(", "\\beval\\s*\\("]
         }
@@ -1835,7 +1835,7 @@ blocks have defaults while `selection` stayed required. The shipped defaults:
 | `runner.intervalMinutes` | `10`                 | The minutes between two iterations of the loop: an integer of 1 or more             |
 | `review.tiers`           | S 150/5, M 600/20    | The changed lines and files a diff may have to stay in tier `S`, then `M`           |
 | `review.team`            | see below            | The reviewers each tier runs, with their model, effort and level                    |
-| `review.security`        | see below            | The path and line patterns that add the security reviewer                           |
+| `review.security`        | see below            | The path and line patterns that add the security reviewer, and its model and effort |
 
 When a run used a default, the text report's header gains a third line,
 `defaults: sessions.tool, naming.model`, listing the dotted keys in the order
@@ -1853,17 +1853,25 @@ sets `review.tiers` replaces both thresholds:
   `{ "reviewer", "model"?, "effort"?, "level"? }`. `reviewer` is one of
   `walkthrough`, `code-review`, `codex`, `coderabbit`, `fallow-review`,
   `tests-lens` and `security-review`; `effort` and `level` are one of `low`,
-  `medium`, `high`, `xhigh` and `max`. The shipped table sets no `model`:
-  `S` runs `walkthrough`, `code-review` at `medium` and `codex` at `medium`;
-  `M` adds `coderabbit` and `fallow-review` and raises `code-review` to `high`;
-  `L` adds `tests-lens`, `code-review` at `xhigh` and `codex` at `high`.
+  `medium`, `high`, `xhigh` and `max`. A teammate row (`walkthrough`,
+  `tests-lens`) and a `code-review` row name their `model` and `effort`, and the
+  teammate is started with them; a `codex` row names an `effort` and no model.
+  The shipped table is the one set by the calibration. `S` runs `walkthrough`
+  (`opus` at `medium`), `code-review` at `medium` (`opus` at `high`) and `codex`
+  at `medium`; `M` adds `coderabbit` and raises `code-review` to `high`; `L`
+  adds `tests-lens` (`opus` at `high`), `code-review` at `xhigh` and `codex` at
+  `high`. `fallow-review` is in no shipped tier: it runs only in a table that
+  lists it.
 - `security` — `pathPatterns`, matched case-insensitively against a changed
   path, and `linePatterns`, matched against an added line. Each is a JavaScript
   regular expression source: a pattern that is empty or does not compile is
   rejected with its path, for example `review.security.linePatterns[1]`. The
   shipped lists cover auth, token, secret, credential, crypto and permission
   paths, `.env` files, and added calls to `exec`, `execFile`, `spawn`, `eval`
-  and `new Function`.
+  and `new Function`. The optional `model` (not empty) and `effort` (one of the
+  values of a team row) set the security reviewer's engine, which is built by
+  code and listed in no tier; they ship as `opus` at `high`, and a file that
+  omits them leaves the reviewer on its session's own model.
 
 The review CLI is the one consumer that works without a configuration file:
 it then runs with the shipped `review` block, and reports `review.tiers`,
@@ -4259,7 +4267,8 @@ The plan records that the tree was dirty, and the summary says so.
 | `tests-lens`      | tests and silent failures                  | a Claude teammate                         |
 | `security-review` | security                                   | Claude Code's built-in `/security-review` |
 
-`fallow-review` applies only to TypeScript and JavaScript repositories. The
+`fallow-review` applies only to TypeScript and JavaScript repositories, and the
+shipped team lists it in no tier: it runs when a configuration lists it. The
 Codex CLI runs a review of the subject. The `code-review` reviewer is skipped as
 shadowed while a user or project skill named `code-review` is installed, and so
 is `security-review` while one named `security-review` is.
@@ -4278,21 +4287,25 @@ A caller can raise the tier with `--tier`, which needs a `--reason`. A request
 for a tier below the measured one is refused with exit 2 and nothing runs. The
 plan and the report record the measured tier, the tier used and the reason.
 
-Each tier takes the reviewers the configuration lists. The shipped team, before
-the calibration, is:
+Each tier takes the reviewers the configuration lists. The shipped team, as the
+calibration set it, is:
 
 | Tier | Reviewers                                                                     |
 | ---- | ----------------------------------------------------------------------------- |
 | `S`  | `walkthrough`, `code-review` at `medium`, `codex` at `medium` effort          |
-| `M`  | `S`'s, plus `coderabbit` and `fallow-review`, with `code-review` at `high`    |
+| `M`  | `S`'s, plus `coderabbit`, with `code-review` at `high`                        |
 | `L`  | `M`'s, plus `tests-lens`, with `code-review` at `xhigh` and `codex` at `high` |
 
-The calibration sets the shipped table. This table is the one before it.
+Every teammate of the shipped table names its model and effort: `walkthrough`
+`opus` at `medium`, and `code-review` and `tests-lens` `opus` at `high`. The plan
+records them in the reviewer's engine, and the skill starts the teammate with
+them. The shipped team names no Codex model.
 
 ### The security trigger
 
 `security-review` joins the team at any tier when a changed path, or an added
-line, matches one of the configured security patterns. The report names the
+line, matches one of the configured security patterns. Its model and effort come
+from `review.security`, shipped as `opus` at `high`. The report names the
 patterns that matched and where.
 
 ### Reviewers that cannot run
@@ -4310,7 +4323,9 @@ causes are:
   reach the report.
 
 The report names every skipped reviewer and its reason. A skipped reviewer is
-not replaced.
+not replaced. A Codex entry that names a path outside the repository is dropped
+alone and named under Codex in the report; any other unreadable Codex output
+still skips Codex.
 
 `walkthrough` and `tests-lens` are required: they need only Claude and the
 plugin, so they run whenever their tier calls for them. When a required

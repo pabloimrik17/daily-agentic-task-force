@@ -9,6 +9,7 @@ import { join } from "node:path";
 import type { Exec } from "../../exec.ts";
 import { parseReviewerFile } from "../schema.ts";
 import {
+    type DroppedEntry,
     FINDING_SCHEMA,
     type Plan,
     type PlannedReviewer,
@@ -29,8 +30,8 @@ export interface RunContext {
 
 export type Runner = (ctx: RunContext) => Promise<ReviewerFile>;
 
-// What a runner decides: the items it read, or why it gives up.
-export type Verdict = { items: RawItem[] } | { skip: string };
+// What a runner decides: the items it read and any entry it dropped, or why it gives up.
+export type Verdict = { items: RawItem[]; dropped?: DroppedEntry[] } | { skip: string };
 
 // Design D7: every CLI reviewer gets the same 15 minutes.
 export const REVIEW_TIMEOUT_MS = 15 * 60 * 1000;
@@ -76,6 +77,10 @@ export async function runTimed(
         outcome: "reported",
         durationMs,
         items: verdict.items,
+        // Written only when non-empty.
+        ...(verdict.dropped === undefined || verdict.dropped.length === 0
+            ? {}
+            : { dropped: verdict.dropped }),
     };
     const parsed = parseReviewerFile(file);
     return parsed.ok

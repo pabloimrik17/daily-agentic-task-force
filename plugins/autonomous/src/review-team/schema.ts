@@ -21,6 +21,7 @@ import {
 import { deriveSeverity, SEVERITY_TABLES } from "./severity.ts";
 import {
     type Doubt,
+    type DroppedEntry,
     type Engine,
     type Finding,
     FINDING_SCHEMA,
@@ -205,6 +206,11 @@ function finding(
     };
 }
 
+// Spec "Doubts are reported apart": a doubt that names no label is read as a question.
+function doubtLabel(parent: Json, path: string): "question" {
+    return "label" in parent ? choice(parent, "label", path, ["question"]) : "question";
+}
+
 function doubt(parent: Json, path: string, extraKeys: readonly string[]): RawDoubt {
     rejectUnknownKeys(parent, [...DOUBT_KEYS, ...extraKeys], path);
     return {
@@ -212,7 +218,7 @@ function doubt(parent: Json, path: string, extraKeys: readonly string[]): RawDou
         title: oneLine(parent, "title", path),
         statement: nonEmpty(parent, "statement", path),
         location: location(parent.location, `${path}.location`),
-        label: choice(parent, "label", path, ["question"]),
+        label: doubtLabel(parent, path),
         ...withOptional("evidence", optional(parent, "evidence", path, nonEmpty)),
     };
 }
@@ -230,6 +236,16 @@ function rawItem(reviewer: ReviewerId): Reader<RawItem> {
     };
 }
 
+function droppedList(parent: Json, key: string, path: string): DroppedEntry[] {
+    return list(parent, key, path, droppedEntry);
+}
+
+function droppedEntry(value: unknown, path: string): DroppedEntry {
+    const parent = object(value, path);
+    rejectUnknownKeys(parent, ["entry", "reason"], path);
+    return { entry: nonEmpty(parent, "entry", path), reason: nonEmpty(parent, "reason", path) };
+}
+
 function reviewerFile(input: unknown): ReviewerFile {
     const parent = object(input, "$");
     const common = {
@@ -241,11 +257,16 @@ function reviewerFile(input: unknown): ReviewerFile {
         rejectUnknownKeys(parent, ["schema", "reviewer", "outcome", "durationMs", "reason"], "$");
         return { ...common, outcome: "skipped", reason: nonEmpty(parent, "reason", "$") };
     }
-    rejectUnknownKeys(parent, ["schema", "reviewer", "outcome", "durationMs", "items"], "$");
+    rejectUnknownKeys(
+        parent,
+        ["schema", "reviewer", "outcome", "durationMs", "items", "dropped"],
+        "$",
+    );
     return {
         ...common,
         outcome: "reported",
         items: list(parent, "items", "$", rawItem(common.reviewer)),
+        ...withOptional("dropped", optional(parent, "dropped", "$", droppedList)),
     };
 }
 
@@ -393,7 +414,7 @@ function reviewerOutcome(value: unknown, path: string): ReviewerOutcome {
     const parent = object(value, path);
     rejectUnknownKeys(
         parent,
-        ["reviewer", "outcome", "reason", "required", "engine", "durationMs"],
+        ["reviewer", "outcome", "reason", "required", "engine", "durationMs", "dropped"],
         path,
     );
     return {
@@ -403,6 +424,7 @@ function reviewerOutcome(value: unknown, path: string): ReviewerOutcome {
         ...withOptional("reason", optional(parent, "reason", path, nonEmpty)),
         ...withOptional("engine", optional(parent, "engine", path, field(engine))),
         ...withOptional("durationMs", optional(parent, "durationMs", path, duration)),
+        ...withOptional("dropped", optional(parent, "dropped", path, droppedList)),
     };
 }
 

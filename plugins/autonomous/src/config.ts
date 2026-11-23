@@ -547,6 +547,10 @@ function oneOf(entry: Json, key: string, path: string, allowed: readonly string[
     return value;
 }
 
+function effortOf(entry: Json, key: string, path: string): string {
+    return oneOf(entry, key, path, EFFORTS);
+}
+
 function nonEmpty(entry: Json, key: string, path: string): string {
     const value = string(entry, key, path);
     if (value === "") {
@@ -562,9 +566,7 @@ function teamRow(entry: Json, path: string): TeamRow {
         throw new ParseError(`${path}.reviewer must be one of ${REVIEWER_IDS.join(", ")}`);
     }
     const model = optional(entry, "model", path, nonEmpty);
-    const effort = optional(entry, "effort", path, (parent, key, at) =>
-        oneOf(parent, key, at, EFFORTS),
-    );
+    const effort = optional(entry, "effort", path, effortOf);
     const level = optional(entry, "level", path, (parent, key, at) =>
         oneOf(parent, key, at, LEVELS),
     );
@@ -577,10 +579,14 @@ function teamRow(entry: Json, path: string): TeamRow {
 }
 
 function securityConfig(entry: Json, path: string): ReviewConfig["security"] {
-    rejectUnknownKeys(entry, ["pathPatterns", "linePatterns"], path);
+    rejectUnknownKeys(entry, ["pathPatterns", "linePatterns", "model", "effort"], path);
+    const model = optional(entry, "model", path, nonEmpty);
+    const effort = optional(entry, "effort", path, effortOf);
     return {
         pathPatterns: patterns(entry, "pathPatterns", path),
         linePatterns: patterns(entry, "linePatterns", path),
+        ...(model === undefined ? {} : { model }),
+        ...(effort === undefined ? {} : { effort }),
     };
 }
 

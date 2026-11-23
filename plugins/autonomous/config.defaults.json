@@ -10,27 +10,27 @@
         },
         "team": {
             "S": [
-                { "reviewer": "walkthrough" },
-                { "reviewer": "code-review", "level": "medium" },
+                { "reviewer": "walkthrough", "model": "opus", "effort": "medium" },
+                { "reviewer": "code-review", "level": "medium", "model": "opus", "effort": "high" },
                 { "reviewer": "codex", "effort": "medium" }
             ],
             "M": [
-                { "reviewer": "walkthrough" },
-                { "reviewer": "code-review", "level": "high" },
+                { "reviewer": "walkthrough", "model": "opus", "effort": "medium" },
+                { "reviewer": "code-review", "level": "high", "model": "opus", "effort": "high" },
                 { "reviewer": "codex", "effort": "medium" },
-                { "reviewer": "coderabbit" },
-                { "reviewer": "fallow-review" }
+                { "reviewer": "coderabbit" }
             ],
             "L": [
-                { "reviewer": "walkthrough" },
-                { "reviewer": "code-review", "level": "xhigh" },
+                { "reviewer": "walkthrough", "model": "opus", "effort": "medium" },
+                { "reviewer": "code-review", "level": "xhigh", "model": "opus", "effort": "high" },
                 { "reviewer": "codex", "effort": "high" },
                 { "reviewer": "coderabbit" },
-                { "reviewer": "fallow-review" },
-                { "reviewer": "tests-lens" }
+                { "reviewer": "tests-lens", "model": "opus", "effort": "high" }
             ]
         },
         "security": {
+            "model": "opus",
+            "effort": "high",
             "pathPatterns": [
                 "auth",
                 "token",

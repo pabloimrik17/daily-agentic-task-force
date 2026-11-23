@@ -60,6 +60,13 @@ export interface RawDoubt {
 
 export type RawItem = RawFinding | RawDoubt;
 
+// An entry of a reviewer's own output that the runner left out, with the reason: today only a
+// Codex entry whose path is outside the repository.
+export interface DroppedEntry {
+    entry: string;
+    reason: string;
+}
+
 // `reviewers/<id>.json`. A teammate always writes the reported form; `run <id>`
 // writes the skipped form when its tool fails, times out or cannot be parsed.
 export type ReviewerFile =
@@ -69,6 +76,7 @@ export type ReviewerFile =
           outcome: "reported";
           durationMs?: number;
           items: RawItem[];
+          dropped?: DroppedEntry[]; // written only when non-empty
       }
     | {
           schema: typeof FINDING_SCHEMA;
@@ -115,7 +123,7 @@ export interface TeamRow {
 export interface ReviewConfig {
     tiers: { S: TierThreshold; M: TierThreshold };
     team: Record<Tier, TeamRow[]>;
-    security: { pathPatterns: string[]; linePatterns: string[] };
+    security: { pathPatterns: string[]; linePatterns: string[]; model?: string; effort?: string };
 }
 
 export interface Subject {
@@ -183,6 +191,7 @@ export interface ReviewerOutcome {
     required: boolean;
     engine?: Engine; // absent for a reviewer skipped at plan time
     durationMs?: number;
+    dropped?: DroppedEntry[]; // entries its runner left out, with the reason
 }
 
 export interface WalkthroughGuide {

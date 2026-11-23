@@ -18,6 +18,7 @@ import { deriveSeverity } from "./severity.ts";
 import { gitStatus } from "./subject.ts";
 import {
     type Doubt,
+    type DroppedEntry,
     type Finding,
     type Plan,
     type PlannedReviewer,
@@ -81,14 +82,23 @@ function durationOf(path: string, read: FileRead, createdAt: string): number | u
         : undefined;
 }
 
-// What the file yields: its items, or the reason it yields none.
-function verdictOf(read: FileRead): { items: RawItem[]; reason?: string } {
+// What the file yields: its items and the entries its runner dropped, or the reason it yields
+// none.
+function verdictOf(read: FileRead): {
+    items: RawItem[];
+    dropped?: DroppedEntry[];
+    reason?: string;
+} {
     if (!read.ok) {
         return { items: [], reason: read.reason };
     }
-    return read.file.outcome === "skipped"
-        ? { items: [], reason: read.file.reason }
-        : { items: read.file.items };
+    if (read.file.outcome === "skipped") {
+        return { items: [], reason: read.file.reason };
+    }
+    return {
+        items: read.file.items,
+        ...(read.file.dropped === undefined ? {} : { dropped: read.file.dropped }),
+    };
 }
 
 function notReported(
@@ -122,6 +132,7 @@ function gather(dir: string, plan: Plan, row: PlannedReviewer): Gathered {
             required: row.required,
             engine: row.engine,
             ...(durationMs === undefined ? {} : { durationMs }),
+            ...(verdict.dropped === undefined ? {} : { dropped: verdict.dropped }),
         },
         items: verdict.items,
         errors: result.errors,

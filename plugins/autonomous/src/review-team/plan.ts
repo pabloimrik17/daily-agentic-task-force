@@ -327,7 +327,12 @@ export async function buildPlan(
     }
     const triggered = security.value.length > 0;
     const checks = availabilityDeps(deps);
-    const rows = resolveTeam(base.value.tier.used, deps.review.team, triggered);
+    const rows = resolveTeam(
+        base.value.tier.used,
+        deps.review.team,
+        deps.review.security,
+        triggered,
+    );
     const composed = await composeTeam(rows, checks, await securityApplies(rows, git, subject));
     const now = deps.now();
     const dir = reportDir(request, deps, subject, now);

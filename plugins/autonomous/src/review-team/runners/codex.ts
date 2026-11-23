@@ -3,15 +3,18 @@
 // D8). `codex exec review` ignores `--output-schema`, so its last message is text of a fixed form:
 // a summary, then entries `- [P<n>] <title> — <absolute path>:<start>-<end>`, each followed by an
 // indented paragraph. A line that opens an entry and does not fit the form makes the whole text
-// unreadable, so no entry of a half-understood review is reported.
+// unreadable, so no entry of a half-understood review is reported. The one exception is a path
+// outside the repository: that is the model's mistake, not a format change, so that entry alone
+// is dropped and recorded (design D15).
 
 import { mkdir, readFile, rm } from "node:fs/promises";
 import { isAbsolute, join, relative } from "node:path";
 
 import type { ExecResult } from "../../exec.ts";
 import type { Result } from "../../result.ts";
+import { hideMachinePaths } from "../report.ts";
 import { SEVERITY_TABLES } from "../severity.ts";
-import type { RawFinding, RawItem, ReviewerFile } from "../types.ts";
+import type { DroppedEntry, RawFinding, RawItem, ReviewerFile } from "../types.ts";
 import { REVIEW_TIMEOUT_MS, type RunContext, runTimed, saveRaw, type Verdict } from "./shared.ts";
 
 const SHORT_TIMEOUT_MS = 30_000;
@@ -59,15 +62,25 @@ function paragraphOf(body: string[]): { statement: string; evidence: string } {
     return { statement: evidence.split(/\n\s*\n/)[0] ?? evidence, evidence };
 }
 
-function repositoryPath(path: string, repoRoot: string, header: string): string {
+// The path relative to the repository, or undefined when it is not inside it.
+function repositoryPath(path: string, repoRoot: string): string | undefined {
     const relativePath = relative(repoRoot, path);
     if (!isAbsolute(path) || relativePath.startsWith("..") || isAbsolute(relativePath)) {
-        throw new Error(`${path} is not inside the repository, in "${header}"`);
+        return undefined;
     }
     return relativePath.split("\\").join("/");
 }
 
-function toFinding({ header, body }: Entry, repoRoot: string): RawFinding {
+interface Header {
+    priority: string;
+    title: string;
+    path: string;
+    start: string;
+    end: string;
+}
+
+// The fields of an entry's first line, or the reason the whole text is unreadable.
+function readHeader({ header, body }: Entry): Header {
     const match = ENTRY.exec(header);
     if (match === null) {
         throw new Error(`the entry line does not fit the form: "${header}"`);
@@ -81,26 +94,57 @@ function toFinding({ header, body }: Entry, repoRoot: string): RawFinding {
     if (body.length === 0) {
         throw new Error(`the entry has no paragraph: "${header}"`);
     }
+    return { priority, title, path, start, end };
+}
+
+type Parsed = { finding: RawFinding } | { dropped: DroppedEntry };
+
+function toFinding(entry: Entry, repoRoot: string): Parsed {
+    const { priority, title, path, start, end } = readHeader(entry);
+    const file = repositoryPath(path, repoRoot);
+    if (file === undefined) {
+        // Codex's text names the machine's user through home and temp paths: hide those.
+        return {
+            dropped: {
+                entry: hideMachinePaths(entry.header),
+                reason: `${hideMachinePaths(path)} is not inside the repository`,
+            },
+        };
+    }
     return {
-        kind: "finding",
-        title: title.trim(),
-        ...paragraphOf(body),
-        location: {
-            scope: "line",
-            file: repositoryPath(path, repoRoot, header),
-            startLine: Number(start),
-            endLine: Number(end),
-            side: "new",
+        finding: {
+            kind: "finding",
+            title: title.trim(),
+            ...paragraphOf(entry.body),
+            location: {
+                scope: "line",
+                file,
+                startLine: Number(start),
+                endLine: Number(end),
+                side: "new",
+            },
+            label: priority === "P3" ? "suggestion" : "issue",
+            nativeSeverity: priority,
         },
-        label: priority === "P3" ? "suggestion" : "issue",
-        nativeSeverity: priority,
     };
 }
 
+export interface CodexReview {
+    items: RawItem[];
+    dropped: DroppedEntry[];
+}
+
 // Codex's review reports no doubts. A message with no entry line is a review with no findings.
-export function parseCodexReview(text: string, repoRoot: string): Result<RawItem[]> {
+export function parseCodexReview(text: string, repoRoot: string): Result<CodexReview> {
     try {
-        return { ok: true, value: splitEntries(text).map((entry) => toFinding(entry, repoRoot)) };
+        const parsed = splitEntries(text).map((entry) => toFinding(entry, repoRoot));
+        return {
+            ok: true,
+            value: {
+                items: parsed.flatMap((entry) => ("finding" in entry ? [entry.finding] : [])),
+                dropped: parsed.flatMap((entry) => ("dropped" in entry ? [entry.dropped] : [])),
+            },
+        };
     } catch (error) {
         const detail = error instanceof Error ? error.message : String(error);
         return { ok: false, error: detail };
@@ -156,7 +200,7 @@ async function verdictOfMessage(ctx: RunContext, text: string): Promise<Verdict>
     }
     const parsed = parseCodexReview(text, root.value);
     return parsed.ok
-        ? { items: parsed.value }
+        ? { items: parsed.value.items, dropped: parsed.value.dropped }
         : { skip: `codex output could not be read: ${parsed.error}` };
 }
 

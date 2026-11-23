@@ -1,5 +1,6 @@
 import { readFileSync } from "node:fs";
 import { mkdir, readFile, writeFile } from "node:fs/promises";
+import { homedir, tmpdir } from "node:os";
 import { join } from "node:path";
 
 import { afterEach, describe, expect, it } from "vitest";
@@ -318,12 +319,76 @@ describe("a skipped reviewer", () => {
         expect(reason).toMatch(/^codex output could not be read/);
     });
 
-    it("names the path of an entry outside the repository", async () => {
-        const { ctx } = setup({ message: entry("/home/someone/else/src/a.ts") });
+    it("Codex entry outside the repository: the other entry is reported, this one is dropped", async () => {
+        const outside = "/home/someone/else/src/a.ts";
+        const message = `Summary.\n\n${entry(`${ROOT}/src/b.ts`)}\n\n${entry(outside)}`;
+        const { ctx } = setup({ message });
+
+        const file = await runCodex(ctx);
+
+        expect(parseReviewerFile(file)).toEqual({ ok: true, value: file });
+        expect(file).toMatchObject({ outcome: "reported" });
+        expect(file.outcome === "reported" && file.items).toHaveLength(1);
+        expect(file.outcome === "reported" && file.dropped).toEqual([
+            {
+                entry: `- [P1] Await the write — ${outside}:13-13`,
+                reason: `${outside} is not inside the repository`,
+            },
+        ]);
+    });
+
+    it("writes no dropped list when no entry was dropped", async () => {
+        const { ctx } = setup({ message: MESSAGE });
+
+        const file = await runCodex(ctx);
+
+        expect(file).not.toHaveProperty("dropped");
+    });
+
+    it("quotes a dropped entry's path with the home directory as ~", async () => {
+        const { ctx } = setup({ message: entry(join(homedir(), "elsewhere", "a.ts")) });
+
+        const file = await runCodex(ctx);
+
+        expect(file.outcome === "reported" && file.dropped).toEqual([
+            {
+                entry: "- [P1] Await the write — ~/elsewhere/a.ts:13-13",
+                reason: "~/elsewhere/a.ts is not inside the repository",
+            },
+        ]);
+    });
+
+    it("quotes a dropped entry's path under the temp directory with $TMPDIR", async () => {
+        const paths = [
+            join(tmpdir(), "scratchpad", "wt", "pr-94", "a.ts"),
+            "/private/tmp/claude-501/-Users-someone-project/wt/pr-94/a.ts",
+            "/home/someone/tmp/a.ts",
+        ];
+        const { ctx } = setup({ message: paths.map((path) => entry(path)).join("\n\n") });
+
+        const file = await runCodex(ctx);
+
+        expect(file.outcome === "reported" && file.dropped?.map((entry) => entry.reason)).toEqual([
+            "$TMPDIR/scratchpad/wt/pr-94/a.ts is not inside the repository",
+            "$TMPDIR/claude-501/-Users-someone-project/wt/pr-94/a.ts is not inside the repository",
+            "/home/someone/tmp/a.ts is not inside the repository",
+        ]);
+    });
+
+    it("still skips Codex when an entry that does not fit the form sits beside a dropped one", async () => {
+        const message = `${entry("/home/someone/else/a.ts")}\n\n- [P1] no location here\n  Text.`;
+        const { ctx } = setup({ message });
 
         const reason = skippedReason(await runCodex(ctx));
 
-        expect(reason).toContain("/home/someone/else/src/a.ts is not inside the repository");
+        expect(reason).toMatch(/^codex output could not be read/);
+        expect(reason).toContain('"- [P1] no location here"');
+    });
+
+    it("still skips Codex for an entry outside the repository that has no paragraph", async () => {
+        const { ctx } = setup({ message: "- [P1] T — /home/someone/else/a.ts:1-1\n" });
+
+        expect(skippedReason(await runCodex(ctx))).toContain("the entry has no paragraph");
     });
 });
 
@@ -337,7 +402,7 @@ describe("parseCodexReview", () => {
 
         const result = parse(text);
 
-        expect(result.ok && result.value.map((item) => item.label)).toEqual([
+        expect(result.ok && result.value.items.map((item) => item.label)).toEqual([
             "issue",
             "issue",
             "issue",
@@ -348,13 +413,13 @@ describe("parseCodexReview", () => {
     it("keeps an em dash inside the title and splits at the last one", () => {
         const result = parse(`- [P2] Slow — and wrong — ${ROOT}/src/a.ts:4-9\n  Text.`);
 
-        expect(result.ok && result.value[0]?.title).toBe("Slow — and wrong");
+        expect(result.ok && result.value.items[0]?.title).toBe("Slow — and wrong");
     });
 
     it("takes the first paragraph as the statement and all of them as the evidence", () => {
         const result = parse(`- [P2] T — ${ROOT}/a.ts:1-1\n  One.\n  Two.\n\n  Three.`);
 
-        const item = result.ok ? result.value[0] : undefined;
+        const item = result.ok ? result.value.items[0] : undefined;
         expect(item).toMatchObject({ statement: "One.\nTwo.", evidence: "One.\nTwo.\n\nThree." });
     });
 
@@ -371,11 +436,40 @@ describe("parseCodexReview", () => {
         expect(result.ok === false && result.error).toContain("unknown priority P9");
     });
 
-    it("refuses a relative path and a path that climbs out of the repository", () => {
-        for (const path of ["src/a.ts", `${ROOT}/../other/a.ts`, "/tmp/throwaway-other/a.ts"]) {
+    it("drops an entry whose path is relative or climbs out of the repository", () => {
+        for (const [path, shown] of [
+            ["src/a.ts", "src/a.ts"],
+            [`${ROOT}/../other/a.ts`, "$TMPDIR/throwaway/../other/a.ts"],
+            ["/srv/throwaway-other/a.ts", "/srv/throwaway-other/a.ts"],
+        ] as const) {
             const result = parse(`- [P1] T — ${path}:1-1\n  Text.`);
 
-            expect(result.ok === false && result.error).toContain("is not inside the repository");
+            expect(result).toEqual({
+                ok: true,
+                value: {
+                    items: [],
+                    dropped: [
+                        {
+                            entry: `- [P1] T — ${shown}:1-1`,
+                            reason: `${shown} is not inside the repository`,
+                        },
+                    ],
+                },
+            });
         }
+    });
+
+    it("keeps the entries inside the repository and lists the dropped ones apart", () => {
+        const result = parse(
+            [`${ROOT}/a.ts`, "/elsewhere/b.ts", `${ROOT}/c.ts`]
+                .map((path) => `- [P2] T — ${path}:1-1\n  Text.`)
+                .join("\n\n"),
+        );
+
+        expect(result.ok && result.value.items.map((item) => item.location)).toEqual([
+            { scope: "line", file: "a.ts", startLine: 1, endLine: 1, side: "new" },
+            { scope: "line", file: "c.ts", startLine: 1, endLine: 1, side: "new" },
+        ]);
+        expect(result.ok && result.value.dropped).toHaveLength(1);
     });
 });

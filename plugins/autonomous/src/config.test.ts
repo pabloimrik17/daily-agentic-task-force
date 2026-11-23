@@ -340,27 +340,27 @@ describe("optional blocks", () => {
                 tiers: { S: { maxLines: 150, maxFiles: 5 }, M: { maxLines: 600, maxFiles: 20 } },
                 team: {
                     S: [
-                        { reviewer: "walkthrough" },
-                        { reviewer: "code-review", level: "medium" },
+                        { reviewer: "walkthrough", model: "opus", effort: "medium" },
+                        { reviewer: "code-review", level: "medium", model: "opus", effort: "high" },
                         { reviewer: "codex", effort: "medium" },
                     ],
                     M: [
-                        { reviewer: "walkthrough" },
-                        { reviewer: "code-review", level: "high" },
+                        { reviewer: "walkthrough", model: "opus", effort: "medium" },
+                        { reviewer: "code-review", level: "high", model: "opus", effort: "high" },
                         { reviewer: "codex", effort: "medium" },
                         { reviewer: "coderabbit" },
-                        { reviewer: "fallow-review" },
                     ],
                     L: [
-                        { reviewer: "walkthrough" },
-                        { reviewer: "code-review", level: "xhigh" },
+                        { reviewer: "walkthrough", model: "opus", effort: "medium" },
+                        { reviewer: "code-review", level: "xhigh", model: "opus", effort: "high" },
                         { reviewer: "codex", effort: "high" },
                         { reviewer: "coderabbit" },
-                        { reviewer: "fallow-review" },
-                        { reviewer: "tests-lens" },
+                        { reviewer: "tests-lens", model: "opus", effort: "high" },
                     ],
                 },
                 security: {
+                    model: "opus",
+                    effort: "high",
                     pathPatterns: expect.arrayContaining([
                         "auth",
                         "(^|/)\\.env(\\.|$)",
@@ -441,7 +441,6 @@ describe("the review block", () => {
             "code-review",
             "codex",
             "coderabbit",
-            "fallow-review",
         ]);
     });
 
@@ -594,6 +593,27 @@ describe("review block validation", () => {
         expect(mistake(withSecurity({ globs: [] }))).toBe(
             "$.review.security.globs is not a recognised field",
         );
+    });
+
+    it("rejects a security effort that is not one of the efforts, with its path", () => {
+        expect(mistake(withSecurity({ effort: "huge" }))).toBe(
+            "$.review.security.effort must be one of low, medium, high, xhigh, max",
+        );
+        expect(mistake(withSecurity({ effort: 3 }))).toBe(
+            "$.review.security.effort must be a string",
+        );
+    });
+
+    it("rejects an empty security model, with its path", () => {
+        expect(mistake(withSecurity({ model: "" }))).toBe(
+            "$.review.security.model must not be empty",
+        );
+    });
+
+    it("accepts a security block with no model and no effort", () => {
+        const security = { pathPatterns: ["auth"], linePatterns: [] };
+        const result = parseConfig({ ...valid(), review: { ...shipped, security } });
+        expect(result.ok && result.value.review.security).toEqual(security);
     });
 
     it("accepts empty pattern lists, which turn the security trigger off", () => {

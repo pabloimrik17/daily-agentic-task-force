@@ -112,6 +112,8 @@ Read `<dir>/report.md` and summarise it in the chat:
 - who ran, and who was skipped and why;
 - the findings by severity, `CRITICAL` first, each with its location;
 - the doubts, apart from the findings;
+- the entries a reviewer's output dropped, with their reason, if the report
+  names any;
 - the walkthrough's guide, or why there is none;
 - the report's errors, if it has any;
 - the path of the report directory;

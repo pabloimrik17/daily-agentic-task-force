@@ -485,6 +485,52 @@ describe("collect: the report files", () => {
         }
     });
 
+    it("carries a reviewer's dropped entries into report.json and report.md", async () => {
+        writePlan([row("walkthrough"), row("codex")]);
+        const dropped = [
+            {
+                entry: "- [P1] Await the write — /home/someone/else/src/a.ts:13-13",
+                reason: "/home/someone/else/src/a.ts is not inside the repository",
+            },
+        ];
+        writeReviewer(
+            "codex",
+            reported("codex", [finding("Missing await on save", "P1")], { dropped }),
+        );
+
+        const report = await collected();
+
+        expect(outcomeOf(report, "codex")).toMatchObject({ outcome: "reported", dropped });
+        expect(report.findings.map((entry) => entry.id)).toEqual(["codex-1"]);
+        const written = JSON.parse(readFileSync(join(dir, "report.json"), "utf8")) as Report;
+        expect(outcomeOf(written, "codex")?.dropped).toEqual(dropped);
+        expect(parseReport(written)).toEqual({ ok: true, value: report });
+        expect(readFileSync(join(dir, "report.md"), "utf8")).toContain(
+            `  - dropped "${dropped[0]?.entry}": ${dropped[0]?.reason}`,
+        );
+    });
+
+    it("leaves dropped off the outcome of a reviewer that dropped nothing", async () => {
+        writePlan([row("walkthrough"), row("codex")]);
+        writeReviewer("codex", reported("codex", [finding("Missing await on save", "P1")]));
+
+        const report = await collected();
+
+        expect(outcomeOf(report, "codex")).not.toHaveProperty("dropped");
+    });
+
+    it("Doubt without a label: the report lists the doubt with label question", async () => {
+        writePlan([row("walkthrough")]);
+        const { label: _label, ...unlabelled } = doubt("Why?");
+        writeFileSync(join(dir, "walkthrough.json"), "{}");
+        writeReviewer("walkthrough", reported("walkthrough", [unlabelled]));
+
+        const report = await collected();
+
+        expect(report.doubts).toMatchObject([{ id: "walkthrough-1", label: "question" }]);
+        expect(readFileSync(join(dir, "report.md"), "utf8")).toContain("Why?");
+    });
+
     it("Plannotator missing: no guide, and the walkthrough's findings still count", async () => {
         writePlan([row("walkthrough")], {
             guide: { available: false, reason: "plannotator CLI not found on PATH" },

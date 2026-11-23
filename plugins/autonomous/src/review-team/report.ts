@@ -3,8 +3,8 @@
 // `report.md` for a person. Neither names an absolute path or the home
 // directory: reasons that quote a tool's message are made relative first.
 
-import { writeFileSync } from "node:fs";
-import { homedir } from "node:os";
+import { realpathSync, writeFileSync } from "node:fs";
+import { homedir, tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 
 import type { Result } from "../result.ts";
@@ -19,20 +19,67 @@ import {
     type Severity,
 } from "./types.ts";
 
+function realOrSame(path: string): string {
+    try {
+        return realpathSync(path);
+    } catch {
+        return path;
+    }
+}
+
+// The roots that name the machine's user: the home directory, and the temp directory in the forms
+// a tool may quote (`os.tmpdir()`, its resolved form, and the fixed `/tmp` and `/private/tmp`),
+// since a temp path such as `/private/tmp/claude-501/-Users-name-...` carries the user's name.
+function machineRoots(): Map<string, string> {
+    const home = homedir();
+    const temp = [tmpdir(), realOrSame(tmpdir()), "/tmp", "/private/tmp"];
+    const roots = new Map<string, string>(temp.map((root) => [root, "$TMPDIR"]));
+    if (home.length > 1) {
+        roots.set(home, "~");
+    }
+    return roots;
+}
+
+const byLength = (a: string, b: string): number => b.length - a.length;
+
+const escapeRegExp = (text: string): string => text.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+
+// Names the home directory as `~` and the temp directory as `$TMPDIR`, wherever a root starts a
+// path (never inside one, so `/home/x/tmp` is left alone). A path outside home, temp, the
+// repository and the report directory stays as the tool wrote it: it names nothing of the user.
+export function hideMachinePaths(text: string): string {
+    const roots = machineRoots();
+    const longestFirst = [...roots.keys()].filter((root) => root.length > 1).sort(byLength);
+    if (longestFirst.length === 0) {
+        return text;
+    }
+    const pattern = new RegExp(
+        `(?<![\\w.~/-])(${longestFirst.map(escapeRegExp).join("|")})(?![\\w.-])`,
+        "g",
+    );
+    return text.replace(pattern, (root) => roots.get(root) ?? root);
+}
+
 // A reason or an error that quotes a path names it from the report directory, or from `~`.
 function scrubber(dir: string): (text: string) => string {
-    const home = homedir();
-    return (text) => {
-        const relative = text.replaceAll(`${dir}/`, "").replaceAll(dir, ".");
-        return home.length > 1 ? relative.replaceAll(home, "~") : relative;
-    };
+    return (text) => hideMachinePaths(text.replaceAll(`${dir}/`, "").replaceAll(dir, "."));
 }
 
 function scrubOutcome(
     scrub: (text: string) => string,
 ): (outcome: ReviewerOutcome) => ReviewerOutcome {
-    return (outcome) =>
-        outcome.reason === undefined ? outcome : { ...outcome, reason: scrub(outcome.reason) };
+    return (outcome) => ({
+        ...outcome,
+        ...(outcome.reason === undefined ? {} : { reason: scrub(outcome.reason) }),
+        ...(outcome.dropped === undefined
+            ? {}
+            : {
+                  dropped: outcome.dropped.map((dropped) => ({
+                      entry: scrub(dropped.entry),
+                      reason: scrub(dropped.reason),
+                  })),
+              }),
+    });
 }
 
 function scrubbed(report: Report, dir: string): Report {
@@ -89,6 +136,12 @@ function seconds(durationMs: number | undefined): string[] {
     return durationMs === undefined ? [] : [`${(durationMs / 1000).toFixed(1)} s`];
 }
 
+function droppedLines(outcome: ReviewerOutcome): string[] {
+    return (outcome.dropped ?? []).map(
+        (dropped) => `  - dropped "${oneLine(dropped.entry)}": ${oneLine(dropped.reason)}`,
+    );
+}
+
 function reviewerLine(outcome: ReviewerOutcome): string {
     const details = [
         ...(outcome.engine === undefined ? [] : [engineText(outcome.engine)]),
@@ -106,7 +159,9 @@ const OUTCOME_HEADINGS = [
 
 function reviewersSection(reviewers: readonly ReviewerOutcome[]): string[] {
     return OUTCOME_HEADINGS.flatMap(([outcome, heading]) => {
-        const lines = reviewers.filter((entry) => entry.outcome === outcome).map(reviewerLine);
+        const lines = reviewers
+            .filter((entry) => entry.outcome === outcome)
+            .flatMap((entry) => [reviewerLine(entry), ...droppedLines(entry)]);
         return lines.length === 0 ? [] : [`${heading}:`, "", ...lines, ""];
     });
 }
