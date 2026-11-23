@@ -50,7 +50,6 @@ interface Work {
     review: string; // the adversarial review's body
 }
 
-// The transition the verification closes with.
 const MOVE: Move = { left: "verify", reached: "code-review" };
 
 // What changes with the task's autonomy: its own section, what it does with uncommitted changes

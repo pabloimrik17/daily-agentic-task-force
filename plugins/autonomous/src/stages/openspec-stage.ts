@@ -98,7 +98,6 @@ export function contextSection(
     };
 }
 
-// The stage's own logbook section: its name and what it holds.
 interface LogbookSection {
     name: "Proposal" | "Implementation" | "Verification";
     holds: string;
