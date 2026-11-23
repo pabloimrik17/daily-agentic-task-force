@@ -5,14 +5,15 @@ import { dirname } from "node:path";
 
 import { type TaskKey, taskKey } from "../../attempts/record.ts";
 import { definitionPath, logbookEntryPath, stageSummaryPath } from "../../attempts/state.ts";
+import { MAX_WORDS } from "../../logbook/body.ts";
 import { DEFINITION_HEADING } from "../../persist/splice.ts";
 import { renderPrompt } from "../prompt.ts";
 import type { StageContext, StagePromptInput } from "../stage.ts";
+import { HANDOFF_SKILL, SKILLS_PLUGIN } from "../skills.ts";
 
-export const SKILLS_PLUGIN = "mattpocock-skills";
+export { SKILLS_PLUGIN } from "../skills.ts";
 
 const GRILL_SKILL = "grill-with-docs";
-const HANDOFF_SKILL = "handoff";
 
 export const GRILL_ME_SKILLS: readonly string[] = [GRILL_SKILL, HANDOFF_SKILL];
 
@@ -100,7 +101,7 @@ function closing({ attempt, task, definition, summary, entry }: Closing): string
         "",
         "The Proposed autonomy section only records what the grill proposes. The task's autonomy label, set by the transition in step 6, is the decision: if the human answers another autonomy, leave the definition as it is and do not run persist again.",
         "",
-        `The logbook entry's body, in \`${entry}\`, addresses a person catching up on the pull request, not the next agent. It has these four sections, in this order, and a stage may add its own after them: \`### What I did\`, \`### Decisions\`, \`### Assumptions\` and \`### Next stage\`. It holds at most 300 words. Mark each decision as the agent's or the human's. Next stage links this task's stage summary without repeating it. \`none\` is fine for Decisions or Assumptions. Do not write the entry's header: log mode writes it.`,
+        `The logbook entry's body, in \`${entry}\`, addresses a person catching up on the pull request, not the next agent. It has these four sections, in this order, and a stage may add its own after them: \`### What I did\`, \`### Decisions\`, \`### Assumptions\` and \`### Next stage\`. It holds at most ${MAX_WORDS} words. Mark each decision as the agent's or the human's. Next stage links this task's stage summary without repeating it. \`none\` is fine for Decisions or Assumptions. Do not write the entry's header: log mode writes it.`,
     ];
 }
 

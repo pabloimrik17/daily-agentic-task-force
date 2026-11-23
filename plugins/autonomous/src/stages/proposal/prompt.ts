@@ -13,6 +13,7 @@ import {
     contextSection,
     contextValue,
     NO_FORCE_PUSH,
+    ON_FAILURE,
     openspecPrompt,
     type Paths,
     promptAutonomy,
@@ -53,7 +54,7 @@ const AFK: Autonomy = {
     blocked: true,
     transition: (task) =>
         `Run \`/autonomous:run --apply --transition ${task}\`. For an \`AFK\` task it asks no one: it moves the task to \`implement\` itself. If it exits non-zero, the transition was not applied: publish no logbook entry, do not write the result marker, and leave this session open, so a human finds it waiting.`,
-    onFailure: `treat it as a blocker: follow the section "${BLOCKED_TITLE}", and run no transition`,
+    onFailure: ON_FAILURE.AFK,
 };
 
 const HITL: Autonomy = {
@@ -71,7 +72,7 @@ const HITL: Autonomy = {
     blocked: false,
     transition: (task) =>
         `Run \`/autonomous:run --apply --transition ${task}\`. It asks the human whether to approve the proposal and move the task to \`implement\`, and applies the answer. When the human answers "Later", or the answer is not applied, stop here: publish no logbook entry, do not write the result marker, and leave this session open, so the human can come back to it.`,
-    onFailure: "tell the human what it reported, and continue only as the human decides",
+    onFailure: ON_FAILURE.HITL,
 };
 
 const AUTONOMIES: Record<AutonomyLabel, Autonomy> = { AFK, HITL };

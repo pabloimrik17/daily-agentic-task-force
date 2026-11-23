@@ -16,14 +16,13 @@ import { MAX_WORDS, REQUIRED_SECTIONS } from "../logbook/body.ts";
 import type { PullRequest } from "../pull-request/port.ts";
 import type { Result } from "../result.ts";
 import { stageAutonomy, type TransitionStage, transitionRow } from "../transition/mode.ts";
-import { SKILLS_PLUGIN } from "./grill-me/prompt.ts";
 import { findBranchChange } from "./openspec-change.ts";
 import { findWorkflow, missingWorkflow } from "./openspec-workflows.ts";
 import { renderPrompt } from "./prompt.ts";
-import { loadSkills } from "./skills.ts";
+import { HANDOFF_SKILL, loadSkills, SKILLS_PLUGIN } from "./skills.ts";
 import type { StageContext, StageEnv, StagePrerequisites, StagePromptInput } from "./stage.ts";
 
-export const HANDOFF_SKILL = "handoff";
+export { HANDOFF_SKILL } from "./skills.ts";
 export const CONTEXT_KEY = "context";
 export const PULL_REQUEST_KEY = "pullRequest"; // absent when the branch has no open pull request
 export const CHANGE_KEY = "change"; // the name of the OpenSpec change the branch adds
@@ -75,6 +74,11 @@ export function promptPaths({ attempt, resultPath }: StagePromptInput): Paths {
 export function pullRequestOf(context: StageContext): PullRequest | null {
     const json = context[PULL_REQUEST_KEY];
     return json === undefined ? null : (JSON.parse(json) as PullRequest);
+}
+
+// Required by the prerequisites of a stage after proposal, so its absence is a defect.
+export function requiredPullRequest(context: StageContext, stage: OpenspecStage): PullRequest {
+    return JSON.parse(contextValue(context, stage, PULL_REQUEST_KEY)) as PullRequest;
 }
 
 const numbered = (steps: readonly string[]) => steps.map((step, index) => `${index + 1}. ${step}`);
@@ -252,6 +256,12 @@ export const DEVIATION: Record<AutonomyLabel, string> = {
     HITL: "Ask the human before you change the proposal, and change it only as they decide.",
 };
 
+// What to do when a command or a check fails, per autonomy.
+export const ON_FAILURE: Record<AutonomyLabel, string> = {
+    AFK: `treat it as a blocker: follow the section "${BLOCKED_TITLE}", and run no transition`,
+    HITL: "tell the human what it reported, and continue only as the human decides",
+};
+
 // `onFailure` says what to do when a push fails; `written` what the stage writes besides the stage
 // summary and the logbook entry.
 export function constraintsSection(onFailure: string, written: string): Section {
@@ -336,10 +346,7 @@ const openspecCli: Check = async ({ readers }) => {
     return run.ok ? NOTHING : failed(`\`openspec --version\` cannot run: ${run.error}`);
 };
 
-const handoffSkill: Check = async ({ home }) => {
-    const skills = await loadSkills(home, SKILLS_PLUGIN, [HANDOFF_SKILL]);
-    return skills.ok ? { ok: true, value: skills.value } : failed(skills.error);
-};
+const handoffSkill: Check = ({ home }) => loadSkills(home, SKILLS_PLUGIN, [HANDOFF_SKILL]);
 
 const taskContext: Check = async ({ task, readers }) => {
     const read = await readers.context.read(task);
@@ -369,10 +376,7 @@ const openPullRequest =
 export const changeCheck: Check = async ({ repository, branch, readers }) => {
     const base = await readers.pullRequests.defaultBranch();
     if (!base.ok) {
-        return {
-            ok: false,
-            error: `cannot read the default branch of ${repository}: ${base.error}`,
-        };
+        return failed(`cannot read the default branch of ${repository}: ${base.error}`);
     }
     const change = await findBranchChange(readers.git, {
         directory: repository,

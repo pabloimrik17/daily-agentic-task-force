@@ -19,6 +19,7 @@ import {
     contextValue,
     DEVIATION,
     hitlTransition,
+    ON_FAILURE,
     afkTransition,
     type Move,
     openspecPrompt,
@@ -26,7 +27,7 @@ import {
     type Paths,
     promptAutonomy,
     promptPaths,
-    PULL_REQUEST_KEY,
+    requiredPullRequest,
     type Section,
     summarySection,
 } from "../openspec-stage.ts";
@@ -73,7 +74,7 @@ const AFK: Autonomy = {
     review: null,
     blocked: true,
     transition: (paths) => afkTransition(paths, MOVE),
-    onFailure: `treat it as a blocker: follow the section "${BLOCKED_TITLE}", and run no transition`,
+    onFailure: ON_FAILURE.AFK,
 };
 
 const HITL: Autonomy = {
@@ -90,22 +91,17 @@ const HITL: Autonomy = {
     review: "Give the human a quick look at the implementation: show them the implementation and the pull request's URL for anything that jars, and tell them that verification, code review and QA follow. Fix only what the human clearly asks for, and commit and push each round as a new commit. Go on only when the human is done with it, and once a round changed anything, confirm again, as in the step before, that every check passes, nothing is left uncommitted and every commit is pushed.",
     blocked: false,
     transition: (paths) => hitlTransition(paths, MOVE, "the implementation"),
-    onFailure: "tell the human what it reported, and continue only as the human decides",
+    onFailure: ON_FAILURE.HITL,
 };
 
 const AUTONOMIES: Record<AutonomyLabel, Autonomy> = { AFK, HITL };
-
-// Required by the prerequisites, so its absence is a defect, not a branch without one.
-function openPullRequest(context: StageContext): PullRequest {
-    return JSON.parse(contextValue(context, "implement", PULL_REQUEST_KEY)) as PullRequest;
-}
 
 function workOf(context: StageContext): Work {
     return {
         change: contextValue(context, "implement", CHANGE_KEY),
         apply: contextValue(context, "implement", APPLY_WORKFLOW_KEY),
         update: contextValue(context, "implement", UPDATE_WORKFLOW_KEY),
-        pullRequest: openPullRequest(context),
+        pullRequest: requiredPullRequest(context, "implement"),
     };
 }
 
