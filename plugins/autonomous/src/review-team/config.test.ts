@@ -26,18 +26,13 @@ const shippedBlock = () => {
     if (!result.ok) {
         throw new Error(result.error);
     }
-    return result.value.review;
+    return result.value;
 };
 
 describe("loadReviewConfig", () => {
     it("runs with the shipped review block when there is no configuration file", () => {
         const result = loadReviewConfig(ENV, missingFile);
-        expect(result.ok && result.value.defaulted).toEqual([
-            "review.tiers",
-            "review.team",
-            "review.security",
-        ]);
-        const review = result.ok ? result.value.review : undefined;
+        const review = result.ok ? result.value : undefined;
         expect(review?.tiers).toEqual({
             S: { maxLines: 150, maxFiles: 5 },
             M: { maxLines: 600, maxFiles: 20 },
@@ -75,13 +70,12 @@ describe("loadReviewConfig", () => {
         expect(pathPatterns.some((re) => re.test("src/render.ts"))).toBe(false);
     });
 
-    it("uses the review block of an existing file, listing only the review keys it defaulted", () => {
+    it("uses the review block of an existing file", () => {
         const review = {
             tiers: { S: { maxLines: 10, maxFiles: 2 }, M: { maxLines: 50, maxFiles: 9 } },
         };
         const result = loadReviewConfig(ENV, () => JSON.stringify({ ...base(), review }));
-        expect(result.ok && result.value.review.tiers).toEqual(review.tiers);
-        expect(result.ok && result.value.defaulted).toEqual(["review.team", "review.security"]);
+        expect(result.ok && result.value.tiers).toEqual(review.tiers);
     });
 
     it("stops with the path of an invalid threshold", () => {

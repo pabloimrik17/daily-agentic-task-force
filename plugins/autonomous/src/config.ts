@@ -245,7 +245,7 @@ const SESSIONS_KEYS = ["tool", "profile", "binary"];
 const WORKSPACE_KEYS = ["root"];
 const NAMING_KEYS = ["model", "effort"];
 const RUNNER_KEYS = ["grills", "parallel", "intervalMinutes"];
-export const REVIEW_KEYS = ["tiers", "team", "security"];
+const REVIEW_KEYS = ["tiers", "team", "security"];
 
 // Design D13. The filled values are validated afterwards, by the caller.
 function overlay(

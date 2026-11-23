@@ -192,7 +192,7 @@ async function plan(request: PlanRequest, deps: CliDeps): Promise<number> {
             now: deps.now,
             exists: deps.exists,
             fallowPlugin: deps.fallowPlugin,
-            review: config.value.review,
+            review: config.value,
             briefsDir: deps.briefsDir,
         },
     );
