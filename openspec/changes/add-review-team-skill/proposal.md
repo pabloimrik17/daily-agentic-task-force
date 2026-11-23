@@ -27,7 +27,7 @@ The code review stage (DOT-164) needs a procedure for the report of its adversar
 
 - The finding triage, refutation, fixes and publishing to the pull request: the code review stage (DOT-164).
 - The hybrid tier decision, in which a model's opinion joins the measure (DOT-158).
-- Greptile's CLI as a reviewer, until its quota is known to be separate from the pull request app's (DOT-162).
+- Greptile's CLI as a registry reviewer. The calibration measures it on the same pull requests, and a follow-up adds it if its quota is separate from the pull request app's and it earns a place.
 - Picture it (DOT-159).
 - These as reviewers: the official `code-review:code-review` plugin, `/simplify` (it edits code), `/verify` and expect (they run the change, which is QA's job), and the review skills of mattpocock-skills and superpowers (their spec axis is verification's).
 - Codex as a teammate that fixes (DOT-140).

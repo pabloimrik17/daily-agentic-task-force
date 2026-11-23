@@ -11,6 +11,8 @@
 
     Recorded on 2026-11-22: the four commands pass (3,019 tests), the glossary terms and ADR 0008 are on the branch, and DOT-162 is not done (Backlog), so 9.2 waits.
 
+    Later on 2026-11-22 the DOT-162 changes were applied by hand on the personal Mac: no skill named `code-review` shadows the built-in, and `plan` skips no reviewer. Its dotfiles pull request is still open.
+
 ## 2. Schemas and severity
 
 - [x] 2.1 Add the types and validators of `autonomous.finding.v1` and `autonomous.review-report.v1` in `src/review-team/` on `src/validate.ts` (design D3, D4): the finding and doubt kinds, the three location scopes, the engine with its version, the label, the native severity and the optional suggested fix. Verify with tests for each scenario of "The finding schema" and "Doubts are reported apart", and for a finding missing its location being rejected with its path.
@@ -75,14 +77,19 @@
 - [ ] 9.2 Calibrate (design D14, HITL, only after DOT-162).
     - Build the reference set of accepted bot findings for five merged pull requests between #94 and #105, and have the user confirm it.
     - Run the full team at `L` on each pull request's commit before ready-for-review.
+    - Pass the Greptile CLI over the same five commits. Record how many reference findings it caught and whether its use counted against the pull request app's monthly tier.
     - Record the coverage, the unique findings and the time and cost per reviewer in `calibration.md`.
     - Set the shipped `review` defaults from the results.
 
     Verify with `calibration.md` and with `config.test.ts` pinning the new defaults.
-- [ ] 9.3 Run every gate: `bun run test`, `bun run typecheck`, `bun run lint:eslint`, `bun run lint:fallow`, `bun run lint:knip`, `bun run lint:oxfmt`, `bun run lint:markdownlint` and `openspec validate add-review-team-skill --strict`. Verify that each one passes.
+
+    Run on 2026-11-22, not finished. The reference set (20 findings over #94, #96, #97, #100 and #105) is confirmed by the user, the team ran at `L` on the five commits, and `calibration.md` holds the coverage, the unique findings and the time and cost. The team caught 9 of the 20, and 8 of those 9 came from `/code-review`. Greptile's CLI is billed per use and is not on the plan, so it stays unmeasured, as the user chose. The first runs showed that the `/code-review` brief reviewed the wrong code; it now passes a revision range. Still open: the user's decisions on the defaults, then the shipped `review` block and `config.test.ts`.
+- [x] 9.3 Run every gate: `bun run test`, `bun run typecheck`, `bun run lint:eslint`, `bun run lint:fallow`, `bun run lint:knip`, `bun run lint:oxfmt`, `bun run lint:markdownlint` and `openspec validate add-review-team-skill --strict`. Verify that each one passes.
+
+    Run on 2026-11-22 at `094f757`: the eight gates exit 0 (3,403 tests in 155 files). Calibration (9.2) has not run, so the gates run again after it changes the shipped defaults.
 
 ## Workflow follow-up
 
 - Sync the specs and archive the change after the merge.
-- The old `~/.claude/commands/review-team.md` is deleted by DOT-162, not here.
+- The old `~/.claude/commands/review-team.md` is deleted by DOT-165, not here.
 - The code review stage (DOT-164) consumes this skill; prepare its proposal after the calibration.

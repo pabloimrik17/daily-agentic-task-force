@@ -8,7 +8,7 @@ See proposal.md, "Why". The current state that shapes the approach:
 - **The external tools**, as installed on the user's machine on 2026-11-22:
     - `codex exec review` (codex-cli 0.169) takes `--base`, `-m`, `-c model_reasoning_effort=…`, `-o` and `--ephemeral`, and posts nothing. It accepts `--output-schema` and ignores it.
     - `coderabbit review --agent` (0.9.5) emits NDJSON with severities `critical`…`none`, and takes `--base` and `--base-commit`.
-    - The built-in `/code-review` takes `[low|medium|high|xhigh|max] [<branch>|<path>]`, posts nothing without `--comment`, fixes nothing without `--fix`, and reports `important`, `pre_existing` and `nit`.
+    - The built-in `/code-review` takes `[low|medium|high|xhigh|max] [<revision range>]`, posts nothing without `--comment`, fixes nothing without `--fix`, and reports `important`, `pre_existing` and `nit`.
     - The built-in `/security-review` reports `High`, `Medium` and `Low` and drops findings with a confidence below 8.
     - `fallow:fallow-review` reports the actions `block`, `address`, `consider` and `fyi`.
     - `plannotator guide export --guide <g> --patch <p>` validates an authored guide against its patch and fails when a file is misplaced.
@@ -95,6 +95,8 @@ A failure that only shows at run time also makes a reviewer skipped, with its re
 
 Checked on 2026-11-22 against `codex-cli 0.169.0` and `coderabbit 0.9.5`. Every flag above exists under that name. `-o` is the short form of `--output-last-message`, and `--base` is documented as taking a branch, and the fixture run confirmed that it takes the merge base's commit. A model that the account does not support makes Codex exit 1 with its own message, which becomes the skip reason; the shipped team names no model.
 
+Checked on 2026-11-22 against Claude Code 2.1.330, in the calibration: the built-in `/code-review` reads a lone commit id as the commit to review, not as a base. Given the merge base alone, it reviewed that commit in the three first runs and never the subject. The brief therefore passes the subject as a revision range, `<merge-base>..<head>`, which the skill's documentation lists as a target and which a run on #97's commit confirmed.
+
 ### D9. The walkthrough writes a Plannotator guide
 
 The walkthrough's brief asks for the authored guide format:
@@ -147,7 +149,8 @@ The calibration runs once, with the user following it (HITL):
 3. Build the reference set: the bot findings the user accepted, which are the threads followed by a fix of that place or answered as addressed. The user confirms the list.
 4. Run the full team at `L` against the pull request's base.
 5. Record per reviewer how many of the reference findings it caught, the findings only it reported, and its time and cost (from the teammates' usage and the CLI durations).
-6. Set the shipped `review` defaults from those numbers.
+6. Pass the Greptile CLI over the same commits, outside the team. Record how many of the reference findings it caught and whether its use counted against the pull request app's monthly tier.
+7. Set the shipped `review` defaults from those numbers.
 
 The numbers and the reasoning go in `calibration.md` in this change.
 
