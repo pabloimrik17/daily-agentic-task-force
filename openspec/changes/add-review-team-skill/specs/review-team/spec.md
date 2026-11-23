@@ -203,7 +203,7 @@ What a reviewer cannot judge without knowing the intent SHALL be reported as a d
 
 ### Requirement: Exact duplicates are grouped
 
-Findings with the same file, the same line range and the same title, compared case-insensitively and ignoring whitespace, SHALL be grouped into one entry that names every reviewer that reported it. Findings that differ in any of these SHALL stay separate.
+Findings located on lines with the same file, the same line range and the same title, compared case-insensitively and ignoring whitespace, SHALL be grouped into one entry that names every reviewer that reported it. Findings that differ in any of these SHALL stay separate. A finding located on a file or on the whole change SHALL stay separate.
 
 #### Scenario: Two reviewers, same finding
 
@@ -213,6 +213,11 @@ Findings with the same file, the same line range and the same title, compared ca
 #### Scenario: Same place, different claim
 
 - **WHEN** two reviewers report different titles at the same line
+- **THEN** the report holds two entries
+
+#### Scenario: Same file, no line range
+
+- **WHEN** two reviewers report the same title on the same file with no line range
 - **THEN** the report holds two entries
 
 ### Requirement: The walkthrough draft
@@ -231,7 +236,7 @@ The walkthrough SHALL draft the change's walkthrough as a Plannotator guide of t
 
 ### Requirement: The report
 
-A review SHALL write a report directory holding `report.json`, which follows `autonomous.review-report.v1`, and a short `report.md` for a person. The report SHALL hold the subject, the measured and used tiers, every reviewer with its outcome, reason, engine and duration, the findings, the doubts and the walkthrough guide. The directory SHALL be the one the caller names or, when none is named, a new directory outside the repository.
+A review SHALL write a report directory holding `report.json`, which follows `autonomous.review-report.v1`, and a short `report.md` for a person. The report SHALL hold the subject, the measured and used tiers, every reviewer with its outcome and reason, the engine and duration of each reviewer the plan put in the team, the findings, the doubts and the walkthrough guide. The directory SHALL be the one the caller names or, when none is named, a new directory outside the repository.
 
 #### Scenario: Run by hand
 

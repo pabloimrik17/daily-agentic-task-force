@@ -4362,10 +4362,11 @@ report lists doubts apart from findings.
 
 ### Exact duplicates
 
-Findings with the same file, the same line range and the same title, compared
-case-insensitively and ignoring whitespace, are grouped into one entry that
-names every reviewer that reported it. Findings that differ in any of these stay
-separate. Merging by root cause is the finding triage's work.
+Findings located on lines with the same file, the same line range and the same
+title, compared case-insensitively and ignoring whitespace, are grouped into one
+entry that names every reviewer that reported it. Findings that differ in any of
+these stay separate, and so do findings located on a file or on the whole
+change. Merging by root cause is the finding triage's work.
 
 ### The walkthrough guide
 
@@ -4378,7 +4379,9 @@ walkthrough's findings and doubts count either way.
 ### The report
 
 The report directory is the one `--dir` names or, without it, a new directory
-outside the repository. It holds:
+outside the repository. A directory inside the repository is left out of every
+tree check, so the files the review writes there never count as a change. It
+holds:
 
 - `plan.json`, the plan: the subject, the tiers, the team and the skipped
   reviewers;
@@ -4389,8 +4392,9 @@ outside the repository. It holds:
 - `walkthrough.json`, `walkthrough.patch` and `walkthrough.html`, the guide, the
   patch it was validated against and the page validation leaves;
 - `report.json`, which follows `autonomous.review-report.v1`: the subject, the
-  measured and used tiers, every reviewer with its outcome, reason, engine and
-  duration, the findings, the doubts and the guide;
+  measured and used tiers, every reviewer with its outcome and reason, the
+  engine and duration of each reviewer the plan put in the team, the findings,
+  the doubts and the guide;
 - `report.md`, a short summary for a person.
 
 By hand, the session also summarises the report in the chat: the tier, who ran

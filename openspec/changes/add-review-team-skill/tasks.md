@@ -104,6 +104,17 @@ Decided by the user on 2026-11-23 from `calibration.md` (design D15).
 
     Run on 2026-11-23 on the working tree of section 10: the eight gates and `openspec validate --strict` exit 0 (3,433 tests in 155 files), and `fallow audit` exits 0 with one duplication warning that predates this change (`attempts/state.ts` and `review-team/schema.ts`).
 
+## 11. Verification fixes
+
+From `openspec-verify-change` on 2026-11-23.
+
+- [x] 11.1 (W2) Leave a report directory inside the repository out of `subject.dirty`, the plan's status and `collect`'s comparison. Verify with tests in `subject.test.ts`, `collect.test.ts` and `plan.test.ts`.
+- [x] 11.2 (S1) Make the review CLI's loader return the `review` block alone, without the unused `defaulted` list. Verify with `review-team/config.test.ts`.
+- [x] 11.3 (W1) State in the spec and in D10 that only findings located on lines are grouped, with the scenario "Same file, no line range". Verify with `collect.test.ts` ("keeps apart … file-scope findings") and `openspec validate --strict`.
+- [x] 11.4 (S2) Name an engine and a duration in the spec and the README only for the reviewers the plan put in the team. Verify with `collect.test.ts` ("carries the plan's skipped reviewers over").
+
+Every gate of 9.3 runs again after these fixes.
+
 ## Workflow follow-up
 
 - Sync the specs and archive the change after the merge.

@@ -111,11 +111,11 @@ It also asks for the findings and doubts the walkthrough meets while explaining 
 
 ### D10. Grouping is mechanical
 
-`collect` groups findings with the same file, start line, end line and title, after lower-casing the title and collapsing its whitespace. It keeps the first one's text and lists every reviewer and id in `reporters`. Anything less exact is left to the finding triage, which merges by root cause and names what it merged.
+`collect` groups findings located on lines with the same file, start line, end line and title, after lower-casing the title and collapsing its whitespace. It keeps the first one's text and lists every reviewer and id in `reporters`. A finding located on a file or on the whole change is never grouped: it has no range to compare, and its title is often generic ("No tests"), so grouping it would keep one reviewer's text for what may be different claims. Doubts are never grouped. Anything less exact is left to the finding triage, which merges by root cause and names what it merged.
 
 ### D11. The report directory
 
-The default directory is `<os tmpdir>/review-team/<repo>-<short head>-<UTC timestamp>`, outside the repository so that nothing in it can be committed. `--dir` names another. The directory holds:
+The default directory is `<os tmpdir>/review-team/<repo>-<short head>-<UTC timestamp>`, outside the repository so that nothing in it can be committed. `--dir` names another. When the directory is inside the repository, every tree check leaves it out with a pathspec (`:(exclude,literal)<dir>`): `subject.dirty`, the plan's recorded `git status --porcelain` and `collect`'s comparison. The files the review writes there are never taken for a change of the tree, so a `--dir` inside the repository works. The directory holds:
 
 - `plan.json`;
 - `reviewers/<id>.json`;
