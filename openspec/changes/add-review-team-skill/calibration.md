@@ -95,7 +95,7 @@ The user decided on 2026-11-23 from the numbers above (design D15):
 - **The shipped team names each teammate's model and effort:** the walkthrough `opus` at `medium`, `/code-review` and the tests lens `opus` at `high`, and the security reviewer `opus` at `high` through `review.security`. The walkthrough's Sonnet runs above are why.
 - **A doubt with no label is read as `question`**, so a missing label no longer fails a required reviewer's whole file.
 - **A Codex entry with a path outside the repository is dropped alone** and named in the report, instead of skipping Codex.
-- **A reviewer of prose that instructs an agent** is a follow-up task, with the eight prose misses above as its evidence.
+- **A reviewer of prose that instructs an agent** is a follow-up task, DOT-167, with the eight prose misses above as its evidence.
 
 Left as they are:
 
