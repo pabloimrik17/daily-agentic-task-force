@@ -128,7 +128,7 @@ review team's file shape, with the skill's own severity word, without adding,
 dropping or re-rating any:
 
 - `code-review` invokes Claude Code's built-in `/code-review`, which takes
-  `[low|medium|high|xhigh|max] [<branch>|<path>]` and reports `important`,
+  `[low|medium|high|xhigh|max] [<revision range>]` and reports `important`,
   `pre_existing` and `nit`. It posts nothing without `--comment` and fixes
   nothing without `--fix`, and the brief passes neither.
 - `security-review` invokes Claude Code's built-in `/security-review`, which

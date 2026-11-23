@@ -317,7 +317,7 @@ describe("buildPlan", () => {
             expect(brief).toContain(`base with \`${subject.base}\``);
         }
         const codeReview = readFileSync(join(dir, "briefs", "code-review.md"), "utf8");
-        expect(codeReview).toContain(`/code-review xhigh ${subject.mergeBase}`);
+        expect(codeReview).toContain(`/code-review xhigh ${subject.mergeBase}..${subject.head}`);
         expect(codeReview).toContain("important, pre_existing, nit");
         const walkthrough = readFileSync(join(dir, "briefs", "walkthrough.md"), "utf8");
         expect(walkthrough).toContain(join(dir, "walkthrough.json"));
@@ -332,7 +332,9 @@ describe("buildPlan", () => {
         const { dir, plan: planned } = await plan({}, deps({ review }));
 
         const brief = readFileSync(join(dir, "briefs", "code-review.md"), "utf8");
-        expect(brief).toContain(`/code-review medium ${planned.subject.mergeBase}`);
+        expect(brief).toContain(
+            `/code-review medium ${planned.subject.mergeBase}..${planned.subject.head}`,
+        );
         expect(planned.team[0]?.engine).toEqual({
             tool: "claude-code",
             version: "2.1.300 (Claude Code)",

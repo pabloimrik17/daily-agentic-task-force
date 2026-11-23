@@ -30,12 +30,13 @@ git diff {{MERGE_BASE}} {{HEAD}}
 Invoke the built-in skill `/code-review` with these arguments and no others:
 
 ```text
-/code-review {{LEVEL}} {{MERGE_BASE}}
+/code-review {{LEVEL}} {{MERGE_BASE}}..{{HEAD}}
 ```
 
 `{{LEVEL}}` is the effort level the review team chose for this change, and
-`{{MERGE_BASE}}` is the base the skill reviews from; it takes a commit id
-there. Pass no `--comment`, which posts findings to the pull request, no
+`{{MERGE_BASE}}..{{HEAD}}` is the revision range the skill reviews: the
+subject. Pass the range whole. A commit id alone would make the skill review
+that one commit, not the work that follows it. Pass no `--comment`, which posts findings to the pull request, no
 `--fix`, which edits files, and no `--max-findings`, which changes the
 person's setting.
 

@@ -143,7 +143,7 @@ describe("the review team skill", () => {
 
     it("tells how the built-in reviewers are run and transcribed", () => {
         expect(BODY).toContain("without adding, dropping or re-rating any");
-        expect(BODY).toContain("`[low|medium|high|xhigh|max] [<branch>|<path>]`");
+        expect(BODY).toContain("`[low|medium|high|xhigh|max] [<revision range>]`");
         expect(BODY).toContain(
             "It posts nothing without `--comment` and fixes nothing without `--fix`",
         );
@@ -213,9 +213,10 @@ describe.each(BUILT_INS)("the %s brief, which runs a skill", (id) => {
 });
 
 describe("the briefs of the built-in skills", () => {
-    it("runs /code-review at the tier's level from the merge base, posting and fixing nothing", () => {
+    it("runs /code-review at the tier's level on the subject's revision range, posting and fixing nothing", () => {
         const brief = collapse(briefText("code-review"));
-        expect(brief).toContain("/code-review {{LEVEL}} {{MERGE_BASE}}");
+        expect(brief).toContain("/code-review {{LEVEL}} {{MERGE_BASE}}..{{HEAD}}");
+        expect(brief).toContain("A commit id alone would make the skill review that one commit");
         expect(brief).toContain("Pass no `--comment`");
         expect(brief).toContain("no `--fix`");
     });
