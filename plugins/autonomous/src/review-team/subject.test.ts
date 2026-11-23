@@ -1,11 +1,11 @@
-import { writeFileSync } from "node:fs";
+import { mkdirSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 
 import type { Exec } from "../exec.ts";
 import { gitSync, isolatedGit, temporaryDirectories } from "../stages/test-fixtures.ts";
-import { gitStatus, resolveSubject } from "./subject.ts";
+import { gitStatus, insideRepository, resolveSubject } from "./subject.ts";
 
 const directories = temporaryDirectories("review-subject");
 let clone: string;
@@ -167,5 +167,50 @@ describe("gitStatus", () => {
         writeFileSync(join(clone, "new.md"), "new\n");
 
         expect(await gitStatus(git)).toEqual({ ok: true, value: "?? new.md\n" });
+    });
+
+    it("leaves out the path it is given, and still reports any other change", async () => {
+        mkdirSync(join(clone, "review-out"));
+        writeFileSync(join(clone, "review-out", "plan.json"), "{}\n");
+
+        expect(await gitStatus(git)).toEqual({ ok: true, value: "?? review-out/\n" });
+        expect(await gitStatus(git, "review-out")).toEqual({ ok: true, value: "" });
+
+        writeFileSync(join(clone, "new.md"), "new\n");
+
+        expect(await gitStatus(git, "review-out")).toEqual({ ok: true, value: "?? new.md\n" });
+    });
+});
+
+describe("insideRepository", () => {
+    it("is the path from the root when the directory is inside the repository", () => {
+        expect(insideRepository("/work/repo", "/work/repo/review-out")).toBe("review-out");
+        expect(insideRepository("/work/repo", "/work/repo/a/b")).toBe(join("a", "b"));
+    });
+
+    it("is nothing for the root itself or a directory outside it", () => {
+        expect(insideRepository("/work/repo", "/work/repo")).toBeUndefined();
+        expect(insideRepository("/work/repo", "/work/other")).toBeUndefined();
+        expect(insideRepository("/work/repo", "/tmp/review-team/x")).toBeUndefined();
+    });
+
+    it("keeps a directory whose name only starts with two dots", () => {
+        expect(insideRepository("/work/repo", "/work/repo/..out")).toBe("..out");
+    });
+});
+
+describe("resolveSubject: a report directory in the repository", () => {
+    it("is not a change of the working tree", async () => {
+        mkdirSync(join(clone, "review-out"));
+        writeFileSync(join(clone, "review-out", "plan.json"), "{}\n");
+
+        const left = await resolveSubject(
+            { ...deps(fakeGh(null)), leaveOut: "review-out" },
+            "main",
+        );
+        const counted = await resolveSubject(deps(fakeGh(null)), "main");
+
+        expect(left.ok && left.value.dirty).toBe(false);
+        expect(counted.ok && counted.value.dirty).toBe(true);
     });
 });

@@ -3,7 +3,7 @@
 // the one given, else the open pull request's, else the default branch's.
 // Every git call runs in the repository: the caller binds the Exec to it.
 
-import { basename } from "node:path";
+import { basename, isAbsolute, relative, sep } from "node:path";
 
 import type { Exec } from "../exec.ts";
 import type { Result } from "../result.ts";
@@ -13,6 +13,7 @@ interface SubjectDeps {
     git: Exec;
     gh: Exec;
     repoRoot: string;
+    leaveOut?: string; // a path from the repository root that is not part of the tree's state
 }
 
 type Base = Pick<Subject, "base" | "baseSource">;
@@ -71,12 +72,28 @@ async function mergeBaseWith(git: Exec, base: string): Promise<Result<string>> {
         : { ok: false, error: `finding the merge base of HEAD and ${ref}: ${mergeBase.error}` };
 }
 
-export async function gitStatus(git: Exec): Promise<Result<string>> {
-    const status = await git(["status", "--porcelain"]);
+// The path of `dir` from the repository root, when `dir` is inside the repository.
+export function insideRepository(root: string, dir: string): string | undefined {
+    const path = relative(root, dir);
+    const outside = path === ".." || path.startsWith(`..${sep}`) || isAbsolute(path);
+    return path === "" || outside ? undefined : path;
+}
+
+// `leaveOut`: the report directory, written after the plan and never a change of the tree.
+// `literal`, so a directory name holding `*`, `?` or `[` is not read as a glob.
+export async function gitStatus(git: Exec, leaveOut?: string): Promise<Result<string>> {
+    const status = await git([
+        "status",
+        "--porcelain",
+        ...(leaveOut === undefined ? [] : ["--", ".", `:(exclude,literal)${leaveOut}`]),
+    ]);
     return status.ok ? { ok: true, value: status.stdout } : status;
 }
 
-async function headState(git: Exec): Promise<Result<Pick<Subject, "branch" | "head" | "dirty">>> {
+async function headState(
+    git: Exec,
+    leaveOut?: string,
+): Promise<Result<Pick<Subject, "branch" | "head" | "dirty">>> {
     const branch = await stdoutOf(git, ["rev-parse", "--abbrev-ref", "HEAD"]);
     if (!branch.ok) {
         return branch;
@@ -85,7 +102,7 @@ async function headState(git: Exec): Promise<Result<Pick<Subject, "branch" | "he
     if (!head.ok) {
         return head;
     }
-    const status = await gitStatus(git);
+    const status = await gitStatus(git, leaveOut);
     if (!status.ok) {
         return status;
     }
@@ -104,7 +121,7 @@ export async function resolveSubject(deps: SubjectDeps, base?: string): Promise<
     if (!mergeBase.ok) {
         return mergeBase;
     }
-    const state = await headState(deps.git);
+    const state = await headState(deps.git, deps.leaveOut);
     if (!state.ok) {
         return state;
     }

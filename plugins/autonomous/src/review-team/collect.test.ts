@@ -1,4 +1,4 @@
-import { mkdirSync, readFileSync, utimesSync, writeFileSync } from "node:fs";
+import { mkdirSync, readFileSync, realpathSync, utimesSync, writeFileSync } from "node:fs";
 import { homedir, tmpdir } from "node:os";
 import { join } from "node:path";
 
@@ -424,6 +424,35 @@ describe("collect: the tree and HEAD (spec, The review team only reports)", () =
         expect(report.errors).toEqual([
             'the working tree changed since the plan (git status --porcelain: now " M src/a.ts")',
         ]);
+    });
+
+    describe("with the report directory inside the repository", () => {
+        // git names the repository by its real path, so the directory is made under that.
+        beforeEach(() => {
+            dir = join(realpathSync(repo), "review-out");
+            mkdirSync(join(dir, "reviewers"), { recursive: true });
+            writePlan([row("codex")]);
+            writeReviewer("codex", reported("codex", []));
+        });
+
+        it("does not count the directory, nor what the collection writes in it, as a change", async () => {
+            const report = await collected();
+
+            expect(report.errors).toEqual([]);
+            expect(readFileSync(join(dir, "report.json"), "utf8")).toContain(
+                "autonomous.review-report",
+            );
+        });
+
+        it("still reports a change outside it", async () => {
+            writeFileSync(join(repo, "src/a.ts"), "export const a = 2;\n");
+
+            const report = await collected();
+
+            expect(report.errors).toEqual([
+                'the working tree changed since the plan (git status --porcelain: now " M src/a.ts")',
+            ]);
+        });
     });
 
     it("reports a moved HEAD, naming both commits", async () => {

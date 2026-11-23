@@ -15,7 +15,7 @@ import { REGISTRY } from "./registry.ts";
 import { writeReport } from "./report.ts";
 import { parseReviewerFile } from "./schema.ts";
 import { deriveSeverity } from "./severity.ts";
-import { gitStatus } from "./subject.ts";
+import { gitStatus, insideRepository } from "./subject.ts";
 import {
     type Doubt,
     type DroppedEntry,
@@ -229,10 +229,16 @@ async function headChange(git: Exec, before: string): Promise<string[]> {
     return now === before ? [] : [`HEAD moved since the plan, from ${before} to ${now}`];
 }
 
+// The report directory, when it is inside the repository, is never a change of the tree.
+async function leftOut(git: Exec, dir: string): Promise<string | undefined> {
+    const root = await git(["rev-parse", "--show-toplevel"]);
+    return root.ok ? insideRepository(root.stdout.trim(), dir) : undefined;
+}
+
 // Spec "The review team only reports": a reviewer that changed the tree or HEAD is an error.
-async function changesSincePlan(git: Exec, plan: Plan): Promise<string[]> {
+async function changesSincePlan(git: Exec, plan: Plan, dir: string): Promise<string[]> {
     return [
-        ...statusChange(await gitStatus(git), plan.status),
+        ...statusChange(await gitStatus(git, await leftOut(git, dir)), plan.status),
         ...(await headChange(git, plan.subject.head)),
     ];
 }
@@ -266,7 +272,7 @@ export async function collect(dir: string, deps: CollectDeps): Promise<Result<Re
         return plan;
     }
     // Checked before collect writes anything, in case the report directory is in the tree.
-    const changes = await changesSincePlan(deps.git, plan.value);
+    const changes = await changesSincePlan(deps.git, plan.value, dir);
     const gathered = plan.value.team.map((row) => gather(dir, plan.value, row));
     const walkthrough = await validateGuide(dir, plan.value, deps);
     return writeReport(dir, assemble(plan.value, gathered, walkthrough, changes));

@@ -322,6 +322,30 @@ describe("buildPlan", () => {
         expect(readdirSync(tmp)).toEqual([]);
     });
 
+    it("Run for a stage inside the repository: the directory is not a change of the tree", async () => {
+        commit({ "small.ts": lines(10) });
+        const named = join(clone, "review-out");
+        mkdirSync(named);
+        writeFileSync(join(named, "earlier.json"), "{}\n"); // left over from an earlier run
+
+        const { dir, plan: planned } = await plan({ dir: named });
+
+        expect(dir).toBe(named);
+        expect(planned.status).toBe("");
+        expect(planned.subject.dirty).toBe(false);
+        expect(existsSync(join(named, "plan.json"))).toBe(true);
+    });
+
+    it("Run for a stage inside the repository: a change outside the directory still counts", async () => {
+        commit({ "small.ts": lines(10) });
+        writeFileSync(join(clone, "small.ts"), lines(11));
+
+        const { plan: planned } = await plan({ dir: join(clone, "review-out") });
+
+        expect(planned.status).toBe(" M small.ts\n");
+        expect(planned.subject.dirty).toBe(true);
+    });
+
     it("fills every placeholder of every teammate's brief", async () => {
         commit({ "big.ts": lines(200) });
 

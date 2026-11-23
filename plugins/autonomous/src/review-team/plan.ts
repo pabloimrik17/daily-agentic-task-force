@@ -19,7 +19,7 @@ import {
 import { chooseTier, measureDiff, tierOf } from "./measure.ts";
 import { REGISTRY } from "./registry.ts";
 import { securityMatches } from "./security.ts";
-import { gitStatus, resolveSubject } from "./subject.ts";
+import { gitStatus, insideRepository, resolveSubject } from "./subject.ts";
 import { resolveTeam } from "./team.ts";
 import {
     type Engine,
@@ -76,14 +76,17 @@ interface Composed {
 
 async function measured(request: PlanRequest, deps: PlanDeps): Promise<Refusable<Measured>> {
     const git = deps.exec("git", CLI_TIMEOUT_MS);
+    // Only a directory the caller names can be in the repository.
+    const leaveOut =
+        request.dir === undefined ? undefined : insideRepository(deps.repoRoot, request.dir);
     const subject = await resolveSubject(
-        { git, gh: deps.exec("gh", CLI_TIMEOUT_MS), repoRoot: deps.repoRoot },
+        { git, gh: deps.exec("gh", CLI_TIMEOUT_MS), repoRoot: deps.repoRoot, leaveOut },
         request.base,
     );
     if (!subject.ok) {
         return subject;
     }
-    const status = await gitStatus(git);
+    const status = await gitStatus(git, leaveOut);
     if (!status.ok) {
         return status;
     }
