@@ -8,7 +8,7 @@ import type { Tracker, TrackerResult } from "../label-triage/trackers/tracker.ts
 import { labelCheckFor, missingLabelDetail, READ_BACK_MISMATCH } from "../label-triage/write.ts";
 import { READ_BACK_TRIES, readUntil, type Wait } from "../read-back.ts";
 import type { AnswerStatus } from "../runner.ts";
-import type { TransitionRow } from "./mode.ts";
+import type { TransitionRow } from "./table.ts";
 
 export interface Applying {
     tracker: Tracker;

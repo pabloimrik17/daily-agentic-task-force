@@ -1,6 +1,6 @@
 import { isAutonomyLabel } from "../../label-contract/contract.ts";
 import type { TrackerTask } from "../../label-triage/trackers/tracker.ts";
-import { transitionRow } from "../../transition/mode.ts";
+import { transitionRow } from "../../transition/table.ts";
 import { opusHighArgs, type Stage, type StageEnv, type StagePrerequisites } from "../stage.ts";
 import { loadSkills } from "../skills.ts";
 import { GRILL_ME_SKILLS, grillMePrompt, SKILLS_PLUGIN } from "./prompt.ts";

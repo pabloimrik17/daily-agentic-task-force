@@ -11,16 +11,15 @@ import type { Wait } from "../read-back.ts";
 import type { AnswerContext, AnswerRecord } from "../runner.ts";
 import { applyTransition, type Settlement } from "./apply.ts";
 import { type GuardTools, guardsOnLeaving } from "./guards.ts";
+import { parseTransitionId, TRANSITION } from "./mode.ts";
 import {
     accepts,
     APPROVAL_VALUES,
     AUTONOMY_OPTIONS,
-    parseTransitionId,
     rowOf,
     stageAutonomy,
-    TRANSITION,
     type TransitionRow,
-} from "./mode.ts";
+} from "./table.ts";
 import { awaitedDetail, awaitedReceipt } from "./receipt.ts";
 import { recordTransition } from "./transitioned.ts";
 

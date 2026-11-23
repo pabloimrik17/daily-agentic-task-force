@@ -11,7 +11,7 @@ import type { Exec } from "../exec.ts";
 import type { PullRequestsFactory } from "../pull-request/port.ts";
 import type { Result } from "../result.ts";
 import { findBranchChange } from "../stages/openspec-change.ts";
-import type { TransitionStage } from "./mode.ts";
+import { type TransitionStage, transitionRow } from "./table.ts";
 
 export interface GuardTools {
     git: Exec; // run with `-C <directory>`
@@ -28,14 +28,14 @@ const plural = (count: number, noun: string) => `${count} ${noun}${count === 1 ?
 
 const message = (error: unknown) => (error instanceof Error ? error.message : String(error));
 
-// The reasons that stop a task leaving the stage; none for the stages without guards.
+// The reasons that stop a task leaving the stage; none for a stage the table does not guard.
 export async function guardsOnLeaving(
     from: TransitionStage,
     ref: TaskRef,
     state: string,
     tools: GuardTools,
 ): Promise<string[]> {
-    return from === "implement" || from === "verify" ? workGuards(ref, state, tools) : [];
+    return transitionRow(from).guarded ? workGuards(ref, state, tools) : [];
 }
 
 async function workGuards(ref: TaskRef, state: string, tools: GuardTools): Promise<string[]> {

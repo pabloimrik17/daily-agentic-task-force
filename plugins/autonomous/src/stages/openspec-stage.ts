@@ -15,7 +15,7 @@ import type { TrackerTask } from "../label-triage/trackers/tracker.ts";
 import { MAX_WORDS, REQUIRED_SECTIONS } from "../logbook/body.ts";
 import type { PullRequest } from "../pull-request/port.ts";
 import type { Result } from "../result.ts";
-import { stageAutonomy, type TransitionStage, transitionRow } from "../transition/mode.ts";
+import { stageAutonomy, type TransitionStage, transitionRow } from "../transition/table.ts";
 import { findBranchChange } from "./openspec-change.ts";
 import { findWorkflow, missingWorkflow } from "./openspec-workflows.ts";
 import { renderPrompt } from "./prompt.ts";
