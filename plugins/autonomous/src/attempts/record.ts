@@ -83,6 +83,10 @@ export interface AttemptRecord {
     agentArgs: string[] | null; // null in records written before the field existed
 }
 
+export function isTaskRecord(record: AttemptRecord, ref: TaskRef): boolean {
+    return record.task.source === ref.source && record.task.id === ref.id;
+}
+
 // Open, or completed with a cleanup still owed (spec "Open attempts"); a stale
 // cleanup on a discarded or aborted record (legacy data) never holds the task.
 export function holdsTask(record: AttemptRecord): boolean {

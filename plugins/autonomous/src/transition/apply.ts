@@ -37,7 +37,7 @@ type Phase = (moving: Moving) => Promise<string | null>;
 
 const NOTHING_REMOVED = "; nothing was removed";
 
-const list = (labels: readonly string[]) => `[${labels.join(", ")}]`;
+export const list = (labels: readonly string[]) => `[${labels.join(", ")}]`;
 
 export async function applyTransition(applying: Applying): Promise<Settlement> {
     const moving = plan(applying);

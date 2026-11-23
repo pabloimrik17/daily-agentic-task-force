@@ -1,5 +1,4 @@
-// The transition table and what it answers about a task's stage, apart from transition mode
-// (./mode.ts), so the stages and the guards read it without importing the mode.
+// The transition table and what it answers about a task's stage.
 
 import type { TaskRef } from "../attempts/record.ts";
 import {

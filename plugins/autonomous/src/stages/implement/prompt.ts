@@ -30,12 +30,18 @@ import {
     requiredPullRequest,
     type Section,
     summarySection,
+    UPDATE_WORKFLOW_KEY,
 } from "../openspec-stage.ts";
 import type { StageContext, StagePromptInput } from "../stage.ts";
 
-export { CHANGE_KEY, CONTEXT_KEY, HANDOFF_SKILL, PULL_REQUEST_KEY } from "../openspec-stage.ts";
+export {
+    CHANGE_KEY,
+    CONTEXT_KEY,
+    HANDOFF_SKILL,
+    PULL_REQUEST_KEY,
+    UPDATE_WORKFLOW_KEY,
+} from "../openspec-stage.ts";
 export const APPLY_WORKFLOW_KEY = "applyWorkflow"; // `/openspec-apply-change` or `/opsx:apply`
-export const UPDATE_WORKFLOW_KEY = "updateWorkflow"; // `/openspec-update-change` or `/opsx:update`
 
 // What the prompt names, read by the prerequisites.
 interface Work {

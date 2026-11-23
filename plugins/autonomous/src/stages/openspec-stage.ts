@@ -25,6 +25,7 @@ import type { StageContext, StageEnv, StagePrerequisites, StagePromptInput } fro
 export { HANDOFF_SKILL } from "./skills.ts";
 export const CONTEXT_KEY = "context";
 export const PULL_REQUEST_KEY = "pullRequest"; // absent when the branch has no open pull request
+export const UPDATE_WORKFLOW_KEY = "updateWorkflow"; // `/openspec-update-change` or `/opsx:update`
 export const CHANGE_KEY = "change"; // the name of the OpenSpec change the branch adds
 
 type OpenspecStage = Extract<TransitionStage, "proposal" | "implement" | "verify">;

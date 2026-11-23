@@ -4,7 +4,13 @@
 
 import { access } from "node:fs/promises";
 
-import { type AttemptId, type AttemptRecord, holdsTask, type TaskRef } from "../attempts/record.ts";
+import {
+    type AttemptId,
+    type AttemptRecord,
+    holdsTask,
+    isTaskRecord,
+    type TaskRef,
+} from "../attempts/record.ts";
 import { attemptDir, listRecords, receiptPath } from "../attempts/state.ts";
 import type { Result } from "../result.ts";
 import { type TransitionStage, transitionRow } from "./table.ts";
@@ -29,11 +35,7 @@ export async function awaitedReceipt(
         return { ok: false, error: error instanceof Error ? error.message : String(error) };
     }
     const open = records.filter(
-        (record) =>
-            record.task.source === ref.source &&
-            record.task.id === ref.id &&
-            record.stage === stage &&
-            holdsTask(record),
+        (record) => isTaskRecord(record, ref) && record.stage === stage && holdsTask(record),
     );
     for (const { id } of open) {
         const receipt = receiptPath(attemptDir(state, id));

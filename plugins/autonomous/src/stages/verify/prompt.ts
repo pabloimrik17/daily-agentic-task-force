@@ -32,11 +32,12 @@ import {
     requiredPullRequest,
     type Section,
     summarySection,
+    UPDATE_WORKFLOW_KEY,
 } from "../openspec-stage.ts";
 import type { StageContext, StagePromptInput } from "../stage.ts";
 
+export { UPDATE_WORKFLOW_KEY } from "../openspec-stage.ts";
 export const VERIFY_WORKFLOW_KEY = "verifyWorkflow"; // `/openspec-verify-change` or `/opsx:verify`
-export const UPDATE_WORKFLOW_KEY = "updateWorkflow"; // `/openspec-update-change` or `/opsx:update`
 export const ADVERSARIAL_REVIEW_KEY = "adversarialReview"; // the skill's body, frontmatter stripped
 
 // Design D11: the record of the findings, beside the result marker, outside the repository.

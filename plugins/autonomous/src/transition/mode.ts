@@ -11,7 +11,7 @@ import type { Wait } from "../read-back.ts";
 import { buildHandoff, type Handoff, renderHandoffLine } from "../report.ts";
 import type { Result } from "../result.ts";
 import type { HandoffOption, HandoffQuestion } from "../runner.ts";
-import { applyTransition } from "./apply.ts";
+import { applyTransition, list } from "./apply.ts";
 import { type GuardTools, guardsOnLeaving } from "./guards.ts";
 import { awaitedDetail, awaitedReceipt } from "./receipt.ts";
 import {
@@ -149,9 +149,9 @@ function rowToLeave(
 ): Result<TransitionRow> {
     const row = rowOf(task.labels);
     const where = `${task.source} ${task.id} is in`;
-    const labels = `(labels [${task.labels.join(", ")}])`;
+    const labels = `(labels ${list(task.labels)})`;
     if (row === null) {
-        return { ok: false, error: `${where} none of ${stageList()} ${labels}` };
+        return { ok: false, error: `${where} none of ${STAGE_LIST} ${labels}` };
     }
     if (from !== undefined && row.from !== from) {
         return { ok: false, error: `${where} ${row.from}, not ${from} ${labels}` };
@@ -160,10 +160,7 @@ function rowToLeave(
 }
 
 // "grill-me, proposal, implement and verify"
-function stageList(): string {
-    const last = TRANSITION_STAGES.at(-1);
-    return `${TRANSITION_STAGES.slice(0, -1).join(", ")} and ${last}`;
-}
+const STAGE_LIST = `${TRANSITION_STAGES.slice(0, -1).join(", ")} and ${TRANSITION_STAGES.at(-1)}`;
 
 function asking(
     report: TransitionReport,
@@ -233,7 +230,7 @@ function header(task: TransitionTask, beyond: string): string {
     return task.id.length <= MAX_HEADER ? task.id : beyond;
 }
 
-const labelsLine = (task: TransitionTask) => `Labels: [${task.labels.join(", ")}]`;
+const labelsLine = (task: TransitionTask) => `Labels: ${list(task.labels)}`;
 
 // Only the autonomy is asked: the scope is a property the grill does not change,
 // and the stage follows the answer.
@@ -306,5 +303,5 @@ function taskLine(task: TransitionTask | null): string {
     if (task === null) {
         return "task: unreadable";
     }
-    return `task: ${task.source} ${task.id} → "${task.title}" → labels [${task.labels.join(", ")}]`;
+    return `task: ${task.source} ${task.id} → "${task.title}" → labels ${list(task.labels)}`;
 }
