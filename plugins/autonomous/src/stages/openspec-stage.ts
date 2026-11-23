@@ -11,10 +11,11 @@ import { logbookEntryPath, stageSummaryPath } from "../attempts/state.ts";
 import { renderContext } from "../context/render.ts";
 import type { TaskContext } from "../context/types.ts";
 import type { AutonomyLabel } from "../label-contract/contract.ts";
+import type { TrackerTask } from "../label-triage/trackers/tracker.ts";
 import { MAX_WORDS, REQUIRED_SECTIONS } from "../logbook/body.ts";
 import type { PullRequest } from "../pull-request/port.ts";
 import type { Result } from "../result.ts";
-import { stageAutonomy, type TransitionStage } from "../transition/mode.ts";
+import { stageAutonomy, type TransitionStage, transitionRow } from "../transition/mode.ts";
 import { SKILLS_PLUGIN } from "./grill-me/prompt.ts";
 import { findBranchChange } from "./openspec-change.ts";
 import { findWorkflow, missingWorkflow } from "./openspec-workflows.ts";
@@ -399,6 +400,12 @@ export function openspecChecks({ stage, workflows, pullRequest }: OpenspecChecks
         taskContext,
         openPullRequest(pullRequest === "required"),
     ];
+}
+
+// Done once the task is closed, or its transition moved it to the next stage.
+export function leftStage(stage: OpenspecStage): (task: TrackerTask) => boolean {
+    const { from, to } = transitionRow(stage);
+    return ({ closed, labels }) => closed || (labels.includes(to) && !labels.includes(from));
 }
 
 export function checkAll(checks: readonly Check[]): (env: StageEnv) => Promise<StagePrerequisites> {
