@@ -74,7 +74,7 @@
 - [x] 9.1 Run the review team by hand on this branch. Check that the report names the tier, who ran and who was skipped and why, that the guide validated, and that the tree and `HEAD` are unchanged. Verify by reading `report.md` and `git status`.
 
     Run on 2026-11-22 at `e56356b`, tier `L` as measured (9,461 lines in 67 files). The walkthrough, `fallow-review`, the tests lens and `/security-review` reported 25 findings and 8 doubts; the guide validated; the tree and `HEAD` were unchanged. Three reviewers were skipped with their reasons: Codex (the configured model is not supported by the account), CodeRabbit (its review asked for a new login although `auth status` reported one) and `/code-review` (shadowed until DOT-162). So neither CLI parser has read a real run on this repository yet. The findings have not been triaged.
-- [ ] 9.2 Calibrate (design D14, HITL, only after DOT-162).
+- [x] 9.2 Calibrate (design D14, HITL, only after DOT-162).
     - Build the reference set of accepted bot findings for five merged pull requests between #94 and #105, and have the user confirm it.
     - Run the full team at `L` on each pull request's commit before ready-for-review.
     - Pass the Greptile CLI over the same five commits. Record how many reference findings it caught and whether its use counted against the pull request app's monthly tier.
@@ -84,9 +84,23 @@
     Verify with `calibration.md` and with `config.test.ts` pinning the new defaults.
 
     Run on 2026-11-22, not finished. The reference set (20 findings over #94, #96, #97, #100 and #105) is confirmed by the user, the team ran at `L` on the five commits, and `calibration.md` holds the coverage, the unique findings and the time and cost. The team caught 9 of the 20, and 8 of those 9 came from `/code-review`. Greptile's CLI is billed per use and is not on the plan, so it stays unmeasured, as the user chose. The first runs showed that the `/code-review` brief reviewed the wrong code; it now passes a revision range. Still open: the user's decisions on the defaults, then the shipped `review` block and `config.test.ts`.
+
+    Finished on 2026-11-23: the user decided from `calibration.md` (design D15), section 10 set the shipped `review` block from it, and `config.test.ts` pins it.
 - [x] 9.3 Run every gate: `bun run test`, `bun run typecheck`, `bun run lint:eslint`, `bun run lint:fallow`, `bun run lint:knip`, `bun run lint:oxfmt`, `bun run lint:markdownlint` and `openspec validate add-review-team-skill --strict`. Verify that each one passes.
 
     Run on 2026-11-22 at `094f757`: the eight gates exit 0 (3,403 tests in 155 files). Calibration (9.2) has not run, so the gates run again after it changes the shipped defaults.
+
+## 10. Calibration decisions
+
+Decided by the user on 2026-11-23 from `calibration.md` (design D15).
+
+- [x] 10.1 Set the shipped team from the calibration: `fallow-review` out of `M` and `L`; the walkthrough, `/code-review` and the tests lens with their model and effort in every tier; optional `model` and `effort` in `review.security`, shipped as `opus` at `high`, carried into the security reviewer's engine. Update `config.example.json`, the README's tier table and configuration, and `SKILL.md` where it names the team. Verify with `config.test.ts` pinning the new defaults, `team.test.ts` and `plan.test.ts` for "Tier M" and "Teammate model", and an invalid `review.security.effort` failing validation with its path.
+- [x] 10.2 Drop a Codex entry whose path is outside the repository, alone: the optional `dropped` list in the reviewer file, carried by `collect` into the reviewer's outcome and named in `report.md`. Verify with tests for "Codex entry outside the repository", for an entry that does not fit the form still skipping Codex, and for a `dropped` entry in `report.json` and `report.md`.
+- [x] 10.3 Read a doubt with no `label` as `question`. Verify with a test for "Doubt without a label" and one that a doubt labelled `issue` still fails validation.
+- [ ] 10.4 File the follow-up task for a reviewer of prose that instructs an agent (prompts, skills, documents), with the eight misses of `calibration.md` as its evidence. Verify by reading the task back in the tracker.
+- [x] 10.5 Record the decisions in `calibration.md`, mark 9.2 done, and run every gate of 9.3 again. Verify that each one passes.
+
+    Run on 2026-11-23 on the working tree of section 10: the eight gates and `openspec validate --strict` exit 0 (3,433 tests in 155 files), and `fallow audit` exits 0 with one duplication warning that predates this change (`attempts/state.ts` and `review-team/schema.ts`).
 
 ## Workflow follow-up
 

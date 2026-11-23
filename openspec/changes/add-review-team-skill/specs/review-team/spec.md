@@ -76,20 +76,31 @@ A caller MAY ask for a tier above the measured one, giving a reason. A request f
 
 ### Requirement: Reviewers per tier
 
-Each tier SHALL take the reviewers its configuration lists, with their model, effort and level. The shipped table SHALL be the one set by the calibration. Before calibration it is:
+Each tier SHALL take the reviewers its configuration lists, with their model, effort and level. The shipped table SHALL be the one set by the calibration:
 
-- `S`: walkthrough, `/code-review` at `medium`, and Codex at `medium` effort.
-- `M`: `S`'s reviewers, plus the CodeRabbit CLI and `fallow-review`, with `/code-review` at `high`.
-- `L`: `M`'s reviewers, plus the tests-and-silent-failures lens, with `/code-review` at `xhigh` and Codex at `high`.
+- `S`: the walkthrough, `/code-review` at level `medium`, and Codex at `medium` effort.
+- `M`: `S`'s reviewers and the CodeRabbit CLI, with `/code-review` at `high`.
+- `L`: `M`'s reviewers and the tests lens, with `/code-review` at `xhigh` and Codex at `high`.
+
+`fallow-review` SHALL run only when a configuration lists it.
 
 #### Scenario: Tier M
 
-- **WHEN** a review runs at tier `M` and every reviewer is available
-- **THEN** the walkthrough, `/code-review` at `high`, Codex, the CodeRabbit CLI and `fallow-review` report, and the tests lens does not run
+- **WHEN** a review runs at tier `M` with the shipped table and every reviewer is available
+- **THEN** the walkthrough, `/code-review` at `high`, Codex and the CodeRabbit CLI report, and neither the tests lens nor `fallow-review` runs
+
+### Requirement: Teammates run on a named model
+
+Every teammate reviewer of the shipped table SHALL name its model and effort: the walkthrough `opus` at `medium`, `/code-review` and the tests lens `opus` at `high`. The plan SHALL record a teammate's model and effort in its engine, and the skill SHALL start the teammate with them. The shipped team SHALL name no Codex model.
+
+#### Scenario: Teammate model
+
+- **WHEN** a review is planned with the shipped table
+- **THEN** the walkthrough's engine names model `opus` and effort `medium`, and its teammate is started with that model and effort
 
 ### Requirement: The security trigger
 
-The security reviewer SHALL join the team at any tier when a changed path, or an added line, matches one of the configured security patterns. The report SHALL name the patterns that matched and where.
+The security reviewer SHALL join the team at any tier when a changed path, or an added line, matches one of the configured security patterns. Its model and effort SHALL come from the security configuration, shipped as `opus` at `high` effort. The report SHALL name the patterns that matched and where.
 
 #### Scenario: Shell execution added
 
@@ -145,12 +156,17 @@ Every finding SHALL follow `autonomous.finding.v1`: an id unique in the report, 
 
 ### Requirement: Output is validated at run time
 
-Each reviewer's output SHALL be validated against the finding schema when the review collects it. A reviewer whose output fails SHALL count as a reviewer that could not run, and none of its findings SHALL reach the report.
+Each reviewer's output SHALL be validated against the finding schema when the review collects it. A reviewer whose output fails SHALL count as a reviewer that could not run, and none of its findings SHALL reach the report. One exception: a Codex entry that fits Codex's form but names a path outside the repository SHALL be dropped alone, and the report SHALL name it under the Codex reviewer with the reason, while Codex's other entries are reported.
 
 #### Scenario: Changed tool output
 
 - **WHEN** the CodeRabbit CLI emits a line that the parser cannot read as a finding
 - **THEN** the CodeRabbit reviewer is skipped with a reason quoting the validation error, and its other lines are not reported either
+
+#### Scenario: Codex entry outside the repository
+
+- **WHEN** Codex reports two entries and one names a path outside the repository
+- **THEN** the other entry is reported as a Codex finding, and the report names the dropped entry under the Codex reviewer with the path and the reason
 
 ### Requirement: Severity comes from fixed tables
 
@@ -173,12 +189,17 @@ A finding's severity SHALL be set by code from its reviewer's native severity, t
 
 ### Requirement: Doubts are reported apart
 
-What a reviewer cannot judge without knowing the intent SHALL be reported as a doubt, with kind `doubt`, the Conventional Comments label `question`, a location and a statement, and no severity. Doubts SHALL be listed apart from findings.
+What a reviewer cannot judge without knowing the intent SHALL be reported as a doubt, with kind `doubt`, the Conventional Comments label `question`, a location and a statement, and no severity. A doubt that omits its label SHALL be read as `question`; a doubt with any other label fails validation. Doubts SHALL be listed apart from findings.
 
 #### Scenario: Unexplained removal
 
 - **WHEN** the walkthrough cannot tell whether removing a flag was intended
 - **THEN** the report lists a doubt at that line, with no severity, apart from the findings
+
+#### Scenario: Doubt without a label
+
+- **WHEN** a teammate writes a doubt with no `label`
+- **THEN** the file passes validation and the report lists the doubt with label `question`
 
 ### Requirement: Exact duplicates are grouped
 

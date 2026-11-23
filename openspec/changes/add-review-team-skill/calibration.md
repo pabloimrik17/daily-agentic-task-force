@@ -1,6 +1,6 @@
 # Calibration
 
-The calibration of design D14, run on 2026-11-22. It is not finished: the runs and the scoring are done, and the shipped `review` defaults are not yet set from them (see "Open decisions").
+The calibration of design D14, run on 2026-11-22. The shipped `review` defaults were set from it on 2026-11-23 (see "Decisions").
 
 ## Method
 
@@ -82,17 +82,24 @@ The reviewers of one pull request run at once, so a run takes as long as `/code-
 ## Defects the calibration found in the review team
 
 - **Fixed: the `/code-review` brief reviewed the wrong code.** It passed the merge base alone, and the built-in skill reads a lone commit id as the commit to review. On #94, #96 and #97 it reviewed the base commit and never the subject. The brief now passes the range `<merge-base>..<head>` (design D8). The numbers above come from the runs after the fix.
-- **Open: the walkthrough on Sonnet wrote an invalid file on 2 of 3 pull requests.** It left `label` off a doubt. The walkthrough is required, so `collect` exited 1 and wrote no report. On Opus it wrote a valid file on all four.
-- **Open: one bad path loses all of Codex's findings.** The parser skips the reviewer when one entry does not fit (design D8). On #94 that dropped two findings that other reviewers confirmed.
-- **Open: CodeRabbit phrases some findings as questions**, and the parser records them as findings, not doubts.
-- **Open: the plan names no model for a teammate.** Whoever runs the skill picks it, and the walkthrough result above shows the choice matters.
+- **Decided: the walkthrough on Sonnet wrote an invalid file on 2 of 3 pull requests.** It left `label` off a doubt. The walkthrough is required, so `collect` exited 1 and wrote no report. On Opus it wrote a valid file on all four.
+- **Decided: one bad path loses all of Codex's findings.** The parser skips the reviewer when one entry does not fit (design D8). On #94 that dropped two findings that other reviewers confirmed.
+- **Left as is: CodeRabbit phrases some findings as questions**, and the parser records them as findings, not doubts.
+- **Decided: the plan names no model for a teammate.** Whoever runs the skill picks it, and the walkthrough result above shows the choice matters.
 
-## Open decisions
+## Decisions
 
-The shipped `review` defaults are unchanged, and `config.test.ts` pins nothing new. What the numbers suggest, for the user to decide:
+The user decided on 2026-11-23 from the numbers above (design D15):
 
-- `/code-review` carries the team: 8 of the 9 caught reference findings and 23 of the 34 unique findings that look real. It is also about 60% of the teammates' cost ($19.07 of $31.49).
-- `fallow-review` caught nothing and reported no defect in five runs.
-- Codex on the free account reported nothing in four runs. That says little about a paid model.
-- CodeRabbit's CLI caught 1 of the 9 reference findings in its reach, where the pull request bot had raised 6 of those 9. Its free plan covers 3 reviews.
-- Eight of the misses are instructions in prose. A reviewer with that angle is the gap the reference set shows.
+- **`fallow-review` leaves `M` and `L`.** It caught nothing and reported no defect in five runs. It stays in the registry for a configuration that lists it.
+- **The shipped team names each teammate's model and effort:** the walkthrough `opus` at `medium`, `/code-review` and the tests lens `opus` at `high`, and the security reviewer `opus` at `high` through `review.security`. The walkthrough's Sonnet runs above are why.
+- **A doubt with no label is read as `question`**, so a missing label no longer fails a required reviewer's whole file.
+- **A Codex entry with a path outside the repository is dropped alone** and named in the report, instead of skipping Codex.
+- **A reviewer of prose that instructs an agent** is a follow-up task, with the eight prose misses above as its evidence.
+
+Left as they are:
+
+- `/code-review` keeps its levels per tier. It carries the team (8 of the 9 caught reference findings and 23 of the 34 unique findings that look real) at about 60% of the teammates' cost ($19.07 of $31.49).
+- Codex stays, with no shipped model. On the free account it reported nothing in four runs, which says little about a paid model.
+- CodeRabbit stays in `M` and `L`. Its CLI caught 1 of the 9 reference findings in its reach, where the pull request bot had raised 6 of them, and its free plan covers three reviews; after that it is skipped with the rate-limit reason.
+- CodeRabbit findings phrased as questions stay findings.
