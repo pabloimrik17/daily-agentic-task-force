@@ -148,12 +148,17 @@ The prompt SHALL tell the agent that only the orchestrator commits, never a team
 
 ### Requirement: The checks pass before the transition
 
-The prompt SHALL tell the agent to run every check the repository defines, such as its tests, linters and type checks, and to run the transition only when they all pass and every task of the change is checked.
+The prompt SHALL tell the agent to run every check the repository defines, such as its tests, linters and type checks, and to run the transition only when they all pass and every task of the change is checked. For `HITL`, a check that cannot be made to pass SHALL be put to the human, and the agent SHALL go on only as the human decides.
 
 #### Scenario: A check fails
 
 - **WHEN** the repository's tests fail after the last unit of work
 - **THEN** the prompt's order leads the agent to fix them, or to treat them as a blocker, before any transition
+
+#### Scenario: A check that cannot pass, HITL
+
+- **WHEN** the repository's tests of an `HITL` task cannot be made to pass
+- **THEN** the prompt tells the agent to tell the human what they reported and to go on only as the human decides
 
 ### Requirement: The implementation prompt follows the autonomy
 
