@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { type AutonomousConfig, CONFIG_SCHEMA, type Source } from "../config.ts";
+import { type AutonomousConfig, CONFIG_SCHEMA, shippedReview, type Source } from "../config.ts";
 import { inertDocumentMethods } from "../label-triage/test-fixtures.ts";
 import type {
     Tracker,
@@ -102,6 +102,7 @@ function config(enabled: Partial<Record<Source, boolean>> = {}): AutonomousConfi
         workspace: { root: "/home/me/WebstormProjects" },
         naming: { model: "haiku", effort: "low" },
         runner: { grills: 1, parallel: 2, intervalMinutes: 10 },
+        review: shippedReview(),
     };
 }
 

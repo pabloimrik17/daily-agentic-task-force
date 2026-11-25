@@ -1,0 +1,11 @@
+warning: Model metadata for `gpt-6.1-sol` not found. Defaulting to fallback metadata; this can degrade performance and cause issues.
+2026-11-22T19:55:26.971617Z ERROR rmcp::transport::worker: worker quit with fatal: Transport channel closed, when Client(HttpRequest(HttpRequest("http/request failed: error sending request for url (http://localhost:64542/stream)")))
+2026-11-22T19:55:27.007509Z ERROR rmcp::transport::worker: worker quit with fatal: Transport channel closed, when Client(HttpRequest(HttpRequest("http/request failed: error sending request for url (http://localhost:64542/stream)")))
+warning: Model metadata for `gpt-6.1-sol` not found. Defaulting to fallback metadata; this can degrade performance and cause issues.
+2026-11-22T19:55:27.260305Z ERROR rmcp::transport::worker: worker quit with fatal: Transport channel closed, when Client(HttpRequest(HttpRequest("http/request failed: error sending request for url (http://localhost:64542/stream)")))
+2026-11-22T19:55:27.975210Z ERROR rmcp::transport::worker: worker quit with fatal: Transport channel closed, when Client(HttpRequest(HttpRequest("http/request failed: error sending request for url (http://localhost:64542/stream)")))
+2026-11-22T19:55:28.263634Z ERROR rmcp::transport::worker: worker quit with fatal: Transport channel closed, when Client(HttpRequest(HttpRequest("http/request failed: error sending request for url (http://localhost:64542/stream)")))
+ERROR: The 'gpt-6.1-sol' model is not supported when using Codex with a ChatGPT account.
+codex
+Review was interrupted. Please re-run /review and wait for it to complete.
+ERROR: The 'gpt-6.1-sol' model is not supported when using Codex with a ChatGPT account.

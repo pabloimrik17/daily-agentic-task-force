@@ -48,5 +48,37 @@
         "grills": 1,
         "parallel": 2,
         "intervalMinutes": 10
+    },
+    "review": {
+        "tiers": {
+            "S": { "maxLines": 150, "maxFiles": 5 },
+            "M": { "maxLines": 600, "maxFiles": 20 }
+        },
+        "team": {
+            "S": [
+                { "reviewer": "walkthrough", "model": "opus", "effort": "medium" },
+                { "reviewer": "code-review", "level": "medium", "model": "opus", "effort": "high" },
+                { "reviewer": "codex", "effort": "medium" }
+            ],
+            "M": [
+                { "reviewer": "walkthrough", "model": "opus", "effort": "medium" },
+                { "reviewer": "code-review", "level": "high", "model": "opus", "effort": "high" },
+                { "reviewer": "codex", "effort": "medium" },
+                { "reviewer": "coderabbit" }
+            ],
+            "L": [
+                { "reviewer": "walkthrough", "model": "opus", "effort": "medium" },
+                { "reviewer": "code-review", "level": "xhigh", "model": "opus", "effort": "high" },
+                { "reviewer": "codex", "effort": "high" },
+                { "reviewer": "coderabbit" },
+                { "reviewer": "tests-lens", "model": "opus", "effort": "high" }
+            ]
+        },
+        "security": {
+            "model": "opus",
+            "effort": "high",
+            "pathPatterns": ["auth", "secret", "(^|/)\\.env(\\.|$)"],
+            "linePatterns": ["\\b(execFile|spawn)\\s*\\(", "\\beval\\s*\\("]
+        }
     }
 }

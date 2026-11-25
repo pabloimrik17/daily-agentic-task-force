@@ -1,0 +1,12 @@
+The added total function throws for every nonempty array, and the new persistence helpers do not wait for their writes to finish, causing incorrect completion and failure handling.
+
+Full review comments:
+
+- [P1] Await the file write so save failures are handled — /tmp/throwaway/src/store.ts:13-13
+  `writeFile` returns a promise, so this `try/catch` only catches synchronous errors and `save` can resolve before the file is written. If the write fails, callers see an unhandled rejection rather than the intended ignored failure; callers that immediately read the file can also observe stale data.
+
+- [P1] Stop the total loop before the array length — /tmp/throwaway/src/store.ts:20-20
+  `i <= items.length` makes the loop process one index beyond the array. For any nonempty `items` array, `items[i]` is `undefined` on the final iteration and reading `.quantity` throws, so `total` never returns a result.
+
+- [P1] Await save after removing an item — /tmp/throwaway/src/store.ts:29-29
+  Because `save` is asynchronous and this call is not awaited, `removeItem` resolves before the updated file is written and does not propagate write failures. Callers that proceed after removal can still read the old contents, and a failed write can become an unhandled rejection.
