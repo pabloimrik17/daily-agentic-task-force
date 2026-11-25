@@ -132,6 +132,12 @@ function fakePort(script: PortScript = {}): FakePort {
                 lag.reads -= 1;
                 return [...lag.shows];
             }),
+        threads: refuse("threads"),
+        pendingReview: refuse("pendingReview"),
+        review: refuse("review"),
+        reply: refuse("reply"),
+        resolve: refuse("resolve"),
+        unresolve: refuse("unresolve"),
     };
     return { port, directories: [], calls, comments: () => stored };
 }

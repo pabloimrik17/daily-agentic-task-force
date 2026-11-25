@@ -106,6 +106,13 @@ function fakePort(script: PortScript = {}): FakePort {
             }),
         comment: (number, file) => act("comment", [number, file], () => undefined),
         comments: (number) => act("comments", [number], () => []),
+        threads: (number) => act("threads", [number], () => []),
+        pendingReview: (number) => act("pendingReview", [number], () => null),
+        review: (number, body, threads) =>
+            act("review", [number, body, threads], () => ({ id: "R_1", url: URL })),
+        reply: (thread, body) => act("reply", [thread, body], () => undefined),
+        resolve: (thread) => act("resolve", [thread], () => undefined),
+        unresolve: (thread) => act("unresolve", [thread], () => undefined),
     };
     const factory = (directory: string) => {
         directories.push(directory);

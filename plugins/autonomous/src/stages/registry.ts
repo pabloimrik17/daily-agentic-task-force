@@ -2,6 +2,7 @@
 // what `launch` consults. A stage selected but absent here is reported as
 // waiting for an implementation.
 
+import { codeReviewStage } from "./code-review/stage.ts";
 import { grillMeStage } from "./grill-me/stage.ts";
 import { implementStage } from "./implement/stage.ts";
 import { proposalStage } from "./proposal/stage.ts";
@@ -15,6 +16,7 @@ export const STAGES: ReadonlyMap<StageId, Stage> = new Map([
     [proposalStage.id, proposalStage],
     [implementStage.id, implementStage],
     [verifyStage.id, verifyStage],
+    [codeReviewStage.id, codeReviewStage],
 ]);
 
 export function stageFor(id: StageId): Stage | undefined {

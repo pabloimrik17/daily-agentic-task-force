@@ -52,6 +52,9 @@ import { sleep, stopOnSignals, type Wait } from "./loop/signals.ts";
 import { stopLoop } from "./loop/stop.ts";
 import { waitForNotices } from "./loop/wait-notices.ts";
 import { runPersist } from "./persist/persist.ts";
+import { runPublish } from "./publish/publish.ts";
+import { renderPublishJson, renderPublishText, unconfiguredPublish } from "./publish/report.ts";
+import { updateWalkthrough } from "./publish/walkthrough.ts";
 import { renderPersistJson, renderPersistText, unconfiguredPersist } from "./persist/report.ts";
 import { ghPullRequests } from "./pull-request/github.ts";
 import { runPullRequest } from "./pull-request/mode.ts";
@@ -127,6 +130,7 @@ export interface MainDeps {
     // `openspec` finds its root from its working directory and has no flag to name another.
     openspecIn: (directory: string) => Exec;
     git: Exec; // run with `-C <directory>`
+    plannotatorIn: (directory: string) => Exec; // `plannotator` reads git from its working directory
     stdout: (text: string) => void;
     stderr: (text: string) => void;
     wait: Wait; // the loop's interval and the polls of --notices and --stop-loop
@@ -174,6 +178,9 @@ function dispatch(args: RunArgs, steps: readonly Step[], deps: MainDeps): Promis
     }
     if (args.log !== undefined) {
         return runLogMode(args.log, args, deps);
+    }
+    if (args.publish !== undefined) {
+        return runPublishMode(args.publish, args, deps);
     }
     return dispatchRest(args, steps, deps);
 }
@@ -485,6 +492,29 @@ async function runLogMode(attempt: AttemptId, args: RunArgs, deps: MainDeps): Pr
     return exitCodeFor(report.outcome);
 }
 
+// Design D6 of add-code-review-stage: no run lock, as persist and log modes; it writes only the
+// receipt and the walkthrough beside the attempt record, never the record.
+async function runPublishMode(attempt: AttemptId, args: RunArgs, deps: MainDeps): Promise<number> {
+    const startedAt = deps.now();
+    const load = modeConfig(args, deps, (path, error) =>
+        renderPublishJson(unconfiguredPublish(attempt, path, error, startedAt)),
+    );
+    if (load === null) {
+        return exitCodeFor("not-evaluable");
+    }
+    const publishDeps = {
+        config: load.config,
+        state: resolveStateDir(deps.env),
+        pullRequests: deps.pullRequests,
+        git: deps.git,
+        plannotatorIn: deps.plannotatorIn,
+        walkthrough: updateWalkthrough,
+    };
+    const report = await runPublish(attempt, publishDeps, startedAt);
+    deps.stdout(args.json ? renderPublishJson(report) : renderPublishText(report));
+    return exitCodeFor(report.outcome);
+}
+
 // Design D11: discard mode, like answer mode, runs no step; unlike it, it
 // rewrites an attempt, so it holds the run lock.
 async function runDiscard(args: RunArgs, deps: MainDeps): Promise<number> {
@@ -553,6 +583,8 @@ if (import.meta.main) {
         openspec: execCommand("openspec"),
         openspecIn: (directory) => execCommand("openspec", CLI_TIMEOUT_MS, { cwd: directory }),
         git: execCommand("git"),
+        plannotatorIn: (directory) =>
+            execCommand("plannotator", CLI_TIMEOUT_MS, { cwd: directory }),
         stdout: (text) => process.stdout.write(`${text}\n`),
         stderr: (text) => process.stderr.write(`${text}\n`),
         wait: sleep,

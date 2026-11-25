@@ -1,7 +1,5 @@
-// The guards on leaving implement or verify (spec autonomous-run, "Leaving implement needs the
-// work finished" and "Leaving verify needs the work finished"; design D6): in the task's
-// workspace, the change has no unchecked task, the working tree is clean and the branch is
-// pushed. Every reason that holds comes back, so one run tells the human all there is to finish.
+// Spec autonomous-run, "Leaving implement/verify/code-review needs the work finished"; designs D6,
+// D13. Every reason that holds comes back, so one run tells the human all there is to finish.
 
 import { access } from "node:fs/promises";
 
@@ -35,7 +33,9 @@ export async function guardsOnLeaving(
     state: string,
     tools: GuardTools,
 ): Promise<string[]> {
-    return from === "implement" || from === "verify" ? workGuards(ref, state, tools) : [];
+    return from === "implement" || from === "verify" || from === "code-review"
+        ? workGuards(ref, state, tools)
+        : [];
 }
 
 async function workGuards(ref: TaskRef, state: string, tools: GuardTools): Promise<string[]> {
@@ -139,7 +139,12 @@ async function uncommittedChanges(path: string, git: Exec): Promise<string | nul
     return changed === 0 ? null : `the working tree has ${plural(changed, "uncommitted change")}`;
 }
 
-async function unpushedCommits(path: string, branch: string, git: Exec): Promise<string | null> {
+// Also a precondition of publish mode: a thread can only be anchored to pushed lines.
+export async function unpushedCommits(
+    path: string,
+    branch: string,
+    git: Exec,
+): Promise<string | null> {
     const remote = `origin/${branch}`;
     const exists = await git(["-C", path, "rev-parse", "--verify", "--quiet", remote]);
     if (!exists.ok) {

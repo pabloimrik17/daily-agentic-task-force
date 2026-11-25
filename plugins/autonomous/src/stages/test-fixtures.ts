@@ -12,7 +12,8 @@ import type { ContextReader } from "../context/types.ts";
 import { type Exec, toExecResult } from "../exec.ts";
 import type { AutonomyLabel } from "../label-contract/contract.ts";
 import { config, trackers } from "../label-triage/test-fixtures.ts";
-import type { PullRequest, PullRequests } from "../pull-request/port.ts";
+import type { PullRequest, PullRequests, ReviewThread } from "../pull-request/port.ts";
+import type { Result } from "../result.ts";
 import type { RunContext } from "../runner.ts";
 import { fakeReader, selectContext, workTask } from "../select/test-fixtures.ts";
 import type { StageName, WorkTask } from "../select/types.ts";
@@ -185,10 +186,12 @@ export function installHandoff(home: string, body: string): string {
 }
 
 // Readers that log each call to `calls`; git runs for real, the others answer as told: no
-// context, `pullRequest` for the branch, and `main` as the default branch.
+// context, `pullRequest` for the branch, `main` as the default branch, and `threads` for the pull
+// request's review threads.
 export function loggingReaders(
     calls: string[],
     pullRequest: PullRequest | null,
+    threads: Result<ReviewThread[]> = { ok: true, value: [] },
 ): StageEnv["readers"] {
     const context: ContextReader = {
         source: "linear",
@@ -205,6 +208,10 @@ export function loggingReaders(
         defaultBranch: () => {
             calls.push("defaultBranch");
             return Promise.resolve({ ok: true, value: "main" });
+        },
+        threads: (number) => {
+            calls.push(`threads:${number}`);
+            return Promise.resolve(threads);
         },
     };
     return {

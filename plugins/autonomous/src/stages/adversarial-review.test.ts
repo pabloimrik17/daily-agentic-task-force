@@ -211,6 +211,34 @@ describe("the adversarial review skill", () => {
         );
     });
 
+    it("Code review as caller: the two optional parameters are supplied by the caller, never asked for", () => {
+        expect(body).toContain("A caller may also supply these two.");
+        expect(body).toContain("Never ask for them: without them, they do not apply.");
+        expect(body).toContain("human rounds: further rounds that follow the human's comments;");
+        expect(body).toContain(
+            "advisory reporters: the reporters whose findings the refutation only advises on.",
+        );
+    });
+
+    it("Human round added: a human round runs the finding triage onwards on the human's comments, and no reviewer reports again", () => {
+        expect(body).toContain("Only a caller that supplies human rounds gets more.");
+        expect(body).toContain(
+            "run a human round: the finding triage, the refutation, the fix and the fix check, once, with the human's comments as the report.",
+        );
+        expect(body).toContain("No reviewer reports again.");
+    });
+
+    it("Advisory refutation: the reporter decides, and the fix check judges the fix against the finding's statement", () => {
+        expect(body).toContain(
+            "Show that reporter the refutation's outcome and its counter-evidence.",
+        );
+        expect(body).toContain(
+            "The finding survives or not as they decide. It survives without a reproduction when they keep it.",
+        );
+        expect(body).toContain("Judge the fix against the finding's statement");
+        expect(body).toContain("The only exception is a finding of an advisory reporter, below.");
+    });
+
     it("Record complete: every reported finding with its destination, and every fixed one with its commit", () => {
         expect(body).toContain("Keep the record where the caller says.");
         expect(body).toContain(

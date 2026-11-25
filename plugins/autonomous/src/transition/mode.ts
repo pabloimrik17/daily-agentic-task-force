@@ -1,7 +1,7 @@
 // Transition mode (spec autonomous-run, "Transition mode", "Transition question", "Approval
 // question", "Transition report"). It writes only for an AFK task leaving a stage left on
-// approval, proposal, implement or verify; every other answer comes back through answer mode
-// (./answer.ts).
+// approval, proposal, implement, verify or code-review; every other answer comes back through
+// answer mode (./answer.ts).
 
 import { isSource, taskKey, type TaskRef } from "../attempts/record.ts";
 import type { AutonomousConfig, Source } from "../config.ts";
@@ -19,7 +19,7 @@ import type { Result } from "../result.ts";
 import type { HandoffOption, HandoffQuestion } from "../runner.ts";
 import { applyTransition } from "./apply.ts";
 import { type GuardTools, guardsOnLeaving } from "./guards.ts";
-import { awaitedDetail, awaitedReceipt } from "./receipt.ts";
+import { awaitedDetails } from "./receipt.ts";
 import { recordTransition } from "./transitioned.ts";
 
 export const TRANSITION = "transition";
@@ -40,6 +40,7 @@ const TRANSITIONS = {
     proposal: { to: "implement", asks: "approval" },
     implement: { to: "verify", asks: "approval" },
     verify: { to: "code-review", asks: "approval" },
+    "code-review": { to: "external-review", asks: "approval" },
 } as const satisfies Partial<Record<StageLabel, TransitionTarget>>;
 
 export type TransitionStage = keyof typeof TRANSITIONS;
@@ -77,8 +78,8 @@ export const APPROVAL_VALUES: readonly StageLabel[] = TRANSITION_STAGES.map(tran
     .filter((row) => row.asks === "approval")
     .map((row) => row.to);
 
-// The autonomy that decides how a task leaves a stage left on approval, `proposal`, `implement` or `verify`
-// (spec label-contract, "The autonomy decides whether leaving ... needs an answer"): exactly one,
+// The autonomy that decides how a task leaves a stage left on approval, `proposal`, `implement`, `verify` or
+// `code-review` (spec label-contract, "The autonomy decides whether leaving ... needs an answer"): exactly one,
 // or the reason there is none.
 export function stageAutonomy(
     ref: TaskRef,
@@ -140,6 +141,7 @@ const READY: Record<TransitionStage, string> = {
     proposal: "the proposal is ready",
     implement: "the implementation is ready",
     verify: "the verification is ready",
+    "code-review": "the code review is ready",
 };
 
 // Task ids carry no `:`.
@@ -204,12 +206,12 @@ export async function runTransition(
         return { ...report, task, reasons: [leaving.error] };
     }
     const row = leaving.value;
-    const awaited = await awaitedReceipt(deps.state, ref, row.from);
+    const awaited = await awaitedDetails(deps.state, ref, row.from);
     if (!awaited.ok) {
         return { ...report, task, reasons: [awaited.error] };
     }
     if (awaited.value !== null) {
-        return { ...report, task, reasons: [awaitedDetail(awaited.value)] };
+        return { ...report, task, reasons: [awaited.value] };
     }
     if (row.asks === "autonomy") {
         return asking(report, task, transitionQuestion(ref, task));
@@ -235,7 +237,7 @@ function rowToLeave(
     return { ok: true, value: row };
 }
 
-// "grill-me, proposal, implement and verify"
+// "grill-me, proposal, implement, verify and code-review"
 function stageList(): string {
     const last = TRANSITION_STAGES.at(-1);
     return `${TRANSITION_STAGES.slice(0, -1).join(", ")} and ${last}`;

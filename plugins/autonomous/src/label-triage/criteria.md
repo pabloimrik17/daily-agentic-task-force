@@ -8,8 +8,8 @@ to a task; a task carrying both is in conflict.
 The autonomy group holds `AFK` and `HITL`. Exactly one of the two applies to
 a task; a task carrying both is in conflict.
 
-The stage group holds `grill-me`, `proposal`, `implement`, `verify` and `code-review`.
-Exactly one of the five applies to a task; a task carrying two is in conflict.
+The stage group holds `grill-me`, `proposal`, `implement`, `verify`, `code-review` and `external-review`.
+Exactly one of the six applies to a task; a task carrying two is in conflict.
 
 `work` is Nazaries work.
 
@@ -33,6 +33,9 @@ proposal.
 
 `code-review` means the task is verified and ready for code review.
 
+`external-review` means the task has passed every review stage that exists and
+waits for external review.
+
 Two things are decided for a task: its scope and its autonomy. The stage is
 never decided on its own; it follows the autonomy decision.
 
@@ -44,7 +47,7 @@ decides it. A task with no stage label that is decided `AFK` or `HITL` gets
 `proposal` as its stage.
 
 `grill-me` is an option only when the task has no stage label. A task that
-already carries `grill-me`, `proposal`, `implement`, `verify` or `code-review` is decided
+already carries `grill-me`, `proposal`, `implement`, `verify`, `code-review` or `external-review` is decided
 `AFK` or `HITL`.
 
 Constraints: exactly one scope label applies to a task. Exactly one of `AFK`

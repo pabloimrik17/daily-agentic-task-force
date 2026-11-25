@@ -68,7 +68,7 @@ export function nonEmpty(parent: Json, key: string, path: string): string {
     return value;
 }
 
-function oneLine(parent: Json, key: string, path: string): string {
+export function oneLine(parent: Json, key: string, path: string): string {
     const value = nonEmpty(parent, key, path);
     if (/[\r\n]/.test(value)) {
         throw new ParseError(`${path}.${key} must be a single line`);
@@ -76,7 +76,7 @@ function oneLine(parent: Json, key: string, path: string): string {
     return value;
 }
 
-function integerAtLeast(parent: Json, key: string, path: string, minimum: number): number {
+export function integerAtLeast(parent: Json, key: string, path: string, minimum: number): number {
     const value = number(parent, key, path);
     if (!Number.isInteger(value) || value < minimum) {
         throw new ParseError(`${path}.${key} must be an integer >= ${minimum}`);
@@ -146,7 +146,7 @@ const LOCATION_READERS: Readonly<
     Record<(typeof SCOPES)[number], (p: Json, path: string) => Location>
 > = { line: lineLocation, file: fileLocation, change: changeLocation };
 
-function location(value: unknown, path: string): Location {
+export function location(value: unknown, path: string): Location {
     const parent = object(value, path);
     return LOCATION_READERS[choice(parent, "scope", path, SCOPES)](parent, path);
 }

@@ -3,12 +3,27 @@
 
 import { CLI_TIMEOUT_MS, type Exec, execCommand } from "../exec.ts";
 import type { Result } from "../result.ts";
-import { ParseError, array, boolean, number, object, string } from "../validate.ts";
 import {
+    type Json,
+    ParseError,
+    array,
+    boolean,
+    choice,
+    number,
+    object,
+    string,
+} from "../validate.ts";
+import {
+    type DiffSide,
     EMPTY_COMMIT_SUBJECT,
+    type NewThread,
+    type PostedReview,
     type PullRequest,
     type PullRequests,
     type PullRequestsFactory,
+    type ReviewThread,
+    type ThreadAnchor,
+    type ThreadComment,
 } from "./port.ts";
 
 // The commit and the push run the repository's hooks, and a pre-push hook can run a whole test
@@ -127,6 +142,429 @@ function shortIds(stdout: string): string[] {
         .flatMap((line) => line.split(" ", 1));
 }
 
+// Review threads exist only in GitHub's GraphQL API (design D8 of add-code-review-stage). Strings go
+// with `-f`, so a body such as "true" or "12" stays a string; `-F` types the numbers and fills
+// gh's `{owner}` and `{repo}` placeholders from the working directory's repository.
+
+const PULL_REQUEST_VARIABLES = "$owner: String!, $name: String!, $number: Int!";
+
+function onPullRequest(selection: string): string {
+    return `repository(owner: $owner, name: $name) { pullRequest(number: $number) { ${selection} } }`;
+}
+
+const COMMENTS_FIELDS =
+    "pageInfo { hasNextPage endCursor } nodes { id body url author { login } createdAt }";
+
+const THREADS_QUERY = `query ReviewThreads(${PULL_REQUEST_VARIABLES}, $after: String) {
+  ${onPullRequest(`reviewThreads(first: 100, after: $after) {
+    pageInfo { hasNextPage endCursor }
+    nodes {
+      id path subjectType line startLine diffSide isResolved isOutdated
+      comments(first: 100) { ${COMMENTS_FIELDS} }
+    }
+  }`)}
+}`;
+
+const COMMENTS_QUERY = `query ThreadComments($thread: ID!, $after: String) {
+  node(id: $thread) {
+    ... on PullRequestReviewThread { comments(first: 100, after: $after) { ${COMMENTS_FIELDS} } }
+  }
+}`;
+
+// GitHub shows a pending review only to its author.
+const PENDING_REVIEW_QUERY = `query PendingReview(${PULL_REQUEST_VARIABLES}) {
+  ${onPullRequest("reviews(states: PENDING, first: 1) { nodes { url } }")}
+}`;
+
+const PULL_REQUEST_ID_QUERY = `query PullRequestId(${PULL_REQUEST_VARIABLES}) {
+  ${onPullRequest("id")}
+}`;
+
+// No event: the review stays pending until it is submitted.
+const ADD_REVIEW_MUTATION = `mutation AddPullRequestReview($pullRequest: ID!) {
+  addPullRequestReview(input: { pullRequestId: $pullRequest }) { pullRequestReview { id } }
+}`;
+
+// A variable left out leaves its input field unset.
+const ADD_THREAD_MUTATION = `mutation AddPullRequestReviewThread(
+  $review: ID!, $path: String!, $body: String!, $subjectType: PullRequestReviewThreadSubjectType!,
+  $line: Int, $side: DiffSide, $startLine: Int, $startSide: DiffSide
+) {
+  addPullRequestReviewThread(input: {
+    pullRequestReviewId: $review, path: $path, body: $body, subjectType: $subjectType,
+    line: $line, side: $side, startLine: $startLine, startSide: $startSide
+  }) { thread { id } }
+}`;
+
+// The event is fixed: a run never approves or requests changes.
+const SUBMIT_REVIEW_MUTATION = `mutation SubmitPullRequestReview($review: ID!, $body: String!) {
+  submitPullRequestReview(input: { pullRequestReviewId: $review, event: COMMENT, body: $body }) { pullRequestReview { id url } }
+}`;
+
+const DELETE_REVIEW_MUTATION = `mutation DeletePullRequestReview($review: ID!) {
+  deletePullRequestReview(input: { pullRequestReviewId: $review }) { pullRequestReview { id } }
+}`;
+
+const REPLY_MUTATION = `mutation AddPullRequestReviewThreadReply($thread: ID!, $body: String!) {
+  addPullRequestReviewThreadReply(input: { pullRequestReviewThreadId: $thread, body: $body }) { comment { id } }
+}`;
+
+const RESOLVE_MUTATION = `mutation ResolveReviewThread($thread: ID!) {
+  resolveReviewThread(input: { threadId: $thread }) { thread { id } }
+}`;
+
+const UNRESOLVE_MUTATION = `mutation UnresolveReviewThread($thread: ID!) {
+  unresolveReviewThread(input: { threadId: $thread }) { thread { id } }
+}`;
+
+function text(name: string, value: string): string[] {
+    return ["-f", `${name}=${value}`];
+}
+
+function typed(name: string, value: number | string): string[] {
+    return ["-F", `${name}=${value}`];
+}
+
+function pullRequestVariables(pullNumber: number): string[] {
+    return [
+        ...typed("owner", "{owner}"),
+        ...typed("name", "{repo}"),
+        ...typed("number", pullNumber),
+    ];
+}
+
+function cursor(after: string | null): string[] {
+    return after === null ? [] : text("after", after);
+}
+
+function graphQlErrors(response: Json): string | null {
+    const errors = response.errors;
+    if (!Array.isArray(errors) || errors.length === 0) {
+        return null;
+    }
+    return errors
+        .map((error: unknown) => {
+            const message = (error as { message?: unknown } | null)?.message;
+            return typeof message === "string" ? message : JSON.stringify(error);
+        })
+        .join("; ");
+}
+
+// gh exits non-zero when a response holds `errors`; they are read here too, so that a 200 response
+// holding them is never taken for data.
+async function graphql<T>(
+    gh: Exec,
+    label: string,
+    query: string,
+    variables: string[],
+    read: (data: Json) => T,
+): Promise<Result<T>> {
+    const out = await run(gh, label, ["api", "graphql", "-f", `query=${query}`, ...variables]);
+    if (!out.ok) {
+        return out;
+    }
+    const parsed = parseJson(label, out.value, (json): Result<T> => {
+        const response = object(json, "output");
+        const errors = graphQlErrors(response);
+        return errors === null
+            ? { ok: true, value: read(object(response.data, "output.data")) }
+            : { ok: false, error: `${label}: ${errors}` };
+    });
+    return parsed.ok ? parsed.value : parsed;
+}
+
+function ignoreData(): void {}
+
+function nullableNumber(parent: Json, key: string, path: string): number | null {
+    return parent[key] === null ? null : number(parent, key, path);
+}
+
+function pullRequestOf(data: Json): Json {
+    const repository = object(data.repository, "output.data.repository");
+    return object(repository.pullRequest, "output.data.repository.pullRequest");
+}
+
+function payloadNode(data: Json, mutation: string, node: string): Json {
+    const payload = object(data[mutation], `output.data.${mutation}`);
+    return object(payload[node], `output.data.${mutation}.${node}`);
+}
+
+function payloadId(data: Json, mutation: string, node: string): string {
+    return string(payloadNode(data, mutation, node), "id", `output.data.${mutation}.${node}`);
+}
+
+interface Page<T> {
+    nodes: T[];
+    next: string | null;
+}
+
+function readPage<T>(
+    value: unknown,
+    path: string,
+    read: (node: unknown, path: string) => T,
+): Page<T> {
+    const connection = object(value, path);
+    const info = object(connection.pageInfo, `${path}.pageInfo`);
+    const more = boolean(info, "hasNextPage", `${path}.pageInfo`);
+    return {
+        nodes: array(connection.nodes, `${path}.nodes`).map((node, index) =>
+            read(node, `${path}.nodes[${index}]`),
+        ),
+        next: more ? string(info, "endCursor", `${path}.pageInfo`) : null,
+    };
+}
+
+async function collect<T>(
+    fetchPage: (after: string | null) => Promise<Result<Page<T>>>,
+    first: string | null,
+): Promise<Result<T[]>> {
+    const all: T[] = [];
+    let after = first;
+    do {
+        const page = await fetchPage(after);
+        if (!page.ok) {
+            return page;
+        }
+        all.push(...page.value.nodes);
+        after = page.value.next;
+    } while (after !== null);
+    return { ok: true, value: all };
+}
+
+function readComment(value: unknown, path: string): ThreadComment {
+    const json = object(value, path);
+    const author = json.author === null ? null : object(json.author, `${path}.author`);
+    return {
+        id: string(json, "id", path),
+        body: string(json, "body", path),
+        url: string(json, "url", path),
+        author: author === null ? "" : string(author, "login", `${path}.author`),
+        createdAt: string(json, "createdAt", path),
+    };
+}
+
+const SUBJECT_TYPES: readonly ReviewThread["subjectType"][] = ["LINE", "FILE"];
+
+const DIFF_SIDES: readonly DiffSide[] = ["LEFT", "RIGHT"];
+
+interface ListedThread {
+    thread: ReviewThread;
+    moreComments: string | null;
+}
+
+// GitHub gives a single-line thread a start line equal to its line; the port keeps it for a
+// multi-line thread.
+function readThread(value: unknown, path: string): ListedThread {
+    const json = object(value, path);
+    const line = nullableNumber(json, "line", path);
+    const startLine = nullableNumber(json, "startLine", path);
+    const comments = readPage(json.comments, `${path}.comments`, readComment);
+    return {
+        thread: {
+            id: string(json, "id", path),
+            path: string(json, "path", path),
+            subjectType: choice(json, "subjectType", path, SUBJECT_TYPES),
+            line,
+            startLine: startLine === line ? null : startLine,
+            side: json.diffSide === null ? null : choice(json, "diffSide", path, DIFF_SIDES),
+            resolved: boolean(json, "isResolved", path),
+            outdated: boolean(json, "isOutdated", path),
+            comments: comments.nodes,
+        },
+        moreComments: comments.next,
+    };
+}
+
+function readThreadPage(data: Json): Page<ListedThread> {
+    const path = "output.data.repository.pullRequest.reviewThreads";
+    return readPage(pullRequestOf(data).reviewThreads, path, readThread);
+}
+
+function readCommentPage(data: Json): Page<ThreadComment> {
+    const node = object(data.node, "output.data.node");
+    return readPage(node.comments, "output.data.node.comments", readComment);
+}
+
+function readPendingReview(data: Json): string | null {
+    const path = "output.data.repository.pullRequest.reviews";
+    const reviews = object(pullRequestOf(data).reviews, path);
+    const [first] = array(reviews.nodes, `${path}.nodes`);
+    return first === undefined
+        ? null
+        : string(object(first, `${path}.nodes[0]`), "url", `${path}.nodes[0]`);
+}
+
+async function listThreads(gh: Exec, pullNumber: number): Promise<Result<ReviewThread[]>> {
+    const label = `gh api graphql reviewThreads ${pullNumber}`;
+    const variables = pullRequestVariables(pullNumber);
+    const listed = await collect(
+        (after) =>
+            graphql(gh, label, THREADS_QUERY, [...variables, ...cursor(after)], readThreadPage),
+        null,
+    );
+    if (!listed.ok) {
+        return listed;
+    }
+    const threads: ReviewThread[] = [];
+    for (const { thread, moreComments } of listed.value) {
+        const rest = await restOfComments(gh, thread.id, moreComments);
+        if (!rest.ok) {
+            return rest;
+        }
+        threads.push({ ...thread, comments: [...thread.comments, ...rest.value] });
+    }
+    return { ok: true, value: threads };
+}
+
+function restOfComments(
+    gh: Exec,
+    thread: string,
+    after: string | null,
+): Promise<Result<ThreadComment[]>> {
+    if (after === null) {
+        return Promise.resolve({ ok: true, value: [] });
+    }
+    const label = `gh api graphql comments ${thread}`;
+    const variables = text("thread", thread);
+    return collect(
+        (page) =>
+            graphql(gh, label, COMMENTS_QUERY, [...variables, ...cursor(page)], readCommentPage),
+        after,
+    );
+}
+
+function anchorVariables(anchor: ThreadAnchor): string[] {
+    if (anchor.kind === "file") {
+        return text("subjectType", "FILE");
+    }
+    const { line, startLine, side } = anchor;
+    const range =
+        startLine === undefined || startLine === line
+            ? []
+            : [...typed("startLine", startLine), ...text("startSide", side)];
+    return [
+        ...text("subjectType", "LINE"),
+        ...typed("line", line),
+        ...text("side", side),
+        ...range,
+    ];
+}
+
+function anchorName(anchor: ThreadAnchor): string {
+    return anchor.kind === "file" ? anchor.path : `${anchor.path}:${anchor.line}`;
+}
+
+async function addThreads(
+    gh: Exec,
+    review: string,
+    threads: readonly NewThread[],
+): Promise<Result<void>> {
+    for (const { anchor, body } of threads) {
+        const label = `gh api graphql addPullRequestReviewThread ${anchorName(anchor)}`;
+        const variables = [
+            ...text("review", review),
+            ...text("path", anchor.path),
+            ...text("body", body),
+            ...anchorVariables(anchor),
+        ];
+        const added = await graphql(gh, label, ADD_THREAD_MUTATION, variables, (data) =>
+            payloadId(data, "addPullRequestReviewThread", "thread"),
+        );
+        if (!added.ok) {
+            return added;
+        }
+    }
+    return { ok: true, value: undefined };
+}
+
+function submitReview(gh: Exec, review: string, body: string): Promise<Result<PostedReview>> {
+    const label = `gh api graphql submitPullRequestReview ${review}`;
+    const variables = [...text("review", review), ...text("body", body)];
+    return graphql(gh, label, SUBMIT_REVIEW_MUTATION, variables, (data) => {
+        const path = "output.data.submitPullRequestReview.pullRequestReview";
+        const posted = payloadNode(data, "submitPullRequestReview", "pullRequestReview");
+        return { id: string(posted, "id", path), url: string(posted, "url", path) };
+    });
+}
+
+// A pending review left behind would block the next run's, since an account holds one per
+// pull request.
+async function discardReview(gh: Exec, review: string, error: string): Promise<Result<never>> {
+    const label = `gh api graphql deletePullRequestReview ${review}`;
+    const deleted = await graphql(
+        gh,
+        label,
+        DELETE_REVIEW_MUTATION,
+        text("review", review),
+        ignoreData,
+    );
+    const outcome = deleted.ok ? `the pending review ${review} was deleted` : deleted.error;
+    return { ok: false, error: `${error}; ${outcome}` };
+}
+
+async function postReview(
+    gh: Exec,
+    pullNumber: number,
+    body: string,
+    threads: readonly NewThread[],
+): Promise<Result<PostedReview>> {
+    const pullRequest = await graphql(
+        gh,
+        `gh api graphql pullRequest ${pullNumber}`,
+        PULL_REQUEST_ID_QUERY,
+        pullRequestVariables(pullNumber),
+        (data) => string(pullRequestOf(data), "id", "output.data.repository.pullRequest"),
+    );
+    if (!pullRequest.ok) {
+        return pullRequest;
+    }
+    const pending = await graphql(
+        gh,
+        `gh api graphql addPullRequestReview ${pullNumber}`,
+        ADD_REVIEW_MUTATION,
+        text("pullRequest", pullRequest.value),
+        (data) => payloadId(data, "addPullRequestReview", "pullRequestReview"),
+    );
+    if (!pending.ok) {
+        return pending;
+    }
+    const added = await addThreads(gh, pending.value, threads);
+    const posted = added.ok ? await submitReview(gh, pending.value, body) : added;
+    return posted.ok ? posted : discardReview(gh, pending.value, posted.error);
+}
+
+type ReviewThreadMethods = Pick<
+    PullRequests,
+    "threads" | "pendingReview" | "review" | "reply" | "resolve" | "unresolve"
+>;
+
+function reviewThreads(gh: Exec): ReviewThreadMethods {
+    const onThread = (mutation: string, query: string, thread: string, body: string[] = []) =>
+        graphql(
+            gh,
+            `gh api graphql ${mutation} ${thread}`,
+            query,
+            [...text("thread", thread), ...body],
+            ignoreData,
+        );
+    return {
+        threads: (pullNumber) => listThreads(gh, pullNumber),
+        pendingReview: (pullNumber) =>
+            graphql(
+                gh,
+                `gh api graphql pendingReview ${pullNumber}`,
+                PENDING_REVIEW_QUERY,
+                pullRequestVariables(pullNumber),
+                readPendingReview,
+            ),
+        review: (pullNumber, body, threads) => postReview(gh, pullNumber, body, threads),
+        reply: (thread, body) =>
+            onThread("addPullRequestReviewThreadReply", REPLY_MUTATION, thread, text("body", body)),
+        resolve: (thread) => onThread("resolveReviewThread", RESOLVE_MUTATION, thread),
+        unresolve: (thread) => onThread("unresolveReviewThread", UNRESOLVE_MUTATION, thread),
+    };
+}
+
 export function gitHubPullRequests(execs: GitHubExecs, directory: string): PullRequests {
     const { gh, git, hooked } = execs;
     const inDirectory = ["-C", directory];
@@ -206,6 +644,7 @@ export function gitHubPullRequests(execs: GitHubExecs, directory: string): PullR
             ]);
             return out.ok ? parseJson(label, out.value, readCommentBodies) : out;
         },
+        ...reviewThreads(gh),
     };
 }
 

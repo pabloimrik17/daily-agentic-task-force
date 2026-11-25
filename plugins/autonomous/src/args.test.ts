@@ -19,6 +19,7 @@ const DEFAULTS: RunArgs = {
     pullRequest: undefined,
     title: undefined,
     log: undefined,
+    publish: undefined,
     loop: false,
     grills: undefined,
     parallel: undefined,
@@ -169,6 +170,18 @@ describe("parseArgs", () => {
         );
     });
 
+    it("reads --apply --transition --from code-review", () => {
+        expect(
+            parseArgs(["--apply", "--transition", "linear:DOT-110", "--from", "code-review"]),
+        ).toEqual(
+            accepted({
+                apply: true,
+                transition: { source: "linear", id: "DOT-110" },
+                from: "code-review",
+            }),
+        );
+    });
+
     it("reads --apply --pull-request with and without --title and --json", () => {
         const id = "linear:DOT-121:grill-me:1";
         expect(parseArgs(["--apply", "--pull-request", id])).toEqual(
@@ -184,6 +197,16 @@ describe("parseArgs", () => {
         expect(parseArgs(["--apply", "--log", id])).toEqual(accepted({ apply: true, log: id }));
         expect(parseArgs(["--log", id, "--json", "--apply"])).toEqual(
             accepted({ apply: true, json: true, log: id }),
+        );
+    });
+
+    it("Publish mode: reads --apply --publish with and without --json", () => {
+        const id = "linear:DOT-121:code-review:1";
+        expect(parseArgs(["--apply", "--publish", id])).toEqual(
+            accepted({ apply: true, publish: id }),
+        );
+        expect(parseArgs(["--publish", id, "--json", "--apply"])).toEqual(
+            accepted({ apply: true, json: true, publish: id }),
         );
     });
 
@@ -284,8 +307,8 @@ describe("parseArgs", () => {
             "--stage given more than once",
         ],
         [
-            ["--task", "linear:A-1", "--stage", "code-review"],
-            "--stage code-review is not a registered stage (test, grill-me, proposal, implement, verify)",
+            ["--task", "linear:A-1", "--stage", "external-review"],
+            "--stage external-review is not a registered stage (test, grill-me, proposal, implement, verify, code-review)",
         ],
         [["--stage", "test"], "--stage requires --task"],
         [
@@ -332,8 +355,8 @@ describe("parseArgs", () => {
             "--from requires a stage name",
         ],
         [
-            ["--apply", "--transition", "linear:DOT-110", "--from", "code-review"],
-            "--from code-review is not a stage a transition leaves (grill-me, proposal, implement, verify)",
+            ["--apply", "--transition", "linear:DOT-110", "--from", "external-review"],
+            "--from external-review is not a stage a transition leaves (grill-me, proposal, implement, verify, code-review)",
         ],
         [
             ["--apply", "--transition", "linear:DOT-110", "--from", "verify", "--from", "verify"],
@@ -597,6 +620,47 @@ describe("parseArgs", () => {
         [["--notices", "0", "--loop", "--interval", "5"], NOTICES_ALONE],
         [["--apply", "--notices", "0", "--persist", "linear:DOT-121:grill-me:1"], NOTICES_ALONE],
         [["--apply", "--notices", "0", "--log", "linear:DOT-121:grill-me:1"], NOTICES_ALONE],
+        [["--publish", "linear:DOT-121:code-review:1"], "--publish requires --apply"],
+        [["--publish", "linear:DOT-121:code-review:1", "--json"], "--publish requires --apply"],
+        [["--apply", "--publish"], "--publish requires an attempt id <source>:<task>:<stage>:<n>"],
+        [
+            ["--apply", "--publish", "linear:DOT-121"],
+            "--publish linear:DOT-121 must be an attempt id <source>:<task>:<stage>:<n>",
+        ],
+        [
+            [
+                "--apply",
+                "--publish",
+                "linear:DOT-121:code-review:1",
+                "--publish",
+                "linear:DOT-121:code-review:1",
+            ],
+            "--publish given more than once",
+        ],
+        [
+            ["--apply", "--publish", "linear:DOT-121:code-review:1", "--force"],
+            "--publish can only be combined with --apply and --json",
+        ],
+        [
+            ["--apply", "--publish", "linear:DOT-121:code-review:1", "--discard", "beads:X-1"],
+            "--publish can only be combined with --apply and --json",
+        ],
+        [
+            [
+                "--apply",
+                "--publish",
+                "linear:DOT-121:code-review:1",
+                "--log",
+                "linear:DOT-121:code-review:1",
+            ],
+            "--log can only be combined with --apply and --json",
+        ],
+        [
+            ["--apply", "--publish", "linear:DOT-121:code-review:1", "--title", "x"],
+            "--title requires --pull-request",
+        ],
+        [["--loop", "--apply", "--publish", "linear:DOT-121:code-review:1"], LOOP_ONLY],
+        [["--apply", "--notices", "0", "--publish", "linear:DOT-121:code-review:1"], NOTICES_ALONE],
     ])("rejects %j", (argv, error) => {
         expect(parseArgs(argv)).toEqual({ ok: false, error });
     });

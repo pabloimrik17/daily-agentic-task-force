@@ -1,0 +1,23 @@
+{
+    "title": "Retry failed uploads",
+    "intent": "Uploads that fail on a network error are retried three times before the user sees an error.",
+    "sections": [
+        {
+            "title": "The retry loop",
+            "overview": "The loop stops once the token is revoked.",
+            "diffs": [{ "file": "src/retry.ts", "summary": "Stops the loop on a revoked token." }]
+        },
+        {
+            "title": "The upload client",
+            "overview": "The client wires the retry loop in.",
+            "diffs": [{ "file": "src/client.ts", "summary": "Imports the upload." }],
+            "diagram": { "kind": "mermaid", "source": "flowchart LR\n  A --> B" }
+        },
+        {
+            "title": "Documentation",
+            "overview": "The README says uploads are retried.",
+            "diffs": [{ "file": "README.md", "summary": "Documents the retries." }]
+        }
+    ],
+    "unplacedFiles": []
+}

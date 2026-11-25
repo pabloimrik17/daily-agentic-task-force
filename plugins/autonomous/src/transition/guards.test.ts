@@ -22,7 +22,7 @@ afterEach(() => {
 async function leaving(
     work: Work = {},
     calls: string[] = [],
-    stage: "implement" | "verify" = "implement",
+    stage: "implement" | "verify" | "code-review" = "implement",
 ): Promise<string[]> {
     const { state, workspace } = await stateWithWorkspace(TASK);
     kept.push(state, workspace);
@@ -169,5 +169,40 @@ describe("guards: Leaving verify needs the work finished", () => {
         expect(await leaving({ completed: 3, total: 4 }, [], "verify")).toEqual([
             `the change ${CHANGE} has 1 of 4 tasks unchecked`,
         ]);
+    });
+});
+
+describe("guards: Leaving code-review needs the work finished", () => {
+    it("Uncommitted fix: the working tree is named", async () => {
+        expect(await leaving({ status: " M src/a.ts\n" }, [], "code-review")).toEqual([
+            "the working tree has 1 uncommitted change",
+        ]);
+    });
+
+    it("Unpushed fix: the commit the remote branch lacks is named", async () => {
+        expect(await leaving({ ahead: 1 }, [], "code-review")).toEqual([
+            `the branch ${BRANCH} has 1 commit origin/${BRANCH} lacks`,
+        ]);
+    });
+
+    it("Unchecked task: every reason that holds comes back", async () => {
+        expect(
+            await leaving(
+                { completed: 11, total: 12, status: " M a.ts\n", ahead: 2 },
+                [],
+                "code-review",
+            ),
+        ).toEqual([
+            `the change ${CHANGE} has 1 of 12 tasks unchecked`,
+            "the working tree has 1 uncommitted change",
+            `the branch ${BRANCH} has 2 commits origin/${BRANCH} lacks`,
+        ]);
+    });
+
+    it("Work finished: the three checks of verify run and pass", async () => {
+        const calls: string[] = [];
+
+        expect(await leaving({}, calls, "code-review")).toEqual([]);
+        expect(calls).toHaveLength(7);
     });
 });

@@ -18,6 +18,43 @@ interface OpenRequest {
     bodyFile: string;
 }
 
+// Review threads exist only in GitHub's GraphQL API (design D8 of add-code-review-stage).
+export type DiffSide = "LEFT" | "RIGHT";
+
+export interface ThreadComment {
+    id: string; // GraphQL node id
+    body: string;
+    url: string;
+    author: string; // login; empty when the account is gone
+    createdAt: string; // ISO 8601
+}
+
+export interface ReviewThread {
+    id: string; // GraphQL node id
+    path: string;
+    subjectType: "LINE" | "FILE";
+    line: number | null; // null at file level, or when GitHub no longer places it
+    startLine: number | null;
+    side: DiffSide | null;
+    resolved: boolean;
+    outdated: boolean;
+    comments: ThreadComment[]; // oldest first; the first one's url is the thread's
+}
+
+export type ThreadAnchor =
+    | { kind: "line"; path: string; line: number; startLine?: number; side: DiffSide }
+    | { kind: "file"; path: string };
+
+export interface NewThread {
+    anchor: ThreadAnchor;
+    body: string;
+}
+
+export interface PostedReview {
+    id: string;
+    url: string;
+}
+
 export interface PullRequests {
     defaultBranch(): Promise<Result<string>>;
     find(branch: string): Promise<Result<PullRequest | null>>; // the open one; merged and closed ones never count
@@ -29,6 +66,17 @@ export interface PullRequests {
     edit(number: number, change: { title?: string; bodyFile: string }): Promise<Result<void>>;
     comment(number: number, file: string): Promise<Result<void>>;
     comments(number: number): Promise<Result<string[]>>; // bodies, oldest first
+    threads(number: number): Promise<Result<ReviewThread[]>>; // every review thread, any author
+    pendingReview(number: number): Promise<Result<string | null>>; // the url of this account's pending review
+    // One review with the event COMMENT: a pending review, one thread per entry, then submitted.
+    review(
+        number: number,
+        body: string,
+        threads: readonly NewThread[],
+    ): Promise<Result<PostedReview>>;
+    reply(thread: string, body: string): Promise<Result<void>>;
+    resolve(thread: string): Promise<Result<void>>;
+    unresolve(thread: string): Promise<Result<void>>;
 }
 
 export type PullRequestsFactory = (directory: string) => PullRequests;

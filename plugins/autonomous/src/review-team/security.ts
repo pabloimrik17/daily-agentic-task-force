@@ -36,7 +36,7 @@ const HUNK = /^@@ -\d+(?:,\d+)? \+(\d+)(?:,\d+)? @@/;
 // git quotes and C-escapes a path that holds `"`, `\` or a control character, even with
 // core.quotePath=false; any other path is returned as it is. The escaped bytes are decoded as
 // UTF-8, so an octal-escaped multibyte character comes out whole.
-function unquoted(path: string): string {
+export function unquoted(path: string): string {
     if (path.length < 2 || !path.startsWith('"') || !path.endsWith('"')) {
         return path;
     }

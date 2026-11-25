@@ -30,7 +30,7 @@ function readers(calls: string[]) {
                 workTask("linear", "DOT-4", ["personal", "grill-me", "taken"], {
                     title: "Being worked on",
                 }),
-                workTask("linear", "DOT-5", ["personal", "AFK", "code-review"], {
+                workTask("linear", "DOT-5", ["personal", "AFK", "external-review"], {
                     title: "Build the feature",
                 }),
             ],
@@ -168,7 +168,7 @@ describe("renderSelect", () => {
                     fakeReader(
                         "beads",
                         ["B-1", "B-2", "B-3"].map((id) =>
-                            workTask("beads", id, ["personal", "AFK", "code-review"]),
+                            workTask("beads", id, ["personal", "AFK", "external-review"]),
                         ),
                         calls,
                     ),
