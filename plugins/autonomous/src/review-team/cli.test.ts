@@ -35,7 +35,7 @@ interface Call {
 }
 
 // The answers of a fake git in a repository whose branch is `numstat` ahead of `origin/main`.
-function gitAnswers(numstat: string, failing?: string): [string, ExecResult][] {
+function gitAnswers(numstat: string, failing?: string, head = HEAD): [string, ExecResult][] {
     const ok = (stdout: string): ExecResult => ({ ok: true, stdout });
     const answers: [string, ExecResult][] = [
         ["rev-parse --show-toplevel", ok(`${ROOT}\n`)],
@@ -43,8 +43,10 @@ function gitAnswers(numstat: string, failing?: string): [string, ExecResult][] {
         ["rev-parse --verify", ok(`${MERGE_BASE}\n`)],
         ["merge-base", ok(`${MERGE_BASE}\n`)],
         ["rev-parse --abbrev-ref HEAD", ok("feature/work\n")],
-        ["rev-parse HEAD", ok(`${HEAD}\n`)],
+        ["rev-parse HEAD", ok(`${head}\n`)],
         ["status --porcelain", ok("")],
+        ["diff HEAD", ok("")],
+        ["ls-files --others", ok("")],
         ["diff --numstat", ok(numstat)],
         ["diff --name-only", ok("src/a.ts\0")],
         ["-c core.quotePath=false diff", ok("")],
@@ -111,6 +113,7 @@ const reported: ReviewerFile = {
 interface Options {
     numstat?: string;
     failingGit?: string;
+    head?: string;
     readConfig?: (path: string) => string;
     collected?: Result<Report>;
     file?: ReviewerFile;
@@ -127,7 +130,7 @@ function harness(options: Options = {}): Harness {
     const stderr: string[] = [];
     const collected: Harness["collected"] = [];
     const contexts: RunContext[] = [];
-    const git = gitAnswers(options.numstat ?? SMALL, options.failingGit);
+    const git = gitAnswers(options.numstat ?? SMALL, options.failingGit, options.head);
     const runner: Runner = (ctx) => {
         contexts.push(ctx);
         return Promise.resolve(options.file ?? reported);
@@ -381,6 +384,31 @@ describe("review-team CLI", () => {
             expect(result.stderr[0]).toContain(error);
             expect(h.contexts).toEqual([]);
             expect(existsSync(join(dir, "reviewers", `${reviewer}.json`))).toBe(false);
+        });
+
+        it("exits 1 and writes no file when HEAD moved after the plan", async () => {
+            const dir = await plannedDir();
+            const moved = "3".repeat(40);
+            const h = harness({ head: moved });
+
+            const result = await invoke(["run", "coderabbit", "--dir", dir], h);
+
+            expect(result.code).toBe(1);
+            expect(result.stderr).toEqual([`HEAD moved since the plan, from ${HEAD} to ${moved}`]);
+            expect(h.contexts).toEqual([]);
+            expect(existsSync(join(dir, "reviewers", "coderabbit.json"))).toBe(false);
+        });
+
+        it("exits 1 and writes no file when HEAD cannot be read", async () => {
+            const dir = await plannedDir();
+            const h = harness({ failingGit: "rev-parse HEAD" });
+
+            const result = await invoke(["run", "coderabbit", "--dir", dir], h);
+
+            expect(result.code).toBe(1);
+            expect(result.stderr).toEqual(["could not check HEAD: git failed: rev-parse HEAD"]);
+            expect(h.contexts).toEqual([]);
+            expect(existsSync(join(dir, "reviewers", "coderabbit.json"))).toBe(false);
         });
 
         it("exits 1 when the directory holds no plan", async () => {

@@ -513,6 +513,19 @@ describe("review block validation", () => {
         expect(result.ok && result.value.review).toEqual(shipped);
     });
 
+    it("rejects a reviewer repeated within a tier, naming the repeated row", () => {
+        const S = [{ reviewer: "codex" }, { reviewer: "walkthrough" }, { reviewer: "codex" }];
+        expect(mistake({ team: { ...shipped.team, S } })).toBe(
+            "$.review.team.S[2].reviewer repeats codex (already at $.review.team.S[0])",
+        );
+    });
+
+    it("accepts the same reviewer in different tiers", () => {
+        const team = { ...shipped.team, S: [{ reviewer: "codex" }], M: [{ reviewer: "codex" }] };
+        const result = parseConfig({ ...valid(), review: { ...shipped, team } });
+        expect(result.ok && result.value.review.team.M).toEqual([{ reviewer: "codex" }]);
+    });
+
     it.each([
         ["a zero", 0],
         ["a fraction", 1.5],

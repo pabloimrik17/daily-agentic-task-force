@@ -51,7 +51,11 @@ async function writePatch(dir: string, subject: Subject, git: Exec): Promise<Res
     if (!diff.ok) {
         return { ok: false, error: `writing ${PATCH}: ${diff.error}` };
     }
-    writeFileSync(join(dir, PATCH), diff.stdout);
+    try {
+        writeFileSync(join(dir, PATCH), diff.stdout);
+    } catch (error) {
+        return { ok: false, error: `writing ${PATCH}: ${(error as Error).message}` };
+    }
     return { ok: true, value: undefined };
 }
 
@@ -105,7 +109,15 @@ async function misplaced(dir: string, subject: Subject, git: Exec): Promise<stri
 
 async function exported(dir: string, plannotator: Exec): Promise<WalkthroughGuide> {
     const out = join(dir, HTML);
-    rmSync(out, { force: true });
+    try {
+        rmSync(out, { force: true });
+    } catch (error) {
+        return {
+            guide: null,
+            patch: PATCH,
+            reason: `removing ${HTML}: ${(error as Error).message}`,
+        };
+    }
     const result = await plannotator([
         "guide",
         "export",

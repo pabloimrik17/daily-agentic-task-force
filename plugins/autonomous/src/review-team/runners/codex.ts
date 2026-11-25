@@ -8,12 +8,13 @@
 // is dropped and recorded (design D15).
 
 import { mkdir, readFile, rm } from "node:fs/promises";
-import { isAbsolute, join, relative } from "node:path";
+import { isAbsolute, join } from "node:path";
 
 import type { ExecResult } from "../../exec.ts";
 import type { Result } from "../../result.ts";
 import { hideMachinePaths } from "../report.ts";
 import { SEVERITY_TABLES } from "../severity.ts";
+import { insideRepository } from "../subject.ts";
 import type { DroppedEntry, RawFinding, RawItem, ReviewerFile } from "../types.ts";
 import { REVIEW_TIMEOUT_MS, type RunContext, runTimed, saveRaw, type Verdict } from "./shared.ts";
 
@@ -21,6 +22,10 @@ const SHORT_TIMEOUT_MS = 30_000;
 const LAST_MESSAGE = "codex.last-message.txt";
 
 const ENTRY_START = "- [";
+// An absolute path may hold " — ", which the greedy ENTRY would split at. This one ends the title
+// at the first " — " that an absolute path (POSIX, or a Windows drive) follows, so the path stays
+// whole. ENTRY is the fallback, which a relative path still reaches and is then dropped alone.
+const ABSOLUTE_ENTRY = /^- \[(P\d+)\] (\S.*?) — ((?:\/|[A-Za-z]:[\\/]).+):(\d+)-(\d+)\s*$/;
 const ENTRY = /^- \[(P\d+)\] (\S.*) — (.+):(\d+)-(\d+)\s*$/;
 const PRIORITIES = Object.keys(SEVERITY_TABLES.codex);
 
@@ -64,11 +69,8 @@ function paragraphOf(body: string[]): { statement: string; evidence: string } {
 
 // The path relative to the repository, or undefined when it is not inside it.
 function repositoryPath(path: string, repoRoot: string): string | undefined {
-    const relativePath = relative(repoRoot, path);
-    if (!isAbsolute(path) || relativePath.startsWith("..") || isAbsolute(relativePath)) {
-        return undefined;
-    }
-    return relativePath.split("\\").join("/");
+    const inside = isAbsolute(path) ? insideRepository(repoRoot, path) : undefined;
+    return inside?.split("\\").join("/");
 }
 
 interface Header {
@@ -81,7 +83,7 @@ interface Header {
 
 // The fields of an entry's first line, or the reason the whole text is unreadable.
 function readHeader({ header, body }: Entry): Header {
-    const match = ENTRY.exec(header);
+    const match = ABSOLUTE_ENTRY.exec(header) ?? ENTRY.exec(header);
     if (match === null) {
         throw new Error(`the entry line does not fit the form: "${header}"`);
     }
@@ -180,8 +182,12 @@ function codexArguments(ctx: RunContext, lastMessage: string): string[] {
 async function readLastMessage(path: string): Promise<string> {
     try {
         return await readFile(path, "utf8");
-    } catch {
-        return "";
+    } catch (error) {
+        // Only a missing file is no message; runTimed records any other cause.
+        if ((error as NodeJS.ErrnoException).code === "ENOENT") {
+            return "";
+        }
+        throw error;
     }
 }
 

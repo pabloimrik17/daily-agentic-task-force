@@ -532,7 +532,23 @@ function tierRows(value: unknown, path: string): TeamRow[] {
     if (rows.length === 0) {
         throw new ParseError(`${path} must not be empty`);
     }
-    return rows.map((row, index) => teamRow(object(row, `${path}[${index}]`), `${path}[${index}]`));
+    const parsed = rows.map((row, index) =>
+        teamRow(object(row, `${path}[${index}]`), `${path}[${index}]`),
+    );
+    rejectRepeatedReviewer(parsed, path);
+    return parsed;
+}
+
+// Rows of one reviewer share its brief and its output file, so a tier may not repeat one.
+function rejectRepeatedReviewer(rows: TeamRow[], path: string): void {
+    rows.forEach((row, index) => {
+        const first = rows.findIndex((other) => other.reviewer === row.reviewer);
+        if (first !== index) {
+            throw new ParseError(
+                `${path}[${index}].reviewer repeats ${row.reviewer} (already at ${path}[${first}])`,
+            );
+        }
+    });
 }
 
 function isReviewerId(value: string): value is ReviewerId {

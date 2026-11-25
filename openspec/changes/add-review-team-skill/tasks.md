@@ -115,6 +115,30 @@ From `openspec-verify-change` on 2026-11-23.
 
 Every gate of 9.3 runs again after these fixes.
 
+## 12. Pull request review fixes
+
+From the review comments on the pull request.
+
+- [x] 12.1 Clear an earlier review's generated files when a plan reuses its directory, and refuse a directory with review files but no review plan. Verify with `plan.test.ts` and `collect.test.ts`.
+- [x] 12.2 Record a content fingerprint of the working tree in the plan and compare it in `collect`. Verify with `subject.test.ts` and `collect.test.ts`.
+- [x] 12.3 Pass `--untracked-files=normal` to the tree status. Verify with `subject.test.ts`.
+- [x] 12.4 Derive the merge base from the one `HEAD` read. Verify with `subject.test.ts`.
+- [x] 12.5 Group duplicates by side too. Verify with `collect.test.ts`.
+- [x] 12.6 Validate that the report's tier is never below the measured one and has a reason when raised. Verify with `schema.test.ts`.
+- [x] 12.7 Reject a reviewer repeated within a tier. Verify with `config.test.ts`.
+- [x] 12.8 Turn the guide's filesystem failures into its reason. Verify with `guide.test.ts`.
+- [x] 12.9 Hide machine paths in finding and doubt text. Verify with `report.test.ts`.
+- [x] 12.10 Codex parser: accept a path holding " — " and a `..name` directory, and report read errors other than a missing file. Verify with `runners/codex.test.ts`.
+- [x] 12.11 `run` refuses to start a reviewer when `HEAD` moved since the plan. Verify with `cli.test.ts`.
+- [x] 12.12 Security trigger: decode quoted paths and keep hunks apart. Verify with `security.test.ts`.
+- [x] 12.13 Let each brief write its own output inside the repository. Verify with `skill.test.ts`.
+- [x] 12.14 Share one `choice` validator between the review schema and the attempts state. Verify with `schema.test.ts`.
+- [x] 12.15 Drop the README's stale "defaulted" sentence about the review CLI without a configuration file.
+
+Not done: refreshing `origin/HEAD` before the default branch is read. The plan stays offline and writes no ref, and the open pull request's base or `--base` covers a remote whose default branch changed.
+
+Every gate of 9.3 runs again after these fixes.
+
 ## Workflow follow-up
 
 - Sync the specs and archive the change after the merge.

@@ -3,6 +3,7 @@
 // the one given, else the open pull request's, else the default branch's.
 // Every git call runs in the repository: the caller binds the Exec to it.
 
+import { createHash } from "node:crypto";
 import { basename, isAbsolute, relative, sep } from "node:path";
 
 import type { Exec } from "../exec.ts";
@@ -63,10 +64,10 @@ async function resolveBase(deps: SubjectDeps, given?: string): Promise<Result<Ba
 }
 
 // The remote-tracking ref when it exists, so a stale local branch does not move the merge base.
-async function mergeBaseWith(git: Exec, base: string): Promise<Result<string>> {
+async function mergeBaseWith(git: Exec, base: string, head: string): Promise<Result<string>> {
     const remote = await git(["rev-parse", "--verify", "--quiet", `refs/remotes/origin/${base}`]);
     const ref = remote.ok ? `origin/${base}` : base;
-    const mergeBase = await stdoutOf(git, ["merge-base", ref, "HEAD"]);
+    const mergeBase = await stdoutOf(git, ["merge-base", ref, head]);
     return mergeBase.ok
         ? mergeBase
         : { ok: false, error: `finding the merge base of HEAD and ${ref}: ${mergeBase.error}` };
@@ -79,15 +80,67 @@ export function insideRepository(root: string, dir: string): string | undefined 
     return path === "" || outside ? undefined : path;
 }
 
-// `leaveOut`: the report directory, written after the plan and never a change of the tree.
 // `literal`, so a directory name holding `*`, `?` or `[` is not read as a glob.
+function pathspec(leaveOut?: string): string[] {
+    return leaveOut === undefined ? [] : ["--", ".", `:(exclude,literal)${leaveOut}`];
+}
+
+// `leaveOut`: the report directory, written after the plan and never a change of the tree.
 export async function gitStatus(git: Exec, leaveOut?: string): Promise<Result<string>> {
+    // Explicit, so status.showUntrackedFiles=no cannot hide new files.
     const status = await git([
         "status",
         "--porcelain",
-        ...(leaveOut === undefined ? [] : ["--", ".", `:(exclude,literal)${leaveOut}`]),
+        "--untracked-files=normal",
+        ...pathspec(leaveOut),
     ]);
     return status.ok ? { ok: true, value: status.stdout } : status;
+}
+
+// The untracked files' blob ids, read without writing an object. None: no call.
+async function untrackedBlobs(git: Exec, names: string): Promise<Result<string>> {
+    const paths = names.split("\0").filter((name) => name !== "");
+    if (paths.length === 0) {
+        return { ok: true, value: "" };
+    }
+    const blobs = await git(["hash-object", "--stdin-paths"], `${paths.join("\n")}\n`);
+    return blobs.ok ? { ok: true, value: blobs.stdout } : blobs;
+}
+
+// A digest of the working tree's contents: the status line of a file already dirty at plan
+// time stays the same when it is edited again, its contents do not.
+export async function treeFingerprint(git: Exec, leaveOut?: string): Promise<Result<string>> {
+    const diff = await git([
+        "diff",
+        "HEAD",
+        "--binary",
+        "--no-color",
+        "--no-ext-diff",
+        "--no-textconv",
+        ...pathspec(leaveOut),
+    ]);
+    if (!diff.ok) {
+        return diff;
+    }
+    const names = await git([
+        "ls-files",
+        "--others",
+        "--exclude-standard",
+        "-z",
+        ...pathspec(leaveOut),
+    ]);
+    if (!names.ok) {
+        return names;
+    }
+    const blobs = await untrackedBlobs(git, names.stdout);
+    if (!blobs.ok) {
+        return blobs;
+    }
+    const hash = createHash("sha256");
+    for (const part of [diff.stdout, names.stdout, blobs.value]) {
+        hash.update(part).update("\0");
+    }
+    return { ok: true, value: hash.digest("hex") };
 }
 
 async function headState(
@@ -117,13 +170,14 @@ export async function resolveSubject(deps: SubjectDeps, base?: string): Promise<
     if (!resolved.ok) {
         return resolved;
     }
-    const mergeBase = await mergeBaseWith(deps.git, resolved.value.base);
-    if (!mergeBase.ok) {
-        return mergeBase;
-    }
+    // One observation of HEAD: the merge base is derived from that commit.
     const state = await headState(deps.git, deps.leaveOut);
     if (!state.ok) {
         return state;
+    }
+    const mergeBase = await mergeBaseWith(deps.git, resolved.value.base, state.value.head);
+    if (!mergeBase.ok) {
+        return mergeBase;
     }
     return {
         ok: true,

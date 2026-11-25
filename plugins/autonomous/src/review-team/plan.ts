@@ -4,7 +4,7 @@
 // trigger, the team and its availability, then writes the report directory's `plan.json` and
 // one filled brief per teammate. A refused tier stops it before anything is checked or written.
 
-import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 
 import { CLI_TIMEOUT_MS, type Exec } from "../exec.ts";
@@ -17,9 +17,10 @@ import {
     guideAvailability,
 } from "./availability.ts";
 import { chooseTier, measureDiff, tierOf } from "./measure.ts";
+import { readPlan } from "./plan-file.ts";
 import { REGISTRY } from "./registry.ts";
 import { securityMatches } from "./security.ts";
-import { gitStatus, insideRepository, resolveSubject } from "./subject.ts";
+import { gitStatus, insideRepository, resolveSubject, treeFingerprint } from "./subject.ts";
 import { resolveTeam } from "./team.ts";
 import {
     type Engine,
@@ -64,6 +65,7 @@ export interface PlanRequest {
 interface Measured {
     subject: Subject;
     status: string;
+    fingerprint: string;
     measure: Measure;
     tier: TierChoice;
 }
@@ -72,6 +74,21 @@ interface Composed {
     team: PlannedReviewer[];
     rows: TeamRow[];
     skipped: SkippedReviewer[];
+}
+
+// What collect compares the tree with: its status lines and its contents.
+async function treeState(
+    git: Exec,
+    leaveOut?: string,
+): Promise<Result<Pick<Measured, "status" | "fingerprint">>> {
+    const status = await gitStatus(git, leaveOut);
+    if (!status.ok) {
+        return status;
+    }
+    const fingerprint = await treeFingerprint(git, leaveOut);
+    return fingerprint.ok
+        ? { ok: true, value: { status: status.value, fingerprint: fingerprint.value } }
+        : fingerprint;
 }
 
 async function measured(request: PlanRequest, deps: PlanDeps): Promise<Refusable<Measured>> {
@@ -86,9 +103,9 @@ async function measured(request: PlanRequest, deps: PlanDeps): Promise<Refusable
     if (!subject.ok) {
         return subject;
     }
-    const status = await gitStatus(git, leaveOut);
-    if (!status.ok) {
-        return status;
+    const tree = await treeState(git, leaveOut);
+    if (!tree.ok) {
+        return tree;
     }
     const measure = await measureDiff(git, subject.value.mergeBase, subject.value.head);
     if (!measure.ok) {
@@ -102,7 +119,7 @@ async function measured(request: PlanRequest, deps: PlanDeps): Promise<Refusable
               ok: true,
               value: {
                   subject: subject.value,
-                  status: status.value,
+                  ...tree.value,
                   measure: measure.value,
                   tier: tier.value,
               },
@@ -289,9 +306,53 @@ function fillBriefs(
     return { ok: true, value: briefs };
 }
 
+// What a review writes in its directory, besides plan.json, which the new plan overwrites.
+const GENERATED = [
+    "briefs",
+    "reviewers",
+    "raw",
+    "walkthrough.json",
+    "walkthrough.patch",
+    "walkthrough.html",
+    "report.json",
+    "report.md",
+];
+
+function refusal(dir: string, plan: { ok: false; error: string } | undefined): Result<void> {
+    const holds =
+        plan === undefined
+            ? "review files but no plan.json"
+            : `a plan.json that is not a review's (${plan.error})`;
+    return {
+        ok: false,
+        error: `the report directory ${dir} holds ${holds}: empty it or name another directory`,
+    };
+}
+
+// collect would read an earlier review's files as this run's, so a directory the caller names
+// that holds one is cleared first. Only a valid plan.json proves the files are a review's;
+// without one nothing is deleted, and the directory is refused if it holds review files.
+function clearEarlierReview(dir: string): Result<void> {
+    const generated = GENERATED.filter((name) => existsSync(join(dir, name)));
+    const plan = existsSync(join(dir, "plan.json")) ? readPlan(dir) : undefined;
+    if (plan?.ok !== true) {
+        return plan === undefined && generated.length === 0
+            ? { ok: true, value: undefined }
+            : refusal(dir, plan);
+    }
+    for (const name of generated) {
+        rmSync(join(dir, name), { recursive: true, force: true });
+    }
+    return { ok: true, value: undefined };
+}
+
 // A directory of our own naming must be new; one the caller names may already exist.
 function writeDirectory(dir: string, owned: boolean, files: Map<string, string>): Result<void> {
     try {
+        const cleared = owned ? { ok: true as const, value: undefined } : clearEarlierReview(dir);
+        if (!cleared.ok) {
+            return cleared;
+        }
         mkdirSync(dirname(dir), { recursive: true });
         mkdirSync(dir, { recursive: !owned });
         for (const sub of ["briefs", "reviewers", "raw"]) {

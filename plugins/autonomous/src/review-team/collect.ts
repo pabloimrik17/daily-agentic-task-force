@@ -15,7 +15,7 @@ import { REGISTRY } from "./registry.ts";
 import { writeReport } from "./report.ts";
 import { parseReviewerFile } from "./schema.ts";
 import { deriveSeverity } from "./severity.ts";
-import { gitStatus, insideRepository } from "./subject.ts";
+import { gitStatus, insideRepository, treeFingerprint } from "./subject.ts";
 import {
     type Doubt,
     type DroppedEntry,
@@ -178,6 +178,7 @@ function groupKey(finding: Finding): string | undefined {
               location.file,
               location.startLine,
               location.endLine,
+              location.side,
               finding.title.toLowerCase().replace(/\s+/g, " ").trim(),
           ])
         : undefined;
@@ -235,12 +236,27 @@ async function leftOut(git: Exec, dir: string): Promise<string | undefined> {
     return root.ok ? insideRepository(root.stdout.trim(), dir) : undefined;
 }
 
+// A file already dirty at plan time keeps its status line when it is edited again; its
+// contents do not.
+function contentChange(now: Result<string>, before: string): string[] {
+    if (!now.ok) {
+        return [`could not check the working tree: ${now.error}`];
+    }
+    return now.value === before ? [] : ["the contents of the working tree changed since the plan"];
+}
+
+// One change of the tree is reported once: the contents only when the status saw no change.
+async function treeChange(git: Exec, plan: Plan, dir: string): Promise<string[]> {
+    const leaveOut = await leftOut(git, dir);
+    const status = statusChange(await gitStatus(git, leaveOut), plan.status);
+    return status.length > 0
+        ? status
+        : contentChange(await treeFingerprint(git, leaveOut), plan.fingerprint);
+}
+
 // Spec "The review team only reports": a reviewer that changed the tree or HEAD is an error.
 async function changesSincePlan(git: Exec, plan: Plan, dir: string): Promise<string[]> {
-    return [
-        ...statusChange(await gitStatus(git, await leftOut(git, dir)), plan.status),
-        ...(await headChange(git, plan.subject.head)),
-    ];
+    return [...(await treeChange(git, plan, dir)), ...(await headChange(git, plan.subject.head))];
 }
 
 function assemble(

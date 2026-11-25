@@ -9,6 +9,7 @@ import type { Result } from "../result.ts";
 import {
     array,
     boolean,
+    choice,
     type Json,
     object,
     optional,
@@ -16,16 +17,7 @@ import {
     rejectUnknownKeys,
     string,
 } from "../validate.ts";
-import {
-    choice,
-    engine,
-    measure,
-    nonEmpty,
-    security,
-    subject,
-    tierChoice,
-    toResult,
-} from "./schema.ts";
+import { engine, measure, nonEmpty, security, subject, tierChoice, toResult } from "./schema.ts";
 import {
     type Plan,
     PLAN_SCHEMA,
@@ -59,6 +51,14 @@ function createdAt(parent: Json, path: string): string {
     const value = nonEmpty(parent, "createdAt", path);
     if (Number.isNaN(Date.parse(value))) {
         throw new ParseError(`${path}.createdAt must be an ISO 8601 date`);
+    }
+    return value;
+}
+
+function fingerprint(parent: Json, path: string): string {
+    const value = string(parent, "fingerprint", path);
+    if (!/^[0-9a-f]{64}$/.test(value)) {
+        throw new ParseError(`${path}.fingerprint must be 64 lowercase hex characters`);
     }
     return value;
 }
@@ -112,6 +112,7 @@ function plan(input: unknown): Plan {
             "createdAt",
             "subject",
             "status",
+            "fingerprint",
             "measure",
             "tier",
             "security",
@@ -126,6 +127,7 @@ function plan(input: unknown): Plan {
         createdAt: createdAt(parent, "$"),
         subject: subject(parent.subject, "$.subject"),
         status: string(parent, "status", "$"),
+        fingerprint: fingerprint(parent, "$"),
         measure: measure(parent.measure, "$.measure"),
         tier: tierChoice(parent.tier, "$.tier"),
         security: security(parent.security, "$.security"),

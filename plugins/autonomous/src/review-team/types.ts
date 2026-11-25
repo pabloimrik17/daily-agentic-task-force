@@ -176,6 +176,7 @@ export interface Plan {
     createdAt: string; // ISO 8601, UTC
     subject: Subject;
     status: string; // `git status --porcelain` at plan time, for collect's comparison
+    fingerprint: string; // sha256 of the tree's contents at plan time: catches a re-edit status misses
     measure: Measure;
     tier: TierChoice;
     security: { triggered: boolean; matches: SecurityMatch[] };

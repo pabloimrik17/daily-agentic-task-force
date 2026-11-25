@@ -34,6 +34,7 @@ const PLAN: Plan = {
         dirty: false,
     },
     status: "",
+    fingerprint: "0".repeat(64),
     measure: { lines: 40, files: 1 },
     tier: { measured: "S", used: "S" },
     security: { triggered: false, matches: [] },

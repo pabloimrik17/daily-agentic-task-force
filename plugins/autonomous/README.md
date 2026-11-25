@@ -1874,8 +1874,7 @@ sets `review.tiers` replaces both thresholds:
   omits them leaves the reviewer on its session's own model.
 
 The review CLI is the one consumer that works without a configuration file:
-it then runs with the shipped `review` block, and reports `review.tiers`,
-`review.team` and `review.security` as defaulted. A file that exists is still
+it then runs with the shipped `review` block. A file that exists is still
 validated as a whole, and a bad `review` key stops the review with its path,
 for example `review.tiers.S.maxLines`.
 
@@ -4246,6 +4245,9 @@ bun plugins/autonomous/src/review-team/cli.ts collect --dir <dir>
 ```
 
 It exits 0 when it is done, 1 on an error and 2 when it refuses a request.
+`run <id>` refuses to start when `HEAD` moved since the plan and writes no
+reviewer file, so `collect` reports that reviewer as not having written its
+output.
 
 ### The subject
 
@@ -4362,11 +4364,11 @@ report lists doubts apart from findings.
 
 ### Exact duplicates
 
-Findings located on lines with the same file, the same line range and the same
-title, compared case-insensitively and ignoring whitespace, are grouped into one
-entry that names every reviewer that reported it. Findings that differ in any of
-these stay separate, and so do findings located on a file or on the whole
-change. Merging by root cause is the finding triage's work.
+Findings located on lines with the same file, the same side, the same line range
+and the same title, compared case-insensitively and ignoring whitespace, are
+grouped into one entry that names every reviewer that reported it. Findings that
+differ in any of these stay separate, and so do findings located on a file or on
+the whole change. Merging by root cause is the finding triage's work.
 
 ### The walkthrough guide
 
@@ -4379,8 +4381,17 @@ walkthrough's findings and doubts count either way.
 ### The report
 
 The report directory is the one `--dir` names or, without it, a new directory
-outside the repository. A directory inside the repository is left out of every
-tree check, so the files the review writes there never count as a change. It
+outside the repository. A directory that already holds a review's `plan.json`
+is cleaned first: the plan removes that review's generated files (`briefs/`,
+`reviewers/`, `raw/`, the `walkthrough.*` files and `report.*`) and keeps
+anything else, so no earlier file passes for this run's output. A directory that
+holds any of those names but no valid `plan.json` is refused, untouched: empty
+it or name another. A directory inside the repository is left out of every
+tree check, so the files the review writes there never count as a change. The
+plan also fingerprints the contents of the working tree, and `collect` compares
+it: editing a file that was already modified or untracked at plan time is
+reported as a change. `report.json` and `report.md` hide the home and temp
+directories in every text, findings and doubts included. The directory
 holds:
 
 - `plan.json`, the plan: the subject, the tiers, the team and the skipped

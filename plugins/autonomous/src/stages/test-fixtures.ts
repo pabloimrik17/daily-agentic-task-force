@@ -42,9 +42,9 @@ export function gitSync(args: readonly string[], cwd?: string): void {
 }
 
 // The git `Exec` a test hands to code under test, which would otherwise inherit process.env.
-export const isolatedGit: Exec = (args) =>
+export const isolatedGit: Exec = (args, input) =>
     new Promise((resolve) => {
-        execFile(
+        const child = execFile(
             "git",
             args,
             { env: isolatedGitEnv, timeout: GIT_TIMEOUT_MS },
@@ -52,6 +52,11 @@ export const isolatedGit: Exec = (args) =>
                 resolve(toExecResult("git", GIT_TIMEOUT_MS, error, stdout, stderr));
             },
         );
+        if (input !== undefined) {
+            // As execCommand: an exit before the input is drained is reported by the callback.
+            child.stdin?.on("error", () => {});
+            child.stdin?.end(input);
+        }
     });
 
 // A stage environment whose readers reject: a stage that ignores them never notices, and a test

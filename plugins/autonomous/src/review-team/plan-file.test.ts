@@ -32,6 +32,7 @@ const valid = (): Plan => ({
         dirty: false,
     },
     status: " M README.md\n",
+    fingerprint: "0123456789abcdef".repeat(4),
     measure: { lines: 90, files: 3 },
     tier: { measured: "S", used: "L", reason: "label contract" },
     security: {
@@ -83,6 +84,21 @@ describe("parsePlan", () => {
             "$.createdAt must be an ISO 8601 date",
         ],
         ["a status that is not text", { ...valid(), status: null }, "$.status must be a string"],
+        [
+            "no fingerprint",
+            { ...valid(), fingerprint: undefined },
+            "$.fingerprint must be a string",
+        ],
+        [
+            "a fingerprint in uppercase hex",
+            { ...valid(), fingerprint: "0123456789ABCDEF".repeat(4) },
+            "$.fingerprint must be 64 lowercase hex characters",
+        ],
+        [
+            "a fingerprint of the wrong length",
+            { ...valid(), fingerprint: "0".repeat(63) },
+            "$.fingerprint must be 64 lowercase hex characters",
+        ],
         [
             "a bad subject",
             { ...valid(), subject: { ...valid().subject, dirty: "no" } },

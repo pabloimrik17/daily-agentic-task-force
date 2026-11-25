@@ -239,6 +239,18 @@ function record(file: ReviewerFile, output: string, deps: CliDeps): number {
     return 0;
 }
 
+// The error of a HEAD that is not the planned one, or of a HEAD that cannot be read.
+async function headError(deps: CliDeps, root: string, plan: Plan): Promise<string | undefined> {
+    const head = await deps.exec("git", CLI_TIMEOUT_MS, { cwd: root })(["rev-parse", "HEAD"]);
+    if (!head.ok) {
+        return `could not check HEAD: ${head.error}`;
+    }
+    const now = head.stdout.trim();
+    return now === plan.subject.head
+        ? undefined
+        : `HEAD moved since the plan, from ${plan.subject.head} to ${now}`;
+}
+
 async function run(reviewer: string, dir: string, deps: CliDeps): Promise<number> {
     if (!isReviewerId(reviewer)) {
         return fail(
@@ -258,6 +270,11 @@ async function run(reviewer: string, dir: string, deps: CliDeps): Promise<number
     const root = await repositoryRoot(deps);
     if (!root.ok) {
         return fail(deps, root.error);
+    }
+    // A reviewer run on another HEAD would review other commits under the planned subject.
+    const moved = await headError(deps, root.value, plan.value);
+    if (moved !== undefined) {
+        return fail(deps, moved);
     }
     const file = await runner({
         exec: (command, timeoutMs, options) =>

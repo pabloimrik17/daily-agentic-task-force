@@ -5,13 +5,13 @@ import { afterEach, beforeEach, describe, expect, it } from "vitest";
 
 import type { Exec } from "../exec.ts";
 import { gitSync, isolatedGit, temporaryDirectories } from "../stages/test-fixtures.ts";
-import { gitStatus, insideRepository, resolveSubject } from "./subject.ts";
+import { gitStatus, insideRepository, resolveSubject, treeFingerprint } from "./subject.ts";
 
 const directories = temporaryDirectories("review-subject");
 let clone: string;
 let calls: string[];
 
-const git: Exec = (args) => isolatedGit(["-C", clone, ...args]);
+const git: Exec = (args, input) => isolatedGit(["-C", clone, ...args], input);
 
 function run(...args: string[]): void {
     gitSync(["-C", clone, ...args]);
@@ -148,6 +148,45 @@ describe("resolveSubject", () => {
         });
     });
 
+    it("records a new file as dirty when the configuration hides untracked files", async () => {
+        run("config", "status.showUntrackedFiles", "no");
+        writeFileSync(join(clone, "new.md"), "new\n");
+
+        const subject = await resolveSubject(deps(fakeGh(null)));
+
+        expect(subject.ok && subject.value.dirty).toBe(true);
+    });
+
+    it("reads HEAD once and takes the merge base from that commit", async () => {
+        const heads = ["1".repeat(40), "2".repeat(40)];
+        const asked: string[] = [];
+        const moving: Exec = (args) => {
+            asked.push(args.join(" "));
+            const answers: Record<string, () => string> = {
+                "rev-parse --abbrev-ref HEAD": () => "feature/work",
+                "rev-parse HEAD": () => heads.shift() ?? "", // HEAD moves after each read
+                [`merge-base origin/main ${"1".repeat(40)}`]: () => "a".repeat(40),
+                [`merge-base origin/main ${"2".repeat(40)}`]: () => "b".repeat(40),
+            };
+            const answer = answers[args.join(" ")]?.() ?? "";
+            return Promise.resolve({ ok: true, stdout: `${answer}\n` });
+        };
+
+        const subject = await resolveSubject(
+            { git: moving, gh: fakeGh(null), repoRoot: clone },
+            "main",
+        );
+
+        expect(subject.ok && subject.value).toMatchObject({
+            head: "1".repeat(40),
+            mergeBase: "a".repeat(40),
+        });
+        expect(asked.filter((call) => call === "rev-parse HEAD")).toHaveLength(1);
+        expect(asked.filter((call) => call.startsWith("merge-base"))).toEqual([
+            `merge-base origin/main ${"1".repeat(40)}`,
+        ]);
+    });
+
     it("fails, naming why, when no base can be resolved", async () => {
         run("remote", "set-head", "origin", "--delete");
 
@@ -169,6 +208,13 @@ describe("gitStatus", () => {
         expect(await gitStatus(git)).toEqual({ ok: true, value: "?? new.md\n" });
     });
 
+    it("lists a new file even when the configuration hides untracked files", async () => {
+        run("config", "status.showUntrackedFiles", "no");
+        writeFileSync(join(clone, "new.md"), "new\n");
+
+        expect(await gitStatus(git)).toEqual({ ok: true, value: "?? new.md\n" });
+    });
+
     it("leaves out the path it is given, and still reports any other change", async () => {
         mkdirSync(join(clone, "review-out"));
         writeFileSync(join(clone, "review-out", "plan.json"), "{}\n");
@@ -179,6 +225,68 @@ describe("gitStatus", () => {
         writeFileSync(join(clone, "new.md"), "new\n");
 
         expect(await gitStatus(git, "review-out")).toEqual({ ok: true, value: "?? new.md\n" });
+    });
+});
+
+describe("treeFingerprint", () => {
+    async function fingerprint(leaveOut?: string): Promise<string> {
+        const result = await treeFingerprint(git, leaveOut);
+        if (!result.ok) {
+            throw new Error(result.error);
+        }
+        return result.value;
+    }
+
+    it("is a sha256 digest that stays the same while the tree does", async () => {
+        const clean = await fingerprint();
+
+        expect(clean).toMatch(/^[0-9a-f]{64}$/);
+        expect(await fingerprint()).toBe(clean);
+    });
+
+    it("changes when a file already modified is edited again, though its status line does not", async () => {
+        writeFileSync(join(clone, "work.md"), "changed\n");
+        const [status, before] = [await gitStatus(git), await fingerprint()];
+
+        writeFileSync(join(clone, "work.md"), "changed again\n");
+
+        expect(await gitStatus(git)).toEqual(status);
+        expect(await fingerprint()).not.toBe(before);
+    });
+
+    it("changes when an untracked file is edited again, and writes no object", async () => {
+        writeFileSync(join(clone, "new.md"), "new\n");
+        const before = await fingerprint();
+
+        writeFileSync(join(clone, "new.md"), "newer\n");
+
+        expect(await fingerprint()).not.toBe(before);
+        // The blob ids of "new\n" and "newer\n".
+        for (const blob of [
+            "3e757656cf36eca53338e520d134963a44f793f8",
+            "d58ed19c91e09e9cc931ac08e57009004eebcb52",
+        ]) {
+            expect((await git(["cat-file", "-e", blob])).ok, blob).toBe(false);
+        }
+    });
+
+    it("leaves out the path it is given, and still sees any other change", async () => {
+        const before = await fingerprint("review-out");
+        mkdirSync(join(clone, "review-out"));
+        writeFileSync(join(clone, "review-out", "plan.json"), "{}\n");
+
+        expect(await fingerprint("review-out")).toBe(before);
+        expect(await fingerprint()).not.toBe(before);
+
+        writeFileSync(join(clone, "work.md"), "changed\n");
+
+        expect(await fingerprint("review-out")).not.toBe(before);
+    });
+
+    it("fails when a git call fails", async () => {
+        const failing: Exec = () => Promise.resolve({ ok: false, error: "git failed: boom" });
+
+        expect(await treeFingerprint(failing)).toEqual({ ok: false, error: "git failed: boom" });
     });
 });
 

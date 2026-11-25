@@ -126,6 +126,40 @@ describe("securityMatches", () => {
         });
     });
 
+    it("numbers lines right when the git configuration joins hunks across a line", async () => {
+        gitSync(["-C", repo, "config", "diff.interHunkContext", "1"]);
+        write("src/gap.ts", "const a = 1;\nconst b = 2;\nconst c = 3;\n");
+        commitAll("seed");
+        gitSync(["-C", repo, "branch", "-f", "main"]);
+        write("src/gap.ts", "eval(a);\nconst b = 2;\neval(c);\n");
+        commitAll("work");
+
+        expect(await matches()).toEqual({
+            ok: true,
+            value: [
+                { kind: "line", pattern: "\\beval\\s*\\(", file: "src/gap.ts", line: 1 },
+                { kind: "line", pattern: "\\beval\\s*\\(", file: "src/gap.ts", line: 3 },
+            ],
+        });
+    });
+
+    it.each([
+        ["a quote and a backslash", 'we"ird\\name.ts'],
+        ["a tab", "tab\tname.ts"],
+        ["a control character", "ctl\u0001name.ts"],
+        ["a multibyte character and a quote", 'caf\u00e9 "x".ts'],
+        ["a space", "my file.ts"],
+        ["nothing unusual", "plain.ts"],
+    ])("names the real file when its name holds %s", async (_label, name) => {
+        write(`src/${name}`, "eval(code);\n");
+        commitAll("work");
+
+        expect(await matches()).toEqual({
+            ok: true,
+            value: [{ kind: "line", pattern: "\\beval\\s*\\(", file: `src/${name}`, line: 1 }],
+        });
+    });
+
     it("fails, naming git, on an unknown base", async () => {
         const result = await securityMatches(git, "no-such-ref", "HEAD", PATTERNS);
 

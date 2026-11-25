@@ -385,6 +385,43 @@ describe("writeReport", () => {
         }
     });
 
+    it("names the home directory in a finding's and a doubt's text as ~, and keeps ids and places", () => {
+        const dir = directories.make("dir");
+        const home = join(homedir(), "work", "a.ts");
+        const base = report();
+        const first = base.findings[0];
+        const quotedFinding = {
+            ...finding(9, "WARNING", `Check ${home}`, line("src/a.ts", 5)),
+            statement: `${home} drops the value.`,
+            evidence: `see ${home}:5`,
+            suggestedFix: `edit ${home}`,
+        };
+        const quotedDoubt = { ...doubt("tests-lens-2", "tests-lens"), title: `Is ${home} used?` };
+        const quoted = report({
+            findings: [quotedFinding, ...(first === undefined ? [] : [first])],
+            doubts: [quotedDoubt],
+        });
+
+        const written = writeReport(dir, quoted);
+
+        expect(written.ok && written.value.findings[0]).toEqual({
+            ...quotedFinding,
+            title: "Check ~/work/a.ts",
+            statement: "~/work/a.ts drops the value.",
+            evidence: "see ~/work/a.ts:5",
+            suggestedFix: "edit ~/work/a.ts",
+        });
+        expect(written.ok && written.value.doubts[0]).toEqual({
+            ...quotedDoubt,
+            title: "Is ~/work/a.ts used?",
+        });
+        for (const name of ["report.json", "report.md"]) {
+            const text = readFileSync(join(dir, name), "utf8");
+            expect(text, name).not.toContain(homedir());
+            expect(text, name).toContain("~/work/a.ts");
+        }
+    });
+
     it("returns an error when the directory cannot take the files", () => {
         const dir = join(directories.make("dir"), "missing");
 

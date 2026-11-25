@@ -9,6 +9,7 @@ import type { Result } from "../result.ts";
 import {
     array,
     boolean,
+    choice,
     type Json,
     number,
     object,
@@ -73,21 +74,6 @@ function oneLine(parent: Json, key: string, path: string): string {
         throw new ParseError(`${path}.${key} must be a single line`);
     }
     return value;
-}
-
-export function choice<T extends string>(
-    parent: Json,
-    key: string,
-    path: string,
-    allowed: readonly T[],
-): T {
-    const value = string(parent, key, path);
-    if (!(allowed as readonly string[]).includes(value)) {
-        throw new ParseError(
-            `${path}.${key} must be one of ${allowed.join(", ")} (got ${JSON.stringify(value)})`,
-        );
-    }
-    return value as T;
 }
 
 function integerAtLeast(parent: Json, key: string, path: string, minimum: number): number {
@@ -376,14 +362,21 @@ export function measure(value: unknown, path: string): Measure {
     };
 }
 
+// Spec: a tier can be raised, with a reason, and never lowered.
 export function tierChoice(value: unknown, path: string): TierChoice {
     const parent = object(value, path);
     rejectUnknownKeys(parent, ["measured", "used", "reason"], path);
-    return {
-        measured: choice<Tier>(parent, "measured", path, TIERS),
-        used: choice<Tier>(parent, "used", path, TIERS),
-        ...withOptional("reason", optional(parent, "reason", path, nonEmpty)),
-    };
+    const measured = choice<Tier>(parent, "measured", path, TIERS);
+    const used = choice<Tier>(parent, "used", path, TIERS);
+    const reason = optional(parent, "reason", path, nonEmpty);
+    const raise = TIERS.indexOf(used) - TIERS.indexOf(measured);
+    if (raise < 0) {
+        throw new ParseError(`${path}.used ${used} is below the measured ${measured}`);
+    }
+    if (raise > 0 && reason === undefined) {
+        throw new ParseError(`${path}.reason is required when the tier is raised`);
+    }
+    return { measured, used, ...withOptional("reason", reason) };
 }
 
 function securityMatch(value: unknown, path: string): SecurityMatch {

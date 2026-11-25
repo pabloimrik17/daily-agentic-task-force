@@ -82,6 +82,19 @@ function scrubOutcome(
     });
 }
 
+// A reviewer's free text quotes the paths it saw; the id, reporters and location stay as they are.
+function scrubItem<T extends Finding | Doubt>(scrub: (text: string) => string, item: T): T {
+    return {
+        ...item,
+        title: scrub(item.title),
+        statement: scrub(item.statement),
+        ...(item.evidence === undefined ? {} : { evidence: scrub(item.evidence) }),
+        ...(item.kind === "finding" && item.suggestedFix !== undefined
+            ? { suggestedFix: scrub(item.suggestedFix) }
+            : {}),
+    };
+}
+
 function scrubbed(report: Report, dir: string): Report {
     const scrub = scrubber(resolve(dir));
     const { reason } = report.walkthrough;
@@ -92,6 +105,8 @@ function scrubbed(report: Report, dir: string): Report {
             reason === undefined
                 ? report.walkthrough
                 : { ...report.walkthrough, reason: scrub(reason) },
+        findings: report.findings.map((finding) => scrubItem(scrub, finding)),
+        doubts: report.doubts.map((doubt) => scrubItem(scrub, doubt)),
         errors: report.errors.map(scrub),
     };
 }

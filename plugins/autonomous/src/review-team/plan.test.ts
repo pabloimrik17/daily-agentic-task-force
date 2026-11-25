@@ -8,8 +8,10 @@ import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { shippedReview } from "../config.ts";
 import type { Exec, ExecResult } from "../exec.ts";
 import { gitSync, isolatedGit, temporaryDirectories } from "../stages/test-fixtures.ts";
+import { collect } from "./collect.ts";
 import { parsePlan } from "./plan-file.ts";
 import { buildPlan, type PlanDeps, type PlanRequest } from "./plan.ts";
+import { treeFingerprint } from "./subject.ts";
 import type { Plan } from "./types.ts";
 
 const BRIEFS_DIR = fileURLToPath(new URL("../../skills/review-team/reviewers", import.meta.url));
@@ -35,10 +37,10 @@ const AVAILABLE: Answers = {
 // and one with no answer is not on the PATH.
 function execFor(answers: Answers): PlanDeps["exec"] {
     return (command): Exec =>
-        (args) => {
+        (args, input) => {
             calls.push(`${command} ${args.join(" ")}`);
             if (command === "git") {
-                return isolatedGit(["-C", clone, ...args]);
+                return isolatedGit(["-C", clone, ...args], input);
             }
             if (command === "gh") {
                 return Promise.resolve({ ok: false, error: "gh failed: no pull requests found" });
@@ -324,6 +326,7 @@ describe("buildPlan", () => {
 
     it("Run for a stage inside the repository: the directory is not a change of the tree", async () => {
         commit({ "small.ts": lines(10) });
+        const clean = await treeFingerprint((args) => isolatedGit(["-C", clone, ...args]));
         const named = join(clone, "review-out");
         mkdirSync(named);
         writeFileSync(join(named, "earlier.json"), "{}\n"); // left over from an earlier run
@@ -332,8 +335,75 @@ describe("buildPlan", () => {
 
         expect(dir).toBe(named);
         expect(planned.status).toBe("");
+        expect(clean).toEqual({ ok: true, value: planned.fingerprint });
         expect(planned.subject.dirty).toBe(false);
         expect(existsSync(join(named, "plan.json"))).toBe(true);
+    });
+
+    it("Run for a stage again: clears an earlier review's files and keeps every other file", async () => {
+        commit({ "small.ts": lines(10) });
+        const named = join(directories.make("attempt"), "review");
+        await plan({ dir: named });
+        writeFileSync(join(named, "reviewers", "walkthrough.json"), "{}\n");
+        writeFileSync(join(named, "raw", "codex.stdout.txt"), "old\n");
+        writeFileSync(join(named, "walkthrough.json"), "{}\n");
+        writeFileSync(join(named, "report.json"), "{}\n");
+        writeFileSync(join(named, "notes.txt"), "mine\n");
+
+        await plan({ dir: named });
+
+        expect(readdirSync(named).sort()).toEqual([
+            "briefs",
+            "notes.txt",
+            "plan.json",
+            "raw",
+            "reviewers",
+        ]);
+        expect([readdirSync(join(named, "reviewers")), readdirSync(join(named, "raw"))]).toEqual([
+            [],
+            [],
+        ]);
+        const report = await collect(named, {
+            git: (args, input) => isolatedGit(["-C", clone, ...args], input),
+            plannotator: () => Promise.resolve({ ok: true, stdout: "" }),
+        });
+        expect(
+            report.ok && report.value.reviewers.find((entry) => entry.reviewer === "walkthrough"),
+        ).toMatchObject({
+            outcome: "failed",
+            reason: "ended without writing its output (reviewers/walkthrough.json)",
+        });
+    });
+
+    it("Run for a stage: refuses, and leaves untouched, a directory with review files and no plan", async () => {
+        commit({ "small.ts": lines(10) });
+        const named = directories.make("review");
+        mkdirSync(join(named, "raw"));
+        writeFileSync(join(named, "raw", "keep.txt"), "mine\n");
+
+        const result = await buildPlan({ dir: named }, deps());
+
+        expect(result).toEqual({
+            ok: false,
+            error: `the report directory ${named} holds review files but no plan.json: empty it or name another directory`,
+        });
+        expect(readdirSync(named)).toEqual(["raw"]);
+        expect(readdirSync(join(named, "raw"))).toEqual(["keep.txt"]);
+    });
+
+    it("Run for a stage: refuses a directory whose plan.json is not a review's", async () => {
+        commit({ "small.ts": lines(10) });
+        const named = directories.make("review");
+        writeFileSync(join(named, "plan.json"), "{}\n");
+
+        const result = await buildPlan({ dir: named }, deps());
+
+        expect(result).toEqual({
+            ok: false,
+            error: `the report directory ${named} holds a plan.json that is not a review's (plan.json is not valid: $.schema must be a string): empty it or name another directory`,
+        });
+        expect(readdirSync(named)).toEqual(["plan.json"]);
+        expect(readFileSync(join(named, "plan.json"), "utf8")).toBe("{}\n");
     });
 
     it("Run for a stage inside the repository: a change outside the directory still counts", async () => {
@@ -412,6 +482,7 @@ describe("buildPlan", () => {
         expect(parsePlan(JSON.parse(text))).toEqual({ ok: true, value: planned });
         expect(planned.subject.dirty).toBe(true);
         expect(planned.status).toBe("?? untracked.txt\n");
+        expect(planned.fingerprint).toMatch(/^[0-9a-f]{64}$/);
         expect(text).not.toContain(homedir());
         expect(text).not.toContain(clone);
         expect(text).not.toContain(tmp);

@@ -37,6 +37,7 @@ const PLAN: Plan = {
         dirty: false,
     },
     status: "",
+    fingerprint: "0".repeat(64),
     measure: { lines: 40, files: 1 },
     tier: { measured: "S", used: "S" },
     security: { triggered: false, matches: [] },
@@ -56,12 +57,15 @@ interface Call {
 interface Fake {
     review?: ExecResult;
     message?: string;
+    // Makes the last-message path a directory, which reads as EISDIR, not as a missing file.
+    unreadable?: boolean;
     engine?: Engine;
 }
 
 function setup({
     review = { ok: true, stdout: "" },
     message,
+    unreadable = false,
     engine = { tool: "codex", version: "0.169.0" },
 }: Fake = {}): { ctx: RunContext; calls: Call[] } {
     const calls: Call[] = [];
@@ -83,7 +87,9 @@ function setup({
                     return { ok: true, stdout: VERSION };
                 }
                 const output = args[args.indexOf("-o") + 1];
-                if (message !== undefined && output !== undefined) {
+                if (unreadable && output !== undefined) {
+                    await mkdir(output);
+                } else if (message !== undefined && output !== undefined) {
                     await writeFile(output, message);
                 }
                 return review;
@@ -295,6 +301,15 @@ describe("a skipped reviewer", () => {
         );
     });
 
+    it("names the cause when the last message exists but cannot be read", async () => {
+        const { ctx } = setup({ unreadable: true });
+
+        const reason = skippedReason(await runCodex(ctx));
+
+        expect(reason).toMatch(/^codex runner failed: .*EISDIR/);
+        expect(reason).not.toContain("wrote no last message");
+    });
+
     it("says so when the last message is empty", async () => {
         const { ctx } = setup({ message: " \n" });
 
@@ -414,6 +429,35 @@ describe("parseCodexReview", () => {
         const result = parse(`- [P2] Slow — and wrong — ${ROOT}/src/a.ts:4-9\n  Text.`);
 
         expect(result.ok && result.value.items[0]?.title).toBe("Slow — and wrong");
+    });
+
+    it("keeps a path that holds an em dash whole", () => {
+        const result = parse(`- [P1] T — ${ROOT}/src/a — b.ts:1-1\n  Text.`);
+
+        expect(result.ok && result.value.items[0]).toMatchObject({
+            title: "T",
+            location: { file: "src/a — b.ts" },
+        });
+    });
+
+    it("keeps an em dash in the title when the path holds one too", () => {
+        const result = parse(`- [P1] Slow — wrong — ${ROOT}/src/a — b.ts:1-1\n  Text.`);
+
+        expect(result.ok && result.value.items[0]).toMatchObject({
+            title: "Slow — wrong",
+            location: { file: "src/a — b.ts" },
+        });
+    });
+
+    it("keeps a directory whose name starts with two dots and drops a parent climb", () => {
+        const kept = parse(`- [P1] T — ${ROOT}/..fixtures/a.ts:1-1\n  Text.`);
+        const climbed = parse(`- [P1] T — ${ROOT}/../a.ts:1-1\n  Text.`);
+
+        expect(kept.ok && kept.value.items[0]).toMatchObject({
+            location: { file: "..fixtures/a.ts" },
+        });
+        expect(climbed.ok && climbed.value.items).toEqual([]);
+        expect(climbed.ok && climbed.value.dropped).toHaveLength(1);
     });
 
     it("takes the first paragraph as the statement and all of them as the evidence", () => {

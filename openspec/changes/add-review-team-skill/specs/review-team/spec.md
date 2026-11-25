@@ -41,6 +41,11 @@ The review team SHALL only report. No reviewer SHALL change a file of the subjec
 - **WHEN** a review of a branch ends
 - **THEN** the working tree is as it was before the review, and nothing was posted to the pull request or any tracker
 
+#### Scenario: Already changed file edited again
+
+- **WHEN** a file that was already modified or untracked when the plan was made is edited before `collect` runs
+- **THEN** `collect` reports that the contents of the working tree changed since the plan
+
 ### Requirement: The review tier is measured from the diff
 
 Code SHALL measure the subject's diff and set its review tier: `S` when it changes at most 150 lines and 5 files, else `M` when it changes at most 600 lines and 20 files, else `L`. Changed lines SHALL count added and deleted lines. Lockfiles and OpenSpec change directories SHALL not count. The thresholds SHALL come from the configuration.
@@ -203,7 +208,7 @@ What a reviewer cannot judge without knowing the intent SHALL be reported as a d
 
 ### Requirement: Exact duplicates are grouped
 
-Findings located on lines with the same file, the same line range and the same title, compared case-insensitively and ignoring whitespace, SHALL be grouped into one entry that names every reviewer that reported it. Findings that differ in any of these SHALL stay separate. A finding located on a file or on the whole change SHALL stay separate.
+Findings located on lines with the same file, the same side, the same line range and the same title, compared case-insensitively and ignoring whitespace, SHALL be grouped into one entry that names every reviewer that reported it. Findings that differ in any of these SHALL stay separate. A finding located on a file or on the whole change SHALL stay separate.
 
 #### Scenario: Two reviewers, same finding
 
@@ -213,6 +218,11 @@ Findings located on lines with the same file, the same line range and the same t
 #### Scenario: Same place, different claim
 
 - **WHEN** two reviewers report different titles at the same line
+- **THEN** the report holds two entries
+
+#### Scenario: Opposite sides
+
+- **WHEN** two reviewers report the same title on the same file and line range, one on the old side and one on the new side
 - **THEN** the report holds two entries
 
 #### Scenario: Same file, no line range
@@ -247,6 +257,16 @@ A review SHALL write a report directory holding `report.json`, which follows `au
 
 - **WHEN** a stage names its attempt's directory
 - **THEN** the report is written there
+
+#### Scenario: Directory reused
+
+- **WHEN** a review is planned into the directory of an earlier review, and a reviewer writes nothing this time
+- **THEN** the earlier run's generated files are removed first, and that reviewer is reported as not having written its output (failed when required)
+
+#### Scenario: Foreign review files refused
+
+- **WHEN** the named directory holds `reviewers/` but no valid `plan.json`
+- **THEN** the plan is refused and the directory is left untouched
 
 ### Requirement: The review configuration
 

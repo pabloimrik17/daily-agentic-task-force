@@ -11,6 +11,7 @@ import { STAGE_IDS, type StageId } from "../stages/stage.ts";
 import {
     array,
     boolean,
+    choice,
     type Json,
     number,
     object,
@@ -136,27 +137,14 @@ function nullableString(parent: Json, key: string, path: string): string | null 
     return parent[key] === null ? null : string(parent, key, path);
 }
 
-function literal<T extends string>(
-    parent: Json,
-    key: string,
-    path: string,
-    allowed: readonly T[],
-): T {
-    const value = string(parent, key, path);
-    if (!(allowed as readonly string[]).includes(value)) {
-        throw new ParseError(`${path}.${key} must be one of ${allowed.join(", ")}`);
-    }
-    return value as T;
-}
-
 function attemptState(parent: Json, key: string, path: string): AttemptState {
-    return literal(parent, key, path, ATTEMPT_STATES);
+    return choice(parent, key, path, ATTEMPT_STATES);
 }
 
 function parseTask(task: Json, path: string): AttemptTask {
     rejectUnknownKeys(task, ["source", "id", "title"], path);
     return {
-        source: literal(task, "source", path, ["linear", "beads", "github"]),
+        source: choice(task, "source", path, ["linear", "beads", "github"]),
         id: string(task, "id", path),
         title: string(task, "title", path),
     };
@@ -165,7 +153,7 @@ function parseTask(task: Json, path: string): AttemptTask {
 function parseWorkspace(workspace: Json, path: string): AttemptWorkspace {
     rejectUnknownKeys(workspace, ["manager", "repository", "inferredFrom", "branch", "path"], path);
     return {
-        manager: literal(workspace, "manager", path, ["worktrunk"]),
+        manager: choice(workspace, "manager", path, ["worktrunk"]),
         repository: string(workspace, "repository", path),
         inferredFrom: string(workspace, "inferredFrom", path),
         branch: string(workspace, "branch", path),
@@ -180,13 +168,13 @@ function parseSession(session: Json, path: string): AttemptSession {
         path,
     );
     return {
-        manager: literal(session, "manager", path, ["aoe"]),
+        manager: choice(session, "manager", path, ["aoe"]),
         profile: nullableString(session, "profile", path),
         id: nullableString(session, "id", path),
         group: string(session, "group", path),
         title: string(session, "title", path),
-        titleSource: literal(session, "titleSource", path, ["llm", "fallback"]),
-        tool: literal(session, "tool", path, ["claude", "codex"]),
+        titleSource: choice(session, "titleSource", path, ["llm", "fallback"]),
+        tool: choice(session, "tool", path, ["claude", "codex"]),
         agentSessionId: nullableString(session, "agentSessionId", path),
     };
 }
@@ -195,7 +183,7 @@ function parseObservation(observed: Json, path: string): AttemptObservation {
     rejectUnknownKeys(observed, ["status", "state", "needsHuman", "at"], path);
     return {
         status: string(observed, "status", path),
-        state: literal(observed, "state", path, ["open", "exited", "gone"]),
+        state: choice(observed, "state", path, ["open", "exited", "gone"]),
         needsHuman: boolean(observed, "needsHuman", path),
         at: string(observed, "at", path),
     };
@@ -275,7 +263,7 @@ export function parseRecord(input: unknown): AttemptRecord {
         throw new ParseError(`$.schema must be ${ATTEMPT_SCHEMA}`);
     }
     const task = parseTask(requireObject(root, "task", "$"), "$.task");
-    const stage = literal(root, "stage", "$", STAGE_IDS);
+    const stage = choice(root, "stage", "$", STAGE_IDS);
     const attempt = parseAttemptNumber(root, "$");
     const id = string(root, "id", "$");
     const expected = attemptId(task, stage, attempt);

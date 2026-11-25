@@ -96,6 +96,7 @@ beforeEach(async () => {
             dirty: false,
         },
         status: "",
+        fingerprint: "0".repeat(64),
         measure: { lines: 2, files: 2 },
         tier: { measured: "S", used: "S" },
         security: { triggered: false, matches: [] },
@@ -215,6 +216,29 @@ describe("validateGuide (design D9)", () => {
             reason: "plannotator guide export: plannotator failed: Guide is not valid:\n- missing intent",
         });
         expect(existsSync(join(dir, "walkthrough.html"))).toBe(false);
+    });
+
+    it("records a patch that cannot be written as no guide, with the reason", async () => {
+        writeGuide({ "The values": ["src/a.ts", "src/b.ts"] });
+        mkdirSync(join(dir, "walkthrough.patch"));
+
+        const guide = await validate();
+
+        expect(guide.guide).toBeNull();
+        expect(guide.reason).toMatch(/^writing walkthrough\.patch: /);
+        expect(calls).toEqual([]);
+    });
+
+    it("records an old page that cannot be removed as no guide, with the reason", async () => {
+        writeGuide({ "The values": ["src/a.ts", "src/b.ts"] });
+        mkdirSync(join(dir, "walkthrough.html"));
+        writeFileSync(join(dir, "walkthrough.html", "keep"), "x\n");
+
+        const guide = await validate();
+
+        expect(guide.guide).toBeNull();
+        expect(guide.reason).toMatch(/^removing walkthrough\.html: /);
+        expect(calls).toEqual([]);
     });
 
     it("has no guide when the walkthrough wrote none, or is not in the team", async () => {

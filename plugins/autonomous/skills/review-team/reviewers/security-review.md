@@ -19,7 +19,8 @@ git diff {{MERGE_BASE}} {{HEAD}}
 ## The rules
 
 - You only report. Never fix, refute or triage anything.
-- Change no file of the repository: no edit, no commit, no stash, no checkout.
+- Change no file of the repository other than `{{OUTPUT}}`: no edit, no commit,
+  no stash, no checkout.
 - Post nothing anywhere: no pull request comment, no review, no tracker issue,
   no message.
 - Report what you cannot judge without knowing the intent as a doubt, apart

@@ -9,6 +9,7 @@ import { gitSync, isolatedGit, temporaryDirectories } from "../stages/test-fixtu
 import { collect } from "./collect.ts";
 import { REGISTRY } from "./registry.ts";
 import { parseReport } from "./schema.ts";
+import { gitStatus, treeFingerprint } from "./subject.ts";
 import type { Location, Plan, PlannedReviewer, Report, ReviewerId } from "./types.ts";
 
 type Obj = Record<string, unknown>;
@@ -19,9 +20,10 @@ let repo: string;
 let dir: string;
 let mergeBase: string;
 let head: string;
+let fingerprint: string;
 let calls: string[];
 
-const git: Exec = (args) => isolatedGit(["-C", repo, ...args]);
+const git: Exec = (args, input) => isolatedGit(["-C", repo, ...args], input);
 
 function run(...args: string[]): void {
     gitSync(["-C", repo, ...args]);
@@ -31,6 +33,13 @@ function commit(file: string, content: string): void {
     writeFileSync(join(repo, file), content);
     run("add", file);
     run("commit", "-q", "-m", file);
+}
+
+function valueOf<T>(result: { ok: true; value: T } | { ok: false; error: string }): T {
+    if (!result.ok) {
+        throw new Error(result.error);
+    }
+    return result.value;
 }
 
 async function revParse(ref: string): Promise<string> {
@@ -75,6 +84,7 @@ function writePlan(team: PlannedReviewer[], extra: Partial<Plan> = {}): void {
             dirty: false,
         },
         status: "",
+        fingerprint,
         measure: { lines: 4, files: 2 },
         tier: { measured: "S", used: "S" },
         security: { triggered: false, matches: [] },
@@ -149,6 +159,7 @@ beforeEach(async () => {
     mkdirSync(join(repo, "src"));
     commit("src/a.ts", "export const a = 1;\n");
     head = await revParse("HEAD");
+    fingerprint = valueOf(await treeFingerprint(git));
     dir = directories.make("report");
     mkdirSync(join(dir, "reviewers"));
 });
@@ -219,6 +230,39 @@ describe("collect: grouping (design D10)", () => {
 
         expect(report.findings).toHaveLength(4);
         expect(report.doubts.map((entry) => entry.id)).toEqual(["code-review-3", "codex-3"]);
+    });
+
+    it("keeps apart the old side and the new side of the same range, and groups the same side", async () => {
+        writePlan([row("code-review"), row("codex"), row("coderabbit")]);
+        const old: Location = {
+            scope: "line",
+            file: "src/a.ts",
+            startLine: 40,
+            endLine: 40,
+            side: "old",
+        };
+        writeReviewer(
+            "code-review",
+            reported("code-review", [finding("Missing await on save", "important", old)]),
+        );
+        writeReviewer("codex", reported("codex", [finding("Missing await on save", "P1")]));
+        writeReviewer(
+            "coderabbit",
+            reported("coderabbit", [finding("Missing await on save", "major", old)]),
+        );
+
+        const report = await collected();
+
+        expect(
+            report.findings.map((entry) => [
+                entry.id,
+                entry.location,
+                entry.reporters.map((reporter) => reporter.id),
+            ]),
+        ).toEqual([
+            ["code-review-1", old, ["code-review-1", "coderabbit-1"]],
+            ["codex-1", at(40), ["codex-1"]],
+        ]);
     });
 });
 
@@ -426,6 +470,17 @@ describe("collect: the tree and HEAD (spec, The review team only reports)", () =
         ]);
     });
 
+    it("reports a file created after the plan when the configuration hides untracked files", async () => {
+        run("config", "status.showUntrackedFiles", "no");
+        writeFileSync(join(repo, "src/new.ts"), "export const fresh = 1;\n");
+
+        const report = await collected();
+
+        expect(report.errors).toEqual([
+            'the working tree changed since the plan (git status --porcelain: now "?? src/new.ts")',
+        ]);
+    });
+
     describe("with the report directory inside the repository", () => {
         // git names the repository by its real path, so the directory is made under that.
         beforeEach(() => {
@@ -451,6 +506,52 @@ describe("collect: the tree and HEAD (spec, The review team only reports)", () =
 
             expect(report.errors).toEqual([
                 'the working tree changed since the plan (git status --porcelain: now " M src/a.ts")',
+            ]);
+        });
+    });
+
+    describe("with a tree already dirty at plan time", () => {
+        // The plan records the tree as it is now, as `plan` does.
+        beforeEach(async () => {
+            writeFileSync(join(repo, "src/a.ts"), "export const a = 2;\n");
+            writeFileSync(join(repo, "src/new.ts"), "export const fresh = 1;\n");
+            writePlan([row("codex")], {
+                status: valueOf(await gitStatus(git)),
+                fingerprint: valueOf(await treeFingerprint(git)),
+            });
+        });
+
+        it("reports nothing when the tree is left as it was", async () => {
+            expect((await collected()).errors).toEqual([]);
+        });
+
+        it("reports a re-edit of a file already modified, which git status does not show", async () => {
+            writeFileSync(join(repo, "src/a.ts"), "export const a = 3;\n");
+
+            const report = await collected();
+
+            expect(report.errors).toEqual([
+                "the contents of the working tree changed since the plan",
+            ]);
+        });
+
+        it("reports a re-edit of an untracked file that existed at plan time", async () => {
+            writeFileSync(join(repo, "src/new.ts"), "export const fresh = 2;\n");
+
+            const report = await collected();
+
+            expect(report.errors).toEqual([
+                "the contents of the working tree changed since the plan",
+            ]);
+        });
+
+        it("reports a change the status shows once, by its status lines", async () => {
+            writeFileSync(join(repo, "src/other.ts"), "export const other = 1;\n");
+
+            const report = await collected();
+
+            expect(report.errors).toEqual([
+                'the working tree changed since the plan (git status --porcelain: now "?? src/other.ts")',
             ]);
         });
     });

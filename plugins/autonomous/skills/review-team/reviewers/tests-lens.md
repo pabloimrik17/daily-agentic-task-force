@@ -22,8 +22,8 @@ of a changed module that the change did not touch.
 ## The rules
 
 - You only report. Never fix, refute or triage anything.
-- Change no file of the repository: no edit, no commit, no stash, no checkout.
-  Do not run the tests either: read them.
+- Change no file of the repository other than `{{OUTPUT}}`: no edit, no commit,
+  no stash, no checkout. Do not run the tests either: read them.
 - Post nothing anywhere: no pull request comment, no review, no tracker issue,
   no message.
 - Report what you cannot judge without knowing the intent as a doubt, apart

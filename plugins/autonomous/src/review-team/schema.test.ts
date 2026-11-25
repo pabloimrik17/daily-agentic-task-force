@@ -517,6 +517,16 @@ describe("parseReport", () => {
             "$.tier.measured must be one of S, M, L",
         ],
         [
+            "a lowered tier",
+            { tier: { measured: "L", used: "S", reason: "small enough" } },
+            "$.tier.used S is below the measured L",
+        ],
+        [
+            "a raised tier with no reason",
+            { tier: { measured: "S", used: "M" } },
+            "$.tier.reason is required when the tier is raised",
+        ],
+        [
             "a non-boolean dirty",
             { subject: { ...(report().subject as Obj), dirty: "no" } },
             "$.subject.dirty must be a boolean",
@@ -564,5 +574,12 @@ describe("parseReport", () => {
         ["errors that are not strings", { errors: [1] }, "$.errors[0] must be a string"],
     ])("rejects %s", (_name, extra, message) => {
         expect(error(parseReport(report(extra)))).toContain(message);
+    });
+
+    it.each<[string, Obj]>([
+        ["a raised tier with a reason", { measured: "S", used: "M", reason: "touches the loop" }],
+        ["the measured tier, with no reason", { measured: "M", used: "M" }],
+    ])("accepts %s", (_name, tier) => {
+        expect(parseReport(report({ tier }))).toMatchObject({ ok: true, value: { tier } });
     });
 });
