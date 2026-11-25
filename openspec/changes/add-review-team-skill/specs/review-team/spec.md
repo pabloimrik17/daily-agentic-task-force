@@ -161,7 +161,7 @@ Every finding SHALL follow `autonomous.finding.v1`: an id unique in the report, 
 
 ### Requirement: Output is validated at run time
 
-Each reviewer's output SHALL be validated against the finding schema when the review collects it. A reviewer whose output fails SHALL count as a reviewer that could not run, and none of its findings SHALL reach the report. One exception: a Codex entry that fits Codex's form but names a path outside the repository SHALL be dropped alone, and the report SHALL name it under the Codex reviewer with the reason, while Codex's other entries are reported.
+Each reviewer's output SHALL be validated against the finding schema when the review collects it. A reviewer whose output fails SHALL count as a reviewer that could not run, and none of its findings SHALL reach the report. One exception: a Codex entry that fits Codex's form but names a path that a finding cannot hold SHALL be dropped alone, and the report SHALL name it under the Codex reviewer with the reason, while Codex's other entries are reported.
 
 #### Scenario: Changed tool output
 
@@ -172,6 +172,11 @@ Each reviewer's output SHALL be validated against the finding schema when the re
 
 - **WHEN** Codex reports two entries and one names a path outside the repository
 - **THEN** the other entry is reported as a Codex finding, and the report names the dropped entry under the Codex reviewer with the path and the reason
+
+#### Scenario: Codex entry with a backslash in its path
+
+- **WHEN** Codex reports two entries and one names a file inside the repository whose POSIX name holds a backslash, which a finding's path, written with forward slashes only, cannot hold
+- **THEN** the other entry is reported as a Codex finding, and the report names the dropped entry under the Codex reviewer with the reason
 
 ### Requirement: Severity comes from fixed tables
 

@@ -4325,9 +4325,10 @@ causes are:
   reach the report.
 
 The report names every skipped reviewer and its reason. A skipped reviewer is
-not replaced. A Codex entry that names a path outside the repository is dropped
-alone and named under Codex in the report; any other unreadable Codex output
-still skips Codex.
+not replaced. A Codex entry that names a path outside the repository, or a path
+holding a backslash, which a finding's path cannot hold, is dropped alone and
+named under Codex in the report; any other unreadable Codex output still skips
+Codex.
 
 `walkthrough` and `tests-lens` are required: they need only Claude and the
 plugin, so they run whenever their tier calls for them. When a required

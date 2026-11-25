@@ -352,6 +352,29 @@ describe("a skipped reviewer", () => {
         ]);
     });
 
+    it.skipIf(process.platform === "win32")(
+        "reports the other entry when one path holds a backslash",
+        async () => {
+            const message = `${entry(`${ROOT}/src/a.ts`)}\n\n${entry(`${ROOT}/src/we\\ird.ts`)}`;
+            const { ctx } = setup({ message });
+
+            const file = await runCodex(ctx);
+
+            expect(parseReviewerFile(file)).toEqual({ ok: true, value: file });
+            expect(file).toMatchObject({ outcome: "reported" });
+            expect(
+                file.outcome === "reported" &&
+                    file.items.map((item) => item.location.scope === "line" && item.location.file),
+            ).toEqual(["src/a.ts"]);
+            expect(file.outcome === "reported" && file.dropped).toEqual([
+                {
+                    entry: "- [P1] Await the write — $TMPDIR/throwaway/src/we\\ird.ts:13-13",
+                    reason: "src/we\\ird.ts holds a backslash, which a finding's path cannot",
+                },
+            ]);
+        },
+    );
+
     it("writes no dropped list when no entry was dropped", async () => {
         const { ctx } = setup({ message: MESSAGE });
 
@@ -449,13 +472,26 @@ describe("parseCodexReview", () => {
         });
     });
 
-    it.skipIf(process.platform === "win32")("keeps a backslash in a POSIX file name", () => {
-        const result = parse(`- [P1] T — ${ROOT}/src/we\\ird.ts:1-1\n  Text.`);
+    it.skipIf(process.platform === "win32")(
+        "drops an entry whose POSIX name holds a backslash",
+        () => {
+            const header = `- [P1] T — ${ROOT}/src/we\\ird.ts:1-1`;
+            const result = parse(`${header}\n  Text.`);
 
-        expect(result.ok && result.value.items[0]).toMatchObject({
-            location: { file: "src/we\\ird.ts" },
-        });
-    });
+            expect(result).toEqual({
+                ok: true,
+                value: {
+                    items: [],
+                    dropped: [
+                        {
+                            entry: header.replace(ROOT, "$TMPDIR/throwaway"),
+                            reason: "src/we\\ird.ts holds a backslash, which a finding's path cannot",
+                        },
+                    ],
+                },
+            });
+        },
+    );
 
     it("keeps a directory whose name starts with two dots and drops a parent climb", () => {
         const kept = parse(`- [P1] T — ${ROOT}/..fixtures/a.ts:1-1\n  Text.`);

@@ -114,6 +114,16 @@ function toFinding(entry: Entry, repoRoot: string): Parsed {
             },
         };
     }
+    // The finding schema takes forward slashes only, so a POSIX name holding `\` cannot be named:
+    // this entry alone is dropped (D15).
+    if (file.includes("\\")) {
+        return {
+            dropped: {
+                entry: hideMachinePaths(entry.header),
+                reason: `${file} holds a backslash, which a finding's path cannot`,
+            },
+        };
+    }
     return {
         finding: {
             kind: "finding",
