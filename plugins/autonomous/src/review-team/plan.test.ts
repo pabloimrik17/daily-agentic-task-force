@@ -1,4 +1,11 @@
-import { existsSync, mkdirSync, readdirSync, readFileSync, writeFileSync } from "node:fs";
+import {
+    existsSync,
+    mkdirSync,
+    readdirSync,
+    readFileSync,
+    symlinkSync,
+    writeFileSync,
+} from "node:fs";
 import { homedir } from "node:os";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -326,7 +333,7 @@ describe("buildPlan", () => {
 
     it("Run for a stage inside the repository: the directory is not a change of the tree", async () => {
         commit({ "small.ts": lines(10) });
-        const clean = await treeFingerprint((args) => isolatedGit(["-C", clone, ...args]));
+        const clean = await treeFingerprint((args) => isolatedGit(["-C", clone, ...args]), clone);
         const named = join(clone, "review-out");
         mkdirSync(named);
         writeFileSync(join(named, "earlier.json"), "{}\n"); // left over from an earlier run
@@ -404,6 +411,17 @@ describe("buildPlan", () => {
         });
         expect(readdirSync(named)).toEqual(["plan.json"]);
         expect(readFileSync(join(named, "plan.json"), "utf8")).toBe("{}\n");
+    });
+
+    it("plans a tree with an untracked name holding a newline and a dangling link", async () => {
+        commit({ "small.ts": lines(10) });
+        writeFileSync(join(clone, "odd\nname.md"), "one\n");
+        symlinkSync("missing.md", join(clone, "dangling"));
+
+        const { plan: planned } = await plan();
+
+        expect(planned.subject.dirty).toBe(true);
+        expect(planned.fingerprint).toMatch(/^[0-9a-f]{64}$/);
     });
 
     it("Run for a stage inside the repository: a change outside the directory still counts", async () => {

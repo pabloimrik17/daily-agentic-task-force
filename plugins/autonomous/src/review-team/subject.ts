@@ -4,7 +4,8 @@
 // Every git call runs in the repository: the caller binds the Exec to it.
 
 import { createHash } from "node:crypto";
-import { basename, isAbsolute, relative, sep } from "node:path";
+import { lstatSync, readFileSync, readlinkSync } from "node:fs";
+import { basename, isAbsolute, join, relative, sep } from "node:path";
 
 import type { Exec } from "../exec.ts";
 import type { Result } from "../result.ts";
@@ -97,19 +98,46 @@ export async function gitStatus(git: Exec, leaveOut?: string): Promise<Result<st
     return status.ok ? { ok: true, value: status.stdout } : status;
 }
 
-// The untracked files' blob ids, read without writing an object. None: no call.
-async function untrackedBlobs(git: Exec, names: string): Promise<Result<string>> {
-    const paths = names.split("\0").filter((name) => name !== "");
-    if (paths.length === 0) {
-        return { ok: true, value: "" };
+// One untracked entry, read without following a link, so a dangling or retargeted link counts
+// by its text.
+function entryDigest(root: string, name: string): string {
+    const path = join(root, name);
+    const stat = lstatSync(path, { throwIfNoEntry: false });
+    if (stat === undefined) {
+        return `gone\0${name}`;
     }
-    const blobs = await git(["hash-object", "--stdin-paths"], `${paths.join("\n")}\n`);
-    return blobs.ok ? { ok: true, value: blobs.stdout } : blobs;
+    if (stat.isSymbolicLink()) {
+        return `link\0${name}\0${readlinkSync(path)}`;
+    }
+    if (stat.isFile()) {
+        const mode = (stat.mode & 0o111) === 0 ? "-" : "x";
+        const contents = createHash("sha256").update(readFileSync(path)).digest("hex");
+        return `file\0${name}\0${mode}\0${contents}`;
+    }
+    return `other\0${name}`; // a nested repository, listed as `dir/`
+}
+
+// Hashed in Node: `git hash-object --stdin-paths` splits a name holding a newline and follows
+// links.
+function untrackedDigests(root: string, names: string): Result<string[]> {
+    const digests: string[] = [];
+    for (const name of names.split("\0").filter((entry) => entry !== "")) {
+        try {
+            digests.push(entryDigest(root, name));
+        } catch (error) {
+            return { ok: false, error: `could not read ${name}: ${(error as Error).message}` };
+        }
+    }
+    return { ok: true, value: digests };
 }
 
 // A digest of the working tree's contents: the status line of a file already dirty at plan
 // time stays the same when it is edited again, its contents do not.
-export async function treeFingerprint(git: Exec, leaveOut?: string): Promise<Result<string>> {
+export async function treeFingerprint(
+    git: Exec,
+    root: string,
+    leaveOut?: string,
+): Promise<Result<string>> {
     const diff = await git([
         "diff",
         "HEAD",
@@ -132,12 +160,12 @@ export async function treeFingerprint(git: Exec, leaveOut?: string): Promise<Res
     if (!names.ok) {
         return names;
     }
-    const blobs = await untrackedBlobs(git, names.stdout);
-    if (!blobs.ok) {
-        return blobs;
+    const digests = untrackedDigests(root, names.stdout);
+    if (!digests.ok) {
+        return digests;
     }
     const hash = createHash("sha256");
-    for (const part of [diff.stdout, names.stdout, blobs.value]) {
+    for (const part of [diff.stdout, names.stdout, ...digests.value]) {
         hash.update(part).update("\0");
     }
     return { ok: true, value: hash.digest("hex") };

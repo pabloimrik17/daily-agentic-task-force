@@ -1,4 +1,4 @@
-import { mkdirSync, writeFileSync } from "node:fs";
+import { chmodSync, mkdirSync, symlinkSync, unlinkSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
@@ -230,11 +230,16 @@ describe("gitStatus", () => {
 
 describe("treeFingerprint", () => {
     async function fingerprint(leaveOut?: string): Promise<string> {
-        const result = await treeFingerprint(git, leaveOut);
+        const result = await treeFingerprint(git, clone, leaveOut);
         if (!result.ok) {
             throw new Error(result.error);
         }
         return result.value;
+    }
+
+    async function objects(): Promise<string> {
+        const counted = await git(["count-objects", "-v"]);
+        return counted.ok ? counted.stdout : counted.error;
     }
 
     it("is a sha256 digest that stays the same while the tree does", async () => {
@@ -254,20 +259,50 @@ describe("treeFingerprint", () => {
         expect(await fingerprint()).not.toBe(before);
     });
 
-    it("changes when an untracked file is edited again, and writes no object", async () => {
+    it("changes when an untracked file is edited again or made executable", async () => {
         writeFileSync(join(clone, "new.md"), "new\n");
         const before = await fingerprint();
-
         writeFileSync(join(clone, "new.md"), "newer\n");
+        const edited = await fingerprint();
+        chmodSync(join(clone, "new.md"), 0o755);
+
+        expect(new Set([before, edited, await fingerprint()]).size).toBe(3);
+    });
+
+    it("writes nothing: it only reads git's diff and file list", async () => {
+        writeFileSync(join(clone, "new.md"), "new\n");
+        const asked: string[] = [];
+        const recording: Exec = (args, input) => {
+            asked.push(args[0] ?? "");
+            return git(args, input);
+        };
+        const before = await objects();
+
+        expect((await treeFingerprint(recording, clone)).ok).toBe(true);
+        expect(asked).toEqual(["diff", "ls-files"]);
+        expect(await objects()).toBe(before);
+    });
+
+    it("reads an untracked name holding a newline as one file", async () => {
+        writeFileSync(join(clone, "odd\nname.md"), "one\n");
+        const before = await fingerprint();
+
+        writeFileSync(join(clone, "odd\nname.md"), "two\n");
 
         expect(await fingerprint()).not.toBe(before);
-        // The blob ids of "new\n" and "newer\n".
-        for (const blob of [
-            "3e757656cf36eca53338e520d134963a44f793f8",
-            "d58ed19c91e09e9cc931ac08e57009004eebcb52",
-        ]) {
-            expect((await git(["cat-file", "-e", blob])).ok, blob).toBe(false);
-        }
+    });
+
+    it("counts an untracked link by its text: a dangling one reads, a retargeted one changes", async () => {
+        symlinkSync("missing.md", join(clone, "dangling"));
+        writeFileSync(join(clone, "a.md"), "same\n");
+        writeFileSync(join(clone, "b.md"), "same\n");
+        symlinkSync("a.md", join(clone, "link"));
+        const before = await fingerprint();
+
+        unlinkSync(join(clone, "link"));
+        symlinkSync("b.md", join(clone, "link"));
+
+        expect(await fingerprint()).not.toBe(before);
     });
 
     it("leaves out the path it is given, and still sees any other change", async () => {
@@ -283,10 +318,27 @@ describe("treeFingerprint", () => {
         expect(await fingerprint("review-out")).not.toBe(before);
     });
 
+    // root reads a mode-000 file anyway.
+    it.skipIf(process.getuid?.() === 0)(
+        "fails, naming the file, when an untracked file cannot be read",
+        async () => {
+            writeFileSync(join(clone, "secret.md"), "x\n");
+            chmodSync(join(clone, "secret.md"), 0o000);
+
+            const result = await treeFingerprint(git, clone);
+
+            chmodSync(join(clone, "secret.md"), 0o644);
+            expect(result.ok ? "" : result.error).toMatch(/^could not read secret\.md: EACCES/);
+        },
+    );
+
     it("fails when a git call fails", async () => {
         const failing: Exec = () => Promise.resolve({ ok: false, error: "git failed: boom" });
 
-        expect(await treeFingerprint(failing)).toEqual({ ok: false, error: "git failed: boom" });
+        expect(await treeFingerprint(failing, clone)).toEqual({
+            ok: false,
+            error: "git failed: boom",
+        });
     });
 });
 

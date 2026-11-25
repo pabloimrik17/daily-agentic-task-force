@@ -230,10 +230,10 @@ async function headChange(git: Exec, before: string): Promise<string[]> {
     return now === before ? [] : [`HEAD moved since the plan, from ${before} to ${now}`];
 }
 
-// The report directory, when it is inside the repository, is never a change of the tree.
-async function leftOut(git: Exec, dir: string): Promise<string | undefined> {
+// Read once: it places the report directory and the untracked entries the fingerprint reads.
+async function repositoryRoot(git: Exec): Promise<Result<string>> {
     const root = await git(["rev-parse", "--show-toplevel"]);
-    return root.ok ? insideRepository(root.stdout.trim(), dir) : undefined;
+    return root.ok ? { ok: true, value: root.stdout.trim() } : root;
 }
 
 // A file already dirty at plan time keeps its status line when it is edited again; its
@@ -246,12 +246,16 @@ function contentChange(now: Result<string>, before: string): string[] {
 }
 
 // One change of the tree is reported once: the contents only when the status saw no change.
+// The report directory, when it is inside the repository, is never a change of the tree.
 async function treeChange(git: Exec, plan: Plan, dir: string): Promise<string[]> {
-    const leaveOut = await leftOut(git, dir);
+    const root = await repositoryRoot(git);
+    const leaveOut = root.ok ? insideRepository(root.value, dir) : undefined;
     const status = statusChange(await gitStatus(git, leaveOut), plan.status);
-    return status.length > 0
-        ? status
-        : contentChange(await treeFingerprint(git, leaveOut), plan.fingerprint);
+    if (status.length > 0) {
+        return status;
+    }
+    const now = root.ok ? await treeFingerprint(git, root.value, leaveOut) : root;
+    return contentChange(now, plan.fingerprint);
 }
 
 // Spec "The review team only reports": a reviewer that changed the tree or HEAD is an error.

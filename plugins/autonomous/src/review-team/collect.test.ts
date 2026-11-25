@@ -1,4 +1,12 @@
-import { mkdirSync, readFileSync, realpathSync, utimesSync, writeFileSync } from "node:fs";
+import {
+    mkdirSync,
+    readFileSync,
+    realpathSync,
+    symlinkSync,
+    unlinkSync,
+    utimesSync,
+    writeFileSync,
+} from "node:fs";
 import { homedir, tmpdir } from "node:os";
 import { join } from "node:path";
 
@@ -159,7 +167,7 @@ beforeEach(async () => {
     mkdirSync(join(repo, "src"));
     commit("src/a.ts", "export const a = 1;\n");
     head = await revParse("HEAD");
-    fingerprint = valueOf(await treeFingerprint(git));
+    fingerprint = valueOf(await treeFingerprint(git, repo));
     dir = directories.make("report");
     mkdirSync(join(dir, "reviewers"));
 });
@@ -515,9 +523,12 @@ describe("collect: the tree and HEAD (spec, The review team only reports)", () =
         beforeEach(async () => {
             writeFileSync(join(repo, "src/a.ts"), "export const a = 2;\n");
             writeFileSync(join(repo, "src/new.ts"), "export const fresh = 1;\n");
+            writeFileSync(join(repo, "src/odd\nname.ts"), "export const odd = 1;\n");
+            writeFileSync(join(repo, "src/same.ts"), "export const fresh = 1;\n");
+            symlinkSync("new.ts", join(repo, "src/link.ts"));
             writePlan([row("codex")], {
                 status: valueOf(await gitStatus(git)),
-                fingerprint: valueOf(await treeFingerprint(git)),
+                fingerprint: valueOf(await treeFingerprint(git, repo)),
             });
         });
 
@@ -537,6 +548,27 @@ describe("collect: the tree and HEAD (spec, The review team only reports)", () =
 
         it("reports a re-edit of an untracked file that existed at plan time", async () => {
             writeFileSync(join(repo, "src/new.ts"), "export const fresh = 2;\n");
+
+            const report = await collected();
+
+            expect(report.errors).toEqual([
+                "the contents of the working tree changed since the plan",
+            ]);
+        });
+
+        it("reports a re-edit of an untracked file whose name holds a newline", async () => {
+            writeFileSync(join(repo, "src/odd\nname.ts"), "export const odd = 2;\n");
+
+            const report = await collected();
+
+            expect(report.errors).toEqual([
+                "the contents of the working tree changed since the plan",
+            ]);
+        });
+
+        it("reports a link retargeted to a file with the same contents", async () => {
+            unlinkSync(join(repo, "src/link.ts"));
+            symlinkSync("same.ts", join(repo, "src/link.ts"));
 
             const report = await collected();
 

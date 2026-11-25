@@ -8,7 +8,7 @@
 // is dropped and recorded (design D15).
 
 import { mkdir, readFile, rm } from "node:fs/promises";
-import { isAbsolute, join } from "node:path";
+import { isAbsolute, join, sep } from "node:path";
 
 import type { ExecResult } from "../../exec.ts";
 import type { Result } from "../../result.ts";
@@ -70,7 +70,8 @@ function paragraphOf(body: string[]): { statement: string; evidence: string } {
 // The path relative to the repository, or undefined when it is not inside it.
 function repositoryPath(path: string, repoRoot: string): string | undefined {
     const inside = isAbsolute(path) ? insideRepository(repoRoot, path) : undefined;
-    return inside?.split("\\").join("/");
+    // Only Windows separates with `\`; on POSIX it is part of a file name.
+    return inside?.split(sep).join("/");
 }
 
 interface Header {

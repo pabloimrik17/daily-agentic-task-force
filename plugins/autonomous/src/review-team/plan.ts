@@ -79,13 +79,14 @@ interface Composed {
 // What collect compares the tree with: its status lines and its contents.
 async function treeState(
     git: Exec,
+    root: string,
     leaveOut?: string,
 ): Promise<Result<Pick<Measured, "status" | "fingerprint">>> {
     const status = await gitStatus(git, leaveOut);
     if (!status.ok) {
         return status;
     }
-    const fingerprint = await treeFingerprint(git, leaveOut);
+    const fingerprint = await treeFingerprint(git, root, leaveOut);
     return fingerprint.ok
         ? { ok: true, value: { status: status.value, fingerprint: fingerprint.value } }
         : fingerprint;
@@ -103,7 +104,7 @@ async function measured(request: PlanRequest, deps: PlanDeps): Promise<Refusable
     if (!subject.ok) {
         return subject;
     }
-    const tree = await treeState(git, leaveOut);
+    const tree = await treeState(git, deps.repoRoot, leaveOut);
     if (!tree.ok) {
         return tree;
     }

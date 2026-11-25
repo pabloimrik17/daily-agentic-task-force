@@ -134,6 +134,8 @@ From the review comments on the pull request.
 - [x] 12.13 Let each brief write its own output inside the repository. Verify with `skill.test.ts`.
 - [x] 12.14 Share one `choice` validator between the review schema and the attempts state. Verify with `schema.test.ts`.
 - [x] 12.15 Drop the README's stale "defaulted" sentence about the review CLI without a configuration file.
+- [x] 12.16 Fingerprint the untracked entries without following links and without newline-separated names: a symlink counts by its text and a file by its contents. Verify with `subject.test.ts` and `collect.test.ts`.
+- [x] 12.17 Codex parser: keep a backslash in a POSIX file name. Verify with `runners/codex.test.ts`.
 
 Not done: refreshing `origin/HEAD` before the default branch is read. The plan stays offline and writes no ref, and the open pull request's base or `--base` covers a remote whose default branch changed.
 

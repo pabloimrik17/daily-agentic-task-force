@@ -449,6 +449,14 @@ describe("parseCodexReview", () => {
         });
     });
 
+    it.skipIf(process.platform === "win32")("keeps a backslash in a POSIX file name", () => {
+        const result = parse(`- [P1] T — ${ROOT}/src/we\\ird.ts:1-1\n  Text.`);
+
+        expect(result.ok && result.value.items[0]).toMatchObject({
+            location: { file: "src/we\\ird.ts" },
+        });
+    });
+
     it("keeps a directory whose name starts with two dots and drops a parent climb", () => {
         const kept = parse(`- [P1] T — ${ROOT}/..fixtures/a.ts:1-1\n  Text.`);
         const climbed = parse(`- [P1] T — ${ROOT}/../a.ts:1-1\n  Text.`);
