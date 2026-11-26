@@ -124,7 +124,7 @@ export const LIST_FIELDS = "number,title,body,labels,updatedAt,state";
 const LIST_CAP = 1000;
 export const LIST_LIMIT = String(LIST_CAP + 1);
 
-export function complete<T>(command: string, result: TrackerResult<T[]>): TrackerResult<T[]> {
+export function withinListCap<T>(command: string, result: TrackerResult<T[]>): TrackerResult<T[]> {
     if (result.ok && result.value.length > LIST_CAP) {
         return {
             ok: false,
@@ -146,7 +146,7 @@ export function githubTracker(exec: Exec, config: GithubConfig): Tracker {
             const tasks: TrackerTask[] = [];
             for (const repo of repos) {
                 const command = `gh issue list --repo ${repo} --state open --json ${LIST_FIELDS}`;
-                const result = complete(
+                const result = withinListCap(
                     command,
                     await runJson(
                         exec,
@@ -239,7 +239,7 @@ export function githubTracker(exec: Exec, config: GithubConfig): Tracker {
             const labels: TrackerLabel[] = [];
             for (const repo of repos) {
                 const command = `gh label list --repo ${repo} --json name,color`;
-                const result = complete(
+                const result = withinListCap(
                     command,
                     await runJson(
                         exec,

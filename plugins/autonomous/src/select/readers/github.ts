@@ -2,7 +2,7 @@ import type { GithubConfig } from "../../config.ts";
 import type { Exec } from "../../exec.ts";
 import { parseError, runJson } from "../../label-triage/trackers/cli-json.ts";
 import {
-    complete,
+    withinListCap,
     LIST_FIELDS,
     LIST_LIMIT,
     listedIssue,
@@ -88,7 +88,7 @@ function parseListing(repo: string, items: unknown[]): WorkTask[] {
 async function listRepository(exec: Exec, repo: string): Promise<TrackerResult<WorkTask[]>> {
     const command = `gh issue list --repo ${repo} --state open --json ${READER_FIELDS}`;
     const args = ["issue", "list", "--repo", repo, "--state", "open", "--limit", LIST_LIMIT];
-    const listed = complete(
+    const listed = withinListCap(
         command,
         await runJson(exec, command, [...args, "--json", READER_FIELDS], (value) =>
             array(value, "$"),
