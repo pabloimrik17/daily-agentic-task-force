@@ -1,5 +1,6 @@
 import { expect, it, vi } from "vitest";
 import type { Exec } from "../../exec.ts";
+import { LIST_LIMIT } from "../../label-triage/trackers/github.ts";
 import blockedByCut from "./fixtures/github-blockedby-cut.json";
 import blockerClosed from "./fixtures/github-blocker-closed.json";
 import blockerForeign from "./fixtures/github-blocker-foreign.json";
@@ -60,6 +61,7 @@ it("lists each configured repository once, asking for the blockers in the same c
     for (const [index, repo] of CONFIG.repos.entries()) {
         const args = exec.mock.calls[index]![0];
         expect(args.slice(0, 4)).toEqual(["issue", "list", "--repo", repo]);
+        expect(args[args.indexOf("--limit") + 1]).toBe(LIST_LIMIT);
         expect(args[args.indexOf("--json") + 1]).toBe(
             "number,title,body,labels,updatedAt,state,blockedBy,blocking",
         );
