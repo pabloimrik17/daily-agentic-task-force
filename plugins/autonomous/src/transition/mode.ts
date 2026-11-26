@@ -217,8 +217,6 @@ export async function runTransition(
     return leaveStage({ ...report, task }, { ref, row, task }, deps);
 }
 
-// The row the task leaves, or why it leaves none: it is in no stage of the table, or not in the
-// one the caller expects.
 function rowToLeave(
     task: TransitionTask,
     from: TransitionStage | undefined,

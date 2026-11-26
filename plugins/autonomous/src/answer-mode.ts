@@ -68,8 +68,7 @@ export function unconfiguredAnswers(path: string, error: string, startedAt: Date
     };
 }
 
-// The step an answer is for is the text of its id before the first `:`;
-// answers keep their input order within each step.
+// Answers keep their input order within each step.
 function route(answers: readonly Answer[]): Map<string, Answer[]> {
     const routes = new Map<string, Answer[]>();
     for (const answer of answers) {
