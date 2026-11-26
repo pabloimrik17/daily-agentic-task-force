@@ -22,20 +22,22 @@ import {
     contextValue,
     DEVIATION,
     hitlTransition,
+    ON_FAILURE,
     type Move,
     openspecPrompt,
     orchestrationSection,
     type Paths,
     promptAutonomy,
     promptPaths,
-    PULL_REQUEST_KEY,
+    requiredPullRequest,
     type Section,
     summarySection,
+    UPDATE_WORKFLOW_KEY,
 } from "../openspec-stage.ts";
 import type { StageContext, StagePromptInput } from "../stage.ts";
 
+export { UPDATE_WORKFLOW_KEY } from "../openspec-stage.ts";
 export const VERIFY_WORKFLOW_KEY = "verifyWorkflow"; // `/openspec-verify-change` or `/opsx:verify`
-export const UPDATE_WORKFLOW_KEY = "updateWorkflow"; // `/openspec-update-change` or `/opsx:update`
 export const ADVERSARIAL_REVIEW_KEY = "adversarialReview"; // the skill's body, frontmatter stripped
 
 // Design D11: the record of the findings, beside the result marker, outside the repository.
@@ -90,7 +92,7 @@ const AFK: Autonomy = {
     review: null,
     blocked: true,
     transition: (paths) => afkTransition(paths, MOVE),
-    onFailure: `treat it as a blocker: follow the section "${BLOCKED_TITLE}", and run no transition`,
+    onFailure: ON_FAILURE.AFK,
 };
 
 const HITL: Autonomy = {
@@ -114,22 +116,17 @@ const HITL: Autonomy = {
     review: "Review the outcome with the human: show them each finding by outcome, with its reason, the proposed follow-up tasks and the pull request's URL. Commit and push each round of their feedback as a new commit. Go on only when the human is done with it, and once a round changed anything, confirm again, as in the step before, that every check passes, nothing is left uncommitted and every commit is pushed.",
     blocked: false,
     transition: (paths) => hitlTransition(paths, MOVE, "the verification"),
-    onFailure: "tell the human what it reported, and continue only as the human decides",
+    onFailure: ON_FAILURE.HITL,
 };
 
 const AUTONOMIES: Record<AutonomyLabel, Autonomy> = { AFK, HITL };
-
-// Required by the prerequisites, so its absence is a defect, not a branch without one.
-function openPullRequest(context: StageContext): PullRequest {
-    return JSON.parse(contextValue(context, "verify", PULL_REQUEST_KEY)) as PullRequest;
-}
 
 function workOf(context: StageContext): Work {
     return {
         change: contextValue(context, "verify", CHANGE_KEY),
         verify: contextValue(context, "verify", VERIFY_WORKFLOW_KEY),
         update: contextValue(context, "verify", UPDATE_WORKFLOW_KEY),
-        pullRequest: openPullRequest(context),
+        pullRequest: requiredPullRequest(context, "verify"),
         review: contextValue(context, "verify", ADVERSARIAL_REVIEW_KEY),
     };
 }

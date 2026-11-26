@@ -2,7 +2,7 @@ import { parseAttemptId, parseTaskRef, type AttemptId, type TaskRef } from "./at
 import type { Source } from "./config.ts";
 import { STAGES } from "./stages/registry.ts";
 import { isStageId, type StageId } from "./stages/stage.ts";
-import { isTransitionStage, TRANSITION_STAGES, type TransitionStage } from "./transition/mode.ts";
+import { isTransitionStage, TRANSITION_STAGES, type TransitionStage } from "./transition/table.ts";
 
 // One answer passed back to a question of a handoff: the question's id and the
 // option values chosen for it (design D3).

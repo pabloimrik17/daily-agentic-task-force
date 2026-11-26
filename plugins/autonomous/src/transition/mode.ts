@@ -5,96 +5,28 @@
 
 import { isSource, taskKey, type TaskRef } from "../attempts/record.ts";
 import type { AutonomousConfig, Source } from "../config.ts";
-import {
-    type AutonomyLabel,
-    GROUPS,
-    isAutonomyLabel,
-    MEANINGS,
-    type StageLabel,
-} from "../label-contract/contract.ts";
+import { MEANINGS } from "../label-contract/contract.ts";
 import type { Trackers } from "../label-triage/trackers/tracker.ts";
 import type { Wait } from "../read-back.ts";
 import { buildHandoff, type Handoff, renderHandoffLine } from "../report.ts";
 import type { Result } from "../result.ts";
 import type { HandoffOption, HandoffQuestion } from "../runner.ts";
-import { applyTransition } from "./apply.ts";
+import { applyTransition, list } from "./apply.ts";
 import { type GuardTools, guardsOnLeaving } from "./guards.ts";
 import { awaitedDetail, awaitedReceipt } from "./receipt.ts";
+import {
+    AUTONOMY_OPTIONS,
+    rowOf,
+    stageAutonomy,
+    TRANSITION_STAGES,
+    type TransitionRow,
+    type TransitionStage,
+} from "./table.ts";
 import { recordTransition } from "./transitioned.ts";
 
 export const TRANSITION = "transition";
 
 const TRANSITION_SCHEMA = "autonomous.transition.v1";
-
-// The transitions (spec label-contract, "A transition replaces the stage"), keyed by the stage
-// they leave; `asks` names the question that leads out of it.
-type TransitionQuestion = "autonomy" | "approval";
-
-interface TransitionTarget {
-    to: StageLabel;
-    asks: TransitionQuestion;
-}
-
-const TRANSITIONS = {
-    "grill-me": { to: "proposal", asks: "autonomy" },
-    proposal: { to: "implement", asks: "approval" },
-    implement: { to: "verify", asks: "approval" },
-    verify: { to: "code-review", asks: "approval" },
-} as const satisfies Partial<Record<StageLabel, TransitionTarget>>;
-
-export type TransitionStage = keyof typeof TRANSITIONS;
-
-export interface TransitionRow extends TransitionTarget {
-    from: TransitionStage;
-}
-
-export function transitionRow(from: TransitionStage): TransitionRow {
-    return { from, ...TRANSITIONS[from] };
-}
-
-export const TRANSITION_STAGES = Object.keys(TRANSITIONS) as TransitionStage[];
-
-export function isTransitionStage(value: string): value is TransitionStage {
-    return (TRANSITION_STAGES as readonly string[]).includes(value);
-}
-
-// Table order: a task a cut-short transition left with grill-me beside proposal is still in
-// grill-me, so answering again completes that transition.
-export function rowOf(labels: readonly string[]): TransitionRow | null {
-    const from = TRANSITION_STAGES.find((stage) => labels.includes(stage));
-    return from === undefined ? null : transitionRow(from);
-}
-
-// An autonomy answers the way out of grill-me; the next stage approves the way out of the others.
-export function accepts(row: TransitionRow, value: string): boolean {
-    return row.asks === "autonomy" ? isAutonomyLabel(value) : value === row.to;
-}
-
-export const AUTONOMY_OPTIONS: readonly AutonomyLabel[] = GROUPS.autonomy.filter(isAutonomyLabel);
-
-// What an approval answers with: the stage each approval row leads to.
-export const APPROVAL_VALUES: readonly StageLabel[] = TRANSITION_STAGES.map(transitionRow)
-    .filter((row) => row.asks === "approval")
-    .map((row) => row.to);
-
-// The autonomy that decides how a task leaves a stage left on approval, `proposal`, `implement` or `verify`
-// (spec label-contract, "The autonomy decides whether leaving ... needs an answer"): exactly one,
-// or the reason there is none.
-export function stageAutonomy(
-    ref: TaskRef,
-    labels: readonly string[],
-    stage: TransitionStage,
-): Result<AutonomyLabel> {
-    const found = labels.filter(isAutonomyLabel);
-    const [only] = found;
-    if (found.length === 1 && only !== undefined) {
-        return { ok: true, value: only };
-    }
-    const expected = `expected one of ${AUTONOMY_OPTIONS.join(", ")}`;
-    const problem =
-        found.length === 0 ? "has no autonomy" : `has conflicting autonomy [${found.join(", ")}]`;
-    return { ok: false, error: `${ref.source} ${ref.id} in ${stage} ${problem}: ${expected}` };
-}
 
 interface TransitionTask {
     source: Source;
@@ -133,14 +65,6 @@ const later = (from: TransitionStage): HandoffOption => ({
 });
 
 const CURRENT = "current · ";
-
-// What the question says about the stage it asks to leave.
-const READY: Record<TransitionStage, string> = {
-    "grill-me": "the grill is over",
-    proposal: "the proposal is ready",
-    implement: "the implementation is ready",
-    verify: "the verification is ready",
-};
 
 // Task ids carry no `:`.
 export function transitionQuestionId(ref: TaskRef): string {
@@ -212,7 +136,7 @@ export async function runTransition(
         return { ...report, task, reasons: [awaitedDetail(awaited.value)] };
     }
     if (row.asks === "autonomy") {
-        return asking(report, task, transitionQuestion(ref, task));
+        return asking(report, task, transitionQuestion(ref, task, row));
     }
     return leaveStage({ ...report, task }, { ref, row, task }, deps);
 }
@@ -223,9 +147,9 @@ function rowToLeave(
 ): Result<TransitionRow> {
     const row = rowOf(task.labels);
     const where = `${task.source} ${task.id} is in`;
-    const labels = `(labels [${task.labels.join(", ")}])`;
+    const labels = `(labels ${list(task.labels)})`;
     if (row === null) {
-        return { ok: false, error: `${where} none of ${stageList()} ${labels}` };
+        return { ok: false, error: `${where} none of ${STAGE_LIST} ${labels}` };
     }
     if (from !== undefined && row.from !== from) {
         return { ok: false, error: `${where} ${row.from}, not ${from} ${labels}` };
@@ -234,10 +158,7 @@ function rowToLeave(
 }
 
 // "grill-me, proposal, implement and verify"
-function stageList(): string {
-    const last = TRANSITION_STAGES.at(-1);
-    return `${TRANSITION_STAGES.slice(0, -1).join(", ")} and ${last}`;
-}
+const STAGE_LIST = `${TRANSITION_STAGES.slice(0, -1).join(", ")} and ${TRANSITION_STAGES.at(-1)}`;
 
 function asking(
     report: TransitionReport,
@@ -307,11 +228,15 @@ function header(task: TransitionTask, beyond: string): string {
     return task.id.length <= MAX_HEADER ? task.id : beyond;
 }
 
-const labelsLine = (task: TransitionTask) => `Labels: [${task.labels.join(", ")}]`;
+const labelsLine = (task: TransitionTask) => `Labels: ${list(task.labels)}`;
 
 // Only the autonomy is asked: the scope is a property the grill does not change,
 // and the stage follows the answer.
-function transitionQuestion(ref: TaskRef, task: TransitionTask): HandoffQuestion {
+function transitionQuestion(
+    ref: TaskRef,
+    task: TransitionTask,
+    row: TransitionRow,
+): HandoffQuestion {
     const options = AUTONOMY_OPTIONS.map((label): HandoffOption => {
         const current = task.labels.includes(label) ? CURRENT : "";
         return { label, value: label, description: `${current}${MEANINGS[label]}` };
@@ -321,23 +246,23 @@ function transitionQuestion(ref: TaskRef, task: TransitionTask): HandoffQuestion
         step: TRANSITION,
         header: header(task, "autonomy"),
         question: [
-            `${task.source} ${task.id} "${task.title}": ${READY["grill-me"]}. Which autonomy does the task keep?`,
+            `${task.source} ${task.id} "${task.title}": ${row.ready}. Which autonomy does the task keep?`,
             labelsLine(task),
         ].join("\n"),
-        options: [...options, later("grill-me")],
+        options: [...options, later(row.from)],
         multiSelect: false,
     };
 }
 
 // The approval changes no autonomy and no scope: it only lets the task leave the stage.
 function approvalQuestion(ref: TaskRef, task: TransitionTask, row: TransitionRow): HandoffQuestion {
-    const { from, to } = row;
+    const { from, to, ready } = row;
     return {
         id: transitionQuestionId(ref),
         step: TRANSITION,
         header: header(task, "approval"),
         question: [
-            `${task.source} ${task.id} "${task.title}": ${READY[from]}. Approve it to move the task to ${to}?`,
+            `${task.source} ${task.id} "${task.title}": ${ready}. Approve it to move the task to ${to}?`,
             labelsLine(task),
         ].join("\n"),
         options: [
@@ -376,5 +301,5 @@ function taskLine(task: TransitionTask | null): string {
     if (task === null) {
         return "task: unreadable";
     }
-    return `task: ${task.source} ${task.id} → "${task.title}" → labels [${task.labels.join(", ")}]`;
+    return `task: ${task.source} ${task.id} → "${task.title}" → labels ${list(task.labels)}`;
 }
