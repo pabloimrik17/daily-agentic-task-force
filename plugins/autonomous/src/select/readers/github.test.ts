@@ -125,6 +125,18 @@ it("fails naming the task when a blocker has no node, as for one the token canno
     );
 });
 
+it.each([
+    ["state", "must be a string"],
+    ["repository", "must be an object"],
+    ["number", "must be a finite number"],
+])("fails naming the node when a blocker has no %s", async (field, problem) => {
+    const [issue] = blockerOpen;
+    const [node] = issue!.blockedBy.nodes;
+    const { [field as keyof typeof node]: _omitted, ...broken } = node!;
+    const listed = [{ ...issue!, blockedBy: { nodes: [broken], totalCount: 1 } }];
+    expect(await failure(listed)).toContain(`$[0].blockedBy.nodes[0].${field} ${problem}`);
+});
+
 it("fails when a repository lists more than the 1000 issues gh is asked for", async () => {
     const issues = Array.from({ length: 1001 }, (_, index) => ({
         ...listing[0]!,
