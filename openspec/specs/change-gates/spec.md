@@ -11,7 +11,7 @@ Defines what the repository checks before a commit and before a push, and which 
 The pre-commit hook SHALL check only what is staged:
 
 - Format every staged file.
-- Run ESLint on staged TypeScript files.
+- Run ESLint on staged TypeScript and YAML files.
 - Run markdownlint on staged Markdown files.
 - Run the Renovate validator when `renovate.json` is staged.
 - Run `fallow audit` when a file fallow analyses is staged.
