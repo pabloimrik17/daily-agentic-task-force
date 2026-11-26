@@ -1,6 +1,6 @@
 import type { GithubConfig } from "../../config.ts";
 import type { Exec } from "../../exec.ts";
-import { runJson } from "../../label-triage/trackers/cli-json.ts";
+import { parseError, runJson } from "../../label-triage/trackers/cli-json.ts";
 import {
     complete,
     LIST_FIELDS,
@@ -68,31 +68,38 @@ function openIds(entry: Json, key: string, path: string, id: string): string[] {
     });
 }
 
-function parseListing(repo: string): (value: unknown) => WorkTask[] {
-    return (value) =>
-        array(value, "$").map((item, index) => {
-            const path = `$[${index}]`;
-            const entry = object(item, path);
-            const task = listedIssue(repo, entry, path);
-            return {
-                ...task,
-                priority: null,
-                project: null,
-                repository: repo,
-                blockedBy: openIds(entry, "blockedBy", path, task.id),
-                children: null,
-                blocks: openIds(entry, "blocking", path, task.id),
-            };
-        });
+function parseListing(repo: string, items: unknown[]): WorkTask[] {
+    return items.map((item, index) => {
+        const path = `$[${index}]`;
+        const entry = object(item, path);
+        const task = listedIssue(repo, entry, path);
+        return {
+            ...task,
+            priority: null,
+            project: null,
+            repository: repo,
+            blockedBy: openIds(entry, "blockedBy", path, task.id),
+            children: null,
+            blocks: openIds(entry, "blocking", path, task.id),
+        };
+    });
 }
 
 async function listRepository(exec: Exec, repo: string): Promise<TrackerResult<WorkTask[]>> {
     const command = `gh issue list --repo ${repo} --state open --json ${READER_FIELDS}`;
     const args = ["issue", "list", "--repo", repo, "--state", "open", "--limit", LIST_LIMIT];
-    return complete(
+    const listed = complete(
         command,
-        await runJson(exec, command, [...args, "--json", READER_FIELDS], parseListing(repo)),
+        await runJson(exec, command, [...args, "--json", READER_FIELDS], (value) =>
+            array(value, "$"),
+        ),
     );
+    if (!listed.ok) return listed;
+    try {
+        return { ok: true, value: parseListing(repo, listed.value) };
+    } catch (error) {
+        return { ok: false, error: parseError(command, error) };
+    }
 }
 
 export function githubWorkReader(exec: Exec, config: GithubConfig): WorkReader {
