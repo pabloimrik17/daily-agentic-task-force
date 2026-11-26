@@ -165,7 +165,7 @@ Each label SHALL have exactly one spelling, used verbatim on every tracker: `wor
 
 ### Requirement: Aliases are evidence, never removed
 
-The configuration MAY declare, per source, alias labels that count as evidence for one contract label (for example Beads `nazaries` for `work`, `human` for `HITL`). An alias SHALL NOT count as the contract label being present. The system SHALL NOT remove, rename or replace an alias or any other label outside the contract. Apart from a transition and the removal of `taken`, the only write the contract allows is adding a contract label.
+The configuration MAY declare, per source, alias labels that count as evidence for one contract label (for example Beads `nazaries` for `work`, `human` for `HITL`). An alias SHALL NOT count as the contract label being present. The system SHALL NOT remove, rename or replace an alias or any other label outside the contract. Apart from a transition, the removal of `taken` and the removal of `triage-me` by label triage, the only write the contract allows is adding a contract label.
 
 #### Scenario: Alias present
 
