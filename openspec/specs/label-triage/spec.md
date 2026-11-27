@@ -292,7 +292,7 @@ A missing stage SHALL be derived as `proposal`, with confidence 1 and tier `code
 
 ### Requirement: The autonomy decision depends on the stage
 
-For a task with no autonomy and no stage label, the autonomy decision SHALL choose among `AFK`, `HITL` and `grill-me`, where `grill-me` leaves the autonomy to a grill. For a task whose stage is `proposal`, `implement`, `verify` or `code-review`, it SHALL choose between `AFK` and `HITL` only. A task in `grill-me` without an autonomy label SHALL need no autonomy decision.
+For a task with no autonomy and no stage label, the autonomy decision SHALL choose among `AFK`, `HITL` and `grill-me`, where `grill-me` leaves the autonomy to a grill. For a task that carries any other stage label, it SHALL choose between `AFK` and `HITL` only. A task in `grill-me` without an autonomy label SHALL need no autonomy decision.
 
 #### Scenario: Task with neither
 
@@ -317,6 +317,11 @@ For a task with no autonomy and no stage label, the autonomy decision SHALL choo
 #### Scenario: Task in code-review
 
 - **WHEN** a task carries `personal` and `code-review`
+- **THEN** its autonomy decision may be `AFK` or `HITL`, and never `grill-me`
+
+#### Scenario: Task in a stage with no implementation
+
+- **WHEN** a task carries `personal` and `external-review`
 - **THEN** its autonomy decision may be `AFK` or `HITL`, and never `grill-me`
 
 ### Requirement: Labels missing on a tracker are not written
