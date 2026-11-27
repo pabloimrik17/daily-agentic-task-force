@@ -137,7 +137,9 @@ async function postReview(
         attempt: findings.attempt,
         stage: STAGE,
         round,
-        states: anchored.map(({ item }) => item.published.state),
+        states: anchored.flatMap(({ item }) =>
+            item.published.state === "kept" ? [] : [item.published.state],
+        ),
         review: findings.review,
         unanchored: unanchored.map(comment),
     });
@@ -238,7 +240,7 @@ async function reply(publishing: Publishing, planned: Threaded): Promise<string 
 async function settle({ port, report }: Publishing, planned: Threaded): Promise<string | null> {
     const { thread } = planned.target;
     const resolved = wantsResolved(planned);
-    if (thread.resolved === resolved) {
+    if (resolved === null || thread.resolved === resolved) {
         return null;
     }
     const changed = await (resolved ? port.resolve(thread.id) : port.unresolve(thread.id));
@@ -267,7 +269,7 @@ function misplaced(
             return [`the thread of ${id} does not show "${planned.published.status}"`];
         }
         const wanted = wantsResolved(planned);
-        return thread.resolved === wanted
+        return wanted === null || thread.resolved === wanted
             ? []
             : [`the thread of ${id} is ${thread.resolved ? "resolved" : "open"}`];
     });
@@ -324,17 +326,19 @@ function notesOf(
     threaded: readonly Threaded[],
     threads: readonly ReviewThread[],
 ): WalkthroughNote[] {
-    return threaded.map(({ entry, published, target }) => {
-        const thread = threads.find(({ id }) => id === target.thread.id) ?? target.thread;
-        return {
-            finding: entry.id,
-            label: `${published.label}${published.blocking ? " (blocking)" : ""}`,
-            statement: entry.statement,
-            status: published.status,
-            url: urlOf(thread),
-            location: entry.location,
-        };
-    });
+    return threaded
+        .filter(({ published }) => published.state !== "kept")
+        .map(({ entry, published, target }) => {
+            const thread = threads.find(({ id }) => id === target.thread.id) ?? target.thread;
+            return {
+                finding: entry.id,
+                label: `${published.label}${published.blocking ? " (blocking)" : ""}`,
+                statement: entry.statement,
+                status: published.status,
+                url: urlOf(thread),
+                location: entry.location,
+            };
+        });
 }
 
 async function updateWalkthrough(

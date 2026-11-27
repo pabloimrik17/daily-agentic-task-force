@@ -24,7 +24,7 @@ Publish mode SHALL validate the whole record before it writes anything. A record
 
 ### Requirement: Only surviving findings are published
 
-Publish mode SHALL publish a finding only when it survived the refutation, and a doubt only when the record marks it for publication. A fixed `SUGGESTION`, a refuted finding and a dismissed finding SHALL NOT be published.
+Publish mode SHALL open a new thread for a finding only when it survived the refutation, and for a doubt only when the record marks it for publication. A fixed `SUGGESTION`, a refuted finding and a dismissed finding SHALL NOT be published. This governs new threads: an entry linked to an existing thread is answered whatever its outcome (see "A linked entry that is not published is answered").
 
 #### Scenario: Refuted finding
 
@@ -108,7 +108,7 @@ A thread SHALL be anchored to the finding's line on the final diff when the diff
 
 ### Requirement: One review per round that opens threads
 
-Publish mode SHALL post the new threads of one review round in one review, with the event `COMMENT`, whose body is a three-line index of what the round published. A reply to an existing thread, or a change of its state, SHALL open no review. A round that opens no thread SHALL post no review.
+Publish mode SHALL post the new threads of one review round in one review, with the event `COMMENT`, whose body is a three-line index of what the round published. For a reply to an existing thread, or a change of its state, publish mode SHALL post no review of its own; the review GitHub itself attaches to a reply is not one. A round that opens no thread SHALL post no review.
 
 #### Scenario: First round
 
@@ -118,7 +118,7 @@ Publish mode SHALL post the new threads of one review round in one review, with 
 #### Scenario: Human round with replies only
 
 - **WHEN** a human round only answers the human's two GitHub threads
-- **THEN** no review is posted, and each thread gains a reply
+- **THEN** publish mode posts no review of its own, and each thread gains a reply
 
 ### Requirement: Existing threads are answered, never duplicated
 
@@ -134,6 +134,30 @@ For a record entry linked to an existing thread, publish mode SHALL reply in tha
 - **WHEN** a second attempt links a finding to a thread the first attempt resolved as fixed, and the finding is open again
 - **THEN** the thread gains a reply and is unresolved
 
+### Requirement: A linked entry that is not published is answered
+
+For a linked entry that is not published, publish mode SHALL reply in the thread with its outcome (`not published`, and `refuted`, `dismissed`, `settled` or `asked` when it applies) and its reason, under a hidden `autonomous:resolution v1` marker. It SHALL NOT resolve or unresolve the thread, which a person closes, and SHALL report it among the threads answered. An unpublished entry linked to no thread SHALL post nothing.
+
+#### Scenario: Linked entry refuted
+
+- **WHEN** a second attempt links a refuted finding to the open `question (blocking)` thread of the first attempt
+- **THEN** the thread gains one reply whose status line says `not published (refuted)` with the entry's reason, the thread stays open, and the report lists it among the threads answered
+
+#### Scenario: Linked entry dismissed or settled
+
+- **WHEN** a record links a dismissed finding to an open thread and a settled doubt to a resolved one
+- **THEN** each thread gains one reply naming its outcome (`dismissed`, `settled`) and keeps its state
+
+#### Scenario: Human's finding withdrawn
+
+- **WHEN** a human round links to the human's GitHub thread a finding the human withdrew, and the record does not publish it
+- **THEN** the thread gains one reply with the outcome and the reason, and is neither resolved nor unresolved
+
+#### Scenario: Unpublished entry linked to no thread
+
+- **WHEN** the record holds a refuted finding linked to no thread
+- **THEN** nothing is posted for it
+
 ### Requirement: Publishing is idempotent within an attempt
 
 Running publish mode again in the same attempt SHALL post nothing already posted: a finding whose marker for that attempt is on the pull request SHALL NOT be published again, and a state already replied SHALL NOT be replied again.
@@ -142,6 +166,11 @@ Running publish mode again in the same attempt SHALL post nothing already posted
 
 - **WHEN** publish mode runs twice in a row on the same record
 - **THEN** the second run posts nothing and exits with code 0
+
+#### Scenario: Linked entry answered once
+
+- **WHEN** publish mode runs twice in the same attempt on a record that links a refuted finding to an existing thread
+- **THEN** the second run posts no second reply, because the first reply's hidden marker names the attempt and the finding
 
 #### Scenario: Run cut short
 

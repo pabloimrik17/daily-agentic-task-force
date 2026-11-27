@@ -77,11 +77,13 @@ Publish mode computes the final diff (`git diff <merge-base>...HEAD` in the work
 
 Each first comment ends with `<!-- autonomous:finding v1 attempt=<id> finding=<id> [for=<stage>] -->` (or `doubt`); each state reply with `<!-- autonomous:resolution v1 attempt=<id> finding=<id> state=<state> -->`; each review body with `<!-- autonomous:review v1 attempt=<id> round=<n> -->`. Within an attempt, publish mode skips a finding whose marker for the attempt is already on the pull request, and a reply whose state is already the thread's last; a run cut short is completed by the next run, with no second review. Across attempts, the triage links findings to threads (the prompt lists the threads read at launch, parsed from their markers), and publish mode turns an unlinked finding whose anchor and normalised title match a code review thread exactly into a reply in it, reporting the match.
 
+A linked entry that is not published (a refuted or dismissed finding, a settled doubt, a finding a human withdrew in a human round) still gets one reply in its thread, `Status: not published (<outcome>): <reason>` under a resolution marker, and the thread keeps its state: a doubt that a refutation does not answer stays an open question until a person closes it. The reply is idempotent through the same marker, and the report lists the thread among those answered. The record has no state for a finding the human withdrew, so it shows as `dismissed`.
+
 What code guarantees: no thread twice within an attempt, and none for an exact match across attempts; a finding a later attempt words differently, at lines a fix moved, depends on the triage's link. Matching by meaning in code was rejected in the grill as fragile, and the triage is the phase that merges findings. The definition's acceptance criterion was narrowed to this on 2026-11-25, with the user's approval.
 
 ### D11. One review per round, with a three-line index
 
-A run posts one review per round whose new threads it publishes, normally the round just ended, under a body of three lines: the stage and round, the counts by state, and the review team's tier with its skipped reviewers. Replies and resolutions open no review, since each belongs to an existing thread.
+A run posts one review per round whose new threads it publishes, normally the round just ended, under a body of three lines: the stage and round, the counts by state, and the review team's tier with its skipped reviewers. Publish mode posts no review of its own for replies and resolutions, since each belongs to an existing thread; GitHub attaches an empty `COMMENTED` review to a reply by itself (seen in 12.3, evidence F25).
 
 ### D12. The comment format
 
@@ -110,7 +112,7 @@ Publish mode reads the review team's draft from `<attempt>/review/walkthrough.js
 
 ### D15. The human round runs in the session, publish mode closes it
 
-The agent reads the human's GitHub comments (no marker of a stage, posted after the last publish) and the Plannotator verdict the Inbox returns, turns each comment into a record entry of the reviewer `human` with its severity from its mark, links a GitHub comment's entry to its thread, and runs the round. Publish mode answers and resolves the linked threads and opens threads for Plannotator comments. The session sends the walkthrough with the Inbox's `submit_guide` with `review: true` when it has that tool; without it, or without a walkthrough, the round runs on GitHub only.
+The agent reads the human's GitHub comments (no marker of a stage, posted after the last publish) and the Plannotator verdict the Inbox returns, turns each comment into a record entry of the reviewer `human` with its severity from its mark, links a GitHub comment's entry to its thread, and runs the round. Publish mode answers and resolves the linked threads and opens threads for Plannotator comments. The session sends the walkthrough with the Inbox's `submit_guide` with `review: true` when it has that tool, passing the contents of `walkthrough.json` as `guide` and of `walkthrough.patch` as `patch` (the tool takes content, not paths), and piping the same fields to `plannotator inbox call submit_guide -` when the patch is too large for a tool call; without it, or without a walkthrough, the round runs on GitHub only.
 
 ### D16. The logbook stays within its limit
 

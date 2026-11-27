@@ -23,6 +23,7 @@ import {
     ATTEMPT,
     CHANGE,
     DIFF,
+    doubt,
     finding,
     findingsRecord,
     recordText,
@@ -418,6 +419,118 @@ describe("runPublish: existing threads are answered, never duplicated", () => {
         expect(report.outcome).toBe("not-evaluable");
         expect(report.reasons.join("\n")).toContain("GONE");
         expect(posts(harness.fake.calls)).toEqual([]);
+    });
+});
+
+describe("runPublish: a linked entry that is not published is answered", () => {
+    const refuted = (overrides: Partial<FindingEntry> = {}) =>
+        finding({
+            id: "f4",
+            thread: "E1",
+            reason: "No input makes it loop: the guard in `read` stops it.",
+            refutation: { outcome: "refuted", reproduction: null },
+            publication: { state: "none" },
+            ...overrides,
+        });
+
+    const asked = () => published("E1", ATTEMPT, doubt({ id: "d2" }), false);
+
+    const lastBody = (fake: FakePort, id: string) =>
+        fake.threads.find((item) => item.id === id)?.comments.at(-1)?.body;
+
+    it("Linked entry refuted: one reply with its outcome, the thread's state unchanged", async () => {
+        const port = fakePort({ threads: [asked()] });
+        const harness = await setup({ id: SECOND, port, entries: [refuted()] });
+        const report = await publish(harness, SECOND);
+        expect(report.outcome).toBe("advance");
+        expect(posts(port.calls)).toEqual(["reply E1"]);
+        expect(lastBody(port, "E1")).toBe(
+            [
+                "Status: not published (refuted): No input makes it loop: the guard in `read` stops it.",
+                `<!-- autonomous:resolution v1 attempt=${SECOND} finding=f4 state=none -->`,
+            ].join("\n"),
+        );
+        expect(port.threads[0]?.resolved).toBe(false);
+        expect(report.threads.answered).toEqual([
+            { finding: "f4", url: `${PR_URL}#discussion-E1-0` },
+        ]);
+        expect(report.threads.resolved).toEqual([]);
+        expect(report.threads.unresolved).toEqual([]);
+    });
+
+    it("Linked entry dismissed or settled: one reply with its outcome, the thread's state unchanged", async () => {
+        const port = fakePort({
+            threads: [asked(), published("E2", ATTEMPT, finding({ id: "f2" }), true)],
+        });
+        const dismissed = refuted({
+            id: "f5",
+            destination: "dismiss",
+            refutation: { outcome: "not-refuted", reproduction: null },
+            reason: "The project's style allows it.",
+        });
+        const settled = doubt({
+            id: "d3",
+            thread: "E2",
+            destination: "settled",
+            reason: "The definition answers it.",
+        });
+        const entries = [dismissed, settled];
+        const harness = await setup({ id: SECOND, port, entries });
+        const report = await publish(harness, SECOND);
+        expect(report.outcome).toBe("advance");
+        expect(posts(port.calls)).toEqual(["reply E1", "reply E2"]);
+        expect(lastBody(port, "E1")).toContain(
+            "Status: not published (dismissed): The project's style allows it.",
+        );
+        expect(lastBody(port, "E2")).toContain(
+            "Status: not published (settled): The definition answers it.",
+        );
+        expect(port.threads.map((item) => item.resolved)).toEqual([false, true]);
+        expect(report.threads.answered.map(({ finding: id }) => id)).toEqual(["f5", "d3"]);
+    });
+
+    it("Human's finding withdrawn: the human's thread gains a reply and keeps its state", async () => {
+        const port = fakePort({
+            threads: [human("H1"), human("H2", "Rename it.", { resolved: true })],
+        });
+        const withdrawn = (id: string, at: string) =>
+            fixedByHuman({
+                id,
+                thread: at,
+                destination: "dismiss",
+                refutation: { outcome: "not-refuted", reproduction: null },
+                publication: { state: "none" },
+                reason: "The human dropped it after the advisory refutation.",
+            });
+        const entries = [withdrawn("h1", "H1"), withdrawn("h2", "H2")];
+        const harness = await setup({ port, entries });
+        const report = await publish(harness);
+        expect(report.outcome).toBe("advance");
+        expect(posts(port.calls)).toEqual(["reply H1", "reply H2"]);
+        expect(lastBody(port, "H1")).toContain("Status: not published (dismissed): The human");
+        expect(port.threads.map((item) => item.resolved)).toEqual([false, true]);
+        expect(report.threads.answered.map(({ finding: id }) => id)).toEqual(["h1", "h2"]);
+    });
+
+    it("Second run in the same attempt: no second reply", async () => {
+        const port = fakePort({ threads: [asked()] });
+        const harness = await setup({ id: SECOND, port, entries: [refuted()] });
+        expect((await publish(harness, SECOND)).outcome).toBe("advance");
+        const before = port.calls.length;
+        const second = await publish(harness, SECOND);
+        expect(second.outcome).toBe("advance");
+        expect(posts(port.calls.slice(before))).toEqual([]);
+        expect(port.threads[0]?.comments).toHaveLength(2);
+        expect(second.threads.answered).toEqual([]);
+    });
+
+    it("Unpublished entry with no linked thread: nothing is posted", async () => {
+        const port = fakePort({ threads: [asked()] });
+        const harness = await setup({ id: SECOND, port, entries: [refuted({ thread: null })] });
+        const report = await publish(harness, SECOND);
+        expect(report.outcome).toBe("advance");
+        expect(posts(port.calls)).toEqual([]);
+        expect(port.threads[0]?.comments).toHaveLength(1);
     });
 });
 

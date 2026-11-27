@@ -39,8 +39,9 @@ finds or opens the draft pull request of an attempt's workspace branch and
 writes its cover, running no step; `--title` gives its title. `--log` publishes
 the attempt's logbook entry on that pull request and writes its receipt,
 running no step. `--publish` publishes a `code-review` attempt's findings
-as threads on the attempt's pull request, brings its walkthrough up to date and
-writes the receipt the transition waits for, running no step; in a code
+as threads on the attempt's pull request, answers the threads its entries
+link to (a refuted or dismissed entry too, leaving the thread's state as it is),
+brings its walkthrough up to date and writes the receipt the transition waits for, running no step; in a code
 review's closing it runs after the checks pass and before `--persist` and
 `--transition`. `--triage-questions` reads the tasks that carry `triage-me`
 and lists their questions, running no step, requesting no judgement and
@@ -106,7 +107,9 @@ task that is complete.
    and no handoff, the `AFK` path, is relayed and the command ends: nothing is
    asked. A persist report carries none, and so
    do a pull-request, a log and a publish report, so the command ends here. If there is no handoff, or the AskUserQuestion tool
-   is not available (for example under `claude -p`), end the command.
+   is not available (for example under `claude -p`), end the command. That ends
+   the command, not the turn of a session that ran it as a step of a stage: that
+   session goes on to its next step.
 
 4. Call AskUserQuestion once, with every question in the handoff's
    `questions`, in their order. For each question pass its `question`,
@@ -168,4 +171,5 @@ task that is complete.
 - When the report carries no `handoff`, or AskUserQuestion is not available,
   take no further action: show the report and end the command. Otherwise run
   steps 4 to 6 once; when step 5 keeps no answer, end after relaying the first
-  report. Ending means writing nothing more.
+  report. Ending means writing nothing more, for a user who typed the command; a
+  session that ran it as a step of a stage ends the command, not its turn.

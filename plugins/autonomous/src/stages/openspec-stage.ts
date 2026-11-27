@@ -138,7 +138,7 @@ export function closingSection(paths: Paths, closing: Closing): Section {
     return {
         title: "Closing",
         lines: [
-            `${closing.done}, close the stage in this order. Never skip or reorder a step.`,
+            `${closing.done}, close the stage in this order. Never skip or reorder a step. The end of a command, \`/autonomous:run\` in any mode, is not the end of your turn: after its report, go on to the next step, and end your turn only to wait for the human or after you write the result marker.`,
             "",
             ...numbered(steps),
             "",

@@ -1820,7 +1820,8 @@ posted:
 1. **Validate.** The whole record is validated, and an invalid one publishes
    nothing.
 2. **Plan.** For each entry that is published (see
-   [What is published](#what-is-published)), the mode decides which thread holds
+   [What is published](#what-is-published)), and each unpublished entry linked to
+   a thread, the mode decides which thread holds
    it, in this order: the thread the entry is linked to in the record's `thread`
    field; a thread this attempt already opened for it, found by its marker; an
    exact match; a new thread. The exact match is the backstop for a finding the
@@ -1832,13 +1833,16 @@ posted:
    one review, with the event `COMMENT`, whose body is a three-line index of the
    round (the stage and round, the threads open and resolved, the review team's
    tier and skipped reviewers) and the hidden review marker. A round that opens
-   no thread posts no review, and a reply or a change of state opens none. A
+   no thread posts no review, and publish mode posts none of its own for a reply
+   or a change of state (GitHub attaches an empty review to a reply by itself). A
    comment that no thread can hold goes in the body of its round's review; when
    the round opens no thread, such a comment is not posted, and a note says so.
    The threads the review opened are found again by their markers.
 4. **Replies and resolutions.** For an entry whose thread exists, the mode
    replies with its state, resolves the thread when the finding is accounted for
-   and unresolves it when it is open again. One post at a time.
+   and unresolves it when it is open again. An entry that is not published gets a
+   reply with its outcome and leaves the thread's state as it is. One post at a
+   time.
 5. **Read back.** The pull request's threads are read again, with the read lag
    of [Read-backs and tracker lag](#read-backs-and-tracker-lag), and every post
    of the run must be there in its state.
@@ -1912,22 +1916,22 @@ receipt: /home/me/.local/state/autonomous/attempts/linear/DOT-121/code-review/1/
 
 With `--json` it is one document identified by `schema: "autonomous.publish.v1"`:
 
-| Field         | Content                                                                                                                     |
-| ------------- | --------------------------------------------------------------------------------------------------------------------------- |
-| `schema`      | `autonomous.publish.v1`                                                                                                     |
-| `startedAt`   | The start time of the run                                                                                                   |
-| `outcome`     | `advance` exactly when the receipt was written, `not-evaluable` otherwise                                                   |
-| `attempt`     | The attempt id that was given                                                                                               |
-| `task`        | `{ source, id, title }` once the attempt was read, or `null`                                                                |
-| `pullRequest` | `{ number, url }`, or `null` when the branch has no open pull request                                                       |
-| `threads`     | `{ opened, answered, resolved, unresolved }`, each a list of `{ finding, url }`; a reply by an exact match is in `answered` |
-| `matches`     | The exact matches the run continued, as `{ finding, url }`                                                                  |
-| `reviews`     | One `{ round, url }` per round whose new threads the run posted                                                             |
-| `walkthrough` | `{ outcome, reason }` with `outcome` `saved`, `unchanged` or `none`, or `null` when the run stopped before it               |
-| `notes`       | What the operator should know although the run went through                                                                 |
-| `reasons`     | Why it stopped, in order; empty when the receipt was written                                                                |
-| `receipt`     | The path of `published.json` once written, otherwise `null`                                                                 |
-| `config`      | `{ path, error }`, only when the configuration could not be loaded                                                          |
+| Field         | Content                                                                                                                                                               |
+| ------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `schema`      | `autonomous.publish.v1`                                                                                                                                               |
+| `startedAt`   | The start time of the run                                                                                                                                             |
+| `outcome`     | `advance` exactly when the receipt was written, `not-evaluable` otherwise                                                                                             |
+| `attempt`     | The attempt id that was given                                                                                                                                         |
+| `task`        | `{ source, id, title }` once the attempt was read, or `null`                                                                                                          |
+| `pullRequest` | `{ number, url }`, or `null` when the branch has no open pull request                                                                                                 |
+| `threads`     | `{ opened, answered, resolved, unresolved }`, each a list of `{ finding, url }`; a reply by an exact match, and one to an unpublished linked entry, are in `answered` |
+| `matches`     | The exact matches the run continued, as `{ finding, url }`                                                                                                            |
+| `reviews`     | One `{ round, url }` per round whose new threads the run posted                                                                                                       |
+| `walkthrough` | `{ outcome, reason }` with `outcome` `saved`, `unchanged` or `none`, or `null` when the run stopped before it                                                         |
+| `notes`       | What the operator should know although the run went through                                                                                                           |
+| `reasons`     | Why it stopped, in order; empty when the receipt was written                                                                                                          |
+| `receipt`     | The path of `published.json` once written, otherwise `null`                                                                                                           |
+| `config`      | `{ path, error }`, only when the configuration could not be loaded                                                                                                    |
 
 The exit codes are in [Exit codes](#exit-codes).
 
@@ -1970,8 +1974,10 @@ reason) and one entry per finding or doubt of every round, with these fields:
 
 A finding is published only when it survived the refutation (to fix or defer) or
 was not refuted and is passed on. A refuted finding, a dismissed one and a fixed
-`SUGGESTION` are never published. A doubt is published only when its destination
-is `publish`.
+`SUGGESTION` are never published as a new thread. A doubt is published only when
+its destination is `publish`. An entry the record links to an existing thread is
+answered whatever its outcome, published or not (see
+[A linked entry that is not published](#a-linked-entry-that-is-not-published)).
 
 A thread's state follows the finding's outcome:
 
@@ -1983,6 +1989,29 @@ A thread's state follows the finding's outcome:
 | Passed on to a later stage        | Open     | `passed on to QA #qa`, and generally `passed on to <Stage name> #<stage>` |
 | Blocked                           | Open     | `blocked: <reason>`                                                       |
 | A doubt                           | Open     | `open question`                                                           |
+
+#### A linked entry that is not published
+
+A refuted or dismissed finding, a fixed `SUGGESTION` and a settled or asked doubt
+are not published, but the agent may have linked them to an existing thread: a
+doubt of an earlier attempt that this attempt raised again and refuted, or the
+human's own finding that the human withdrew in a human round. Publish mode
+replies in that thread with one status line and the entry's reason, under a
+hidden `autonomous:resolution` marker, and leaves the thread's state as it is:
+it neither resolves nor unresolves it, so closing it is left to a person.
+
+| Outcome of the linked entry   | Status line                           |
+| ----------------------------- | ------------------------------------- |
+| A refuted finding             | `not published (refuted): <reason>`   |
+| A dismissed finding           | `not published (dismissed): <reason>` |
+| A settled doubt               | `not published (settled): <reason>`   |
+| A doubt the human answered    | `not published (asked): <reason>`     |
+| Any other entry not published | `not published: <reason>`             |
+
+The reply is not posted twice in an attempt, and the report lists the thread
+among those answered. The record has no state for a finding the human withdrew,
+so it shows as `dismissed`. An unpublished entry linked to no thread posts
+nothing.
 
 A finding passed on carries the visible tag `#<stage>` and a hidden marker
 `for=<stage>`, so the stage it is addressed to finds it: the code review's
@@ -4626,7 +4655,9 @@ holds no human round.
 
 For `HITL`, once the stage's round is published, the orchestrator sends the human
 the walkthrough that publish mode wrote, through the Inbox, as a guided review
-that asks for their verdict. Without a walkthrough, the human round runs on
+that asks for their verdict. It passes the files' contents, not their paths, and
+pipes the same fields to `plannotator inbox call submit_guide -` when the patch
+is too large for one tool call. Without a walkthrough, the human round runs on
 GitHub only. See [Publish mode](#publish-mode).
 
 ### Code review commits

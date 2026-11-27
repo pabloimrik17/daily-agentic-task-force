@@ -10,7 +10,7 @@ import {
     titleOf,
 } from "./format.ts";
 import { parseMarkers, threadMarker } from "./markers.ts";
-import { type Published, publicationOf } from "./outcome.ts";
+import { outcomeOf, type Published, publicationOf } from "./outcome.ts";
 import type { RecordEntry } from "./record.ts";
 import { ATTEMPT, doubt, finding } from "./test-fixtures.ts";
 
@@ -110,6 +110,23 @@ describe("Hidden markers", () => {
     it("a state reply holds the status line and a resolution marker", () => {
         expect(stateReply(ATTEMPT, CRITICAL, published(CRITICAL))).toBe(
             `Status: fixed in abc1234\n<!-- autonomous:resolution v1 attempt=${ATTEMPT} finding=f3 state=fixed -->`,
+        );
+    });
+
+    it("a reply for a linked entry not published holds its outcome and a resolution marker", () => {
+        const refuted = finding({
+            id: "f4",
+            thread: "E1",
+            reason: "The guard stops it.",
+            refutation: { outcome: "refuted", reproduction: null },
+            publication: { state: "none" },
+        });
+        const outcome = outcomeOf(refuted);
+        if (outcome === null) {
+            throw new Error("f4 has no outcome");
+        }
+        expect(stateReply(ATTEMPT, refuted, outcome)).toBe(
+            `Status: not published (refuted): The guard stops it.\n<!-- autonomous:resolution v1 attempt=${ATTEMPT} finding=f4 state=none -->`,
         );
     });
 

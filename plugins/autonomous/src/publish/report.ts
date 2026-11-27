@@ -41,7 +41,7 @@ export interface PublishReport {
     pullRequest: PublishPullRequest | null;
     threads: {
         opened: ThreadPost[];
-        answered: ThreadPost[]; // a reply posted: a state, or a finding continuing an exact match
+        answered: ThreadPost[]; // a reply posted: a state, an unpublished linked entry's outcome, or an exact match
         resolved: ThreadPost[];
         unresolved: ThreadPost[];
     };

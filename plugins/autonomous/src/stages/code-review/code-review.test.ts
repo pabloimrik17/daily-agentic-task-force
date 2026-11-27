@@ -742,7 +742,13 @@ describe("Human rounds repeat while the human sends feedback", () => {
 describe("The walkthrough reaches an HITL human", () => {
     it("Walkthrough written: sends it through the Inbox with a request for the human's verdict", () => {
         expect(section(prompt({ autonomy: "HITL" }), "The walkthrough")).toContain(
-            `this session has the Inbox's \`submit_guide\` tool: the guide \`${join(DIR, "walkthrough.json")}\` with its patch \`${join(DIR, "walkthrough.patch")}\`, and \`review: true\`, which asks for the human's verdict. Without that tool, or without a walkthrough, the human round runs on GitHub only`,
+            `this session has the Inbox's \`submit_guide\` tool: pass the contents of \`${join(DIR, "walkthrough.json")}\` as \`guide\` and of \`${join(DIR, "walkthrough.patch")}\` as \`patch\` (the tool takes content, not paths), with \`review: true\`, which asks for the human's verdict.`,
+        );
+    });
+
+    it("Patch too large for a tool call: pipes the same fields to the Inbox's command line", () => {
+        expect(section(prompt({ autonomy: "HITL" }), "The walkthrough")).toContain(
+            "When the patch is too large for one tool call, build one JSON object with those three fields in a script and pipe it to `plannotator inbox call submit_guide -`. Without that tool, or without a walkthrough, the human round runs on GitHub only",
         );
     });
 });
@@ -839,6 +845,17 @@ describe("The code review closing order", () => {
             ]),
         ).toBe(true);
     });
+
+    it.each(["AFK", "HITL"] as const)(
+        "Publish report is not the end of the turn: the %s prompt tells the session to go on after a command's report",
+        (autonomy) => {
+            const closing = section(prompt({ autonomy }), "Closing");
+
+            expect(closing).toContain(
+                "The end of a command, `/autonomous:run` in any mode, is not the end of your turn: after its report, go on to the next step, and end your turn only to wait for the human or after you write the result marker.",
+            );
+        },
+    );
 
     it("Publish mode fails: the AFK prompt follows the blocked path and runs no transition", () => {
         const text = prompt({ autonomy: "AFK" });

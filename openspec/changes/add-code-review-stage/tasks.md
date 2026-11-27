@@ -68,6 +68,17 @@ Results go to `openspec/changes/add-code-review-stage/evidence/code-review-verif
 
     Clean up the sandbox tasks and pull requests afterwards.
 
+## 13. Verify fixes
+
+Findings of the verify run on this change (2026-11-27), fixed here by the user's decision.
+
+- [x] 13.1 W1 (evidence F14): make the shared closing of the stage prompts say that a command's end is not the end of the session's turn, and add the matching clause to the code-review-stage requirement "The code review closing order". Verify with the stage prompt tests and `openspec validate add-code-review-stage --strict`.
+- [x] 13.2 W2 (evidence F10): make the `HITL` walkthrough line of the code review prompt pass the walkthrough's contents to `submit_guide`, not file paths, with the CLI fallback. Verify with `code-review.test.ts`.
+- [x] 13.3 W3 (evidence F15): for a record entry linked to an existing thread that is not published (refuted, dismissed, settled or withdrawn by the human), make publish mode reply in that thread with the entry's outcome and leave the thread's state as it is, idempotently, and list it in the publish report. Add the scenario to the finding-threads spec and document it in the README. Verify with `publish.test.ts` and the plan and format tests, one test per new scenario.
+- [x] 13.4 S1 (evidence F25): reword "SHALL open no review" in the finding-threads spec and design D11 to say that publish mode posts no review of its own for a reply. Verify with `openspec validate add-code-review-stage --strict`.
+- [x] 13.5 S2: remove the unused export `Publication` from `publish/record.ts`. Verify with `bun run lint:knip` and `bun run typecheck`.
+- [x] 13.6 Run the full toolchain of 11.1 again.
+
 ## Workflow follow-up
 
 - Commit as `feat(autonomous): …`, a minor with no `BREAKING CHANGE` footer, excluding `bun.lock`.

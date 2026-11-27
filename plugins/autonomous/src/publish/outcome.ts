@@ -1,13 +1,13 @@
 // What is published and in which state (spec finding-threads, "Only surviving findings are
-// published", "A thread's state follows the finding's outcome" and "A finding passed on is
-// addressed to its stage"; design D12).
+// published", "A thread's state follows the finding's outcome", "A finding passed on is
+// addressed to its stage" and "Existing threads are answered, never duplicated"; design D12).
 
 import type { FindingEntry, PublicationState, RecordEntry } from "./record.ts";
 
 export type ThreadState = "open" | "resolved";
 
 export interface Published {
-    state: ThreadState;
+    state: ThreadState | "kept"; // "kept": an entry not published, whose linked thread keeps its state
     status: string; // the status line, without its `Status: ` prefix
     label: "issue" | "suggestion" | "question"; // Conventional Comments
     blocking: boolean;
@@ -86,4 +86,38 @@ export function publicationOf(entry: RecordEntry): Published | null {
         blocking: entry.severity === "CRITICAL",
         publication: entry.publication.state,
     };
+}
+
+const DOUBT_WORDS = { settled: "settled", ask: "asked", publish: null } as const;
+
+// Why the record does not publish the entry, in the status line's words.
+function notPublishedAs(entry: RecordEntry): string | null {
+    if (entry.kind === "doubt") {
+        return DOUBT_WORDS[entry.destination];
+    }
+    if (entry.refutation.outcome === "refuted") {
+        return "refuted";
+    }
+    return entry.destination === "dismiss" ? "dismissed" : null;
+}
+
+// The reply for an entry that is not published but is linked to a thread: its outcome and the
+// record's reason, with the thread's state left as it is.
+function unpublished(entry: RecordEntry): Published {
+    const as = notPublishedAs(entry);
+    const reason = entry.reason.split(/\s+/u).filter(Boolean).join(" ");
+    return {
+        state: "kept",
+        status: `not published${as === null ? "" : ` (${as})`}: ${reason}`,
+        label: entry.kind === "doubt" ? "question" : entry.label,
+        blocking: entry.kind === "doubt" || entry.severity === "CRITICAL",
+        publication: entry.publication.state,
+    };
+}
+
+// What publish mode answers in the entry's thread: its publication, or, for a linked entry that
+// is not published (a refuted or dismissed finding, a settled doubt), its outcome. Null for an
+// unpublished entry with no linked thread, which posts nothing.
+export function outcomeOf(entry: RecordEntry): Published | null {
+    return publicationOf(entry) ?? (entry.thread === null ? null : unpublished(entry));
 }

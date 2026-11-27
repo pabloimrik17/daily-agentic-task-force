@@ -119,7 +119,7 @@ function afkWalkthrough(work: Work): string[] {
 function hitlWalkthrough(work: Work): string[] {
     const send =
         work.plannotator === ""
-            ? `Once the stage's round is published, send the walkthrough to the human for their review, when publish mode wrote it and this session has the Inbox's \`submit_guide\` tool: the guide \`${work.walkthrough}.json\` with its patch \`${work.walkthrough}.patch\`, and \`review: true\`, which asks for the human's verdict. Without that tool, or without a walkthrough, the human round runs on GitHub only: give the human the pull request's URL.`
+            ? `Once the stage's round is published, send the walkthrough to the human for their review, when publish mode wrote it and this session has the Inbox's \`submit_guide\` tool: pass the contents of \`${work.walkthrough}.json\` as \`guide\` and of \`${work.walkthrough}.patch\` as \`patch\` (the tool takes content, not paths), with \`review: true\`, which asks for the human's verdict. When the patch is too large for one tool call, build one JSON object with those three fields in a script and pipe it to \`plannotator inbox call submit_guide -\`. Without that tool, or without a walkthrough, the human round runs on GitHub only: give the human the pull request's URL.`
             : "The human round runs on GitHub only: give the human the pull request's URL.";
     return [...afkWalkthrough(work), "", send];
 }

@@ -50,7 +50,7 @@ interface Refutation {
     reproduction: string | null;
 }
 
-export type Publication =
+type Publication =
     | { state: "fixed"; commit: string }
     | { state: "deferred"; followUp: string } // the follow-up task was created
     | { state: "deferred"; proposedTitle: string } // the follow-up task was only proposed

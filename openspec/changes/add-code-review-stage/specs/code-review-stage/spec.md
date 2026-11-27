@@ -220,12 +220,17 @@ The prompt SHALL tell the agent to start another human round while the human sen
 
 ### Requirement: The walkthrough reaches an HITL human
 
-For `HITL`, the prompt SHALL tell the agent to send the human, once the stage's round is published, the walkthrough publish mode wrote, through the Inbox as a guided review that asks for their verdict. Without a walkthrough, the human round SHALL run on GitHub only.
+For `HITL`, the prompt SHALL tell the agent to send the human, once the stage's round is published, the walkthrough publish mode wrote, through the Inbox as a guided review that asks for their verdict, passing the files' contents, not their paths, and piping the same fields to `plannotator inbox call submit_guide -` when they are too large for a tool call. Without a walkthrough, the human round SHALL run on GitHub only.
 
 #### Scenario: Walkthrough written
 
 - **WHEN** publish mode wrote a walkthrough for an `HITL` attempt
 - **THEN** the prompt's instructions lead the agent to send it through the Inbox with a request for the human's verdict
+
+#### Scenario: Patch too large for a tool call
+
+- **WHEN** the walkthrough's patch is too large to pass in one tool call
+- **THEN** the prompt's instructions lead the agent to build one JSON object with the guide, the patch and `review: true` and pipe it to `plannotator inbox call submit_guide -`
 
 ### Requirement: Code review commits
 
@@ -256,7 +261,7 @@ The prompt SHALL tell the agent to look, before the report, for what an earlier 
 
 ### Requirement: The code review closing order
 
-The prompt SHALL tell the agent to end the stage in this order: confirm the checks pass and every commit is pushed; run publish mode; for `HITL`, send the walkthrough and hold the human rounds; write `stage-summary.md` and run persist mode; run the transition, naming `code-review`; write `logbook-entry.md` and run log mode; write the result marker.
+The prompt SHALL tell the agent to end the stage in this order: confirm the checks pass and every commit is pushed; run publish mode; for `HITL`, send the walkthrough and hold the human rounds; write `stage-summary.md` and run persist mode; run the transition, naming `code-review`; write `logbook-entry.md` and run log mode; write the result marker. It SHALL say that a command's end is not the end of the turn: the agent ends its turn only to wait for the human or after the marker.
 
 #### Scenario: Commands named
 
@@ -267,6 +272,11 @@ The prompt SHALL tell the agent to end the stage in this order: confirm the chec
 
 - **WHEN** the human answers "Later" to the approval question
 - **THEN** the prompt's order leaves the entry unpublished, the result marker unwritten and the session open
+
+#### Scenario: Publish report is not the end of the turn
+
+- **WHEN** an `HITL` session has run publish mode and relayed its report
+- **THEN** the session goes on in the same turn to show the outcome and send the walkthrough, without an external prompt
 
 #### Scenario: Publish mode fails
 

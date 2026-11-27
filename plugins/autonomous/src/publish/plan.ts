@@ -1,6 +1,7 @@
-// What publish mode does with each published entry of the record (spec finding-threads, "Existing
-// threads are answered, never duplicated", "Publishing is idempotent within an attempt", "An exact
-// match continues an existing thread" and "Only the stage's own threads are touched"; design D10).
+// What publish mode does with each published entry of the record, and with each unpublished entry
+// linked to a thread (spec finding-threads, "Existing threads are answered, never duplicated",
+// "Publishing is idempotent within an attempt", "An exact match continues an existing thread" and
+// "Only the stage's own threads are touched"; design D10).
 // The plan is read from the pull request's threads alone, so a run cut short is completed by the
 // next one.
 
@@ -10,7 +11,7 @@ import type { Result } from "../result.ts";
 import { anchorFor, type DiffFile } from "./anchor.ts";
 import { sameTitle, titleOf } from "./format.ts";
 import { type Marker, parseMarkers, threadMarker } from "./markers.ts";
-import { publicationOf, type Published } from "./outcome.ts";
+import { outcomeOf, type Published } from "./outcome.ts";
 import type { RecordEntry } from "./record.ts";
 
 export const STAGE = "code-review";
@@ -125,13 +126,13 @@ function targetOf(
     };
 }
 
-// Every published entry with what to do; an entry linked to a thread the pull request does not
-// hold fails the plan, so nothing is posted.
+// Every published entry, and every unpublished one linked to a thread, with what to do; an entry
+// linked to a thread the pull request does not hold fails the plan, so nothing is posted.
 export function planEntries(input: PlanInput): Result<Planned[]> {
     const planned: Planned[] = [];
     const taken = new Set<string>();
     for (const entry of input.entries) {
-        const published = publicationOf(entry);
+        const published = outcomeOf(entry);
         if (published === null) {
             continue;
         }
@@ -174,6 +175,8 @@ export function showsState(thread: ReviewThread, attempt: string, planned: Plann
     return last !== null && last.status === status && (last.state ?? publication) === publication;
 }
 
-export function wantsResolved(planned: Planned): boolean {
-    return planned.published.state === "resolved";
+// Null: the thread keeps its state (an entry not published).
+export function wantsResolved(planned: Planned): boolean | null {
+    const { state } = planned.published;
+    return state === "kept" ? null : state === "resolved";
 }

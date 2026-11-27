@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { publicationOf } from "./outcome.ts";
+import { outcomeOf, publicationOf } from "./outcome.ts";
 import { doubt, finding } from "./test-fixtures.ts";
 
 describe("Only surviving findings are published", () => {
@@ -113,5 +113,50 @@ describe("A finding passed on is addressed to its stage", () => {
             publication: "passed-on",
             for: "qa",
         });
+    });
+});
+
+describe("Existing threads are answered, never duplicated", () => {
+    const refuted = finding({
+        thread: "E1",
+        reason: "The guard stops it.",
+        refutation: { outcome: "refuted", reproduction: null },
+        publication: { state: "none" },
+    });
+
+    it("Linked entry refuted: a reply that keeps the thread's state", () => {
+        expect(outcomeOf(refuted)).toEqual({
+            state: "kept",
+            status: "not published (refuted): The guard stops it.",
+            label: "issue",
+            blocking: false,
+            publication: "none",
+        });
+    });
+
+    it("Linked entry dismissed or settled: the status names the outcome", () => {
+        const dismissed = finding({ ...refuted, destination: "dismiss" });
+        expect(
+            outcomeOf({ ...dismissed, refutation: { outcome: "not-refuted", reproduction: null } })
+                ?.status,
+        ).toBe("not published (dismissed): The guard stops it.");
+        expect(
+            outcomeOf(doubt({ destination: "settled", thread: "E1", reason: "Answered." })),
+        ).toMatchObject({
+            state: "kept",
+            status: "not published (settled): Answered.",
+            label: "question",
+            blocking: true,
+        });
+    });
+
+    it("Unpublished entry with no linked thread: nothing to answer", () => {
+        expect(outcomeOf({ ...refuted, thread: null })).toBeNull();
+    });
+
+    it("answers a published entry as it is published", () => {
+        expect(outcomeOf(finding({ thread: "E1" }))).toEqual(
+            publicationOf(finding({ thread: "E1" })),
+        );
     });
 });
