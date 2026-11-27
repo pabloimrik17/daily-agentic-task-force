@@ -20,7 +20,13 @@ import { chooseTier, measureDiff, tierOf } from "./measure.ts";
 import { readPlan } from "./plan-file.ts";
 import { REGISTRY } from "./registry.ts";
 import { securityMatches } from "./security.ts";
-import { gitStatus, insideRepository, resolveSubject, treeFingerprint } from "./subject.ts";
+import {
+    defaultBranch,
+    gitStatus,
+    insideRepository,
+    resolveSubject,
+    treeFingerprint,
+} from "./subject.ts";
 import { resolveTeam } from "./team.ts";
 import {
     type Engine,
@@ -72,7 +78,6 @@ interface Measured {
 
 interface Composed {
     team: PlannedReviewer[];
-    rows: TeamRow[];
     skipped: SkippedReviewer[];
 }
 
@@ -178,10 +183,8 @@ async function planned(
 // The built-in /security-review takes no base and always diffs against origin/HEAD, so with
 // another base it would review a different diff.
 async function onDefaultBranch(git: Exec, subject: Subject): Promise<boolean> {
-    const head = await git(["symbolic-ref", "refs/remotes/origin/HEAD"]);
-    return head.ok
-        ? head.stdout.trim().replace(/^refs\/remotes\/origin\//, "") === subject.base
-        : subject.baseSource === "default-branch";
+    const branch = await defaultBranch(git);
+    return branch.ok ? branch.value === subject.base : subject.baseSource === "default-branch";
 }
 
 async function securityApplies(
@@ -215,16 +218,15 @@ async function composeTeam(
         })),
     );
     const version = versions(checks);
-    const composed: Composed = { team: [], rows: [], skipped: [] };
-    for (const { row, availability } of checked) {
-        if (availability.available) {
-            composed.team.push(await planned(row, version));
-            composed.rows.push(row);
-        } else {
-            composed.skipped.push({ reviewer: row.reviewer, reason: availability.reason });
-        }
-    }
-    return composed;
+    const team = await Promise.all(
+        checked
+            .filter(({ availability }) => availability.available)
+            .map(({ row }) => planned(row, version)),
+    );
+    const skipped = checked.flatMap(({ row, availability }) =>
+        availability.available ? [] : [{ reviewer: row.reviewer, reason: availability.reason }],
+    );
+    return { team, skipped };
 }
 
 // A file-system-safe UTC time, to the second: 20261122T195501Z.
@@ -246,16 +248,20 @@ function reportDir(request: PlanRequest, deps: PlanDeps, subject: Subject, now: 
     );
 }
 
-function placeholders(dir: string, subject: Subject, row: TeamRow): Record<string, string> {
+function placeholders(
+    dir: string,
+    subject: Subject,
+    reviewer: PlannedReviewer,
+): Record<string, string> {
     return {
-        OUTPUT: join(dir, "reviewers", `${row.reviewer}.json`),
+        OUTPUT: join(dir, reviewer.output),
         BASE: subject.base,
         MERGE_BASE: subject.mergeBase,
         HEAD: subject.head,
-        LEVEL: row.level ?? DEFAULT_LEVEL,
+        LEVEL: reviewer.engine.level ?? DEFAULT_LEVEL,
         GUIDE_OUTPUT: join(dir, "walkthrough.json"),
-        REVIEWER: row.reviewer,
-        NATIVE_SEVERITIES: Object.keys(REGISTRY[row.reviewer].severity).join(", "),
+        REVIEWER: reviewer.reviewer,
+        NATIVE_SEVERITIES: Object.keys(REGISTRY[reviewer.reviewer].severity).join(", "),
     };
 }
 
@@ -286,23 +292,25 @@ function readBrief(path: string): Result<string> {
 }
 
 function fillBriefs(
-    rows: TeamRow[],
+    team: PlannedReviewer[],
     briefsDir: string,
     dir: string,
     subject: Subject,
 ): Result<Map<string, string>> {
     const briefs = new Map<string, string>();
-    for (const row of rows) {
-        const name = REGISTRY[row.reviewer].brief;
-        if (name === undefined) {
+    for (const reviewer of team) {
+        const name = REGISTRY[reviewer.reviewer].brief;
+        if (name === undefined || reviewer.brief === undefined) {
             continue;
         }
         const brief = readBrief(join(briefsDir, name));
-        const filled = brief.ok ? fill(brief.value, placeholders(dir, subject, row), name) : brief;
+        const filled = brief.ok
+            ? fill(brief.value, placeholders(dir, subject, reviewer), name)
+            : brief;
         if (!filled.ok) {
             return filled;
         }
-        briefs.set(`briefs/${row.reviewer}.md`, filled.value);
+        briefs.set(reviewer.brief, filled.value);
     }
     return { ok: true, value: briefs };
 }
@@ -401,7 +409,7 @@ export async function buildPlan(
     const composed = await composeTeam(rows, checks, await securityApplies(rows, git, subject));
     const now = deps.now();
     const dir = reportDir(request, deps, subject, now);
-    const briefs = fillBriefs(composed.rows, deps.briefsDir, dir, subject);
+    const briefs = fillBriefs(composed.team, deps.briefsDir, dir, subject);
     if (!briefs.ok) {
         return briefs;
     }

@@ -19,9 +19,9 @@ import {
     type Scope,
 } from "./label-contract/contract.ts";
 import {
+    isReviewerId,
     REVIEWER_IDS,
     type ReviewConfig,
-    type ReviewerId,
     TIERS,
     type TeamRow,
     type TierThreshold,
@@ -31,6 +31,7 @@ import {
     array,
     boolean,
     type Json,
+    integerAtLeast,
     number,
     object,
     optional,
@@ -331,14 +332,6 @@ function workspaceConfig(entry: Json, path: string, home: string): WorkspaceConf
     return { root: expandHome(root, home) };
 }
 
-function integerAtLeast(entry: Json, key: string, path: string, min: number): number {
-    const value = number(entry, key, path);
-    if (!Number.isInteger(value) || value < min) {
-        throw new ParseError(`${path}.${key} must be an integer >= ${min}`);
-    }
-    return value;
-}
-
 function runnerConfig(entry: Json, path: string): RunnerConfig {
     return {
         grills: integerAtLeast(entry, "grills", path, 0),
@@ -549,10 +542,6 @@ function rejectRepeatedReviewer(rows: TeamRow[], path: string): void {
             );
         }
     });
-}
-
-function isReviewerId(value: string): value is ReviewerId {
-    return (REVIEWER_IDS as readonly string[]).includes(value);
 }
 
 function oneOf(entry: Json, key: string, path: string, allowed: readonly string[]): string {

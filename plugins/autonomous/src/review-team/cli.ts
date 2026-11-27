@@ -18,6 +18,7 @@ import { RUNNERS } from "./runners.ts";
 import type { Runner } from "./runners/shared.ts";
 import { headMoved } from "./subject.ts";
 import {
+    isReviewerId,
     type Plan,
     type PlannedReviewer,
     type Report,
@@ -205,10 +206,6 @@ async function plan(request: PlanRequest, deps: CliDeps): Promise<number> {
     return 0;
 }
 
-function isReviewerId(value: string): value is ReviewerId {
-    return (REVIEWER_IDS as readonly string[]).includes(value);
-}
-
 function runnerFor(
     reviewer: ReviewerId,
     plan: Plan,
@@ -321,7 +318,7 @@ export async function main(argv: readonly string[], deps: CliDeps): Promise<numb
 if (import.meta.main) {
     const home = process.env.HOME ?? homedir();
     process.exitCode = await main(process.argv.slice(2), {
-        exec: (command, timeoutMs, options) => execCommand(command, timeoutMs, options),
+        exec: execCommand,
         env: process.env,
         cwd: process.cwd(),
         home,

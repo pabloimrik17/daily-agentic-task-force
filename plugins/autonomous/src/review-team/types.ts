@@ -17,6 +17,10 @@ export const REVIEWER_IDS = [
 ] as const;
 export type ReviewerId = (typeof REVIEWER_IDS)[number];
 
+export function isReviewerId(value: string): value is ReviewerId {
+    return (REVIEWER_IDS as readonly string[]).includes(value);
+}
+
 export const TIERS = ["S", "M", "L"] as const;
 export type Tier = (typeof TIERS)[number];
 

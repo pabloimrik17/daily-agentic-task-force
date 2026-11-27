@@ -53,12 +53,9 @@ async function pullRequestBase(gh: Exec): Promise<string | undefined> {
     return view.ok ? openBase(view.stdout) : undefined;
 }
 
-async function defaultBranch(git: Exec): Promise<Result<string>> {
+export async function defaultBranch(git: Exec): Promise<Result<string>> {
     const head = await stdoutOf(git, ["symbolic-ref", "refs/remotes/origin/HEAD"]);
-    if (!head.ok) {
-        return { ok: false, error: `no base given, no open pull request, and ${head.error}` };
-    }
-    return { ok: true, value: head.value.replace(/^refs\/remotes\/origin\//, "") };
+    return head.ok ? { ok: true, value: head.value.replace(/^refs\/remotes\/origin\//, "") } : head;
 }
 
 async function resolveBase(deps: SubjectDeps, given?: string): Promise<Result<Base>> {
@@ -72,7 +69,7 @@ async function resolveBase(deps: SubjectDeps, given?: string): Promise<Result<Ba
     const fallback = await defaultBranch(deps.git);
     return fallback.ok
         ? { ok: true, value: { base: fallback.value, baseSource: "default-branch" } }
-        : fallback;
+        : { ok: false, error: `no base given, no open pull request, and ${fallback.error}` };
 }
 
 // The remote-tracking ref when it exists, so a stale local branch does not move the merge base.
