@@ -88,7 +88,7 @@ For Beads and Linear, the step SHALL read each task's open blockers, the tasks i
 
 ### Requirement: Next stage of a task
 
-The next stage of a task SHALL be the stage label it carries: `grill-me`, `proposal`, `implement`, `verify`, `code-review`, `qa`, `external-review`, `wrap-up` or `ready-to-merge`. A task without a stage label has no next stage and is excluded under classification. The supported stages SHALL be `grill-me`, `proposal`, `implement` and `verify`; a task whose next stage is any other is excluded as an unsupported stage.
+The next stage of a task SHALL be the stage label it carries: `grill-me`, `proposal`, `implement`, `verify`, `code-review`, `qa`, `external-review`, `wrap-up` or `ready-to-merge`. A task without a stage label has no next stage and is excluded under classification. The supported stages SHALL be `grill-me`, `proposal`, `implement`, `verify` and `code-review`; a task whose next stage is any other is excluded as an unsupported stage.
 
 #### Scenario: grill-me task
 
@@ -113,7 +113,12 @@ The next stage of a task SHALL be the stage label it carries: `grill-me`, `propo
 #### Scenario: Task ready for code review
 
 - **WHEN** a task carries `personal`, `AFK` and `code-review`
-- **THEN** its next stage is `code-review`, which is not supported
+- **THEN** its next stage is `code-review`, which is supported
+
+#### Scenario: Task waiting for external review
+
+- **WHEN** a task carries `personal`, `HITL` and `external-review`
+- **THEN** its next stage is `external-review`, which is not supported
 
 #### Scenario: Task in a stage declared later
 
@@ -367,7 +372,7 @@ In an iteration of the loop, a candidate whose slot kind is full SHALL be exclud
 
 ### Requirement: Most advanced stage first
 
-Before the choice, the step SHALL keep only the candidates whose next stage is the most advanced among the candidates, in the order of the stage labels of the label contract: `grill-me`, then `proposal`, then `implement`, then `verify`. The other candidates SHALL be set aside for this run and reported as such. The rule SHALL apply whatever the scope of the candidates, in a run and in an iteration.
+Before the choice, the step SHALL keep only the candidates whose next stage is the most advanced among the candidates, in the order of the stage labels of the label contract: `grill-me`, then `proposal`, then `implement`, then `verify`, then `code-review`. The other candidates SHALL be set aside for this run and reported as such. The rule SHALL apply whatever the scope of the candidates, in a run and in an iteration.
 
 #### Scenario: Proposal over grill
 
@@ -393,6 +398,11 @@ Before the choice, the step SHALL keep only the candidates whose next stage is t
 
 - **WHEN** one candidate is in `implement` and one in `verify`, and both stages are supported
 - **THEN** only the `verify` candidate is kept, and the `implement` candidate is set aside
+
+#### Scenario: Code review before verification
+
+- **WHEN** one candidate is in `verify` and one in `code-review`, and both stages are supported
+- **THEN** only the `code-review` candidate is kept, and the `verify` candidate is set aside
 
 ### Requirement: A marked task is excluded
 
