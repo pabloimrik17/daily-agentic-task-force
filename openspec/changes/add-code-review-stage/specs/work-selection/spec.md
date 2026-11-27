@@ -2,7 +2,7 @@
 
 ### Requirement: Next stage of a task
 
-The next stage of a task SHALL be the stage label it carries: `grill-me`, `proposal`, `implement`, `verify`, `code-review` or `external-review`. A task without a stage label has no next stage and is excluded under classification. The supported stages SHALL be `grill-me`, `proposal`, `implement`, `verify` and `code-review`.
+The next stage of a task SHALL be the stage label it carries: `grill-me`, `proposal`, `implement`, `verify`, `code-review`, `qa`, `external-review`, `wrap-up` or `ready-to-merge`. A task without a stage label has no next stage and is excluded under classification. The supported stages SHALL be `grill-me`, `proposal`, `implement`, `verify` and `code-review`; a task whose next stage is any other is excluded as an unsupported stage.
 
 #### Scenario: grill-me task
 
@@ -33,6 +33,11 @@ The next stage of a task SHALL be the stage label it carries: `grill-me`, `propo
 
 - **WHEN** a task carries `personal`, `HITL` and `external-review`
 - **THEN** its next stage is `external-review`, which is not supported
+
+#### Scenario: Task in a stage declared later
+
+- **WHEN** a task carries `personal`, `AFK` and one of `qa`, `external-review`, `wrap-up` or `ready-to-merge`
+- **THEN** its next stage is that label, which is not supported
 
 ### Requirement: Most advanced stage first
 

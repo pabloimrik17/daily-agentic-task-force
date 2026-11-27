@@ -422,7 +422,7 @@ describe("main --bootstrap-labels", () => {
             [
                 `label bootstrap — started ${NOW.toISOString()}`,
                 "outcome: advance",
-                "  linear    workspace: created work, personal, AFK, HITL, grill-me, proposal, implement, verify, code-review, external-review, taken, triage-me",
+                "  linear    workspace: created work, personal, AFK, HITL, grill-me, proposal, implement, verify, code-review, qa, external-review, wrap-up, ready-to-merge, taken, triage-me",
             ].join("\n"),
         ]);
     });
@@ -457,7 +457,7 @@ describe("main --bootstrap-labels", () => {
             [
                 `label bootstrap — started ${NOW.toISOString()}`,
                 "outcome: not-evaluable",
-                `  linear    workspace: present work, personal, AFK, HITL, grill-me, implement, verify, code-review, external-review, taken, triage-me; failed proposal (${error})`,
+                `  linear    workspace: present work, personal, AFK, HITL, grill-me, implement, verify, code-review, qa, external-review, wrap-up, ready-to-merge, taken, triage-me; failed proposal (${error})`,
             ].join("\n"),
         ]);
     });
@@ -470,7 +470,7 @@ describe("main --bootstrap-labels", () => {
             [
                 `label bootstrap — started ${NOW.toISOString()}`,
                 "outcome: advance",
-                "  linear    workspace: recoloured AFK (was #000000); present work, personal, HITL, grill-me, proposal, implement, verify, code-review, external-review, taken, triage-me",
+                "  linear    workspace: recoloured AFK (was #000000); present work, personal, HITL, grill-me, proposal, implement, verify, code-review, qa, external-review, wrap-up, ready-to-merge, taken, triage-me",
             ].join("\n"),
         ]);
     });
@@ -499,7 +499,7 @@ describe("main --bootstrap-labels", () => {
             [
                 `label bootstrap — started ${NOW.toISOString()}`,
                 "outcome: not-evaluable",
-                `  linear    workspace: present work, personal, HITL, grill-me, proposal, implement, verify, code-review, external-review, taken, triage-me; failed AFK (${error})`,
+                `  linear    workspace: present work, personal, HITL, grill-me, proposal, implement, verify, code-review, qa, external-review, wrap-up, ready-to-merge, taken, triage-me; failed AFK (${error})`,
             ].join("\n"),
         ]);
     });

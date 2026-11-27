@@ -293,6 +293,19 @@ describe("launch: the unit", () => {
         expect(workspace.calls).toEqual([]);
     });
 
+    it("waits as excluded when a supplied task carries a stage with no implementation", async () => {
+        const qa = { ...TASK, labels: ["personal", "AFK", "qa"] };
+        const { ctx, workspace, sessions } = setup({ tasks: [qa], args: { stage: undefined } });
+
+        expect(await launchStep.run(ctx)).toMatchObject({
+            outcome: "wait",
+            reasons: ["linear:DOT-109 is excluded: unsupported stage"],
+            data: { input: "supplied", excluded: { id: "DOT-109", reason: "unsupported-stage" } },
+        });
+        expect(workspace.calls).toEqual([]);
+        expect(sessionCalls(sessions.calls)).toEqual([]);
+    });
+
     it("launches --stage test on a task whose next stage is proposal", async () => {
         const afk = { ...TASK, labels: ["personal", "AFK", "proposal"] };
         const { ctx } = setup({ tasks: [afk] });
@@ -335,24 +348,24 @@ describe("launch: the slots of the loop", () => {
 });
 
 describe("launch: preconditions", () => {
-    // Every stage id is registered and selection supports no stage label without one, so no
-    // input reaches launch with a stage that has no implementation; the args force
-    // `external-review`, a stage label with no stage id, here.
-    it("waits naming a stage without implementation, before any workspace", async () => {
-        const { ctx, workspace, sessions } = setup({
-            args: { stage: "external-review" as RunArgs["stage"] },
-        });
+    // Selection excludes a task in a stage without an implementation, so none reaches this
+    // guard; the args force a declared stage here.
+    it.each(["qa", "external-review", "wrap-up"] as const)(
+        "Declared stage without implementation reaches launch: %s waits naming a stage without implementation, before any workspace",
+        async (stage) => {
+            const { ctx, workspace, sessions } = setup({ args: { stage } });
 
-        expect(await launchStep.run(ctx)).toMatchObject({
-            step: "launch",
-            tier: "code",
-            outcome: "wait",
-            reasons: ["stage external-review has no implementation"],
-            data: { stage: "external-review", repository: null },
-        });
-        expect(workspace.calls).toEqual([]);
-        expect(sessionCalls(sessions.calls)).toEqual([]);
-    });
+            expect(await launchStep.run(ctx)).toMatchObject({
+                step: "launch",
+                tier: "code",
+                outcome: "wait",
+                reasons: [`stage ${stage} has no implementation`],
+                data: { stage, repository: null },
+            });
+            expect(workspace.calls).toEqual([]);
+            expect(sessionCalls(sessions.calls)).toEqual([]);
+        },
+    );
 
     it("waits when the task read again carries taken, and launches nothing", async () => {
         const taken = { ...TASK, labels: [...TASK.labels, "taken"] };

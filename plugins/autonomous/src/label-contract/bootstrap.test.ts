@@ -124,7 +124,10 @@ const everyWorkspaceLabelExcept = (missing: string): TrackerLabel[] =>
             ["implement", "#26b5ce"],
             ["verify", "#d6409f"],
             ["code-review", "#a3e635"],
+            ["qa", "#0d9488"],
             ["external-review", "#8b5e3c"],
+            ["wrap-up", "#64748b"],
+            ["ready-to-merge", "#15803d"],
             ["taken", "#95a2b3"],
             ["triage-me", "#f2c94c"],
         ] as const
@@ -220,27 +223,38 @@ describe("bootstrapLabels", () => {
         });
     });
 
-    it("external-review bootstrapped: missing on Linear, it is created at workspace level with its colour", async () => {
+    it("Declared stage labels bootstrapped: missing on Linear, each is created at workspace level with its colour", async () => {
+        const declared = [
+            ["qa", "#0d9488"],
+            ["external-review", "#8b5e3c"],
+            ["wrap-up", "#64748b"],
+            ["ready-to-merge", "#15803d"],
+        ] as const;
+        const present = everyWorkspaceLabelExcept("").filter(
+            ({ name }) => !declared.some(([label]) => label === name),
+        );
         const linear = fake("linear", {
             labelScopes: ["workspace"],
-            labels: { ok: true, value: everyWorkspaceLabelExcept("external-review") },
+            labels: { ok: true, value: present },
         });
         const report = await bootstrapLabels(
             trackers({ beads: beads(), github: fake("github"), linear }),
             config({ beads: false, github: false }),
             STARTED,
         );
-        expect(linear.created).toEqual([["workspace", "external-review", "#8b5e3c"]]);
-        expect(
-            report.sources[0]?.labels.find((label) => label.label === "external-review"),
-        ).toEqual({
-            scope: "workspace",
-            label: "external-review",
-            status: "created",
-            colour: "#8b5e3c",
-            expected: null,
-            note: null,
-        });
+        expect(linear.created).toEqual(
+            declared.map(([name, colour]) => ["workspace", name, colour]),
+        );
+        for (const [name, colour] of declared) {
+            expect(report.sources[0]?.labels.find((label) => label.label === name)).toEqual({
+                scope: "workspace",
+                label: name,
+                status: "created",
+                colour,
+                expected: null,
+                note: null,
+            });
+        }
     });
 
     it("recolours a GitHub label with another colour and reports it as recoloured", async () => {
@@ -263,7 +277,10 @@ describe("bootstrapLabels", () => {
             "implement",
             "verify",
             "code-review",
+            "qa",
             "external-review",
+            "wrap-up",
+            "ready-to-merge",
             "taken",
             "triage-me",
         ]);
@@ -389,9 +406,9 @@ describe("bootstrapLabels", () => {
         );
         expect(linear.created).toEqual([]);
         expect(linear.recoloured).toEqual([]);
-        expect(report.sources[0]?.labels).toHaveLength(12);
+        expect(report.sources[0]?.labels).toHaveLength(15);
         expect(report.sources[0]?.labels.map((label) => label.status)).toEqual(
-            Array(12).fill("present"),
+            Array(15).fill("present"),
         );
     });
 
@@ -489,7 +506,7 @@ describe("bootstrapLabels", () => {
         expect(linear.recoloured).toEqual([]);
         expect(report.sources[0]?.labels.every((label) => label.note === null)).toBe(true);
         expect(report.sources[0]?.labels.map((label) => label.status)).toEqual(
-            Array(12).fill("present"),
+            Array(15).fill("present"),
         );
     });
 
@@ -513,7 +530,7 @@ describe("bootstrapLabels", () => {
         );
         expect(linear.recoloured).toEqual([]);
         expect(report.sources[0]?.labels.map((label) => label.status)).toEqual(
-            Array(12).fill("present"),
+            Array(15).fill("present"),
         );
     });
 
@@ -571,7 +588,10 @@ describe("bootstrapLabels", () => {
             "owner/a implement",
             "owner/a verify",
             "owner/a code-review",
+            "owner/a qa",
             "owner/a external-review",
+            "owner/a wrap-up",
+            "owner/a ready-to-merge",
             "owner/a taken",
             "owner/a triage-me",
             "owner/b work",
@@ -582,7 +602,10 @@ describe("bootstrapLabels", () => {
             "owner/b implement",
             "owner/b verify",
             "owner/b code-review",
+            "owner/b qa",
             "owner/b external-review",
+            "owner/b wrap-up",
+            "owner/b ready-to-merge",
             "owner/b taken",
             "owner/b triage-me",
         ]);
@@ -622,7 +645,7 @@ describe("bootstrapLabels", () => {
             STARTED,
         );
         expect(report.sources.map((entry) => entry.source)).toEqual(["beads", "github", "linear"]);
-        expect(github.created).toHaveLength(12);
+        expect(github.created).toHaveLength(15);
         expect(linear.created).toEqual([]);
         expect(report.sources[2]).toEqual({
             source: "linear",
@@ -649,7 +672,7 @@ describe("bootstrapLabels", () => {
             config(),
             STARTED,
         );
-        expect(linear.created).toHaveLength(12);
+        expect(linear.created).toHaveLength(15);
         expect(report.sources[1]).toMatchObject({ source: "github", evaluable: false });
         expect(report.sources[2]).toMatchObject({ source: "linear", evaluable: true });
         expect(report.outcome).toBe("not-evaluable");
@@ -746,7 +769,7 @@ describe("bootstrapLabels", () => {
         expect(report.sources[0]?.labels.map((label) => label.label as string)).not.toContain(
             "bug",
         );
-        expect(report.sources[0]?.labels).toHaveLength(12);
+        expect(report.sources[0]?.labels).toHaveLength(15);
     });
 
     it("omits a disabled source and never calls its tracker", async () => {
@@ -813,8 +836,8 @@ describe("renderBootstrapText", () => {
                 "label bootstrap — started 2026-09-26T10:00:00.000Z",
                 "outcome: not-evaluable",
                 "  beads     not applicable — Beads needs no label creation: labels exist by use",
-                "  github    owner/repo: created work, personal, HITL, proposal, implement, verify, code-review, external-review, taken, triage-me; recoloured AFK (was #000000); failed grill-me (gh label create grill-me --repo owner/repo: gh failed: HTTP 403)",
-                "  github    owner/other: present work, personal, AFK, HITL, grill-me, proposal, implement, verify, code-review, external-review, taken, triage-me",
+                "  github    owner/repo: created work, personal, HITL, proposal, implement, verify, code-review, qa, external-review, wrap-up, ready-to-merge, taken, triage-me; recoloured AFK (was #000000); failed grill-me (gh label create grill-me --repo owner/repo: gh failed: HTTP 403)",
+                "  github    owner/other: present work, personal, AFK, HITL, grill-me, proposal, implement, verify, code-review, qa, external-review, wrap-up, ready-to-merge, taken, triage-me",
                 `  linear    not evaluable — ${UNAUTHENTICATED}`,
             ].join("\n"),
         );
@@ -845,7 +868,7 @@ describe("renderBootstrapText", () => {
             [
                 "label bootstrap — started 2026-09-26T10:00:00.000Z",
                 "outcome: not-evaluable",
-                "  github    owner/repo: present work, personal, AFK, grill-me, proposal, implement, verify, code-review, external-review, taken, triage-me; failed HITL (gh label edit HITL --repo owner/repo: gh failed: HTTP 403)",
+                "  github    owner/repo: present work, personal, AFK, grill-me, proposal, implement, verify, code-review, qa, external-review, wrap-up, ready-to-merge, taken, triage-me; failed HITL (gh label edit HITL --repo owner/repo: gh failed: HTTP 403)",
             ].join("\n"),
         );
     });

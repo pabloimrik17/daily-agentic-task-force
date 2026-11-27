@@ -15,6 +15,7 @@ import {
     LABELS,
     MEANINGS,
     optionsFor,
+    STAGE_ORDER,
 } from "./contract.ts";
 
 // criteria.md wraps lines, backticks label names and lowercases the first
@@ -24,7 +25,7 @@ function normalise(text: string): string {
 }
 
 describe("LABELS, GROUPS and COLOURS", () => {
-    it("lists exactly the twelve contract labels", () => {
+    it("lists exactly the fifteen contract labels", () => {
         expect(LABELS).toEqual([
             "work",
             "personal",
@@ -35,7 +36,10 @@ describe("LABELS, GROUPS and COLOURS", () => {
             "implement",
             "verify",
             "code-review",
+            "qa",
             "external-review",
+            "wrap-up",
+            "ready-to-merge",
             "taken",
             "triage-me",
         ]);
@@ -51,7 +55,10 @@ describe("LABELS, GROUPS and COLOURS", () => {
                 "implement",
                 "verify",
                 "code-review",
+                "qa",
                 "external-review",
+                "wrap-up",
+                "ready-to-merge",
             ],
         });
     });
@@ -69,7 +76,10 @@ describe("LABELS, GROUPS and COLOURS", () => {
             implement: "#26b5ce",
             verify: "#d6409f",
             "code-review": "#a3e635",
+            qa: "#0d9488",
             "external-review": "#8b5e3c",
+            "wrap-up": "#64748b",
+            "ready-to-merge": "#15803d",
             work: "#2f80ed",
             personal: "#27ae60",
             taken: "#95a2b3",
@@ -112,10 +122,27 @@ describe("LABELS, GROUPS and COLOURS", () => {
         expect(MEANINGS["code-review"]).toBe("The task is verified and ready for code review.");
     });
 
-    it("states that external-review means the task has passed every review stage and waits for external review", () => {
+    it("states the meaning of each declared stage label", () => {
+        expect(MEANINGS.qa).toBe("The task has passed code review and is ready for QA.");
         expect(MEANINGS["external-review"]).toBe(
-            "The task has passed every review stage that exists and waits for external review.",
+            "The task has passed every review stage and is ready for external review.",
         );
+        expect(MEANINGS["wrap-up"]).toBe(
+            "The task has passed external review and is ready for wrap-up.",
+        );
+        expect(MEANINGS["ready-to-merge"]).toBe(
+            "The task is wrapped up and waits for a person to merge its pull request.",
+        );
+    });
+
+    it("orders the declared stage labels after code-review", () => {
+        expect(STAGE_ORDER.slice(STAGE_ORDER.indexOf("code-review"))).toEqual([
+            "code-review",
+            "qa",
+            "external-review",
+            "wrap-up",
+            "ready-to-merge",
+        ]);
     });
 
     it("states grill-me without any precedence over AFK and HITL", () => {
@@ -180,6 +207,13 @@ describe("isContractLabel", () => {
         expect(isContractLabel("external_review")).toBe(false);
         expect(isContractLabel("externalreview")).toBe(false);
     });
+    it.each(["qa", "external-review", "wrap-up", "ready-to-merge"])(
+        "accepts the declared stage label %s",
+        (label) => {
+            expect(isContractLabel(label)).toBe(true);
+            expect(isStageLabel(label)).toBe(true);
+        },
+    );
 
     it("rejects a near-miss spelling", () => {
         expect(isContractLabel("Grill Me")).toBe(false);
@@ -246,6 +280,17 @@ describe("isValidGroup", () => {
     it("rejects a label of another group", () => {
         expect(isValidGroup("stage", ["AFK"])).toBe(false);
     });
+
+    it("code-review with qa: two stage labels are not valid", () => {
+        expect(isValidGroup("stage", ["code-review", "qa"])).toBe(false);
+    });
+
+    it.each(["qa", "external-review", "wrap-up", "ready-to-merge"])(
+        "accepts %s as a single stage label",
+        (label) => {
+            expect(isValidGroup("stage", [label])).toBe(true);
+        },
+    );
 });
 
 describe("optionsFor", () => {
@@ -277,10 +322,13 @@ describe("optionsFor in code-review", () => {
     });
 });
 
-describe("optionsFor in external-review", () => {
-    it("Task in external-review: its autonomy is AFK or HITL, never grill-me", () => {
-        expect(optionsFor("autonomy", ["personal", "external-review"])).toEqual(["AFK", "HITL"]);
-    });
+describe("optionsFor in a stage with no implementation", () => {
+    it.each(["qa", "external-review", "wrap-up", "ready-to-merge"])(
+        "Task in %s: its autonomy is AFK or HITL, never grill-me",
+        (stage) => {
+            expect(optionsFor("autonomy", ["personal", stage])).toEqual(["AFK", "HITL"]);
+        },
+    );
 });
 
 describe("isValidDecision", () => {

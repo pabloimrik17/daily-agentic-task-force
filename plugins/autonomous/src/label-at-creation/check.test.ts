@@ -215,6 +215,20 @@ describe("Helper decides what to apply and what to ask", () => {
         ]);
     });
 
+    it.each(["qa", "external-review", "wrap-up", "ready-to-merge"])(
+        "offers AFK and HITL, never grill-me, for a task already in %s",
+        (stage) => {
+            expect(
+                check(input("linear", [stage]), configured, [
+                    judged("autonomy", ["grill-me"], 0.99),
+                ]),
+            ).toEqual([
+                `apply: personal, ${stage}`,
+                `ask autonomy: invalid under the contract: grill-me with a stage label: ${stage}; options AFK, HITL`,
+            ]);
+        },
+    );
+
     it("applies grill-me alone for a grill-me alias, with no judgement needed", () => {
         expect(check(input("linear", ["Grill Me"]), withGrillAlias(), [])).toEqual([
             "apply: personal, grill-me",
@@ -236,7 +250,7 @@ describe("Helper decides what to apply and what to ask", () => {
         expect(check(input("linear", ["grill-me", "proposal"]), configured, [])).toEqual([
             "apply: personal",
             "ask autonomy: no judgement given; options AFK, HITL",
-            "ask stage: conflicting present labels: grill-me, proposal; options grill-me, proposal, implement, verify, code-review, external-review",
+            "ask stage: conflicting present labels: grill-me, proposal; options grill-me, proposal, implement, verify, code-review, qa, external-review, wrap-up, ready-to-merge",
         ]);
     });
 

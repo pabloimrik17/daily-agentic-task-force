@@ -311,6 +311,18 @@ describe("selectCandidates", () => {
         });
     });
 
+    it.each(["qa", "external-review", "wrap-up", "ready-to-merge"])(
+        "Task in a stage declared later: %s is excluded as an unsupported stage",
+        async (stage) => {
+            const task = workTask("linear", "TEST-1", ["personal", "AFK", stage]);
+
+            expect(await evaluate([task])).toMatchObject({
+                ok: true,
+                value: { candidates: [], excluded: [{ reason: "unsupported-stage" }] },
+            });
+        },
+    );
+
     it("keeps an AFK task in proposal as a candidate", async () => {
         const task = workTask("linear", "TEST-1", ["personal", "AFK", "proposal"]);
 

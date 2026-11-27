@@ -9,7 +9,8 @@ import type { PullRequests } from "../pull-request/port.ts";
 import type { WorkTask } from "../select/types.ts";
 import type { SessionTool } from "../sessions/manager.ts";
 
-// Every stage the system knows: the selectable ones (select's `StageName`) and `test`.
+// Every stage an attempt may name: `test` and the stage labels, except `ready-to-merge`,
+// where no session ever runs.
 export const STAGE_IDS = [
     "test",
     "grill-me",
@@ -17,6 +18,9 @@ export const STAGE_IDS = [
     "implement",
     "verify",
     "code-review",
+    "qa",
+    "external-review",
+    "wrap-up",
 ] as const;
 
 export type StageId = (typeof STAGE_IDS)[number];
