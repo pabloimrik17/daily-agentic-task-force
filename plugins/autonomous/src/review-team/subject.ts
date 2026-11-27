@@ -25,6 +25,17 @@ async function stdoutOf(exec: Exec, args: string[]): Promise<Result<string>> {
     return result.ok ? { ok: true, value: result.stdout.trim() } : result;
 }
 
+// The error of a HEAD that is not the planned one, or of a HEAD that cannot be read.
+export async function headMoved(git: Exec, planned: string): Promise<string | undefined> {
+    const head = await stdoutOf(git, ["rev-parse", "HEAD"]);
+    if (!head.ok) {
+        return `could not check HEAD: ${head.error}`;
+    }
+    return head.value === planned
+        ? undefined
+        : `HEAD moved since the plan, from ${planned} to ${head.value}`;
+}
+
 function openBase(stdout: string): string | undefined {
     try {
         const pr = JSON.parse(stdout) as { baseRefName?: unknown; state?: unknown };

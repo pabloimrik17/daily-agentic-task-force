@@ -3,6 +3,7 @@ import {
     mkdirSync,
     readdirSync,
     readFileSync,
+    realpathSync,
     symlinkSync,
     writeFileSync,
 } from "node:fs";
@@ -373,6 +374,7 @@ describe("buildPlan", () => {
         const report = await collect(named, {
             git: (args, input) => isolatedGit(["-C", clone, ...args], input),
             plannotator: () => Promise.resolve({ ok: true, stdout: "" }),
+            repoRoot: realpathSync(clone),
         });
         expect(
             report.ok && report.value.reviewers.find((entry) => entry.reviewer === "walkthrough"),

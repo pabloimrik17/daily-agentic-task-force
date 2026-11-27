@@ -15,7 +15,7 @@ import { REGISTRY } from "./registry.ts";
 import { writeReport } from "./report.ts";
 import { parseReviewerFile } from "./schema.ts";
 import { deriveSeverity } from "./severity.ts";
-import { gitStatus, insideRepository, treeFingerprint } from "./subject.ts";
+import { gitStatus, headMoved, insideRepository, treeFingerprint } from "./subject.ts";
 import {
     type Doubt,
     type DroppedEntry,
@@ -35,6 +35,7 @@ import {
 export interface CollectDeps {
     git: Exec; // bound to the repository
     plannotator: Exec; // bound to the repository: guide export reads provenance from git there
+    repoRoot: string;
 }
 
 type FileRead = { ok: true; file: ReviewerFile } | { ok: false; reason: string };
@@ -221,21 +222,6 @@ function statusChange(now: Result<string>, before: string): string[] {
           ];
 }
 
-async function headChange(git: Exec, before: string): Promise<string[]> {
-    const head = await git(["rev-parse", "HEAD"]);
-    if (!head.ok) {
-        return [`could not check HEAD: ${head.error}`];
-    }
-    const now = head.stdout.trim();
-    return now === before ? [] : [`HEAD moved since the plan, from ${before} to ${now}`];
-}
-
-// Read once: it places the report directory and the untracked entries the fingerprint reads.
-async function repositoryRoot(git: Exec): Promise<Result<string>> {
-    const root = await git(["rev-parse", "--show-toplevel"]);
-    return root.ok ? { ok: true, value: root.stdout.trim() } : root;
-}
-
 // A file already dirty at plan time keeps its status line when it is edited again; its
 // contents do not.
 function contentChange(now: Result<string>, before: string): string[] {
@@ -247,20 +233,23 @@ function contentChange(now: Result<string>, before: string): string[] {
 
 // One change of the tree is reported once: the contents only when the status saw no change.
 // The report directory, when it is inside the repository, is never a change of the tree.
-async function treeChange(git: Exec, plan: Plan, dir: string): Promise<string[]> {
-    const root = await repositoryRoot(git);
-    const leaveOut = root.ok ? insideRepository(root.value, dir) : undefined;
-    const status = statusChange(await gitStatus(git, leaveOut), plan.status);
+async function treeChange(deps: CollectDeps, plan: Plan, dir: string): Promise<string[]> {
+    const leaveOut = insideRepository(deps.repoRoot, dir);
+    const status = statusChange(await gitStatus(deps.git, leaveOut), plan.status);
     if (status.length > 0) {
         return status;
     }
-    const now = root.ok ? await treeFingerprint(git, root.value, leaveOut) : root;
+    const now = await treeFingerprint(deps.git, deps.repoRoot, leaveOut);
     return contentChange(now, plan.fingerprint);
 }
 
 // Spec "The review team only reports": a reviewer that changed the tree or HEAD is an error.
-async function changesSincePlan(git: Exec, plan: Plan, dir: string): Promise<string[]> {
-    return [...(await treeChange(git, plan, dir)), ...(await headChange(git, plan.subject.head))];
+async function changesSincePlan(deps: CollectDeps, plan: Plan, dir: string): Promise<string[]> {
+    const [tree, moved] = await Promise.all([
+        treeChange(deps, plan, dir),
+        headMoved(deps.git, plan.subject.head),
+    ]);
+    return moved === undefined ? tree : [...tree, moved];
 }
 
 function assemble(
@@ -292,7 +281,7 @@ export async function collect(dir: string, deps: CollectDeps): Promise<Result<Re
         return plan;
     }
     // Checked before collect writes anything, in case the report directory is in the tree.
-    const changes = await changesSincePlan(deps.git, plan.value, dir);
+    const changes = await changesSincePlan(deps, plan.value, dir);
     const gathered = plan.value.team.map((row) => gather(dir, plan.value, row));
     const walkthrough = await validateGuide(dir, plan.value, deps);
     return writeReport(dir, assemble(plan.value, gathered, walkthrough, changes));

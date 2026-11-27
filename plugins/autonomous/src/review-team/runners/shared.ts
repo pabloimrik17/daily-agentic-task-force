@@ -6,7 +6,7 @@
 import { mkdir, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 
-import type { Exec } from "../../exec.ts";
+import type { Exec, ExecResult } from "../../exec.ts";
 import { parseReviewerFile } from "../schema.ts";
 import {
     type DroppedEntry,
@@ -23,6 +23,7 @@ export interface RunContext {
     // tool that reports its error there.
     exec: (command: string, timeoutMs: number, options?: { keepOutputOnExit?: boolean }) => Exec;
     dir: string; // the report directory, absolute
+    repoRoot: string; // absolute
     plan: Plan;
     row: PlannedReviewer; // this reviewer's entry of `plan.team`
     now: () => number; // epoch ms
@@ -35,6 +36,7 @@ export type Verdict = { items: RawItem[]; dropped?: DroppedEntry[] } | { skip: s
 
 // Design D7: every CLI reviewer gets the same 15 minutes.
 export const REVIEW_TIMEOUT_MS = 15 * 60 * 1000;
+const VERSION_TIMEOUT_MS = 30_000;
 
 export async function saveRaw(dir: string, name: string, content: string): Promise<void> {
     await mkdir(join(dir, "raw"), { recursive: true });
@@ -49,8 +51,29 @@ export function skippedFile(
     return { schema: FINDING_SCHEMA, reviewer, outcome: "skipped", reason, durationMs };
 }
 
-function messageOf(error: unknown): string {
+export function messageOf(error: unknown): string {
     return error instanceof Error ? error.message : String(error);
+}
+
+export async function saveVersion(ctx: RunContext, tool: string): Promise<void> {
+    const version = await ctx.exec(tool, VERSION_TIMEOUT_MS)(["--version"]);
+    await saveRaw(ctx.dir, `${tool}.version.txt`, version.ok ? version.stdout : version.error);
+}
+
+// An Exec reports stderr only inside a failure's error, so a clean run leaves it empty.
+export async function saveOutput(
+    dir: string,
+    tool: string,
+    stdoutName: string,
+    result: ExecResult,
+): Promise<void> {
+    await saveRaw(dir, stdoutName, result.ok ? result.stdout : (result.exit?.stdout ?? ""));
+    await saveRaw(dir, `${tool}.stderr.txt`, result.ok ? "" : result.error);
+}
+
+// The evidence is the reviewer's whole text and the statement its first paragraph.
+export function withStatement(evidence: string): { statement: string; evidence: string } {
+    return { statement: evidence.split(/\n\s*\n/)[0]?.trim() ?? evidence, evidence };
 }
 
 // Times `decide`, turns a crash into a skip, and validates what it returns with the same parser

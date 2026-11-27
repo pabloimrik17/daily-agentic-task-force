@@ -82,6 +82,7 @@ function setup(review: ExecResult | (() => Promise<ExecResult>)): {
             engine: { tool: "coderabbit", version: "0.9.5" },
             output: "reviewers/coderabbit.json",
         },
+        repoRoot: "/repo",
         now: () => (clock += 250),
     };
     return { ctx, calls };
