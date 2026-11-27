@@ -152,8 +152,7 @@ export const labelTriageStep: Step<LabelTriageData> = {
             detections,
             judged.descriptions,
         );
-        // The step's tier is the highest its parts used in this run: `llm` once a
-        // judgement batch was requested, `code` otherwise.
+        // The step's tier is the highest its parts used in this run.
         const tier = judged.batches > 0 ? "llm" : "code";
         return {
             ...result("advance", reasonsFor(data, written.missing), data, tier),

@@ -298,7 +298,7 @@ async function releaseWorktree({
     return null;
 }
 
-// Never fails the discard: it always returns null, and what goes wrong becomes a note.
+// Never fails the discard: what goes wrong becomes a note.
 async function publishDiscardEntry(discarding: Discarding): Promise<string | null> {
     let outcome: Result<void>;
     try {

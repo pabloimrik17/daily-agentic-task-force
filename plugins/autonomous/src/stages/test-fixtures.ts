@@ -37,7 +37,6 @@ const isolatedGitEnv: NodeJS.ProcessEnv = {
     GIT_COMMITTER_EMAIL: "t@example.com",
 };
 
-// Runs git to completion in the isolated environment; a failure throws.
 export function gitSync(args: readonly string[], cwd?: string): void {
     execFileSync("git", [...args], { cwd, env: isolatedGitEnv, stdio: "pipe" });
 }

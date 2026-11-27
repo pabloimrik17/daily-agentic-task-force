@@ -12,21 +12,22 @@ import { logbookEntryPath, stageSummaryPath } from "../attempts/state.ts";
 import { renderContext } from "../context/render.ts";
 import type { TaskContext } from "../context/types.ts";
 import type { AutonomyLabel } from "../label-contract/contract.ts";
+import type { TrackerTask } from "../label-triage/trackers/tracker.ts";
 import { MAX_WORDS, REQUIRED_SECTIONS } from "../logbook/body.ts";
 import type { PullRequest } from "../pull-request/port.ts";
 import type { Result } from "../result.ts";
-import { stageAutonomy, type TransitionStage } from "../transition/mode.ts";
-import { SKILLS_PLUGIN } from "./grill-me/prompt.ts";
+import { stageAutonomy, type TransitionStage, transitionRow } from "../transition/table.ts";
 import { findBranchChange } from "./openspec-change.ts";
 import { findWorkflow, missingWorkflow } from "./openspec-workflows.ts";
 import { loadPluginSkill, type PluginSkillOptions } from "./plugin-skill.ts";
 import { renderPrompt } from "./prompt.ts";
-import { loadSkills } from "./skills.ts";
+import { HANDOFF_SKILL, loadSkills, SKILLS_PLUGIN } from "./skills.ts";
 import type { StageContext, StageEnv, StagePrerequisites, StagePromptInput } from "./stage.ts";
 
-export const HANDOFF_SKILL = "handoff";
+export { HANDOFF_SKILL } from "./skills.ts";
 export const CONTEXT_KEY = "context";
 export const PULL_REQUEST_KEY = "pullRequest"; // absent when the branch has no open pull request
+export const UPDATE_WORKFLOW_KEY = "updateWorkflow"; // `/openspec-update-change` or `/opsx:update`
 export const CHANGE_KEY = "change"; // the name of the OpenSpec change the branch adds
 
 type OpenspecStage = Extract<TransitionStage, "proposal" | "implement" | "verify" | "code-review">;
@@ -78,7 +79,7 @@ export function pullRequestOf(context: StageContext): PullRequest | null {
     return json === undefined ? null : (JSON.parse(json) as PullRequest);
 }
 
-// For a stage whose prerequisites require it, so its absence is a defect, not a branch without one.
+// Required by the prerequisites of a stage after proposal, so its absence is a defect.
 export function requiredPullRequest(context: StageContext, stage: OpenspecStage): PullRequest {
     return JSON.parse(contextValue(context, stage, PULL_REQUEST_KEY)) as PullRequest;
 }
@@ -105,7 +106,6 @@ export function contextSection(
     };
 }
 
-// The stage's own logbook section: its name and what it holds.
 interface LogbookSection {
     name: "Proposal" | "Implementation" | "Verification" | "Code review";
     holds: string;
@@ -254,11 +254,6 @@ export function hitlTransition({ task }: Paths, { left, reached }: Move, approve
 
 export const REVIEW_TITLE = "The adversarial review";
 
-export const REVIEW_FAILURE: Record<AutonomyLabel, string> = {
-    AFK: `treat it as a blocker: follow the section "${BLOCKED_TITLE}", and run no transition`,
-    HITL: "tell the human what it reported, and continue only as the human decides",
-};
-
 // The adversarial review's parameter "whether a human follows the review".
 export const HUMAN_FOLLOWS: Record<AutonomyLabel, string> = {
     AFK: "no: this task carries `AFK`.",
@@ -343,6 +338,12 @@ export const ACCEPTED_FIXES =
 export const DEVIATION: Record<AutonomyLabel, string> = {
     AFK: "Decide the deviation yourself, without asking, and record it as an assumption as well.",
     HITL: "Ask the human before you change the proposal, and change it only as they decide.",
+};
+
+// What to do when a command or a check fails, per autonomy.
+export const ON_FAILURE: Record<AutonomyLabel, string> = {
+    AFK: `treat it as a blocker: follow the section "${BLOCKED_TITLE}", and run no transition`,
+    HITL: "tell the human what it reported, and continue only as the human decides",
 };
 
 // `onFailure` says what to do when a push fails; `written` what the stage writes besides the stage
@@ -430,10 +431,7 @@ const openspecCli: Check = async ({ readers }) => {
     return run.ok ? NOTHING : failed(`\`openspec --version\` cannot run: ${run.error}`);
 };
 
-const handoffSkill: Check = async ({ home }) => {
-    const skills = await loadSkills(home, SKILLS_PLUGIN, [HANDOFF_SKILL]);
-    return skills.ok ? { ok: true, value: skills.value } : failed(skills.error);
-};
+const handoffSkill: Check = ({ home }) => loadSkills(home, SKILLS_PLUGIN, [HANDOFF_SKILL]);
 
 const taskContext: Check = async ({ task, readers }) => {
     const read = await readers.context.read(task);
@@ -463,10 +461,7 @@ const openPullRequest =
 export const changeCheck: Check = async ({ repository, branch, readers }) => {
     const base = await readers.pullRequests.defaultBranch();
     if (!base.ok) {
-        return {
-            ok: false,
-            error: `cannot read the default branch of ${repository}: ${base.error}`,
-        };
+        return failed(`cannot read the default branch of ${repository}: ${base.error}`);
     }
     const change = await findBranchChange(readers.git, {
         directory: repository,
@@ -507,6 +502,12 @@ export function openspecChecks({ stage, workflows, pullRequest }: OpenspecChecks
         taskContext,
         openPullRequest(pullRequest === "required"),
     ];
+}
+
+// Done once the task is closed, or its transition moved it to the next stage.
+export function leftStage(stage: OpenspecStage): (task: TrackerTask) => boolean {
+    const { from, to } = transitionRow(stage);
+    return ({ closed, labels }) => closed || (labels.includes(to) && !labels.includes(from));
 }
 
 export function checkAll(checks: readonly Check[]): (env: StageEnv) => Promise<StagePrerequisites> {

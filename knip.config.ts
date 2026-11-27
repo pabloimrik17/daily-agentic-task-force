@@ -33,7 +33,6 @@ export default {
             entry: ["scripts/*.ts", "scripts/**/*.test.ts"],
             project: ["scripts/**/*.ts"],
         },
-        // Plugin workspaces: their tests and any scripts/ entries.
         "plugins/*": {
             entry: ["scripts/**/*.ts", "**/*.test.ts"],
             project: ["**/*.ts"],

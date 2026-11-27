@@ -3,19 +3,17 @@
 // one thing missing.
 
 import { execCommand } from "../../exec.ts";
-import type { TrackerTask } from "../../label-triage/trackers/tracker.ts";
 import { guideAvailability } from "../../review-team/availability.ts";
-import type { SessionTool } from "../../sessions/manager.ts";
-import { transitionRow } from "../../transition/mode.ts";
 import {
     type Check,
     changeCheck,
     checkAll,
+    leftStage,
     openspecChecks,
     pluginSkillCheck,
 } from "../openspec-stage.ts";
 import { ADVERSARIAL_REVIEW_SKILL, REVIEW_TEAM_SKILL } from "../plugin-skill.ts";
-import type { Stage } from "../stage.ts";
+import { opusHighArgs, type Stage } from "../stage.ts";
 import {
     ADVERSARIAL_REVIEW_KEY,
     codeReviewPrompt,
@@ -23,12 +21,6 @@ import {
     REVIEW_TEAM_KEY,
 } from "./prompt.ts";
 import { findingThreads } from "./threads.ts";
-
-// No codex flags: the prerequisites never let a codex session start.
-const AGENT_ARGS: Record<SessionTool, string[]> = {
-    claude: ["--model", "opus", "--effort", "high"],
-    codex: [],
-};
 
 // As the review team's plan checks its reviewers.
 const PLANNOTATOR_TIMEOUT_MS = 30_000;
@@ -52,17 +44,11 @@ const CHECKS: readonly Check[] = [
     findingThreads,
 ];
 
-const { from, to } = transitionRow("code-review");
-
-function completed({ closed, labels }: TrackerTask): boolean {
-    return closed || (labels.includes(to) && !labels.includes(from));
-}
-
 export const codeReviewStage: Stage = {
     id: "code-review",
     emoji: "🧐",
     prerequisites: checkAll(CHECKS),
-    agentArgs: (tool) => [...AGENT_ARGS[tool]],
+    agentArgs: opusHighArgs,
     prompt: codeReviewPrompt,
-    completed,
+    completed: leftStage("code-review"),
 };

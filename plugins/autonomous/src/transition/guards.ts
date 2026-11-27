@@ -3,13 +3,19 @@
 
 import { access } from "node:fs/promises";
 
-import type { AttemptRecord, AttemptWorkspace, TaskRef } from "../attempts/record.ts";
+import {
+    type AttemptRecord,
+    type AttemptWorkspace,
+    isTaskRecord,
+    type TaskRef,
+} from "../attempts/record.ts";
 import { listRecords } from "../attempts/state.ts";
 import type { Exec } from "../exec.ts";
+import { plural } from "../label-triage/render.ts";
 import type { PullRequestsFactory } from "../pull-request/port.ts";
 import type { Result } from "../result.ts";
 import { findBranchChange } from "../stages/openspec-change.ts";
-import type { TransitionStage } from "./mode.ts";
+import { type TransitionStage, transitionRow } from "./table.ts";
 
 export interface GuardTools {
     git: Exec; // run with `-C <directory>`
@@ -22,20 +28,16 @@ interface TaskCount {
     total: number;
 }
 
-const plural = (count: number, noun: string) => `${count} ${noun}${count === 1 ? "" : "s"}`;
-
 const message = (error: unknown) => (error instanceof Error ? error.message : String(error));
 
-// The reasons that stop a task leaving the stage; none for the stages without guards.
+// The reasons that stop a task leaving the stage; none for a stage the table does not guard.
 export async function guardsOnLeaving(
     from: TransitionStage,
     ref: TaskRef,
     state: string,
     tools: GuardTools,
 ): Promise<string[]> {
-    return from === "implement" || from === "verify" || from === "code-review"
-        ? workGuards(ref, state, tools)
-        : [];
+    return transitionRow(from).guarded ? workGuards(ref, state, tools) : [];
 }
 
 async function workGuards(ref: TaskRef, state: string, tools: GuardTools): Promise<string[]> {
@@ -46,12 +48,12 @@ async function workGuards(ref: TaskRef, state: string, tools: GuardTools): Promi
     const { path, branch } = found.value;
     // Pruned, so a deleted remote branch cannot pass the unpushed check through a stale ref.
     const fetched = await tools.git(["-C", path, "fetch", "--prune", "origin"]);
-    const reasons: (string | null)[] = [
+    const reasons = [
         fetched.ok ? null : `fetching origin in the workspace: ${fetched.error}`,
+        await uncheckedTasks(path, tools),
+        await uncommittedChanges(path, tools.git),
+        await unpushedCommits(path, branch, tools.git),
     ];
-    reasons.push(await uncheckedTasks(path, tools));
-    reasons.push(await uncommittedChanges(path, tools.git));
-    reasons.push(await unpushedCommits(path, branch, tools.git));
     return reasons.filter((reason) => reason !== null);
 }
 
@@ -66,7 +68,7 @@ async function workspaceOf(state: string, ref: TaskRef): Promise<Result<AttemptW
     }
     const created = (record: AttemptRecord) => record.history[0]?.at ?? "";
     const [latest] = records
-        .filter((record) => record.task.source === ref.source && record.task.id === ref.id)
+        .filter((record) => isTaskRecord(record, ref))
         .sort((a, b) => created(b).localeCompare(created(a)));
     if (latest === undefined) {
         return { ok: false, error: `there is no workspace to check: the task has no attempt` };

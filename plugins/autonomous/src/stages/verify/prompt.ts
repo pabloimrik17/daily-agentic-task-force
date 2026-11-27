@@ -28,6 +28,7 @@ import {
     HUMAN_FOLLOWS,
     hitlReviewSection,
     hitlTransition,
+    ON_FAILURE,
     type Move,
     NO_FOLLOW_UPS,
     openspecPrompt,
@@ -36,7 +37,6 @@ import {
     PROPOSED_FOLLOW_UPS,
     promptAutonomy,
     promptPaths,
-    REVIEW_FAILURE,
     REVIEW_TITLE,
     requiredPullRequest,
     resumeReview,
@@ -44,11 +44,12 @@ import {
     type Section,
     summarySection,
     UNCLAIMED,
+    UPDATE_WORKFLOW_KEY,
 } from "../openspec-stage.ts";
 import type { StageContext, StagePromptInput } from "../stage.ts";
 
+export { UPDATE_WORKFLOW_KEY } from "../openspec-stage.ts";
 export const VERIFY_WORKFLOW_KEY = "verifyWorkflow"; // `/openspec-verify-change` or `/opsx:verify`
-export const UPDATE_WORKFLOW_KEY = "updateWorkflow"; // `/openspec-update-change` or `/opsx:update`
 export const ADVERSARIAL_REVIEW_KEY = "adversarialReview"; // the skill's body, frontmatter stripped
 
 // Design D11: the record of the findings, beside the result marker, outside the repository.
@@ -63,7 +64,6 @@ interface Work {
     review: string; // the adversarial review's body
 }
 
-// The transition the verification closes with.
 const MOVE: Move = { left: "verify", reached: "code-review" };
 
 // What changes with the task's autonomy: its own section, what it does with uncommitted changes
@@ -98,7 +98,7 @@ const AFK: Autonomy = {
     review: null,
     blocked: true,
     transition: (paths) => afkTransition(paths, MOVE),
-    onFailure: REVIEW_FAILURE.AFK,
+    onFailure: ON_FAILURE.AFK,
 };
 
 const HITL: Autonomy = {
@@ -113,7 +113,7 @@ const HITL: Autonomy = {
     review: "Review the outcome with the human: show them each finding by outcome, with its reason, the proposed follow-up tasks and the pull request's URL. Commit and push each round of their feedback as a new commit. Go on only when the human is done with it, and once a round changed anything, confirm again, as in the step before, that every check passes, nothing is left uncommitted and every commit is pushed.",
     blocked: false,
     transition: (paths) => hitlTransition(paths, MOVE, "the verification"),
-    onFailure: REVIEW_FAILURE.HITL,
+    onFailure: ON_FAILURE.HITL,
 };
 
 const AUTONOMIES: Record<AutonomyLabel, Autonomy> = { AFK, HITL };

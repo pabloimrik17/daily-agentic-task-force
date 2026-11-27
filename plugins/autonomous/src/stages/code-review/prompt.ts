@@ -27,13 +27,13 @@ import {
     hitlTransition,
     type Move,
     NO_FOLLOW_UPS,
+    ON_FAILURE,
     openspecPrompt,
     orchestrationSection,
     type Paths,
     PROPOSED_FOLLOW_UPS,
     promptAutonomy,
     promptPaths,
-    REVIEW_FAILURE,
     REVIEW_TITLE,
     requiredPullRequest,
     resumeReview,
@@ -133,7 +133,7 @@ function roundsSection({ attempt }: Work): Section {
             "1. Collect the human's comments: on GitHub, the comments and review threads on the pull request that carry no marker of a stage and were posted after the last publish; in Plannotator, the comments of the verdict the Inbox returns.",
             "2. Make each comment a finding of the reviewer `human`, in the record, with the round's number: 2 for the first human round, then 3, and so on. Its severity comes from its mark, a Plannotator comment's included: `CRITICAL` when it is marked `blocking`, `SUGGESTION` when it is marked `nit` or `nitpick`, and `WARNING` otherwise, a comment with no Conventional Comments label included. Its label is `suggestion` when the comment is labelled `suggestion`, `nit` or `nitpick`, and `issue` otherwise. Link the entry of a comment in a review thread to that thread in its `thread`; a Plannotator comment has none, and publish mode opens a thread for it, reported by `human`.",
             "3. Run the finding triage, the refutation, the fixes and their fix checks on these findings, once. The refutation only advises: show the human its outcome and its counter-evidence for each of their findings, and keep or drop the finding as they decide, never dismissing one silently. A finding the human keeps survives without a reproduction, and its fix check judges the fix against the finding's statement.",
-            `4. Commit and push each fix by the rules of the commits section, run the checks again as the last step of the section "Code review" says, and end the round with \`/autonomous:run --apply --publish ${attempt}\`. It answers and resolves the human's threads, and opens threads for the Plannotator comments. If it exits non-zero, ${REVIEW_FAILURE.HITL}.`,
+            `4. Commit and push each fix by the rules of the commits section, run the checks again as the last step of the section "Code review" says, and end the round with \`/autonomous:run --apply --publish ${attempt}\`. It answers and resolves the human's threads, and opens threads for the Plannotator comments. If it exits non-zero, ${ON_FAILURE.HITL}.`,
             '5. While the human sends feedback, a "Send feedback" verdict in Plannotator or a word in this session, run another human round, and send the walkthrough again when publish mode updated it. Go on to the approval question only once the human says they have no more feedback.',
         ],
     };
@@ -155,7 +155,7 @@ const AFK: Autonomy = {
     review: null,
     blocked: true,
     transition: (paths) => afkTransition(paths, MOVE),
-    onFailure: REVIEW_FAILURE.AFK,
+    onFailure: ON_FAILURE.AFK,
 };
 
 const HITL: Autonomy = {
@@ -177,7 +177,7 @@ const HITL: Autonomy = {
     review: `Review the outcome with the human: show them each finding and doubt by outcome, with its reason, the finding threads by link, the proposed follow-up tasks and the pull request's URL. Then send the walkthrough, as the section "${WALKTHROUGH_TITLE}" says, and hold the human rounds, as the section "${ROUNDS_TITLE}" sets them out. Once a round changed anything, confirm again, as in the first step, that every check passes, nothing is left uncommitted and every commit is pushed.`,
     blocked: false,
     transition: (paths) => hitlTransition(paths, MOVE, "the code review"),
-    onFailure: REVIEW_FAILURE.HITL,
+    onFailure: ON_FAILURE.HITL,
 };
 
 const AUTONOMIES: Record<AutonomyLabel, Autonomy> = { AFK, HITL };

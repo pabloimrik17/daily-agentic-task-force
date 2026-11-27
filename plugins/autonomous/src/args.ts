@@ -2,7 +2,7 @@ import { parseAttemptId, parseTaskRef, type AttemptId, type TaskRef } from "./at
 import type { Source } from "./config.ts";
 import { STAGES } from "./stages/registry.ts";
 import { isStageId, type StageId } from "./stages/stage.ts";
-import { isTransitionStage, TRANSITION_STAGES, type TransitionStage } from "./transition/mode.ts";
+import { isTransitionStage, TRANSITION_STAGES, type TransitionStage } from "./transition/table.ts";
 
 // One answer passed back to a question of a handoff: the question's id and the
 // option values chosen for it (design D3).
@@ -62,7 +62,6 @@ const ACCOUNT_REMOVED =
 const ANSWER_SHAPE = "--answer requires <id>=<value>[,<value>]";
 const ATTEMPT_ID_SHAPE = "<source>:<task>:<stage>:<n>";
 
-// Flags that take no value.
 const SWITCHES = new Map<string, (args: RunArgs) => void>([
     ["--force", (args) => (args.force = true)],
     ["--json", (args) => (args.json = true)],
@@ -75,7 +74,7 @@ const SWITCHES = new Map<string, (args: RunArgs) => void>([
     ["--stop-loop", (args) => (args.stopLoop = true)],
 ]);
 
-// Flags that take the next argument as their value; each returns an error or null.
+// Flags that take the next argument as their value.
 const VALUED = new Map<string, (args: RunArgs, value: string | undefined) => string | null>([
     ["--account", () => ACCOUNT_REMOVED],
     ["--answer", readAnswer],
@@ -477,7 +476,6 @@ function combinationError(args: RunArgs): string | null {
     return COMBINATIONS.find(([broken]) => broken(args))?.[1] ?? null;
 }
 
-// The id and the values are split at the first `=`, the values at `,`.
 function parseAnswer(
     raw: string | undefined,
 ): { ok: true; answer: Answer } | { ok: false; error: string } {

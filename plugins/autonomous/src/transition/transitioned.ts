@@ -1,6 +1,6 @@
 import { readFile } from "node:fs/promises";
 
-import { type AttemptRecord, holdsTask, type TaskRef } from "../attempts/record.ts";
+import { type AttemptRecord, holdsTask, isTaskRecord, type TaskRef } from "../attempts/record.ts";
 import { attemptDir, listRecords, transitionedPath, writeJsonAtomic } from "../attempts/state.ts";
 import type { Result } from "../result.ts";
 import type { StageId } from "../stages/stage.ts";
@@ -71,7 +71,7 @@ export async function recordTransition(input: TransitionedIn): Promise<string | 
 }
 
 const opens = (record: AttemptRecord, ref: TaskRef) =>
-    record.task.source === ref.source && record.task.id === ref.id && holdsTask(record);
+    isTaskRecord(record, ref) && holdsTask(record);
 
 function byValue(parent: Json, key: string, path: string): TransitionedBy {
     const value = string(parent, key, path);

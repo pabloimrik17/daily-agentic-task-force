@@ -62,3 +62,12 @@ export interface Stage {
     prompt(input: StagePromptInput): string; // the whole prompt file
     completed(task: TrackerTask): boolean; // the tracker check; reconcile checks the marker
 }
+
+// The model and effort of grill-me and the OpenSpec stages; DOT-119 replaces the fixed model. No
+// codex flags: their prerequisites never let a codex session start.
+const OPUS_HIGH: Record<SessionTool, readonly string[]> = {
+    claude: ["--model", "opus", "--effort", "high"],
+    codex: [],
+};
+
+export const opusHighArgs = (tool: SessionTool): string[] => [...OPUS_HIGH[tool]];

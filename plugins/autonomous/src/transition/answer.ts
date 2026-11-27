@@ -9,26 +9,23 @@ import { isAutonomyLabel, isStageLabel } from "../label-contract/contract.ts";
 import type { Tracker } from "../label-triage/trackers/tracker.ts";
 import type { Wait } from "../read-back.ts";
 import type { AnswerContext, AnswerRecord } from "../runner.ts";
-import { applyTransition, type Settlement } from "./apply.ts";
+import { applyTransition, list, type Settlement } from "./apply.ts";
 import { type GuardTools, guardsOnLeaving } from "./guards.ts";
+import { parseTransitionId, TRANSITION } from "./mode.ts";
 import {
     accepts,
     APPROVAL_VALUES,
     AUTONOMY_OPTIONS,
-    parseTransitionId,
     rowOf,
     stageAutonomy,
-    TRANSITION,
     type TransitionRow,
-} from "./mode.ts";
+} from "./table.ts";
 import { awaitedDetails } from "./receipt.ts";
 import { recordTransition } from "./transitioned.ts";
 
 const VALUES: readonly string[] = [...AUTONOMY_OPTIONS, ...APPROVAL_VALUES];
 
 const INVALID_VALUE = `invalid for the transition: expected one of ${VALUES.join(", ")}`;
-
-const list = (labels: readonly string[]) => `[${labels.join(", ")}]`;
 
 interface Handling {
     state: string;
