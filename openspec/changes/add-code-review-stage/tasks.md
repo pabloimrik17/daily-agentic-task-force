@@ -57,13 +57,14 @@
 
 Results go to `openspec/changes/add-code-review-stage/evidence/code-review-verification.md`. Every tracker or repository write here needs the user's go-ahead first.
 
-- [ ] 12.1 With the loop stopped, bootstrap `external-review` on the trackers with the user's go-ahead, and record the bootstrap report.
-- [ ] 12.2 Real task: run the stage on DOT-121 (`HITL`, pull request #90, in `code-review`) by hand from this branch, through the review team's report, the finding triage the human reviews, the refutation, the fixes and their checks, publish mode, the walkthrough in the Inbox, at least one human round, the `Approve` answer, the logbook entry and the reconcile run that removes the session. Record the review team's tier and skipped reviewers, the record of findings, the threads and their states, the walkthrough, the commits, the stage summary comment, the labels and the pull request's draft state.
-- [ ] 12.3 Sandbox cases, each recorded with its tracker and pull request state:
+- [x] 12.1 With the loop stopped, bootstrap `external-review` on the trackers with the user's go-ahead, and record the bootstrap report.
+- [x] 12.2 Real task: run the stage on DOT-121 (`HITL`, pull request #90, in `code-review`) by hand from this branch, through the review team's report, the finding triage the human reviews, the refutation, the fixes and their checks, publish mode, the walkthrough in the Inbox, the human's verdict on it (the human approved with no feedback, so the human round moved to 12.3 case 5), the `Approve` answer, the logbook entry and the reconcile run that removes the session. Record the review team's tier and skipped reviewers, the record of findings, the threads and their states, the walkthrough, the commits, the stage summary comment, the labels and the pull request's draft state.
+- [x] 12.3 Sandbox cases, each recorded with its tracker and pull request state:
     1. an `AFK` task from launch to `external-review` with no question, its doubts published as open `question (blocking)` threads and no follow-up task created;
     2. publish mode run twice in one attempt, and a second attempt that finds a finding already published, with no duplicate thread;
     3. the transition refused while `published.json` is missing, then while it names an older digest;
-    4. a launch with `plannotator` off the `PATH`, which runs with no walkthrough and says why.
+    4. a launch with `plannotator` off the `PATH`, which runs with no walkthrough and says why;
+    5. an `HITL` task with at least one human round before the stage summary: a comment the human leaves on the pull request, recorded as a finding of the reviewer `human`, answered in its thread and published again, then the `Approve` answer. This case covers the human round of 12.2, where the human approved the walkthrough with no feedback (user decision, 2026-11-26).
 
     Clean up the sandbox tasks and pull requests afterwards.
 
