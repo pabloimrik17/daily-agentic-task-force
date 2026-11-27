@@ -356,7 +356,8 @@ describe("the walkthrough is saved for the pull request", () => {
         const outcome = await updateWalkthrough(input(), plannotator());
 
         const json = readFileSync(join(dir, "walkthrough.json"), "utf8");
-        expect(outcome).toEqual({ outcome: "saved", digest: digestOf(json) });
+        const digest = digestOf(JSON.stringify([json, FINAL_PATCH]));
+        expect(outcome).toEqual({ outcome: "saved", digest });
         expect(calls[1]).toEqual([
             "guide",
             "import",
@@ -382,6 +383,22 @@ describe("the walkthrough is saved for the pull request", () => {
         expect(second).toEqual({ outcome: "unchanged", digest });
         expect(subcommands()).toEqual(["export", "import", "export"]);
         expect(walkthroughFiles().sort()).toEqual([...FILES].sort());
+    });
+
+    it("saves it again when only the patch's content changed", async () => {
+        const access = plannotator();
+        const first = await updateWalkthrough(input(), access);
+        const digest = first.outcome === "saved" ? first.digest : null;
+        const before = readFileSync(join(dir, "walkthrough.json"), "utf8");
+        const patch = FINAL_PATCH.replace("+        wait();", "+        pause();");
+        expect(patch).not.toBe(FINAL_PATCH);
+
+        const second = await updateWalkthrough(input({ patch, lastDigest: digest }), access);
+
+        expect(readFileSync(join(dir, "walkthrough.json"), "utf8")).toBe(before);
+        expect(second.outcome).toBe("saved");
+        expect(second).not.toEqual(first);
+        expect(subcommands()).toEqual(["export", "import", "export", "import"]);
     });
 
     it("Changed by a human round: the new walkthrough is saved", async () => {

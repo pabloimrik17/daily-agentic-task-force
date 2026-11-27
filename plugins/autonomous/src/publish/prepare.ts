@@ -53,16 +53,13 @@ export interface Prepared extends Attempt, FinalDiff {
 
 const messageOf = (error: unknown) => (error instanceof Error ? error.message : String(error));
 
+// What follows the attempt's record and findings, which `readAttempt` reads.
 export async function prepare(
-    attempt: AttemptId,
+    read: Attempt,
     deps: PrepareDeps,
     report: PublishReport,
 ): Promise<Result<Prepared>> {
-    const read = await readAttempt(attempt, deps, report);
-    if (!read.ok) {
-        return read;
-    }
-    const { record } = read.value;
+    const { record } = read;
     const port = deps.pullRequests(record.workspace.path);
     const open = await openPullRequest(port, record, deps.git, report);
     if (!open.ok) {
@@ -77,7 +74,7 @@ export async function prepare(
         ? {
               ok: true,
               value: {
-                  ...read.value,
+                  ...read,
                   ...diff.value,
                   port,
                   pullRequest: open.value,
@@ -87,7 +84,7 @@ export async function prepare(
         : threads;
 }
 
-async function readAttempt(
+export async function readAttempt(
     attempt: AttemptId,
     deps: PrepareDeps,
     report: PublishReport,

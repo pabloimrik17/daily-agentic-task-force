@@ -119,6 +119,15 @@ function matching(parent: Json, key: string, path: string, pattern: RegExp, what
     return value;
 }
 
+// The pattern keeps the scheme to HTTP; the parse refuses what no host can be read from.
+function httpUrl(parent: Json, key: string, path: string): string {
+    const value = matching(parent, key, path, HTTP_URL, "a URL");
+    if (!URL.canParse(value)) {
+        throw new ParseError(`${path}.${key} must be a URL (got ${JSON.stringify(value)})`);
+    }
+    return value;
+}
+
 function statement(parent: Json, path: string): string {
     const value = nonEmpty(parent, "statement", path);
     if (value.split(/\r?\n/u).length > 3) {
@@ -198,7 +207,7 @@ function deferred(value: Json, path: string): Publication {
         rejectUnknownKeys(value, ["state", "followUp"], path);
         return {
             state: "deferred",
-            followUp: matching(value, "followUp", path, HTTP_URL, "a URL"),
+            followUp: httpUrl(value, "followUp", path),
         };
     }
     rejectUnknownKeys(value, ["state", "proposedTitle"], path);
@@ -343,13 +352,18 @@ function entry(value: unknown, index: number, errors: string[]): RecordEntry | u
     return fields as unknown as RecordEntry;
 }
 
-function review(value: unknown): FindingsRecord["review"] {
-    const parent = object(value, "$.review");
-    rejectUnknownKeys(parent, ["tier", "skipped"], "$.review");
+// Each field is checked by itself, so the report names every one at fault.
+function review(value: unknown, errors: string[]): unknown {
+    const parent = check(errors, () => object(value, "$.review"));
+    if (parent === undefined) {
+        return undefined;
+    }
+    check(errors, () => rejectUnknownKeys(parent, ["tier", "skipped"], "$.review"));
+    const skipped = check(errors, () => array(parent.skipped, "$.review.skipped")) ?? [];
     return {
-        tier: choice(parent, "tier", "$.review", TIERS),
-        skipped: array(parent.skipped, "$.review.skipped").map((item, index) =>
-            skippedReviewer(item, `$.review.skipped[${index}]`),
+        tier: check(errors, () => choice(parent, "tier", "$.review", TIERS)),
+        skipped: skipped.map((item, index) =>
+            check(errors, () => skippedReviewer(item, `$.review.skipped[${index}]`)),
         ),
     };
 }
@@ -388,7 +402,7 @@ function record(input: unknown, errors: string[]): FindingsRecord | undefined {
     const value = {
         schema: check(errors, () => choice(parent, "schema", "$", [FINDINGS_SCHEMA])),
         attempt: check(errors, () => attemptId(parent)),
-        review: check(errors, () => review(parent.review)),
+        review: review(parent.review, errors),
         entries: entries(parent, errors),
     };
     return errors.length === 0 ? (value as FindingsRecord) : undefined;

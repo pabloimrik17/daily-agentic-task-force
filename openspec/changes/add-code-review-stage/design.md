@@ -55,7 +55,7 @@ Right before the two skill bodies, the prompt's own section supplies: the subjec
 
 ### D6. Publishing is a mode: `/autonomous:run --apply --publish <attempt-id>`
 
-A new module `src/publish/` reads and validates `findings.json`, reads the pull request's threads, decides what to post, posts it, reads it back and writes `published.json`. `args.ts` and `run.ts` add the flag as they added `--log`. It takes no run lock, as persist and log modes, because it touches no attempt record.
+A new module `src/publish/` reads and validates `findings.json`, reads the pull request's threads, decides what to post, posts it, reads it back and writes `published.json`. `args.ts` and `run.ts` add the flag as they added `--log`. It takes no run lock, as persist and log modes, because it touches no attempt record. It holds a lock of its own in the attempt's directory, `publish.lock`, from before it reads the threads until it writes the receipt, as log mode holds `logbook.lock`: a second publication of the same attempt that overlaps the first is refused, so no round's review is posted twice.
 
 *Alternative:* the agent posts with `gh api`, following the prompt. Rejected in the grill: the format, the anchors and the idempotency could not be tested, and a format change means migrating threads on open pull requests (ADR 0008).
 
@@ -112,7 +112,7 @@ Publish mode reads the review team's draft from `<attempt>/review/walkthrough.js
 
 ### D15. The human round runs in the session, publish mode closes it
 
-The agent reads the human's GitHub comments (no marker of a stage, posted after the last publish) and the Plannotator verdict the Inbox returns, turns each comment into a record entry of the reviewer `human` with its severity from its mark, links a GitHub comment's entry to its thread, and runs the round. Publish mode answers and resolves the linked threads and opens threads for Plannotator comments. The session sends the walkthrough with the Inbox's `submit_guide` with `review: true` when it has that tool, passing the contents of `walkthrough.json` as `guide` and of `walkthrough.patch` as `patch` (the tool takes content, not paths), and piping the same fields to `plannotator inbox call submit_guide -` when the patch is too large for a tool call; without it, or without a walkthrough, the round runs on GitHub only.
+The agent reads the human's GitHub comments (no marker of a stage, posted since the previous human round began its collection, or since the attempt launched for the first human round) and the Plannotator verdict the Inbox returns, turns each comment into a record entry of the reviewer `human` with its severity from its mark, links a GitHub comment's entry to its thread, and runs the round. Publish mode answers the linked threads, resolves those whose finding is fixed or deferred to a created follow-up task, and opens threads for Plannotator comments. The session sends the walkthrough with the Inbox's `submit_guide` with `review: true` when it has that tool, passing the contents of `walkthrough.json` as `guide` and of `walkthrough.patch` as `patch` (the tool takes content, not paths), and piping the same fields to `plannotator inbox call submit_guide -` when the patch is too large for a tool call; without it, or without a walkthrough, the round runs on GitHub only.
 
 ### D16. The logbook stays within its limit
 

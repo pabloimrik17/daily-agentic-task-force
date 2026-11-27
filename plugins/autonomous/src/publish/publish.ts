@@ -4,7 +4,9 @@
 // reviews, replies and resolutions: the pull request stays a draft. A failed post stops the run,
 // and the next run continues from the markers.
 
+import { acquireLockAt } from "../attempts/lock.ts";
 import type { AttemptId } from "../attempts/record.ts";
+import { publishLockPath } from "../attempts/state.ts";
 import type { Exec } from "../exec.ts";
 import type { ReviewThread } from "../pull-request/port.ts";
 import { READ_BACK_TRIES, readUntil, type Wait } from "../read-back.ts";
@@ -13,7 +15,7 @@ import { guideAvailability } from "../review-team/availability.ts";
 import { continuingReply, firstComment, reviewBody, stateReply } from "./format.ts";
 import { threadMarker } from "./markers.ts";
 import { type Planned, planEntries, showsState, STAGE, wantsResolved } from "./plan.ts";
-import { type PrepareDeps, prepare, type Prepared } from "./prepare.ts";
+import { type PrepareDeps, prepare, type Prepared, readAttempt } from "./prepare.ts";
 import { PUBLISH_RECEIPT_SCHEMA, readPublishReceipt, writePublishReceipt } from "./receipt.ts";
 import { blankPublish, type PublishReport, type ThreadPost } from "./report.ts";
 import type {
@@ -49,18 +51,37 @@ export async function runPublish(
     startedAt: Date,
 ): Promise<PublishReport> {
     const report = blankPublish(attempt, startedAt);
-    const prepared = await prepare(attempt, deps, report);
-    if (!prepared.ok) {
-        report.reasons.push(prepared.error);
-        return report;
-    }
-    const failure = await publish({ ...prepared.value, deps, report });
+    const failure = await publishLocked(attempt, deps, report);
     if (failure !== null) {
         report.reasons.push(failure);
         return report;
     }
     report.outcome = "advance";
     return report;
+}
+
+// One publication per attempt at a time: the lock is held from before the threads are read
+// until the receipt is written, so two runs never post one round's review twice.
+async function publishLocked(
+    attempt: AttemptId,
+    deps: PublishDeps,
+    report: PublishReport,
+): Promise<string | null> {
+    const read = await readAttempt(attempt, deps, report);
+    if (!read.ok) {
+        return read.error;
+    }
+    const file = publishLockPath(read.value.dir);
+    const lock = await acquireLockAt(file, undefined, undefined, "publication");
+    if (!lock.ok) {
+        return lock.error;
+    }
+    try {
+        const prepared = await prepare(read.value, deps, report);
+        return prepared.ok ? await publish({ ...prepared.value, deps, report }) : prepared.error;
+    } finally {
+        await lock.release();
+    }
 }
 
 async function publish(publishing: Publishing): Promise<string | null> {
@@ -180,12 +201,36 @@ function openedBy(attempt: string, { entry, target }: Planned): boolean {
     return marker?.attempt === attempt && marker.finding === entry.id;
 }
 
+const opensThread = ({ target }: Planned) => target.kind === "new" && target.anchor !== null;
+
+function threadOf(planned: readonly Planned[], id: string): ReviewThread | undefined {
+    const target = planned.find((item) => item.entry.id === id)?.target;
+    return target?.kind === "thread" ? target.thread : undefined;
+}
+
+// True once the list shows a thread for every entry the review opened one for. A list the plan
+// refuses settles too: `replan` reports it.
+function showsOpened(
+    publishing: Publishing,
+    opened: readonly Planned[],
+    threads: readonly ReviewThread[],
+): boolean {
+    const now = plan(publishing, threads);
+    return !now.ok || opened.every(({ entry }) => threadOf(now.value, entry.id) !== undefined);
+}
+
+// The read that follows the review can lag it, as the one `readBack` repeats.
 async function replan(
     publishing: Publishing,
     before: readonly Planned[],
 ): Promise<Result<Planned[]>> {
-    const { port, pullRequest, report } = publishing;
-    const threads = await port.threads(pullRequest.number);
+    const { deps, port, pullRequest, report } = publishing;
+    const opened = before.filter(opensThread);
+    const threads = await readUntil(
+        () => port.threads(pullRequest.number),
+        (read) => showsOpened(publishing, opened, read),
+        deps.wait,
+    );
     if (!threads.ok) {
         return threads;
     }
@@ -193,18 +238,15 @@ async function replan(
     if (!planned.ok) {
         return planned;
     }
-    for (const { entry, target } of before) {
-        if (target.kind !== "new" || target.anchor === null) {
-            continue;
-        }
-        const now = planned.value.find((item) => item.entry.id === entry.id);
-        if (now?.target.kind !== "thread") {
+    for (const { entry } of opened) {
+        const thread = threadOf(planned.value, entry.id);
+        if (thread === undefined) {
             return {
                 ok: false,
-                error: `the review was posted but pull request #${pullRequest.number} holds no thread for ${entry.id}`,
+                error: `the review was posted but pull request #${pullRequest.number} holds no thread for ${entry.id} (${READ_BACK_TRIES})`,
             };
         }
-        report.threads.opened.push({ finding: entry.id, url: urlOf(now.target.thread) });
+        report.threads.opened.push({ finding: entry.id, url: urlOf(thread) });
     }
     return planned;
 }

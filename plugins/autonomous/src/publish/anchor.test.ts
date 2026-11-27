@@ -133,6 +133,48 @@ describe("Where a comment is anchored", () => {
         });
     });
 
+    it("keeps a finding on a new file that reuses a renamed file's old path", () => {
+        const files = parseDiff(
+            [
+                "diff --git a/src/z.ts b/src/a.ts",
+                "similarity index 90%",
+                "rename from src/z.ts",
+                "rename to src/a.ts",
+                "--- a/src/z.ts",
+                "+++ b/src/a.ts",
+                "@@ -1,2 +1,2 @@",
+                "-export const z = 1;",
+                "+export const a = 1;",
+                " export {};",
+                "diff --git a/src/z.ts b/src/z.ts",
+                "new file mode 100644",
+                "--- /dev/null",
+                "+++ b/src/z.ts",
+                "@@ -0,0 +1,1 @@",
+                "+export const fresh = 1;",
+                "",
+            ].join("\n"),
+        );
+        const line = (side: "new" | "old") =>
+            ({ scope: "line", file: "src/z.ts", startLine: 1, endLine: 1, side }) as const;
+        expect(anchorFor({ scope: "file", file: "src/z.ts" }, files, CHANGE)).toEqual({
+            kind: "file",
+            path: "src/z.ts",
+        });
+        expect(anchorFor(line("new"), files, CHANGE)).toEqual({
+            kind: "line",
+            path: "src/z.ts",
+            line: 1,
+            side: "RIGHT",
+        });
+        expect(anchorFor(line("old"), files, CHANGE)).toEqual({
+            kind: "line",
+            path: "src/a.ts",
+            line: 1,
+            side: "LEFT",
+        });
+    });
+
     it("Whole change: anchored at file level to the change's proposal.md", () => {
         expect(anchorFor({ scope: "change" }, FILES, CHANGE)).toEqual({
             kind: "file",

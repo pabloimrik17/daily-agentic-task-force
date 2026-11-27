@@ -112,9 +112,10 @@ The refutation still runs, but it does not decide:
 - Show that reporter the refutation's outcome and its counter-evidence.
 - The finding survives or not as they decide. It survives without a
   reproduction when they keep it. Write their decision in the record.
-- Its fix check has no reproduction to use. Judge the fix against the finding's
-  statement: accept it only when the statement no longer holds and the fix does
-  no more than the finding asks.
+- When the refutation wrote a reproduction for it, its fix and its fix check
+  use that reproduction as for any other finding. When it survives without
+  one, judge the fix against the finding's statement: accept it only when the
+  statement no longer holds and the fix does no more than the finding asks.
 
 ## The fix
 

@@ -235,7 +235,12 @@ describe("the adversarial review skill", () => {
         expect(body).toContain(
             "The finding survives or not as they decide. It survives without a reproduction when they keep it.",
         );
-        expect(body).toContain("Judge the fix against the finding's statement");
+        expect(body).toContain(
+            "When the refutation wrote a reproduction for it, its fix and its fix check use that reproduction as for any other finding.",
+        );
+        expect(body).toContain(
+            "When it survives without one, judge the fix against the finding's statement",
+        );
         expect(body).toContain("The only exception is a finding of an advisory reporter, below.");
     });
 

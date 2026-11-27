@@ -169,7 +169,7 @@ For `HITL`, the prompt SHALL tell the agent to hold human rounds after the stage
 #### Scenario: Comment on GitHub
 
 - **WHEN** the human leaves a comment on a line of the pull request during a human round
-- **THEN** the prompt's instructions lead the agent to triage it as a finding of the reviewer `human`, and its thread is answered and resolved by publish mode once it is accounted for
+- **THEN** the prompt's instructions lead the agent to triage it as a finding of the reviewer `human`, and publish mode answers its thread once it is accounted for, resolving it when the finding is fixed or deferred to a created follow-up task and leaving its state as it is otherwise
 
 #### Scenario: Comment in Plannotator
 

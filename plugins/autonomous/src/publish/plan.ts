@@ -126,11 +126,22 @@ function targetOf(
     };
 }
 
+// The thread each entry already holds, by its link or by this attempt's marker: no other entry
+// may take it as an exact match, whichever comes first in the record.
+function held(input: PlanInput): Set<string> {
+    return new Set(
+        input.entries.flatMap((entry) => {
+            const id = entry.thread ?? postedIn(input.threads, input.attempt, entry.id)?.id;
+            return id === undefined ? [] : [id];
+        }),
+    );
+}
+
 // Every published entry, and every unpublished one linked to a thread, with what to do; an entry
 // linked to a thread the pull request does not hold fails the plan, so nothing is posted.
 export function planEntries(input: PlanInput): Result<Planned[]> {
     const planned: Planned[] = [];
-    const taken = new Set<string>();
+    const taken = held(input);
     for (const entry of input.entries) {
         const published = outcomeOf(entry);
         if (published === null) {
@@ -148,7 +159,13 @@ export function planEntries(input: PlanInput): Result<Planned[]> {
     return { ok: true, value: planned };
 }
 
-const STATUS = /^Status: (.*)$/mu;
+// The generated status line sits right above the trace or the marker; a statement may hold a
+// line that starts with `Status: ` too, above it.
+const STATUS = /^Status: (.*)\r?\n(?:<details><summary>Trace<\/summary>|<!-- autonomous:)/gmu;
+
+function statusOf(body: string): string {
+    return [...body.matchAll(STATUS)].at(-1)?.[1]?.trimEnd() ?? "";
+}
 
 // The state this attempt last posted for the finding in the thread: the status line of its last
 // comment naming the finding, and the resolution marker's state. A proposed deferral and a created
@@ -162,8 +179,8 @@ function lastPosted(
     for (const { body } of thread.comments) {
         const marker = parseMarkers(body).find((item) => namesEntry(item, attempt, finding));
         if (marker !== undefined) {
-            const status = STATUS.exec(body)?.[1]?.trimEnd() ?? "";
-            last = { status, state: marker.kind === "resolution" ? marker.state : null };
+            const state = marker.kind === "resolution" ? marker.state : null;
+            last = { status: statusOf(body), state };
         }
     }
     return last;

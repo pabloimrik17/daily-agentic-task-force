@@ -5,11 +5,12 @@ import { join } from "node:path";
 import { afterAll, describe, expect, it } from "vitest";
 
 import { type AttemptId, attemptId } from "../attempts/record.ts";
-import { attemptDir, writeRecord } from "../attempts/state.ts";
+import { attemptDir, publishLockPath, writeRecord } from "../attempts/state.ts";
 import { record as startedAttempt, tempState } from "../attempts/test-fixtures.ts";
 import type { Exec, ExecResult } from "../exec.ts";
 import { config } from "../label-triage/test-fixtures.ts";
 import type { NewThread, PullRequests, ReviewThread, ThreadAnchor } from "../pull-request/port.ts";
+import { READ_BACK_TRIES } from "../read-back.ts";
 import type { Result } from "../result.ts";
 import type { StageId } from "../stages/stage.ts";
 import { firstComment } from "./format.ts";
@@ -51,6 +52,7 @@ interface PortOptions {
     pending?: string | null;
     failing?: { method: Method; error: string }; // every call of that method fails
     sticky?: boolean; // false: resolve and unresolve succeed but change nothing
+    lag?: number; // the thread reads after a review that still return the list before it
 }
 
 interface FakePort {
@@ -130,6 +132,14 @@ function fakePort(options: PortOptions = {}): FakePort {
             find(id).resolved = resolved;
         }
     };
+    let stale: { threads: ReviewThread[]; reads: number } | null = null;
+    const listed = () => {
+        if (stale === null || stale.reads === 0) {
+            return structuredClone(fake.threads);
+        }
+        stale.reads -= 1;
+        return structuredClone(stale.threads);
+    };
     const unexpected = (method: Method) => () => {
         fake.calls.push(method);
         return Promise.resolve({ ok: false as const, error: `${method} was not expected` });
@@ -146,11 +156,12 @@ function fakePort(options: PortOptions = {}): FakePort {
         edit: unexpected("edit"),
         comment: unexpected("comment"),
         comments: unexpected("comments"),
-        threads: () => call("threads", "", () => structuredClone(fake.threads)),
+        threads: () => call("threads", "", listed),
         pendingReview: () => call("pendingReview", "", () => fake.options.pending ?? null),
         review: (_number, body, threads) =>
             call("review", String(threads.length), () => {
                 fake.reviews.push({ body, threads });
+                stale = { threads: structuredClone(fake.threads), reads: options.lag ?? 0 };
                 for (const { anchor, body: first } of threads) {
                     fake.threads.push(placed(`T${fake.threads.length + 1}`, anchor, first));
                 }
@@ -624,6 +635,20 @@ describe("runPublish: publishing is idempotent within an attempt", () => {
         expect(posts(port.calls.slice(before))).toEqual(["resolve T1", "resolve T3"]);
     });
 
+    it("reads back a blocked reason that ends in a space", async () => {
+        const port = fakePort({ threads: [human("H1")] });
+        const blocked = fixedByHuman({
+            thread: "H1",
+            publication: { state: "blocked", reason: "needs owner " },
+        });
+        const harness = await setup({ port, entries: [blocked] });
+        expect((await publish(harness)).outcome).toBe("advance");
+        expect(port.threads[0]?.comments[1]?.body).toContain("Status: blocked: needs owner\n");
+        const before = port.calls.length;
+        expect((await publish(harness)).outcome).toBe("advance");
+        expect(posts(port.calls.slice(before))).toEqual([]);
+    });
+
     it("tells a proposed deferral from a created one, which share the state deferred", async () => {
         const proposed = finding({
             id: "f5",
@@ -641,6 +666,48 @@ describe("runPublish: publishing is idempotent within an attempt", () => {
         const report = await publish(harness);
         expect(report.outcome).toBe("advance");
         expect(posts(harness.fake.calls.slice(before))).toEqual(["reply T1", "resolve T1"]);
+    });
+});
+
+describe("runPublish: the thread read that follows a review can lag it", () => {
+    it("waits the lag out and publishes", async () => {
+        const port = fakePort({ lag: 2 });
+        const report = await publish(await setup({ port }));
+        expect(report.outcome).toBe("advance");
+        expect(port.reviews).toHaveLength(1);
+        expect(report.threads.opened).toHaveLength(4);
+    });
+
+    it("names the tries when the threads never show", async () => {
+        const port = fakePort({ lag: 99 });
+        const report = await publish(await setup({ port }));
+        expect(report.outcome).toBe("not-evaluable");
+        expect(report.reasons).toEqual([
+            `the review was posted but pull request #7 holds no thread for f1 (${READ_BACK_TRIES})`,
+        ]);
+    });
+});
+
+describe("runPublish: one publication per attempt at a time", () => {
+    it("posts each round's review once when two runs of one attempt overlap", async () => {
+        const harness = await setup();
+        const reports = await Promise.all([publish(harness), publish(harness)]);
+        expect(reports.map(({ outcome }) => outcome).sort()).toEqual(["advance", "not-evaluable"]);
+        expect(harness.fake.reviews).toHaveLength(1);
+        const refused = reports.find(({ outcome }) => outcome === "not-evaluable");
+        const lock = publishLockPath(harness.dir);
+        expect(refused?.reasons[0]).toContain(`another publication holds ${lock}`);
+    });
+
+    it("releases the lock when it ends, published or failed", async () => {
+        const done = await setup();
+        await publish(done);
+        expect(existsSync(publishLockPath(done.dir))).toBe(false);
+
+        const port = fakePort({ failing: { method: "review", error: "gh api failed" } });
+        const failed = await setup({ port });
+        expect((await publish(failed)).reasons).toEqual(["gh api failed"]);
+        expect(existsSync(publishLockPath(failed.dir))).toBe(false);
     });
 });
 
@@ -667,6 +734,37 @@ describe("runPublish: an exact match continues an existing thread", () => {
         const rerun = await publish(harness, SECOND);
         expect(rerun.matches).toEqual([]);
         expect(port.reviews).toEqual([]);
+    });
+
+    it("leaves a thread another entry is linked to, whichever comes first in the record", async () => {
+        const earlier = published("E1", ATTEMPT, finding(), false);
+        const port = fakePort({ threads: [earlier] });
+        const unlinked = finding({ id: "f2", publication: { state: "fixed", commit: "def5678" } });
+        const linked = finding({
+            id: "f3",
+            thread: "E1",
+            publication: { state: "blocked", reason: "needs the owner" },
+        });
+        const harness = await setup({ id: SECOND, port, entries: [unlinked, linked] });
+        const report = await publish(harness, SECOND);
+        expect(report.outcome).toBe("advance");
+        expect(report.matches).toEqual([]);
+        expect(posts(port.calls)).toEqual(["review 1", "resolve T2", "reply E1"]);
+    });
+
+    it("reads its own status line, not a statement's line that starts the same way", async () => {
+        const earlier = published("E1", ATTEMPT, finding(), false);
+        const port = fakePort({ threads: [earlier] });
+        const again = finding({
+            id: "f2",
+            statement: "Status: reproduced locally\nA revoked token makes `retry` loop forever.",
+            publication: { state: "fixed", commit: "def5678" },
+        });
+        const harness = await setup({ id: SECOND, port, entries: [again] });
+        expect((await publish(harness, SECOND)).outcome).toBe("advance");
+        const before = port.calls.length;
+        expect((await publish(harness, SECOND)).outcome).toBe("advance");
+        expect(posts(port.calls.slice(before))).toEqual([]);
     });
 
     it("opens a new thread when the line range differs", async () => {

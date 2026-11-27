@@ -281,7 +281,8 @@ async function written(
         return checked;
     }
     await writeFile(files.rendering, walkthrough.rendering);
-    return { ok: true, value: digestOf(json) };
+    // Both files the import reads, framed so no two pairs share a digest.
+    return { ok: true, value: digestOf(JSON.stringify([json, input.patch])) };
 }
 
 async function saved(input: WalkthroughInput, plannotator: Exec): Promise<Result<void>> {

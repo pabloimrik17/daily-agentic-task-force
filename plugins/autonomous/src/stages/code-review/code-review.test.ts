@@ -657,16 +657,19 @@ describe("Doubts are settled before they reach the human", () => {
 describe("The human round", () => {
     const rounds = () => section(prompt({ autonomy: "HITL" }), "Human rounds");
 
-    it("Comment on GitHub: a finding of the reviewer human, linked to its thread, answered and resolved by publish mode", () => {
+    it("Comment on GitHub: a finding of the reviewer human, linked to its thread, answered by publish mode and resolved when its outcome does", () => {
         expect(rounds()).toContain(
-            "on GitHub, the comments and review threads on the pull request that carry no marker of a stage and were posted after the last publish",
+            "on GitHub, the comments and review threads on the pull request that carry no marker of a stage and were posted since the previous human round began its collection, or since this attempt launched when this is the first human round",
+        );
+        expect(rounds()).toContain(
+            "A comment the human posts while the stage's round or a human round runs is then collected by the next human round.",
         );
         expect(rounds()).toContain("Make each comment a finding of the reviewer `human`");
         expect(rounds()).toContain(
             "Link the entry of a comment in a review thread to that thread in its `thread`",
         );
         expect(rounds()).toContain(
-            `end the round with \`/autonomous:run --apply --publish ${ATTEMPT}\`. It answers and resolves the human's threads`,
+            `end the round with \`/autonomous:run --apply --publish ${ATTEMPT}\`. It answers the human's threads, resolves those whose finding is fixed or deferred to a created follow-up task`,
         );
     });
 
@@ -706,7 +709,7 @@ describe("The refutation of a human finding only advises", () => {
         const text = prompt({ autonomy: "HITL" });
 
         expect(section(text, "Human rounds")).toContain(
-            "The refutation only advises: show the human its outcome and its counter-evidence for each of their findings, and keep or drop the finding as they decide, never dismissing one silently. A finding the human keeps survives without a reproduction, and its fix check judges the fix against the finding's statement.",
+            "The refutation only advises: show the human its outcome and its counter-evidence for each of their findings, and keep or drop the finding as they decide, never dismissing one silently. A finding the human keeps survives even without a reproduction, and its fix check then judges the fix against the finding's statement.",
         );
         expect(section(text, "The adversarial review")).toContain(
             "The refutation only advises on the findings of the reporter `human`.",

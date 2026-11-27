@@ -138,6 +138,16 @@ describe("An invalid record publishes nothing", () => {
         expect(error).toContain("$.entries[f1].extra is not a recognised field");
     });
 
+    it.each(["https://[", "https://"])("refuses the malformed follow-up URL %s", (followUp) => {
+        const deferred = finding({
+            destination: "defer",
+            publication: { state: "deferred", followUp },
+        });
+        expect(errorOf(recordText([deferred]))).toContain(
+            "$.entries[f1].publication.followUp must be a URL",
+        );
+    });
+
     it("names an entry without a usable id by its index", () => {
         const error = errorOf(recordText([ROUND_ONE[0], { ...finding(), id: "f 1" }]));
         expect(error).toContain("$.entries[1].id");
@@ -148,12 +158,13 @@ describe("An invalid record publishes nothing", () => {
             ...findingsRecord(),
             schema: "autonomous.findings.v2",
             attempt: "DOT-121",
-            review: { tier: "XL", skipped: [] },
+            review: { tier: "XL", skipped: false },
         });
         const error = errorOf(text);
         expect(error).toContain("$.schema");
         expect(error).toContain("$.attempt must be an attempt id");
         expect(error).toContain("$.review.tier");
+        expect(error).toContain("$.review.skipped");
     });
 
     it("names the file when it is not JSON", () => {

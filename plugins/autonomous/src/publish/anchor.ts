@@ -180,8 +180,20 @@ export function parseDiff(diff: string): DiffFile[] {
     return state.files;
 }
 
-function fileOf(files: readonly DiffFile[], path: string): DiffFile | undefined {
-    return files.find((file) => file.path === path || file.oldPath === path);
+// A path can be one file's own and another's old one: a rename, then a new file under the old
+// name. The new side reads the file now at the path, the old side the one that was there.
+function fileOf(
+    files: readonly DiffFile[],
+    path: string,
+    side: Side = "new",
+): DiffFile | undefined {
+    const now = files.find((file) => file.path === path);
+    const before = files.find((file) => file.oldPath === path && file.status !== "added");
+    return side === "new" ? (now ?? before) : (before ?? now);
+}
+
+function sideOf(location: Exclude<Location, { scope: "change" }>): Side {
+    return location.scope === "line" ? location.side : "new";
 }
 
 function holds(hunk: DiffHunk, startLine: number, endLine: number, side: Side): boolean {
@@ -197,7 +209,7 @@ export function hunkHolding(
     endLine: number,
     side: Side,
 ): DiffHunk | null {
-    const file = fileOf(files, path);
+    const file = fileOf(files, path, side);
     return file?.hunks.find((hunk) => holds(hunk, startLine, endLine, side)) ?? null;
 }
 
@@ -218,7 +230,8 @@ export function anchorFor(
     files: readonly DiffFile[],
     change: string,
 ): ThreadAnchor | null {
-    const file = location.scope === "change" ? undefined : fileOf(files, location.file);
+    const file =
+        location.scope === "change" ? undefined : fileOf(files, location.file, sideOf(location));
     if (file !== undefined && location.scope === "line") {
         const { file: path, startLine, endLine, side } = location;
         if (hunkHolding(files, path, startLine, endLine, side) !== null) {

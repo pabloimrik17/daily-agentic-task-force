@@ -59,7 +59,7 @@ function placement(entry: FindingEntry): Placement | null {
                 for: publication.stage,
             };
         case "blocked":
-            return { state: "open", status: `blocked: ${publication.reason}` };
+            return { state: "open", status: `blocked: ${publication.reason.trim()}` };
         default:
             return null;
     }
