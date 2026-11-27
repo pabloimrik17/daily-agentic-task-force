@@ -40,7 +40,12 @@ A stage SHALL declare: its id, its emoji, its prerequisites, its prompt for a ta
 - **WHEN** the `test` stage is launched
 - **THEN** its prerequisites hold without any check
 
-#### Scenario: Supplied task in a declared stage
+#### Scenario: Supplied task in a stage with no implementation
 
-- **WHEN** a task is supplied with the stage `qa`, which is declared and has no implementation
+- **WHEN** a task is supplied with `--task` and carries `qa`, which is declared and has no implementation
+- **THEN** `launch` waits with `<source>:<id> is excluded: unsupported stage` and writes nothing
+
+#### Scenario: Declared stage without implementation reaches launch
+
+- **WHEN** `launch` is reached with the declared stage `qa`, which has no implementation
 - **THEN** `launch` waits with `stage qa has no implementation` and writes nothing

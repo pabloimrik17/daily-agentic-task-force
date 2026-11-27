@@ -360,6 +360,31 @@ describe("reconcile: completion needs two proofs", () => {
         );
     });
 
+    it("reads a record of a stage this build does not implement and goes on", async () => {
+        const declared = record({
+            id: "linear:DOT-121:code-review:1",
+            task: { source: "linear", id: "DOT-121", title: "Code review stage" },
+            stage: "code-review",
+        });
+        await given(declared);
+        await marker(declared.id);
+        const sessions = fakeSessions({ observe: () => ok(seen("idle")) });
+        const fakes = trackers([], {
+            linear: [task("linear", "DOT-121", ["taken", "code-review"])],
+        });
+        const result = await reconcileStep.run(context({ sessions, trackers: fakes }));
+        expect(result.data.attempts).toHaveLength(1);
+        expect(result.data.attempts[0]).toMatchObject({
+            id: declared.id,
+            state: "started",
+            marker: { ok: true },
+            action: "observed",
+        });
+        expect(result.reasons).toEqual(["1 attempt observed", "nothing changed"]);
+        expect((await stored(declared.id)).state).toBe("started");
+        expect(sessions.calls).toEqual([`observe ${SESSION}`]);
+    });
+
     it("makes an attempt with both proofs eligible for finalisation", async () => {
         await given(record());
         await marker();

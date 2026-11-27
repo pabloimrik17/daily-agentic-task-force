@@ -44,7 +44,7 @@ import { addTaken, TAKEN } from "./taken.ts";
 
 const LAUNCH = "launch";
 
-// A selected unit may be at a stage no session implements (`implement`).
+// A unit's stage may be a stage label that is not a stage id (`ready-to-merge`).
 type LaunchStage = StageId | StageLabel;
 
 export interface LaunchData {

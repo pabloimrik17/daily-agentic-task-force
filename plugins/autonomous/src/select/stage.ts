@@ -1,5 +1,5 @@
 // A task without exactly one stage label has no next stage, and selection excludes it under
-// classification before it asks. `code-review` is a stage label with no stage behind it yet.
+// classification before it asks. The stage labels after `verify` have no stage behind them yet.
 
 import { isStageLabel, STAGE_ORDER } from "../label-contract/contract.ts";
 import type { StageName } from "./types.ts";

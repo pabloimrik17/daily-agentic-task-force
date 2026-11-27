@@ -133,6 +133,28 @@ describe("detect: three label groups", () => {
         expect(Object.values(detection.groups).every(isComplete)).toBe(true);
     });
 
+    it.each(["qa", "external-review", "wrap-up", "ready-to-merge"])(
+        "Task in a stage with no implementation: personal, AFK and %s are complete for all three groups",
+        (stage) => {
+            const detection = detect(task(["personal", "AFK", stage]), rules());
+            expect(detection.groups).toEqual({
+                scope: { status: "present", labels: ["personal"] },
+                autonomy: { status: "present", labels: ["AFK"] },
+                stage: { status: "present", labels: [stage] },
+            });
+            expect(Object.values(detection.groups).every(isComplete)).toBe(true);
+        },
+    );
+
+    it("code-review with qa: a stage conflict for a human to resolve", () => {
+        const detection = detect(task(["code-review", "qa"]), rules());
+        expect(detection.groups.stage).toEqual({
+            status: "conflict",
+            labels: ["code-review", "qa"],
+        });
+        expect(isComplete(detection.groups.stage)).toBe(false);
+    });
+
     it("verify with code-review: a stage conflict for a human to resolve", () => {
         const detection = detect(task(["verify", "code-review"]), rules());
         expect(detection.groups.stage).toEqual({

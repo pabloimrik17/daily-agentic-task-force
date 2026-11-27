@@ -1888,11 +1888,11 @@ exists: the flag, the key in the user's file, the shipped default.
 
 Every task carries labels from three groups:
 
-| Group    | Labels                                                       | Rule                                                                |
-| -------- | ------------------------------------------------------------ | ------------------------------------------------------------------- |
-| scope    | `work`, `personal`                                           | Exactly one. `work` is Nazaries work                                |
-| autonomy | `AFK`, `HITL`                                                | Exactly one. It may be absent only while the stage is `grill-me`    |
-| stage    | `grill-me`, `proposal`, `implement`, `verify`, `code-review` | Exactly one. Two stage labels are a conflict, for a human to settle |
+| Group    | Labels                                                                                                             | Rule                                                                |
+| -------- | ------------------------------------------------------------------------------------------------------------------ | ------------------------------------------------------------------- |
+| scope    | `work`, `personal`                                                                                                 | Exactly one. `work` is Nazaries work                                |
+| autonomy | `AFK`, `HITL`                                                                                                      | Exactly one. It may be absent only while the stage is `grill-me`    |
+| stage    | `grill-me`, `proposal`, `implement`, `verify`, `code-review`, `qa`, `external-review`, `wrap-up`, `ready-to-merge` | Exactly one. Two stage labels are a conflict, for a human to settle |
 
 Two labels of one group are a conflict, reported for a human to settle: neither
 detection, label triage nor the bootstrap removes or replaces either label. A task in
@@ -1900,7 +1900,7 @@ detection, label triage nor the bootstrap removes or replaces either label. A ta
 as deferred, because the grill decides it, and label triage, selection and the
 creation helper count a deferred autonomy as present. A task in `proposal` with
 no autonomy label is missing its autonomy, and so is a task in `implement`,
-`verify` or `code-review`.
+`verify`, `code-review`, `qa`, `external-review`, `wrap-up` or `ready-to-merge`.
 `HITL` with `grill-me` is valid: the autonomy was decided ahead of the grill.
 
 Scope and autonomy are properties, kept for the whole life of a task. The stage
@@ -1932,7 +1932,12 @@ autonomy, when it has one, is provisional until the grill confirms it.
 decided and any grill it needed over. `implement` means the task has a
 proposal and is ready to implement. `verify` means the task is implemented and
 ready to verify against its proposal. `code-review` means the task is verified
-and ready for code review; the loop runs no stage for it yet. `taken` means an
+and ready for code review; the loop runs no stage for it yet. `qa` means the
+task has passed code review and is ready for QA. `external-review` means the
+task has passed every review stage and is ready for external review. `wrap-up`
+means the task has passed external review and is ready for wrap-up.
+`ready-to-merge` means the task is wrapped up and waits for a person to merge
+its pull request. The loop runs no stage for these four yet. `taken` means an
 agent or a person is advancing the task now. `triage-me` means the task is
 waiting for a person to decide its scope or autonomy.
 
@@ -1953,22 +1958,27 @@ or any other label outside the contract.
 Spelling is exact and case-sensitive: `Grill Me` is not `grill-me`, and
 `Proposal` is not `proposal`, and `Code Review` is not `code-review`. Colours, applied where the tracker supports them:
 
-| Label         | Colour    |
-| ------------- | --------- |
-| `AFK`         | `#5e6ad2` |
-| `HITL`        | `#eb5757` |
-| `grill-me`    | `#f2994a` |
-| `proposal`    | `#bb87fc` |
-| `implement`   | `#26b5ce` |
-| `verify`      | `#d6409f` |
-| `code-review` | `#a3e635` |
-| `work`        | `#2f80ed` |
-| `personal`    | `#27ae60` |
-| `taken`       | `#95a2b3` |
-| `triage-me`   | `#f2c94c` |
+| Label             | Colour    |
+| ----------------- | --------- |
+| `AFK`             | `#5e6ad2` |
+| `HITL`            | `#eb5757` |
+| `grill-me`        | `#f2994a` |
+| `proposal`        | `#bb87fc` |
+| `implement`       | `#26b5ce` |
+| `verify`          | `#d6409f` |
+| `code-review`     | `#a3e635` |
+| `qa`              | `#0d9488` |
+| `external-review` | `#8b5e3c` |
+| `wrap-up`         | `#64748b` |
+| `ready-to-merge`  | `#15803d` |
+| `work`            | `#2f80ed` |
+| `personal`        | `#27ae60` |
+| `taken`           | `#95a2b3` |
+| `triage-me`       | `#f2c94c` |
 
 The loop never creates labels on its own. `--bootstrap-labels` does, `proposal`,
-`implement`, `verify`, `code-review`, `taken` and `triage-me` included: at
+`implement`, `verify`, `code-review`, `qa`, `external-review`, `wrap-up`,
+`ready-to-merge`, `taken` and `triage-me` included: at
 workspace level on Linear (a same-name label in any team counts as present), per repo on GitHub, and not at all on Beads, where
 labels exist only by use.
 
@@ -2168,9 +2178,8 @@ It follows the autonomy (see [The label contract](#the-label-contract)):
 
 The autonomy decision offers `AFK`, `HITL` and `grill-me` ("decide it in a
 grill") only for a task with no stage label. For a task with a stage label,
-`proposal`, `implement`, `verify` or `code-review` included, it offers `AFK` and
-`HITL` only, so a `grill-me` judged for a task in `proposal`, `implement`,
-`verify` or `code-review` is invalid and is asked. The question and the validity check take their options
+whichever it is, it offers `AFK` and `HITL` only, so a `grill-me` judged for
+such a task is invalid and is asked. The question and the validity check take their options
 from the same function, so they cannot disagree.
 
 Each decision is recorded in the group of the label it writes. The writes for a
@@ -2524,11 +2533,13 @@ In order, the step:
    With two or more, an LLM compares them.
 
 The next stage of a task is the stage label it carries, `grill-me`, `proposal`,
-`implement`, `verify` or `code-review`. A task without one has no next stage and
-is excluded under classification. `grill-me`, `proposal`, `implement` and
-`verify` are supported, and `verify` is the most advanced of them.
-`code-review` is a stage label with no stage behind it yet, so a task in
-`code-review` is excluded as an unsupported stage. `launch` keeps its own list:
+`implement`, `verify`, `code-review`, `qa`, `external-review`, `wrap-up` or
+`ready-to-merge`. A task without one has no next stage and is excluded under
+classification. `grill-me`, `proposal`, `implement` and `verify` are supported,
+and `verify` is the most advanced of them. `code-review`, `qa`,
+`external-review`, `wrap-up` and `ready-to-merge` are stage labels with no stage
+behind them yet, so a task in any of them is excluded as an unsupported stage
+and nothing is launched for it. `launch` keeps its own list:
 a stage runs only when an implementation is registered for it, and the test,
 grill-me, proposal, implementation and verification stages are.
 
@@ -4062,6 +4073,30 @@ launch steps report `not-evaluable` and stop for as long as one exists in the
 state directory, whatever its state. So before reverting, finish or discard
 every `verify` attempt, move each `attempts/<source>/<task>/verify/` directory
 out of the state directory, and put them back once a release with `verify` is
+installed again.
+
+### Upgrading to the declared stages
+
+`qa`, `external-review`, `wrap-up` and `ready-to-merge` are new labels of the
+contract. Run `/autonomous:run --bootstrap-labels` once per tracker to create
+`qa`, `wrap-up` and `ready-to-merge`, and `external-review` where it does not
+exist yet (see [The label contract](#the-label-contract)).
+
+This release itself writes no `code-review`, `qa`, `external-review` or
+`wrap-up` attempt record, and no `qa`, `external-review`, `wrap-up` or
+`ready-to-merge` label. They come from a development build of one of those
+stages, or from a person setting a label by hand.
+
+An older version that does not declare these stages cannot read such records:
+it rejects any attempt record whose stage is `code-review`, `qa`,
+`external-review` or `wrap-up`, and as reconcile reads every record, one it
+cannot parse stops every run for as long as it exists in the state directory,
+whatever its state. It does not read `qa`, `external-review`, `wrap-up` or
+`ready-to-merge` as stage labels either, so its label triage would judge a task
+carrying one again. So before reverting, finish or discard every attempt of
+those stages, move each `attempts/<source>/<task>/<stage>/` directory of them
+out of the state directory, relabel by hand the tasks carrying one of those
+labels, and put the directories back once a release that declares them is
 installed again.
 
 ## The adversarial review
