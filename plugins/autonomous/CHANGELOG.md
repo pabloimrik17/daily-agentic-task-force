@@ -1,5 +1,20 @@
 # Changelog
 
+## [2.6.0](https://github.com/pabloimrik17/daily-agentic-task-force/compare/autonomous--v2.5.0...autonomous--v2.6.0) (2026-11-27)
+
+
+### Features
+
+* **autonomous:** add the code review stage ([#115](https://github.com/pabloimrik17/daily-agentic-task-force/issues/115)) ([d01640a](https://github.com/pabloimrik17/daily-agentic-task-force/commit/d01640aef9817fcba363118c4fadb8e0bd9ab16d))
+* **autonomous:** add the review team skill ([#110](https://github.com/pabloimrik17/daily-agentic-task-force/issues/110)) ([4ad5455](https://github.com/pabloimrik17/daily-agentic-task-force/commit/4ad5455c2f2d71067f5bfd4bdea5b277cb1d518f))
+* **autonomous:** declare the stages that have no implementation yet (DOT-171) ([#116](https://github.com/pabloimrik17/daily-agentic-task-force/issues/116)) ([4459e27](https://github.com/pabloimrik17/daily-agentic-task-force/commit/4459e2744067a202951484c901de17627f9670a7))
+
+
+### Code Refactoring
+
+* **autonomous:** simplify the stage definitions and the transition table ([#108](https://github.com/pabloimrik17/daily-agentic-task-force/issues/108)) ([db9c827](https://github.com/pabloimrik17/daily-agentic-task-force/commit/db9c82771a2a87a18f2dd9b6cfd6c09a7024bbed))
+* purge comment noise ([#107](https://github.com/pabloimrik17/daily-agentic-task-force/issues/107)) ([50aa734](https://github.com/pabloimrik17/daily-agentic-task-force/commit/50aa734b63056dd2aea579a326ba7e186f7bc64a))
+
 ## [2.5.0](https://github.com/pabloimrik17/daily-agentic-task-force/compare/autonomous--v2.4.0...autonomous--v2.5.0) (2026-11-22)
 
 

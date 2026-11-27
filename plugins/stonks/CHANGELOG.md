@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.1.2](https://github.com/pabloimrik17/daily-agentic-task-force/compare/stonks--v1.1.1...stonks--v1.1.2) (2026-11-27)
+
+
+### Code Refactoring
+
+* purge comment noise ([#107](https://github.com/pabloimrik17/daily-agentic-task-force/issues/107)) ([50aa734](https://github.com/pabloimrik17/daily-agentic-task-force/commit/50aa734b63056dd2aea579a326ba7e186f7bc64a))
+
 ## [1.1.1](https://github.com/pabloimrik17/daily-agentic-task-force/compare/stonks--v1.1.0...stonks--v1.1.1) (2026-11-06)
 
 
