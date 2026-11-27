@@ -376,6 +376,42 @@ describe("runPublish: one review per round that opens threads", () => {
     });
 });
 
+describe("runPublish: a finding no thread can hold, in a round that opens no thread", () => {
+    const nowhere = finding({ id: "f9", location: { scope: "file", file: "docs/absent.md" } });
+    // A diff without the change's proposal, so the proposal cannot hold it either.
+    const diff = DIFF.split("diff --git a/openspec")[0] ?? "";
+    const note =
+        "f9 is not published: no thread can hold it, and round 1 opens no thread whose review could carry it";
+
+    it("notes it when the round holds only a linked thread", async () => {
+        const port = fakePort({ threads: [human("H1")] });
+        const linked = finding({ id: "f2", thread: "H1" });
+        const harness = await setup({ port, entries: [linked, nowhere], diff });
+        const report = await publish(harness);
+        expect(report.outcome).toBe("advance");
+        expect(port.reviews).toEqual([]);
+        expect(report.notes).toContain(note);
+    });
+
+    it("notes it when the round holds only an exact match of an earlier attempt", async () => {
+        const port = fakePort({ threads: [published("E1", ATTEMPT, finding(), false)] });
+        const harness = await setup({ id: SECOND, port, entries: [finding(), nowhere], diff });
+        const report = await publish(harness, SECOND);
+        expect(report.outcome).toBe("advance");
+        expect(port.reviews).toEqual([]);
+        expect(report.notes).toContain(note);
+    });
+
+    it("does not note it on a second run, whose first run's review carried it", async () => {
+        const harness = await setup({ entries: [finding(), nowhere], diff });
+        await publish(harness);
+        const report = await publish(harness);
+        expect(report.outcome).toBe("advance");
+        expect(harness.fake.reviews).toHaveLength(1);
+        expect(report.notes).not.toContain(note);
+    });
+});
+
 describe("runPublish: existing threads are answered, never duplicated", () => {
     it("Human comment fixed: the thread gains a reply naming the commit and is resolved", async () => {
         const port = fakePort({ threads: [human("H1")] });

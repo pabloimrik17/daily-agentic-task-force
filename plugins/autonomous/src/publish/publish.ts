@@ -11,6 +11,7 @@ import { READ_BACK_TRIES, readUntil, type Wait } from "../read-back.ts";
 import type { Result } from "../result.ts";
 import { guideAvailability } from "../review-team/availability.ts";
 import { continuingReply, firstComment, reviewBody, stateReply } from "./format.ts";
+import { threadMarker } from "./markers.ts";
 import { type Planned, planEntries, showsState, STAGE, wantsResolved } from "./plan.ts";
 import { type PrepareDeps, prepare, type Prepared } from "./prepare.ts";
 import { PUBLISH_RECEIPT_SCHEMA, readPublishReceipt, writePublishReceipt } from "./receipt.ts";
@@ -153,14 +154,15 @@ async function postReview(
 }
 
 // A round that opens no thread posts no review, so a comment no thread can hold has no body to go
-// in. A round that holds a thread posted earlier carried it in that review.
+// in. A round that holds a thread this attempt opened posted its review earlier, which carried it;
+// a linked thread or an exact match belongs to no review of this attempt.
 function noteUnanchored(
-    { report }: Publishing,
+    { findings, report }: Publishing,
     round: number,
     planned: readonly Planned[],
     unanchored: readonly Planned[],
 ): void {
-    if (planned.some(({ target }) => target.kind === "thread")) {
+    if (planned.some((item) => openedBy(findings.attempt, item))) {
         return;
     }
     for (const { entry } of unanchored) {
@@ -168,6 +170,14 @@ function noteUnanchored(
             `${entry.id} is not published: no thread can hold it, and round ${round} opens no thread whose review could carry it`,
         );
     }
+}
+
+function openedBy(attempt: string, { entry, target }: Planned): boolean {
+    if (target.kind !== "thread") {
+        return false;
+    }
+    const marker = threadMarker(target.thread.comments[0]?.body ?? "");
+    return marker?.attempt === attempt && marker.finding === entry.id;
 }
 
 async function replan(
