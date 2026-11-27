@@ -21,7 +21,8 @@ export interface PublishReceipt {
     attempt: string;
     pullRequest: { number: number; url: string };
     findingsDigest: string; // sha256 hex of the exact findings.json bytes published
-    walkthroughDigest: string | null; // sha256 hex of the walkthrough.json saved, null when none
+    // sha256 hex of the JSON array [walkthrough.json, walkthrough.patch] as saved; null when none
+    walkthroughDigest: string | null;
     publishedAt: string; // ISO 8601
 }
 

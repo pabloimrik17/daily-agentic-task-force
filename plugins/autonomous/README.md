@@ -1881,8 +1881,9 @@ The receipt:
 ```
 
 `findingsDigest` is the SHA-256 of the exact bytes of `findings.json` published,
-and `walkthroughDigest` that of the saved `walkthrough.json`, or null when there
-is none. The transition waits for this receipt (see
+and `walkthroughDigest` covers the saved walkthrough and its patch together: it
+is the SHA-256 of the JSON array that holds the text of `walkthrough.json` and
+of `walkthrough.patch`, or null when there is none. The transition waits for this receipt (see
 [The publish receipt](#the-publish-receipt)): a `findings.json` that changed
 after it needs a new publication.
 
