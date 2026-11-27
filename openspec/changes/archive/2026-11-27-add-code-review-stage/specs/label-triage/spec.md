@@ -36,5 +36,5 @@ For a task with no autonomy and no stage label, the autonomy decision SHALL choo
 
 #### Scenario: Task in a stage with no implementation
 
-- **WHEN** a task carries `personal` and `external-review`
+- **WHEN** a task carries `personal` and `qa`
 - **THEN** its autonomy decision may be `AFK` or `HITL`, and never `grill-me`
