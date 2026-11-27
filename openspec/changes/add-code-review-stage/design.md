@@ -6,7 +6,7 @@ See proposal.md, "Why". The current state that shapes the approach:
 - **Selection.** `select/stage.ts` holds `SUPPORTED_STAGES = ["grill-me", "proposal", "implement", "verify"]`; `splitByStage` keeps the most advanced supported stage.
 - **The verification stage** (`stages/verify/`) already does almost everything this stage needs, through the shared pieces of `stages/openspec-stage.ts`: `openspecChecks` (which accepts an empty workflow map), `changeCheck`, the orchestration, commits, closing, summary, blocked and constraints sections, `afkTransition`/`hitlTransition`, and the plugin skill loader `stages/plugin-skill.ts`.
 - **The review team** (`src/review-team/`, `skills/review-team/`) plans, runs and collects a report into a directory the caller names, with the walkthrough's draft guide (`walkthrough.json`) validated by `review-team/guide.ts` against a patch. Its skill's commands name `${CLAUDE_PLUGIN_ROOT}`, which only a skill invocation resolves.
-- **The transition** (`transition/mode.ts`) keys its rows by the stage they leave; `receipt.ts` names what each stage persists; `guards.ts` checks the work left in the workspace for `implement` and `verify`.
+- **The transition** (`transition/table.ts`) holds one row per stage it leaves (`transitionRow(stage)`: the stage it leads to, the question's wording, what the stage persists, and whether leaving is guarded); `receipt.ts` reads what a stage persists from its row; `guards.ts` checks the work left in the workspace for the guarded rows, `implement`, `verify` and, with this change, `code-review`.
 - **GitHub.** `pull-request/github.ts` runs `gh` and `git` through `Exec`; it reads and writes pull requests and plain comments, and has no GraphQL call yet. Review threads, file-level comments, replies and resolutions exist only in GitHub's GraphQL API.
 - **Modes.** Persist, pull-request and log modes each take an attempt id, run no step, take no run lock, write a receipt in the attempt's directory and print a versioned report; `args.ts` and `run.ts` dispatch them.
 
@@ -33,7 +33,7 @@ Adding `external-review` to `STAGE_LABELS`, `COLOURS` and `MEANINGS` covers dete
 
 ### D2. The stage lives in `stages/code-review/` and reuses verification's pieces
 
-`stages/code-review/stage.ts` holds the contract (id `code-review`, emoji 🧐, `--model opus --effort high`, prerequisites, completion) and `prompt.ts` the prompt. The prerequisites are `openspecChecks({ stage: "code-review", workflows: {}, pullRequest: "required" })`, `changeCheck`, the two skill bodies and the threads read at launch. Sections verification also needs come from `stages/openspec-stage.ts`; anything that both prompts would phrase the same way and that still lives in `stages/verify/prompt.ts` moves there, with verification's text unchanged and guarded by its tests.
+`stages/code-review/stage.ts` holds the contract (id `code-review`, emoji 🧐, `--model opus --effort high` as `opusHighArgs`, prerequisites, completion as `leftStage("code-review")`) and `prompt.ts` the prompt. The prerequisites are `openspecChecks({ stage: "code-review", workflows: {}, pullRequest: "required" })`, `changeCheck`, the two skill bodies and the threads read at launch. Sections verification also needs come from `stages/openspec-stage.ts`; anything that both prompts would phrase the same way and that still lives in `stages/verify/prompt.ts` moves there, with verification's text unchanged and guarded by its tests.
 
 *Alternative:* derive the code review stage from the verification stage by parameters. Rejected: the two prompts share pieces but not their structure (the review team, publishing, the human round), and a parametrised verification prompt would hide that.
 
@@ -122,7 +122,7 @@ The `### Code review` section names threads by state, fixed suggestions, refuted
 
 ### D17. The transition table gains a row
 
-`TRANSITIONS` gains `"code-review": { to: "external-review", asks: "approval" }`, and `READY` says "the code review is ready". `receipt.ts` gains `code-review: "stage summary"`. ADR 0004 is widened to the fourth transition without an answer, and ADR 0007's consequence that a task stops at `code-review` now names `external-review`.
+The table in `transition/table.ts` gains the row `"code-review"`: it leads to `external-review`, asks for approval, says "the code review is ready", persists the `stage summary` and is guarded. `receipt.ts` reads the persisted item from that row, so it needs no entry of its own; it checks the publish receipt for `code-review` only. ADR 0004 is widened to the fourth transition without an answer, and ADR 0007's consequence that a task stops at `code-review` now names `external-review`.
 
 ### D18. Persist mode gains a plan for `code-review`
 

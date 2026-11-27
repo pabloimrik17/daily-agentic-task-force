@@ -52,7 +52,7 @@ A task that leaves verification carries `code-review` and stops there: selection
     - the new stage: `stages/code-review/` (stage, prompt, prerequisites);
     - the plugin skill loader, which resolves the plugin root in a skill's body: `stages/plugin-skill.ts`;
     - selection: `select/stage.ts`;
-    - the transition, its guards and receipts: `transition/{mode,receipt,guards}.ts`;
+    - the transition, its guards and receipts: `transition/{table,mode,receipt,guards}.ts`;
     - persist mode: `persist/persist.ts`;
     - publish mode and the finding threads (new): `publish/`, with the GitHub reads and writes it needs in `pull-request/`;
     - the walkthrough's update, reusing `review-team/guide.ts`;
