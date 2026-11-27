@@ -133,6 +133,16 @@ describe("detect: three label groups", () => {
         expect(Object.values(detection.groups).every(isComplete)).toBe(true);
     });
 
+    it("Task waiting for external review: personal, HITL and external-review are complete for all three groups", () => {
+        const detection = detect(task(["personal", "HITL", "external-review"]), rules());
+        expect(detection.groups).toEqual({
+            scope: { status: "present", labels: ["personal"] },
+            autonomy: { status: "present", labels: ["HITL"] },
+            stage: { status: "present", labels: ["external-review"] },
+        });
+        expect(Object.values(detection.groups).every(isComplete)).toBe(true);
+    });
+
     it.each(["qa", "external-review", "wrap-up", "ready-to-merge"])(
         "Task in a stage with no implementation: personal, AFK and %s are complete for all three groups",
         (stage) => {
@@ -160,6 +170,15 @@ describe("detect: three label groups", () => {
         expect(detection.groups.stage).toEqual({
             status: "conflict",
             labels: ["verify", "code-review"],
+        });
+        expect(isComplete(detection.groups.stage)).toBe(false);
+    });
+
+    it("code-review with external-review: a stage conflict for a human to resolve", () => {
+        const detection = detect(task(["code-review", "external-review"]), rules());
+        expect(detection.groups.stage).toEqual({
+            status: "conflict",
+            labels: ["code-review", "external-review"],
         });
         expect(isComplete(detection.groups.stage)).toBe(false);
     });
@@ -219,6 +238,15 @@ describe("detect", () => {
 
     it("Near-miss code-review: Code Review is untagged for the stage group only", () => {
         const detection = detect(task(["work", "AFK", "Code Review"]), rules());
+        expect(detection.groups).toEqual({
+            scope: { status: "present", labels: ["work"] },
+            autonomy: { status: "present", labels: ["AFK"] },
+            stage: { status: "missing", evidence: [] },
+        });
+    });
+
+    it("Near-miss external-review: External Review is untagged for the stage group only", () => {
+        const detection = detect(task(["work", "AFK", "External Review"]), rules());
         expect(detection.groups).toEqual({
             scope: { status: "present", labels: ["work"] },
             autonomy: { status: "present", labels: ["AFK"] },

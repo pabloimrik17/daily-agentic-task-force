@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { ATTEMPT_SCHEMA, type AttemptRecord } from "../attempts/record.ts";
 import { workTask } from "../select/test-fixtures.ts";
+import { codeReviewStage } from "./code-review/stage.ts";
 import { grillMeStage } from "./grill-me/stage.ts";
 import { implementStage } from "./implement/stage.ts";
 import { proposalStage } from "./proposal/stage.ts";
@@ -49,13 +50,21 @@ function input(description: string | null = "Do the thing."): StagePromptInput {
 }
 
 describe("the stage registry", () => {
-    it("holds the test, grill-me, proposal, implement and verify stages", () => {
-        expect([...STAGES.keys()]).toEqual(["test", "grill-me", "proposal", "implement", "verify"]);
+    it("holds the test, grill-me, proposal, implement, verify and code-review stages", () => {
+        expect([...STAGES.keys()]).toEqual([
+            "test",
+            "grill-me",
+            "proposal",
+            "implement",
+            "verify",
+            "code-review",
+        ]);
         expect(stageFor("test")).toBe(testStage);
         expect(stageFor("grill-me")).toBe(grillMeStage);
         expect(stageFor("proposal")).toBe(proposalStage);
         expect(stageFor("implement")).toBe(implementStage);
         expect(stageFor("verify")).toBe(verifyStage);
+        expect(stageFor("code-review")).toBe(codeReviewStage);
     });
 });
 

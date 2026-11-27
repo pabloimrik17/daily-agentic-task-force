@@ -208,6 +208,7 @@ export function triageContext(options: {
             pullRequest: undefined,
             title: undefined,
             log: undefined,
+            publish: undefined,
             loop: false,
             grills: undefined,
             parallel: undefined,

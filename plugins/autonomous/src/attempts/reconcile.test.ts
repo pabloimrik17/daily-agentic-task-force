@@ -345,15 +345,15 @@ describe("reconcile: completion needs two proofs", () => {
         "reads a record of a stage this build does not implement and only observes it, its session %s",
         async (status) => {
             const declared = record({
-                id: "linear:DOT-121:code-review:1",
-                task: { source: "linear", id: "DOT-121", title: "Code review stage" },
-                stage: "code-review",
+                id: "linear:DOT-121:qa:1",
+                task: { source: "linear", id: "DOT-121", title: "QA stage" },
+                stage: "qa",
             });
             await given(declared);
             await marker(declared.id);
             const sessions = fakeSessions({ observe: () => ok(seen(status)) });
             const fakes = trackers([], {
-                linear: [task("linear", "DOT-121", ["taken", "code-review"])],
+                linear: [task("linear", "DOT-121", ["taken", "qa"])],
             });
             const result = await reconcileStep.run(context({ sessions, trackers: fakes }));
             expect(result.data.attempts).toHaveLength(1);

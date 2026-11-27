@@ -26,11 +26,23 @@ the adversarial review:
 If one is missing, ask the caller, or the person who asked for the review,
 before the report starts. Never guess the floor.
 
+A caller may also supply these two. Never ask for them: without them, they do
+not apply.
+
+- human rounds: further rounds that follow the human's comments;
+- advisory reporters: the reporters whose findings the refutation only advises
+  on.
+
 ## The phases
 
 Run the phases in this order: the report, the finding triage, the refutation,
 the fix and the fix check. A round runs each phase once: no second report
 follows the fixes, even when every fix passes its fix check.
+
+Only a caller that supplies human rounds gets more. When the human comments
+after a round, run a human round: the finding triage, the refutation, the fix
+and the fix check, once, with the human's comments as the report. Treat each
+comment as a finding reported by the human. No reviewer reports again.
 
 ## Nobody judges their own work
 
@@ -85,12 +97,25 @@ reason in the record as an assumption.
   it, when a test can show it; otherwise, the exact text it contradicts or
   misses, beside the place that does so.
 - A finding with no reproduction does not survive. Write in the record why it
-  does not hold.
+  does not hold. The only exception is a finding of an advisory reporter, below.
 - Once the record holds a reproduction test's path and its text, remove the
   test from the working tree, so no finding's failing test is in the tree
   while another finding is fixed, checked, committed or pushed. A test of a
   finding left unfixed, because it was refuted or deferred, never comes back
   and never reaches a commit.
+
+## An advisory refutation
+
+This applies only to a finding whose reporter the caller named as advisory.
+The refutation still runs, but it does not decide:
+
+- Show that reporter the refutation's outcome and its counter-evidence.
+- The finding survives or not as they decide. It survives without a
+  reproduction when they keep it. Write their decision in the record.
+- When the refutation wrote a reproduction for it, its fix and its fix check
+  use that reproduction as for any other finding. When it survives without
+  one, judge the fix against the finding's statement: accept it only when the
+  statement no longer holds and the fix does no more than the finding asks.
 
 ## The fix
 

@@ -149,6 +149,7 @@ export function context(
             pullRequest: undefined,
             title: undefined,
             log: undefined,
+            publish: undefined,
             releaseWorkspace: false,
             force: false,
             json: false,

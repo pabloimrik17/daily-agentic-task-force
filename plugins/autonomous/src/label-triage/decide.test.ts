@@ -155,6 +155,27 @@ describe("decide: autonomy in code-review", () => {
     });
 });
 
+describe("decide: autonomy in external-review", () => {
+    it("Task in external-review: AFK is eligible and grill-me is asked as invalid", () => {
+        expect(
+            decide(derivation({ group: "autonomy", labels: ["HITL"] }), 0.95, [
+                "personal",
+                "external-review",
+            ]),
+        ).toEqual({ status: "eligible", reason: "" });
+        expect(
+            decide(
+                derivation({ group: "autonomy", labels: ["grill-me"], confidence: 0.99 }),
+                0.95,
+                ["personal", "external-review"],
+            ),
+        ).toEqual({
+            status: "asked",
+            reason: "invalid under the contract: grill-me with a stage label: external-review",
+        });
+    });
+});
+
 describe("decide", () => {
     it("is eligible when confidence is at or above the threshold and the labels are valid", () => {
         expect(decide(derivation({ confidence: 1 }), 0.95, [])).toEqual({

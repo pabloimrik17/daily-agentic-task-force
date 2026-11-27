@@ -350,7 +350,7 @@ describe("launch: the slots of the loop", () => {
 describe("launch: preconditions", () => {
     // Selection excludes a task in a stage without an implementation, so none reaches this
     // guard; the args force a declared stage here.
-    it.each(["code-review", "qa", "external-review", "wrap-up"] as const)(
+    it.each(["qa", "external-review", "wrap-up"] as const)(
         "Declared stage without implementation reaches launch: %s waits naming a stage without implementation, before any workspace",
         async (stage) => {
             const { ctx, workspace, sessions } = setup({ args: { stage } });

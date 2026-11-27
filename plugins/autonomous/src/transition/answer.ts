@@ -20,7 +20,7 @@ import {
     stageAutonomy,
     type TransitionRow,
 } from "./table.ts";
-import { awaitedDetail, awaitedReceipt } from "./receipt.ts";
+import { awaitedDetails } from "./receipt.ts";
 import { recordTransition } from "./transitioned.ts";
 
 const VALUES: readonly string[] = [...AUTONOMY_OPTIONS, ...APPROVAL_VALUES];
@@ -89,12 +89,12 @@ async function settle(answer: Answer, ctx: AnswerContext, handling: Handling): P
 
 async function transition(answering: Answering): Promise<Settlement> {
     const { tracker, ref, row, before, value, state, wait } = answering;
-    const awaited = await awaitedReceipt(state, ref, row.from);
+    const awaited = await awaitedDetails(state, ref, row.from);
     if (!awaited.ok) {
         return { status: "failed", detail: awaited.error };
     }
     if (awaited.value !== null) {
-        return { status: "rejected", detail: awaitedDetail(awaited.value) };
+        return { status: "rejected", detail: awaited.value };
     }
     const refused = await refusal(answering);
     if (refused !== null) {

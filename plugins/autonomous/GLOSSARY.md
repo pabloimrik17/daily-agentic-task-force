@@ -7,11 +7,12 @@ attempt to advance a stage.
 Labels come in three groups: scope, autonomy and stage. Scope and autonomy are
 properties that persist, and each transition replaces the stage
 ([ADR 0001](docs/adr/0001-properties-persist-stages-replace.md)). The grill,
-proposal preparation, the implementation and the verification run as stages
-(see the README's [grill-me stage](README.md#the-grill-me-stage),
+proposal preparation, the implementation, the verification and the code review
+run as stages (see the README's [grill-me stage](README.md#the-grill-me-stage),
 [proposal stage](README.md#the-proposal-stage),
-[implementation stage](README.md#the-implementation-stage) and
-[verification stage](README.md#the-verification-stage)).
+[implementation stage](README.md#the-implementation-stage),
+[verification stage](README.md#the-verification-stage) and
+[code review stage](README.md#the-code-review-stage)).
 
 ## Language
 
@@ -54,7 +55,9 @@ _Avoid_: review, code review
 **Code review**:
 The review stage that judges the quality of the code a task's implementation
 changed, not its match with the proposal, through a review team, before
-anyone outside sees the pull request. It does not exist yet.
+anyone outside sees the pull request. It publishes what survives as finding
+threads on the pull request (see the README's
+[code review stage](README.md#the-code-review-stage)).
 _Avoid_: review, verification, external review, self review
 
 **QA**:
@@ -87,6 +90,18 @@ phases are the report, the finding triage, the refutation, the fix and the fix
 check (see the README's
 [adversarial review](README.md#the-adversarial-review)).
 
+**Review round**:
+One pass of an adversarial review through its phases, from one report to its
+fix checks. A review stage runs one, and an `HITL` code review adds human
+rounds after it.
+_Avoid_: round (alone), pass, iteration
+
+**Human round**:
+A review round of an `HITL` code review whose report is the human's comments
+on the pull request or on the walkthrough. Its refutation is advisory: the
+human, not the refutation, decides whether a finding of theirs stands.
+_Avoid_: feedback round, second review
+
 **Finding triage**:
 The phase of an adversarial review in which the orchestrator makes the
 reported findings its own: it merges and splits them, and sends each one to be
@@ -99,9 +114,10 @@ One thing a review reports as wrong or missing, with the evidence for it.
 _Avoid_: issue, problem
 
 **Reviewer**:
-A teammate or tool that reports findings on a subject from one angle, such as
-correctness, security or structure. It only reports: it never triages,
-refutes or fixes.
+Whoever reports findings on a subject from one angle, such as correctness,
+security or structure: a teammate, a tool, a person, or an earlier stage that
+passed them on. As a reviewer it only reports: it never triages, refutes or
+fixes.
 _Avoid_: agent, bot
 
 **Review team**:
@@ -285,8 +301,9 @@ _Avoid_: human slot
 A slot occupied by an attempt of any stage other than the grill.
 
 **Orchestrator**:
-The agent of an implementation session. It shares the proposal's tasks out
-among teammates and is the only one that commits their work.
+The agent of a stage session that shares the stage's work out among teammates
+and is the only one that commits it: the implementation, the verification and
+the code review each have one.
 _Avoid_: main agent, lead
 
 **Teammate**:
@@ -351,8 +368,11 @@ A task whose autonomy is decided starts at `proposal`, a task in `grill-me`
 moves to `proposal` when the grill ends, a task in `proposal` moves to
 `implement` when its proposal preparation ends, a task in `implement` moves to
 `verify` when its implementation ends, and a task in `verify` moves to
-`code-review` when its verification ends. `ready-to-merge` is a label with no
-stage: the task waits there for a person to merge its pull request.
+`code-review` when its verification ends, and a task in `code-review` moves to
+`external-review` when its code review ends. `external-review` means the task
+waits for the review of the pull request's bots and reviewers; no stage runs
+for it yet. `ready-to-merge` is a label with no stage: the task waits there for
+a person to merge its pull request.
 
 **Taken label**:
 `taken`: marks a taken task for as long as an agent or a person advances it.
@@ -379,7 +399,8 @@ to the human.
 A task leaving its stage: its stage label is replaced and, when the stage
 decided it, its autonomy label is set. It follows the human's answer to a
 question at the end of the stage, except when an `AFK` task leaves proposal
-preparation, implementation or verification, which needs no answer. A script
+preparation, implementation, verification or code review, which needs no
+answer. A script
 applies it.
 
 ### Talking to the human
@@ -403,7 +424,7 @@ _Avoid_: asked question, pending question
 
 **Round**:
 One asking of a handoff's questions, followed by at most one answer mode
-invocation. A run has at most one round.
+invocation. A run has at most one round. It is not a review round.
 
 **Answer**:
 The human's choice for one question, made only of that question's options. It

@@ -30,6 +30,11 @@ Every task SHALL carry labels from three groups. The **scope** group is `work` a
 - **WHEN** a task carries `personal`, `AFK` and `code-review`
 - **THEN** it is complete for all three groups
 
+#### Scenario: Task waiting for external review
+
+- **WHEN** a task carries `personal`, `HITL` and `external-review`
+- **THEN** it is complete for all three groups
+
 #### Scenario: Grill without autonomy
 
 - **WHEN** a task carries `personal` and `grill-me`
@@ -85,6 +90,11 @@ Every task SHALL carry labels from three groups. The **scope** group is `work` a
 - **WHEN** a task carries `verify` and `code-review`
 - **THEN** it is reported as a stage conflict for a human to resolve
 
+#### Scenario: code-review with external-review
+
+- **WHEN** a task carries `code-review` and `external-review`
+- **THEN** it is reported as a stage conflict for a human to resolve
+
 #### Scenario: Task in a stage with no implementation
 
 - **WHEN** a task carries `personal`, `AFK` and one of `qa`, `external-review`, `wrap-up` or `ready-to-merge`
@@ -123,6 +133,11 @@ The contract SHALL fix one meaning per label: `work` is Nazaries work; `personal
 
 - **WHEN** a task carries `AFK` and `code-review`
 - **THEN** the contract reads it as verified against its proposal and ready for an agent to review its code without a human
+
+#### Scenario: external-review with HITL
+
+- **WHEN** a task carries `HITL` and `external-review`
+- **THEN** the contract reads it as having passed every review stage and being ready for external review, with a human intervening in each stage
 
 #### Scenario: Meaning of work in a triage question
 
@@ -176,6 +191,16 @@ Each label SHALL have exactly one spelling, used verbatim on every tracker: `wor
 #### Scenario: Near-miss code-review
 
 - **WHEN** a task carries `Code Review` and the configuration declares no alias for it
+- **THEN** the task is untagged for the stage group
+
+#### Scenario: external-review bootstrapped
+
+- **WHEN** Linear lacks `external-review` and the bootstrap runs
+- **THEN** `external-review` is created at workspace level with colour `#8b5e3c` and reported as created
+
+#### Scenario: Near-miss external-review
+
+- **WHEN** a task carries `External Review` and the configuration declares no alias for it
 - **THEN** the task is untagged for the stage group
 
 #### Scenario: Declared stage labels bootstrapped
@@ -352,7 +377,7 @@ The configuration SHALL NOT declare aliases for `taken`. The label bootstrap SHA
 
 ### Requirement: A transition replaces the stage
 
-A transition SHALL move a task out of its stage. It adds the next stage and, when the stage decided it, the answered autonomy; then it removes the stage it leaves and, when an autonomy was answered, every other autonomy label; and it reads the task back. Labels SHALL be added before any is removed. It is the first exception to the rule that the loop never removes a label, and it removes nothing else. There SHALL be four transitions: from `grill-me` to `proposal`, on a human's answer that sets the autonomy; from `proposal` to `implement`; from `implement` to `verify`; and from `verify` to `code-review`. The last three change no autonomy.
+A transition SHALL move a task out of its stage. It adds the next stage and, when the stage decided it, the answered autonomy; then it removes the stage it leaves and, when an autonomy was answered, every other autonomy label; and it reads the task back. Labels SHALL be added before any is removed. It is the first exception to the rule that the loop never removes a label, and it removes nothing else. There SHALL be five transitions: from `grill-me` to `proposal`, on a human's answer that sets the autonomy; from `proposal` to `implement`; from `implement` to `verify`; from `verify` to `code-review`; and from `code-review` to `external-review`. The last four change no autonomy.
 
 #### Scenario: Grill ends with AFK
 
@@ -388,6 +413,11 @@ A transition SHALL move a task out of its stage. It adds the next stage and, whe
 
 - **WHEN** the transition out of `verify` is applied to a task carrying `personal`, `HITL` and `verify`
 - **THEN** the task carries `personal`, `HITL` and `code-review`, and `verify` was removed
+
+#### Scenario: Code review done
+
+- **WHEN** the transition out of `code-review` is applied to a task carrying `personal`, `HITL` and `code-review`
+- **THEN** the task carries `personal`, `HITL` and `external-review`, and `code-review` was removed
 
 ### Requirement: The autonomy decides whether leaving proposal needs an answer
 
@@ -500,4 +530,23 @@ The transition from `verify` to `code-review` SHALL be applied without a human's
 #### Scenario: Autonomy missing
 
 - **WHEN** the transition out of `verify` is requested for a task carrying `personal` and `verify` only
+- **THEN** nothing is written and the reason names the missing autonomy
+
+### Requirement: The autonomy decides whether leaving code-review needs an answer
+
+The transition from `code-review` to `external-review` SHALL be applied without a human's answer for a task carrying `AFK`, and only on a human's approval for a task carrying `HITL`. A task in `code-review` whose autonomy is missing or in conflict SHALL NOT be transitioned.
+
+#### Scenario: AFK task
+
+- **WHEN** the transition out of `code-review` is requested for a task carrying `work`, `AFK` and `code-review`, its work is finished and its findings are published
+- **THEN** it is applied with no question, and the task carries `work`, `AFK` and `external-review`
+
+#### Scenario: HITL task not approved
+
+- **WHEN** the human answers "Later" for a task carrying `HITL` and `code-review`
+- **THEN** the task keeps `code-review` and nothing is written
+
+#### Scenario: Autonomy missing
+
+- **WHEN** the transition out of `code-review` is requested for a task carrying `personal` and `code-review` only
 - **THEN** nothing is written and the reason names the missing autonomy

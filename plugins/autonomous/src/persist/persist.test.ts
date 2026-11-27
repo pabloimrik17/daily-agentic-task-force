@@ -633,7 +633,7 @@ describe("persist: Persist preconditions", () => {
         const report = await run();
         expectNothingWritten(report, fake, dir);
         expect(report.reasons).toEqual([
-            `attempt ${id} is a test attempt: persist mode takes only grill-me, proposal, implement and verify attempts`,
+            `attempt ${id} is a test attempt: persist mode takes only grill-me, proposal, implement, verify and code-review attempts`,
         ]);
     });
 
@@ -909,6 +909,66 @@ describe("persist: Verification attempts", () => {
 
     it("Verification attempt without a stage summary: the missing file is reported and nothing is written", async () => {
         const { run, fake, dir } = await arrangeVerify({}, { summary: null });
+        const report = await run();
+        expect(report.outcome).toBe("not-evaluable");
+        expect(report.reasons).toEqual([`${join(dir, "stage-summary.md")} is missing`]);
+        expect(fake.calls).toEqual([]);
+        expect(existsSync(receiptPath(dir))).toBe(false);
+    });
+});
+
+describe("persist: Code review attempts", () => {
+    const REVIEW = "linear:DOT-121:code-review:1";
+    const REVIEW_HEADER = `autonomous · code-review · ${REVIEW} · stage summary saved`;
+
+    const arrangeReview = (script: DocumentScript = {}, options: AttemptOptions = {}) =>
+        arrange({ stage: "code-review", definition: null, ...options }, script);
+
+    it("Code review attempt persisted: the comment is written and read back, the description is unchanged and the receipt is written", async () => {
+        const { run, fake, dir, id } = await arrangeReview();
+        const report = await run();
+        expect(id).toBe(REVIEW);
+        expect(report).toMatchObject({
+            outcome: "advance",
+            attempt: REVIEW,
+            task: { source: "linear", id: "DOT-121", title: "Fix the login" },
+            written: { description: false, comment: "posted" },
+            readBack: { description: false, comment: true },
+            notes: [],
+            reasons: [],
+            receipt: receiptPath(dir),
+        });
+        expect(exitCodeFor(report.outcome)).toBe(0);
+        expect(fake.description()).toBe("Fix the login");
+        expect(existsSync(join(dir, "description.md"))).toBe(false);
+        expect(readJson(receiptPath(dir))).toEqual({
+            schema: RECEIPT_SCHEMA,
+            attempt: REVIEW,
+            task: { source: "linear", id: "DOT-121" },
+            at: STARTED.toISOString(),
+            header: REVIEW_HEADER,
+        });
+        expect(fake.calls).toEqual([
+            "readTask DOT-121",
+            "readComments DOT-121",
+            "addComment DOT-121",
+            "readComments DOT-121",
+        ]);
+    });
+
+    it("Comment header: the first line is the header, a blank line follows, and the description is unchanged", async () => {
+        const { run, fake, dir } = await arrangeReview({}, { summary: SUMMARY });
+        await run();
+        expect(headerOf(REVIEW)).toBe(REVIEW_HEADER);
+        expect(fake.comments()).toEqual([`${REVIEW_HEADER}\n\n${SUMMARY}`]);
+        expect(readFileSync(join(dir, "comment.md"), "utf8")).toBe(
+            `${REVIEW_HEADER}\n\n${SUMMARY}`,
+        );
+        expect(fake.description()).toBe("Fix the login");
+    });
+
+    it("Code review attempt without a stage summary: the missing file is reported and nothing is written", async () => {
+        const { run, fake, dir } = await arrangeReview({}, { summary: null });
         const report = await run();
         expect(report.outcome).toBe("not-evaluable");
         expect(report.reasons).toEqual([`${join(dir, "stage-summary.md")} is missing`]);

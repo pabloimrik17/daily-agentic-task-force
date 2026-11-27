@@ -3,8 +3,15 @@
 // order and stop at the first failure, so each reason names the one thing missing; together they
 // read everything the prompt needs.
 
-import { type Check, changeCheck, checkAll, leftStage, openspecChecks } from "../openspec-stage.ts";
-import { ADVERSARIAL_REVIEW_SKILL, loadPluginSkill } from "../plugin-skill.ts";
+import {
+    type Check,
+    changeCheck,
+    checkAll,
+    leftStage,
+    openspecChecks,
+    pluginSkillCheck,
+} from "../openspec-stage.ts";
+import { ADVERSARIAL_REVIEW_SKILL } from "../plugin-skill.ts";
 import { opusHighArgs, type Stage } from "../stage.ts";
 import {
     ADVERSARIAL_REVIEW_KEY,
@@ -12,12 +19,6 @@ import {
     VERIFY_WORKFLOW_KEY,
     verifyPrompt,
 } from "./prompt.ts";
-
-// Design D3: read from the plugin this run belongs to, never from an installed copy.
-const adversarialReview: Check = async () => {
-    const body = await loadPluginSkill(ADVERSARIAL_REVIEW_SKILL);
-    return body.ok ? { ok: true, value: { [ADVERSARIAL_REVIEW_KEY]: body.value } } : body;
-};
 
 // The pull request the implementation committed to is required: the change and its code live in it.
 const CHECKS: readonly Check[] = [
@@ -27,7 +28,7 @@ const CHECKS: readonly Check[] = [
         pullRequest: "required",
     }),
     changeCheck,
-    adversarialReview,
+    pluginSkillCheck(ADVERSARIAL_REVIEW_SKILL, ADVERSARIAL_REVIEW_KEY),
 ];
 
 export const verifyStage: Stage = {

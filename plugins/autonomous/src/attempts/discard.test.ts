@@ -73,6 +73,7 @@ function args(discard: string, releaseWorkspace = false): RunArgs {
         pullRequest: undefined,
         title: undefined,
         log: undefined,
+        publish: undefined,
         releaseWorkspace,
         force: false,
         json: false,
@@ -133,6 +134,12 @@ function fakePullRequests(script: Partial<PullRequests>, calls: string[]): PullR
             calls.push(`comments ${number}`);
             return script.comments?.(number) ?? Promise.resolve({ ok: true, value: [] });
         },
+        threads: unexpected("threads"),
+        pendingReview: unexpected("pendingReview"),
+        review: unexpected("review"),
+        reply: unexpected("reply"),
+        resolve: unexpected("resolve"),
+        unresolve: unexpected("unresolve"),
     };
 }
 

@@ -1,7 +1,7 @@
 // Transition mode (spec autonomous-run, "Transition mode", "Transition question", "Approval
 // question", "Transition report"). It writes only for an AFK task leaving a stage left on
-// approval, proposal, implement or verify; every other answer comes back through answer mode
-// (./answer.ts).
+// approval, proposal, implement, verify or code-review; every other answer comes back through
+// answer mode (./answer.ts).
 
 import { isSource, taskKey, type TaskRef } from "../attempts/record.ts";
 import type { AutonomousConfig, Source } from "../config.ts";
@@ -13,7 +13,7 @@ import type { Result } from "../result.ts";
 import type { HandoffOption, HandoffQuestion } from "../runner.ts";
 import { applyTransition, list } from "./apply.ts";
 import { type GuardTools, guardsOnLeaving } from "./guards.ts";
-import { awaitedDetail, awaitedReceipt } from "./receipt.ts";
+import { awaitedDetails } from "./receipt.ts";
 import {
     AUTONOMY_OPTIONS,
     rowOf,
@@ -128,12 +128,12 @@ export async function runTransition(
         return { ...report, task, reasons: [leaving.error] };
     }
     const row = leaving.value;
-    const awaited = await awaitedReceipt(deps.state, ref, row.from);
+    const awaited = await awaitedDetails(deps.state, ref, row.from);
     if (!awaited.ok) {
         return { ...report, task, reasons: [awaited.error] };
     }
     if (awaited.value !== null) {
-        return { ...report, task, reasons: [awaitedDetail(awaited.value)] };
+        return { ...report, task, reasons: [awaited.value] };
     }
     if (row.asks === "autonomy") {
         return asking(report, task, transitionQuestion(ref, task, row));
@@ -157,7 +157,7 @@ function rowToLeave(
     return { ok: true, value: row };
 }
 
-// "grill-me, proposal, implement and verify"
+// "grill-me, proposal, implement, verify and code-review"
 const STAGE_LIST = `${TRANSITION_STAGES.slice(0, -1).join(", ")} and ${TRANSITION_STAGES.at(-1)}`;
 
 function asking(

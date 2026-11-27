@@ -49,7 +49,10 @@ import {
     startAttempt,
     trackersWith,
 } from "./persist/test-fixtures.ts";
-import type { PullRequests } from "./pull-request/port.ts";
+import type { ExecResult } from "./exec.ts";
+import type { PullRequests, ReviewThread } from "./pull-request/port.ts";
+import { FINDINGS_FILE, PUBLISH_RECEIPT_FILE } from "./publish/receipt.ts";
+import { CHANGE, DIFF, finding, recordText } from "./publish/test-fixtures.ts";
 import { openUsageSource } from "./quota-gate/openusage.ts";
 import {
     ANA,
@@ -159,6 +162,7 @@ function deps(steps: readonly Step[] | undefined, overrides: Partial<MainDeps> =
         openspec: () => Promise.resolve({ ok: false, error: "unused" }),
         openspecIn: () => () => Promise.resolve({ ok: false, error: "unused" }),
         git: () => Promise.resolve({ ok: false, error: "unused" }),
+        plannotatorIn: () => () => Promise.resolve({ ok: false, error: "unused" }),
         stdout: (t) => out.push(t),
         stderr: (t) => err.push(t),
         wait: () => Promise.reject(new Error("wait was not expected")),
@@ -1447,12 +1451,12 @@ describe("main --transition", () => {
     });
 
     it("Task not in grill-me: exits 3 with the reason and no handoff", async () => {
-        const { d, out, calls } = transitionDeps(["personal", "AFK", "code-review"]);
+        const { d, out, calls } = transitionDeps(["personal", "AFK", "external-review"]);
         expect(await main(transitionArgs("--json"), d)).toBe(3);
         const report = documentOf(out);
         expect(report.outcome).toBe("not-evaluable");
         expect(report.reasons).toEqual([
-            "beads B-1 is in none of grill-me, proposal, implement and verify (labels [personal, AFK, code-review])",
+            "beads B-1 is in none of grill-me, proposal, implement, verify and code-review (labels [personal, AFK, external-review])",
         ]);
         expect(report).not.toHaveProperty("handoff");
         expect(calls).toEqual(["beads:readTask:B-1"]);
@@ -1787,6 +1791,13 @@ function fakePullRequests(log: string[]): PullRequests {
         edit: () => ok("edit", undefined),
         comment: () => ok("comment", undefined),
         comments: () => ok("comments", []),
+        threads: () => ok("threads", []),
+        pendingReview: () => ok("pendingReview", null),
+        review: () =>
+            ok("review", { id: "R_1", url: "https://github.com/o/r/pull/7#pullrequestreview-1" }),
+        reply: () => ok("reply", undefined),
+        resolve: () => ok("resolve", undefined),
+        unresolve: () => ok("unresolve", undefined),
     };
 }
 
@@ -1961,6 +1972,215 @@ describe("main --log", () => {
         expect(out).toHaveLength(1);
         expect(JSON.parse(out[0] as string)).toMatchObject({
             schema: "autonomous.log.v1",
+            outcome: "not-evaluable",
+            receipt: null,
+        });
+    });
+});
+
+describe("main --publish", () => {
+    const dir = mkdtempSync(join(tmpdir(), "autonomous-publish-"));
+    const configPath = join(dir, "config.json");
+    writeFileSync(configPath, JSON.stringify(config()));
+    afterAll(() => rmSync(dir, { recursive: true, force: true }));
+
+    const ATTEMPT = "linear:DOT-121:code-review:1";
+    const PR_URL = "https://github.com/o/r/pull/7";
+    const BRANCH = "feature/DOT-109-stage-session-manager";
+
+    function threadedPullRequest(log: string[]): PullRequests {
+        const threads: ReviewThread[] = [];
+        const done = <T>(name: string, value: T) => {
+            log.push(name);
+            return Promise.resolve({ ok: true as const, value });
+        };
+        return {
+            ...fakePullRequests(log),
+            find: () => done("find", { number: 7, url: PR_URL, title: "t" }),
+            threads: () => done("threads", structuredClone(threads)),
+            review: (_number, _body, opened) => {
+                for (const { anchor, body } of opened) {
+                    const id = `T${threads.length + 1}`;
+                    const line = anchor.kind === "line";
+                    threads.push({
+                        id,
+                        path: anchor.path,
+                        subjectType: line ? "LINE" : "FILE",
+                        line: line ? anchor.line : null,
+                        startLine: null,
+                        side: line ? anchor.side : null,
+                        resolved: false,
+                        outdated: false,
+                        comments: [
+                            {
+                                id: `${id}-c`,
+                                body,
+                                url: `${PR_URL}#${id}`,
+                                author: "me",
+                                createdAt: "",
+                            },
+                        ],
+                    });
+                }
+                return done("review", { id: "R1", url: `${PR_URL}#pullrequestreview-1` });
+            },
+            resolve: (id) => {
+                const found = threads.find((item) => item.id === id);
+                if (found !== undefined) {
+                    found.resolved = true;
+                }
+                return done("resolve", undefined);
+            },
+        };
+    }
+
+    function workspaceGit(ahead: number) {
+        return (args: string[]): Promise<ExecResult> => {
+            const listing = `openspec/changes/${CHANGE}/proposal.md\n`;
+            const answers: Record<string, string> = {
+                fetch: "",
+                "rev-parse": "0ddba11\n",
+                "rev-list": `${ahead}\n`,
+                log: "f00dfee\n",
+                "merge-base": "5ca1ab1e\n",
+                diff: args.includes("--name-only") ? listing : DIFF,
+            };
+            const stdout = answers[args[2] ?? ""];
+            return Promise.resolve(
+                stdout === undefined
+                    ? { ok: false, error: `git ${args[2]} was not expected` }
+                    : { ok: true, stdout },
+            );
+        };
+    }
+
+    interface PublishSetup {
+        stage?: "code-review" | "verify";
+        record?: string | null;
+        ahead?: number;
+        env?: Record<string, string>;
+    }
+
+    async function publishDeps(options: PublishSetup = {}) {
+        const stateDir = state();
+        const { dir: attempt } = await startAttempt(stateDir, {
+            stage: options.stage ?? "code-review",
+        });
+        const findings = options.record === undefined ? recordText([finding()]) : options.record;
+        if (findings !== null) {
+            writeFileSync(join(attempt, FINDINGS_FILE), findings);
+        }
+        // A walkthrough draft, so the walkthrough stops at Plannotator.
+        mkdirSync(join(attempt, "review"));
+        writeFileSync(
+            join(attempt, "review", "walkthrough.json"),
+            JSON.stringify({ title: "Fix the login", intent: "Stop the loop.", sections: [] }),
+        );
+        const log: string[] = [];
+        const result = deps([fakeStep("advance")], {
+            env: { AUTONOMOUS_CONFIG: configPath, AUTONOMOUS_STATE: stateDir, ...options.env },
+            pullRequests: () => threadedPullRequest(log),
+            git: workspaceGit(options.ahead ?? 0),
+            plannotatorIn: () => () =>
+                Promise.resolve({ ok: false, error: "plannotator CLI not found on PATH" }),
+        });
+        return { ...result, log, attempt };
+    }
+
+    const posted = (log: readonly string[]) =>
+        log.filter((call) => ["review", "reply", "resolve", "unresolve"].includes(call));
+
+    it("Published: runs no step, posts and reads back the threads, writes the receipt and exits 0", async () => {
+        const { d, out, log, attempt } = await publishDeps();
+        expect(await main(["--apply", "--publish", ATTEMPT], d)).toBe(0);
+        expect(out).toHaveLength(1);
+        expect(out[0]).toContain("autonomous publish");
+        expect(out[0]).not.toContain("[fake]");
+        expect(posted(log)).toEqual(["review", "resolve"]);
+        expect(existsSync(join(attempt, PUBLISH_RECEIPT_FILE))).toBe(true);
+    });
+
+    it("Publish without apply: prints usage and exits 1", async () => {
+        const { d, out, err, log } = await publishDeps();
+        expect(await main(["--publish", ATTEMPT], d)).toBe(1);
+        expect(out).toEqual([]);
+        expect(err.join("\n")).toContain("--publish requires --apply");
+        expect(log).toEqual([]);
+    });
+
+    it("Verification attempt: nothing is posted and the run exits 3", async () => {
+        const { d, out, log } = await publishDeps({ stage: "verify" });
+        const id = "linear:DOT-121:verify:1";
+        expect(await main(["--apply", "--publish", id, "--json"], d)).toBe(3);
+        const report = JSON.parse(out[0] as string) as { reasons: string[] };
+        expect(report.reasons.join("\n")).toContain("belongs to the verify stage");
+        expect(posted(log)).toEqual([]);
+    });
+
+    it("Record missing: nothing is posted, the report names the file, exit 3", async () => {
+        const { d, out, log, attempt } = await publishDeps({ record: null });
+        expect(await main(["--apply", "--publish", ATTEMPT, "--json"], d)).toBe(3);
+        const report = JSON.parse(out[0] as string) as { reasons: string[] };
+        expect(report.reasons).toEqual([`${join(attempt, FINDINGS_FILE)} is missing`]);
+        expect(posted(log)).toEqual([]);
+    });
+
+    it("Fix not pushed: nothing is posted, the report names the unpushed commit, exit 3", async () => {
+        const { d, out, log } = await publishDeps({ ahead: 1 });
+        expect(await main(["--apply", "--publish", ATTEMPT, "--json"], d)).toBe(3);
+        const report = JSON.parse(out[0] as string) as { reasons: string[] };
+        expect(report.reasons).toEqual([
+            `the branch ${BRANCH} has 1 commit origin/${BRANCH} lacks: f00dfee`,
+        ]);
+        expect(posted(log)).toEqual([]);
+    });
+
+    it("refuses an unknown attempt with exit 3", async () => {
+        const { d, out, log } = await publishDeps();
+        const id = "linear:DOT-999:code-review:1";
+        expect(await main(["--apply", "--publish", id, "--json"], d)).toBe(3);
+        const report = JSON.parse(out[0] as string) as { reasons: string[] };
+        expect(report.reasons.join("\n")).toContain(`unknown attempt ${id}`);
+        expect(log).toEqual([]);
+    });
+
+    it("Publish JSON report: one autonomous.publish.v1 document; the walkthrough says Plannotator is not available", async () => {
+        const { d, out, attempt } = await publishDeps();
+        expect(await main(["--apply", "--publish", ATTEMPT, "--json"], d)).toBe(0);
+        expect(out).toHaveLength(1);
+        const report = JSON.parse(out[0] as string) as {
+            walkthrough: { outcome: string; reason: string };
+        };
+        expect(report).toMatchObject({
+            schema: "autonomous.publish.v1",
+            startedAt: NOW.toISOString(),
+            outcome: "advance",
+            attempt: ATTEMPT,
+            task: { source: "linear", id: "DOT-121", title: "Fix the login" },
+            pullRequest: { number: 7, url: PR_URL },
+            threads: {
+                opened: [{ finding: "f1", url: `${PR_URL}#T1` }],
+                answered: [],
+                resolved: [{ finding: "f1", url: `${PR_URL}#T1` }],
+                unresolved: [],
+            },
+            matches: [],
+            reviews: [{ round: 1, url: `${PR_URL}#pullrequestreview-1` }],
+            reasons: [],
+            receipt: join(attempt, PUBLISH_RECEIPT_FILE),
+        });
+        expect(report.walkthrough.outcome).toBe("none");
+        expect(report.walkthrough.reason).toContain("Plannotator is not available");
+    });
+
+    it("prints a configuration that cannot be loaded as one autonomous.publish.v1 document", async () => {
+        const { d, out } = await publishDeps({
+            env: { AUTONOMOUS_CONFIG: join(dir, "absent.json") },
+        });
+        expect(await main(["--apply", "--publish", ATTEMPT, "--json"], d)).toBe(3);
+        expect(out).toHaveLength(1);
+        expect(JSON.parse(out[0] as string)).toMatchObject({
+            schema: "autonomous.publish.v1",
             outcome: "not-evaluable",
             receipt: null,
         });

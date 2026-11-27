@@ -50,6 +50,13 @@ const TRANSITIONS = {
         persisted: "stage summary",
         guarded: true,
     },
+    "code-review": {
+        to: "external-review",
+        asks: "approval",
+        ready: "the code review is ready",
+        persisted: "stage summary",
+        guarded: true,
+    },
 } as const satisfies Partial<Record<StageLabel, TransitionTarget>>;
 
 export type TransitionStage = keyof typeof TRANSITIONS;
@@ -87,8 +94,8 @@ export const APPROVAL_VALUES: readonly StageLabel[] = TRANSITION_STAGES.map(tran
     .filter((row) => row.asks === "approval")
     .map((row) => row.to);
 
-// The autonomy that decides how a task leaves a stage left on approval, `proposal`, `implement` or `verify`
-// (spec label-contract, "The autonomy decides whether leaving ... needs an answer"): exactly one,
+// The autonomy that decides how a task leaves a stage left on approval, `proposal`, `implement`, `verify` or
+// `code-review` (spec label-contract, "The autonomy decides whether leaving ... needs an answer"): exactly one,
 // or the reason there is none.
 export function stageAutonomy(
     ref: TaskRef,

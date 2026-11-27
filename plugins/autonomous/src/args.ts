@@ -28,6 +28,7 @@ export interface RunArgs {
     pullRequest: AttemptId | undefined;
     title: string | undefined;
     log: AttemptId | undefined;
+    publish: AttemptId | undefined;
     loop: boolean;
     grills: number | undefined; // only with --loop
     parallel: number | undefined; // only with --loop
@@ -50,6 +51,7 @@ export const USAGE = [
     "       /autonomous:run --apply --persist <attempt-id> [--json]",
     "       /autonomous:run --apply --pull-request <attempt-id> [--title <title>] [--json]",
     "       /autonomous:run --apply --log <attempt-id> [--json]",
+    "       /autonomous:run --apply --publish <attempt-id> [--json]",
     "       /autonomous:loop [--force] [--json] [--apply] [--grills <n>] [--parallel <n>] [--interval <minutes>]",
     "       bun plugins/autonomous/src/run.ts --notices <n>",
     "       bun plugins/autonomous/src/run.ts --stop-loop",
@@ -85,6 +87,7 @@ const VALUED = new Map<string, (args: RunArgs, value: string | undefined) => str
     ["--pull-request", readPullRequest],
     ["--title", readTitle],
     ["--log", readLog],
+    ["--publish", readPublish],
     ["--grills", integer("--grills", "grills", 0)],
     ["--parallel", integer("--parallel", "parallel", 0)],
     ["--interval", integer("--interval", "interval", 1)],
@@ -109,6 +112,7 @@ export function parseArgs(argv: readonly string[]): ParseArgsResult {
         pullRequest: undefined,
         title: undefined,
         log: undefined,
+        publish: undefined,
         loop: false,
         grills: undefined,
         parallel: undefined,
@@ -227,6 +231,15 @@ function readLog(args: RunArgs, value: string | undefined): string | null {
     return null;
 }
 
+function readPublish(args: RunArgs, value: string | undefined): string | null {
+    const read = readAttemptFlag("--publish", args.publish, value);
+    if (!read.ok) {
+        return read.error;
+    }
+    args.publish = read.id;
+    return null;
+}
+
 function readAttemptFlag(
     flag: string,
     current: AttemptId | undefined,
@@ -309,6 +322,7 @@ const transitioning = (args: RunArgs) => args.transition !== undefined;
 const persisting = (args: RunArgs) => args.persist !== undefined;
 const pullRequesting = (args: RunArgs) => args.pullRequest !== undefined;
 const logging = (args: RunArgs) => args.log !== undefined;
+const publishing = (args: RunArgs) => args.publish !== undefined;
 const forcing = (args: RunArgs) => args.force;
 const limited = (args: RunArgs) =>
     [args.grills, args.parallel, args.interval].some((value) => value !== undefined);
@@ -329,6 +343,7 @@ const modeFlags = (args: RunArgs) =>
         pullRequesting(args),
         args.title !== undefined,
         logging(args),
+        publishing(args),
     ].some(Boolean);
 
 // Every flag other than --json, for the mode that accepts only that.
@@ -356,7 +371,7 @@ const otherFlags = (args: RunArgs) =>
     ].some(Boolean);
 
 const otherModes = (args: RunArgs, ...modes: ((args: RunArgs) => boolean)[]) =>
-    [transitioning, persisting, pullRequesting, logging]
+    [transitioning, persisting, pullRequesting, logging, publishing]
         .filter((mode) => !modes.includes(mode))
         .some((mode) => mode(args));
 
@@ -427,6 +442,13 @@ const COMBINATIONS: readonly (readonly [(args: RunArgs) => boolean, string])[] =
             logging(args) &&
             (otherFlags(args) || args.title !== undefined || otherModes(args, logging)),
         "--log can only be combined with --apply and --json",
+    ],
+    [(args) => publishing(args) && !args.apply, "--publish requires --apply"],
+    [
+        (args) =>
+            publishing(args) &&
+            (otherFlags(args) || args.title !== undefined || otherModes(args, publishing)),
+        "--publish can only be combined with --apply and --json",
     ],
     [
         (args) => args.releaseWorkspace && args.discard === undefined,

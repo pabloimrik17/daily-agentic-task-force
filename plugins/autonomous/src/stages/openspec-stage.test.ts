@@ -41,13 +41,16 @@ function pullRequestCheck(pullRequest: "required" | "optional"): Check {
 function lookUp(found: PullRequest | null): Promise<Result<StageContext>> {
     const find: PullRequests["find"] = () => Promise.resolve({ ok: true, value: found });
     const env = stageEnv({ branch: BRANCH });
-    return pullRequestCheck("required")({
-        ...env,
-        readers: {
-            ...env.readers,
-            pullRequests: { find } as Partial<PullRequests> as PullRequests,
+    return pullRequestCheck("required")(
+        {
+            ...env,
+            readers: {
+                ...env.readers,
+                pullRequests: { find } as Partial<PullRequests> as PullRequests,
+            },
         },
-    });
+        {},
+    );
 }
 
 describe("required pull request", () => {

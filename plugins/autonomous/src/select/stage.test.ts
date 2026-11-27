@@ -28,9 +28,15 @@ describe("nextStage", () => {
         expect(stage !== null && isSupported(stage)).toBe(true);
     });
 
-    it("Task ready for code review: gives code-review, which is not supported", () => {
+    it("Task ready for code review: gives code-review, which is supported", () => {
         const stage = nextStage(["personal", "AFK", "code-review"]);
         expect(stage).toBe("code-review");
+        expect(stage !== null && isSupported(stage)).toBe(true);
+    });
+
+    it("Task waiting for external review: gives external-review, which is not supported", () => {
+        const stage = nextStage(["personal", "HITL", "external-review"]);
+        expect(stage).toBe("external-review");
         expect(stage !== null && isSupported(stage)).toBe(false);
     });
 
@@ -79,6 +85,12 @@ describe("splitByStage", () => {
             kept: [verify],
             setAside: [implement],
         });
+    });
+
+    it("Code review before verification: keeps the code-review candidate and sets the verify one aside", () => {
+        const verify = at("a", "verify");
+        const review = at("b", "code-review");
+        expect(splitByStage([verify, review])).toEqual({ kept: [review], setAside: [verify] });
     });
 
     it("keeps every candidate of the most advanced stage, in order", () => {

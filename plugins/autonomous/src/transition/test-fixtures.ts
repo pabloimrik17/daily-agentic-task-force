@@ -1,12 +1,18 @@
-import { mkdtempSync } from "node:fs";
+import { mkdirSync, mkdtempSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
-import type { AttemptRecord, TaskRef } from "../attempts/record.ts";
-import { writeRecord } from "../attempts/state.ts";
+import { type AttemptId, attemptId, type AttemptRecord, type TaskRef } from "../attempts/record.ts";
+import { attemptDir, receiptPath, writeJsonAtomic, writeRecord } from "../attempts/state.ts";
 import { record, tempState } from "../attempts/test-fixtures.ts";
 import type { ExecResult } from "../exec.ts";
 import type { PullRequests } from "../pull-request/port.ts";
+import {
+    digestOf,
+    FINDINGS_FILE,
+    PUBLISH_RECEIPT_SCHEMA,
+    writePublishReceipt,
+} from "../publish/receipt.ts";
 import type { GuardTools } from "./guards.ts";
 
 export const BRANCH = "feature/DOT-110-implement-stage";
@@ -93,4 +99,47 @@ export async function stateWithWorkspace(
         }),
     );
     return { state, workspace };
+}
+
+export const FINDINGS = '{"schema":"autonomous.findings.v1","entries":[]}\n';
+
+export interface Reviewed {
+    persisted?: boolean; // the persistence receipt
+    findings?: string | null; // the bytes of findings.json; null writes none
+    published?: string | null; // the digest published.json names; null writes none
+}
+
+// A state directory with a started attempt of the task at `code-review`, whose workspace is a
+// directory that exists. By default it is persisted, holds a record and has published exactly it.
+export async function stateInReview(
+    task: TaskRef,
+    reviewed: Reviewed = {},
+): Promise<{ state: string; workspace: string; attempt: AttemptId; dir: string }> {
+    const { persisted = true, findings = FINDINGS } = reviewed;
+    const published = reviewed.published === undefined ? digestOf(FINDINGS) : reviewed.published;
+    const attempt = attemptId(task, "code-review", 1);
+    const made = await stateWithWorkspace(task, {
+        id: attempt,
+        stage: "code-review",
+        state: "started",
+    });
+    const dir = attemptDir(made.state, attempt);
+    mkdirSync(dir, { recursive: true });
+    if (persisted) {
+        await writeJsonAtomic(receiptPath(dir), { schema: "autonomous.persisted.v1" });
+    }
+    if (findings !== null) {
+        writeFileSync(join(dir, FINDINGS_FILE), findings);
+    }
+    if (published !== null) {
+        await writePublishReceipt(dir, {
+            schema: PUBLISH_RECEIPT_SCHEMA,
+            attempt,
+            pullRequest: { number: 7, url: "https://github.com/o/r/pull/7" },
+            findingsDigest: published,
+            walkthroughDigest: null,
+            publishedAt: "2026-11-01T09:00:00.000Z",
+        });
+    }
+    return { ...made, attempt, dir };
 }

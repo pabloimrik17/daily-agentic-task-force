@@ -201,6 +201,12 @@ describe("isContractLabel", () => {
         expect(isContractLabel("codereview")).toBe(false);
     });
 
+    it("accepts external-review and rejects its near-miss spellings", () => {
+        expect(isContractLabel("external-review")).toBe(true);
+        expect(isContractLabel("External Review")).toBe(false);
+        expect(isContractLabel("external_review")).toBe(false);
+        expect(isContractLabel("externalreview")).toBe(false);
+    });
     it.each(["qa", "external-review", "wrap-up", "ready-to-merge"])(
         "accepts the declared stage label %s",
         (label) => {

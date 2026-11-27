@@ -319,9 +319,14 @@ For a task with no autonomy and no stage label, the autonomy decision SHALL choo
 - **WHEN** a task carries `personal` and `code-review`
 - **THEN** its autonomy decision may be `AFK` or `HITL`, and never `grill-me`
 
-#### Scenario: Task in a stage with no implementation
+#### Scenario: Task in external-review
 
 - **WHEN** a task carries `personal` and `external-review`
+- **THEN** its autonomy decision may be `AFK` or `HITL`, and never `grill-me`
+
+#### Scenario: Task in a stage with no implementation
+
+- **WHEN** a task carries `personal` and `qa`
 - **THEN** its autonomy decision may be `AFK` or `HITL`, and never `grill-me`
 
 ### Requirement: Labels missing on a tracker are not written

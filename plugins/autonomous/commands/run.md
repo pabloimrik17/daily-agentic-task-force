@@ -1,6 +1,6 @@
 ---
-description: Run the autonomous loop's reconcile, gate, label triage, select and launch steps, or launch a supplied task, or discard an attempt, or bootstrap the label contract, or hand off the transition question of a task in grill-me, proposal, implement or verify, or move an AFK task in proposal, implement or verify, or save a grill-me, proposal, implementation or verification attempt's stage summary, and a grill's definition, to its task, or open the pull request of an attempt's branch, or publish an attempt's logbook entry, or list the questions of the tasks marked `triage-me`, report the outcome, and ask the user the questions the run hands off
-argument-hint: "[--task <source>:<id> [--stage <stage>]] [--force] [--json] [--apply] [--no-handoff] | --apply --discard <attempt> [--release-workspace] [--json] | --bootstrap-labels [--json] | --triage-questions [--json] | --apply --transition <source>:<task> [--from <stage>] [--json] | --apply --persist <attempt> [--json] | --apply --pull-request <attempt> [--title <title>] [--json] | --apply --log <attempt> [--json]"
+description: Run the autonomous loop's reconcile, gate, label triage, select and launch steps, or launch a supplied task, or discard an attempt, or bootstrap the label contract, or hand off the transition question of a task in grill-me, proposal, implement, verify or code-review, or move an AFK task in proposal, implement, verify or code-review, or save a grill-me, proposal, implementation, verification or code review attempt's stage summary, and a grill's definition, to its task, or open the pull request of an attempt's branch, or publish an attempt's logbook entry, or publish a code review attempt's findings as threads on its pull request, or list the questions of the tasks marked `triage-me`, report the outcome, and ask the user the questions the run hands off
+argument-hint: "[--task <source>:<id> [--stage <stage>]] [--force] [--json] [--apply] [--no-handoff] | --apply --discard <attempt> [--release-workspace] [--json] | --bootstrap-labels [--json] | --triage-questions [--json] | --apply --transition <source>:<task> [--from <stage>] [--json] | --apply --persist <attempt> [--json] | --apply --pull-request <attempt> [--title <title>] [--json] | --apply --log <attempt> [--json] | --apply --publish <attempt> [--json]"
 allowed-tools: Bash(bun:*)
 ---
 
@@ -21,22 +21,29 @@ for it. `--task` supplies a task to `launch` in place of `label-triage` and
 `label-triage` step write labels and hand off questions, which `--no-handoff`
 suppresses; `--bootstrap-labels` creates missing labels on every enabled
 tracker and exits instead of running the steps. `--transition` reads a task in
-`grill-me`, `proposal`, `implement` or `verify`, running no step: for `grill-me`
-it hands off the autonomy question, for an `HITL` task in `proposal`,
-`implement` or `verify` the approval question (for a task in `verify`, that the
-verification is ready, with `Approve` moving it to `code-review`), and an `AFK`
-task in `proposal` it moves to `implement` itself, one in `implement` to
-`verify` and one in `verify` to `code-review`, with no question. A task in
-`implement` or `verify` whose workspace has unchecked tasks of its change,
+`grill-me`, `proposal`, `implement`, `verify` or `code-review`, running no step:
+for `grill-me` it hands off the autonomy question, for an `HITL` task in
+`proposal`, `implement`, `verify` or `code-review` the approval question (for a
+task in `code-review`, that the code review is ready, with `Approve` moving it
+to `external-review`), and an `AFK` task in `proposal` it moves to `implement`
+itself, one in `implement` to `verify`, one in `verify` to `code-review` and one
+in `code-review` to `external-review`, with no question. A task in `implement`,
+`verify` or `code-review` whose workspace has unchecked tasks of its change,
 uncommitted changes or unpushed commits is refused, with no question, and exit
-code 3. With `--from <stage>`, a task not in that stage is refused the same way,
-so a second run cannot leave the stage a first one reached. `--persist` saves a `grill-me`, `proposal`, `implement` or `verify`
-attempt's stage summary, and a grill's definition, to its task and writes the
+code 3. So is a task in `code-review` whose open attempt has no current publish
+receipt. With `--from <stage>`, a task not in that stage is refused the same way,
+so a second run cannot leave the stage a first one reached. `--persist` saves a `grill-me`, `proposal`, `implement`, `verify` or
+`code-review` attempt's stage summary, and a grill's definition, to its task and writes the
 receipt the transition waits for, running no step. `--pull-request`
 finds or opens the draft pull request of an attempt's workspace branch and
 writes its cover, running no step; `--title` gives its title. `--log` publishes
 the attempt's logbook entry on that pull request and writes its receipt,
-running no step. `--triage-questions` reads the tasks that carry `triage-me`
+running no step. `--publish` publishes a `code-review` attempt's findings
+as threads on the attempt's pull request, answers the threads its entries
+link to (a refuted or dismissed entry too, leaving the thread's state as it is),
+brings its walkthrough up to date and writes the receipt the transition waits for, running no step; in a code
+review's closing it runs after the checks pass and before `--persist` and
+`--transition`. `--triage-questions` reads the tasks that carry `triage-me`
 and lists their questions, running no step, requesting no judgement and
 writing nothing; it takes no `--apply` and combines only with `--json`, and its
 answers are applied with `--apply --answer`. `--apply` can
@@ -62,22 +69,28 @@ task that is complete.
 2. Relay the script's stdout and stderr verbatim, in a code block, followed by
    its exit code: 0 advance, 2 wait, 3 not evaluable, 1 usage or runner error.
    With `--transition`, 0 means a handoff was emitted or an `AFK` task was
-   moved to `implement`, `verify` or `code-review`, and 3 means the task is in
-   none of `grill-me`, `proposal`, `implement` and `verify`, a task in
-   `proposal`, `implement` or `verify` has no single autonomy, its source is
+   moved to `implement`, `verify`, `code-review` or `external-review`, and 3 means
+   the task is in none of `grill-me`, `proposal`, `implement`, `verify` and
+   `code-review`, a task in `proposal`, `implement`, `verify` or `code-review`
+   has no single autonomy, its source is
    disabled, it could not be read, an open attempt of the stage the task is
-   leaving has no persistence receipt, the guards refused a task in `implement`
-   or `verify` whose work is unfinished, the
+   leaving has no persistence receipt, an open code review attempt has no
+   current publish receipt, the guards refused a task in `implement`, `verify`
+   or `code-review` whose work is unfinished, the
    `AFK` transition was not applied or the configuration could not be loaded.
    With `--persist`, 0 means the receipt was written and 3 means it was not:
    the attempt is unknown, not open or not a `grill-me`, `proposal`,
-   `implement` or `verify` attempt, a file is missing or empty, a tracker call or read-back
+   `implement`, `verify` or `code-review` attempt, a file is missing or empty, a tracker call or read-back
    failed, or the configuration could not be loaded. With `--pull-request`, 0
    means a pull request is reported or the task needs none, and 3 means the
    attempt is unknown or not open, a title is missing for a pull request to
    open, a command failed or the configuration could not be loaded. With
    `--log`, 0 means the receipt was written and 3 means it was not: there is no
    pull request, the body is missing or rejected, a publish or read-back failed
+   or the configuration could not be loaded. With `--publish`, 0 means the receipt
+   was written and 3 means it was not: the attempt is unknown, not open or not a
+   `code-review` attempt, `findings.json` is missing or invalid, there is no open
+   pull request, the branch has unpushed commits, a post or the read-back failed,
    or the configuration could not be loaded. With `--triage-questions`, 0 means
    every enabled source was read, with or without a question, and 3 means a
    source or the configuration could not be read. Write nothing else around it.
@@ -87,13 +100,16 @@ task that is complete.
    that line starts with `handoff:` and a space; the rest of the line after
    that space is the handoff as JSON. A transition report carries its handoff
    in the same place and in the same form, whether it holds the autonomy
-   question or the approval question, including that of a task in `verify`. A `--triage-questions` report carries
+   question or the approval question, including that of a task in `verify` or
+   `code-review`. A `--triage-questions` report carries
    its handoff in the same place and in the same form, and, unlike a run's, it
    carries it without `--apply`. A transition report with `applied` true
    and no handoff, the `AFK` path, is relayed and the command ends: nothing is
    asked. A persist report carries none, and so
-   do a pull-request and a log report, so the command ends here. If there is no handoff, or the AskUserQuestion tool
-   is not available (for example under `claude -p`), end the command.
+   do a pull-request, a log and a publish report, so the command ends here. If there is no handoff, or the AskUserQuestion tool
+   is not available (for example under `claude -p`), end the command. That ends
+   the command, not the turn of a session that ran it as a step of a stage: that
+   session goes on to its next step.
 
 4. Call AskUserQuestion once, with every question in the handoff's
    `questions`, in their order. For each question pass its `question`,
@@ -122,8 +138,8 @@ task that is complete.
     gave `--json`. Add nothing else, not even a `--force` the
     user typed: answer mode rejects it. Relay the script's stdout and stderr
     verbatim, in a code block, followed by its exit code: 0 every answer
-    applied or skipped, 3 an answer rejected or failed (such as a `verify` or
-    `code-review` approval the guards refuse because the work is unfinished) or the
+    applied or skipped, 3 an answer rejected or failed (such as a `verify`,
+    `code-review` or `external-review` approval the guards or the publish receipt refuse because the work is unfinished) or the
     configuration could not be loaded, 1 usage or runner error. Then end the command,
     writing nothing after it.
 
@@ -136,7 +152,7 @@ task that is complete.
   not a retry. If the gate is `not-evaluable` because of the login or its match to
   an OpenUsage account, show the reason and stop. The run evaluates the account
   Claude Code is logged in as; never change the login.
-- Never add `--apply`, `--bootstrap-labels`, `--triage-questions`, `--persist`, `--pull-request` or `--log` on your own. In
+- Never add `--apply`, `--bootstrap-labels`, `--triage-questions`, `--persist`, `--pull-request`, `--log` or `--publish` on your own. In
   step 1, pass exactly what the user typed, no more and no less. Step 6 is the
   one exception: it passes `--apply` because answer mode requires it. For a run
   the user already typed it, because there is no handoff without it. After
@@ -155,4 +171,5 @@ task that is complete.
 - When the report carries no `handoff`, or AskUserQuestion is not available,
   take no further action: show the report and end the command. Otherwise run
   steps 4 to 6 once; when step 5 keeps no answer, end after relaying the first
-  report. Ending means writing nothing more.
+  report. Ending means writing nothing more, for a user who typed the command; a
+  session that ran it as a step of a stage ends the command, not its turn.

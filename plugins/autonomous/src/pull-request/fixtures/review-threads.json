@@ -1,0 +1,95 @@
+{
+    "data": {
+        "repository": {
+            "pullRequest": {
+                "reviewThreads": {
+                    "pageInfo": { "hasNextPage": false, "endCursor": "Y3Vyc29yOnYyOpK0" },
+                    "nodes": [
+                        {
+                            "id": "PRRT_kwDOUNYMKc66_aaaa",
+                            "path": "src/retry.ts",
+                            "subjectType": "LINE",
+                            "line": 42,
+                            "startLine": 40,
+                            "diffSide": "RIGHT",
+                            "isResolved": true,
+                            "isOutdated": false,
+                            "comments": {
+                                "pageInfo": {
+                                    "hasNextPage": false,
+                                    "endCursor": "Y3Vyc29yOnYyOpK1"
+                                },
+                                "nodes": [
+                                    {
+                                        "id": "PRRC_kwDOUNYMKc8AAAABaaaa",
+                                        "body": "issue (blocking): The retry loop never stops when the token is revoked.\n\nStatus: fixed in abc1234\n<details><summary>Trace</summary>\n\nReported by code-review, codex · CRITICAL · reproduction: test/retry.test.ts \"stops on revoked token\" · Claude Code 2.1.330, codex 0.171.0\n</details>\n<!-- autonomous:finding v1 attempt=linear:DOT-121:code-review:1 finding=f3 -->",
+                                        "url": "https://github.com/demo/repo/pull/42#discussion_r1001",
+                                        "author": { "login": "demo-user" },
+                                        "createdAt": "2026-11-24T10:00:00Z"
+                                    },
+                                    {
+                                        "id": "PRRC_kwDOUNYMKc8AAAABaaab",
+                                        "body": "Status: fixed in abc1234\n<!-- autonomous:resolution v1 attempt=linear:DOT-121:code-review:1 finding=f3 state=fixed -->",
+                                        "url": "https://github.com/demo/repo/pull/42#discussion_r1002",
+                                        "author": { "login": "demo-user" },
+                                        "createdAt": "2026-11-24T10:05:00Z"
+                                    }
+                                ]
+                            }
+                        },
+                        {
+                            "id": "PRRT_kwDOUNYMKc66_bbbb",
+                            "path": "openspec/changes/retry/proposal.md",
+                            "subjectType": "FILE",
+                            "line": null,
+                            "startLine": null,
+                            "diffSide": "RIGHT",
+                            "isResolved": false,
+                            "isOutdated": false,
+                            "comments": {
+                                "pageInfo": {
+                                    "hasNextPage": false,
+                                    "endCursor": "Y3Vyc29yOnYyOpK2"
+                                },
+                                "nodes": [
+                                    {
+                                        "id": "PRRC_kwDOUNYMKc8AAAABbbbb",
+                                        "body": "issue: The change never says what happens offline.\n\nStatus: passed on to QA #qa\n<!-- autonomous:finding v1 attempt=linear:DOT-121:code-review:1 finding=f4 for=qa -->",
+                                        "url": "https://github.com/demo/repo/pull/42#discussion_r1003",
+                                        "author": { "login": "demo-user" },
+                                        "createdAt": "2026-11-24T10:00:00Z"
+                                    }
+                                ]
+                            }
+                        },
+                        {
+                            "id": "PRRT_kwDOUNYMKc66_cccc",
+                            "path": "src/config.ts",
+                            "subjectType": "LINE",
+                            "line": 7,
+                            "startLine": 7,
+                            "diffSide": "LEFT",
+                            "isResolved": false,
+                            "isOutdated": true,
+                            "comments": {
+                                "pageInfo": {
+                                    "hasNextPage": false,
+                                    "endCursor": "Y3Vyc29yOnYyOpK3"
+                                },
+                                "nodes": [
+                                    {
+                                        "id": "PRRC_kwDOUNYMKc8AAAABcccc",
+                                        "body": "true",
+                                        "url": "https://github.com/demo/repo/pull/42#discussion_r1004",
+                                        "author": null,
+                                        "createdAt": "2026-11-23T09:00:00Z"
+                                    }
+                                ]
+                            }
+                        }
+                    ]
+                }
+            }
+        }
+    }
+}

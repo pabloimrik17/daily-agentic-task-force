@@ -5,7 +5,7 @@
 // Every failure is "no guide" with its reason; the walkthrough's items still count.
 
 import { existsSync, rmSync, writeFileSync } from "node:fs";
-import { join } from "node:path";
+import { basename, join } from "node:path";
 
 import type { Exec } from "../exec.ts";
 import type { Result } from "../result.ts";
@@ -22,6 +22,14 @@ interface GuideDeps {
     git: Exec;
     plannotator: Exec;
 }
+
+export interface GuideFiles {
+    guide: string;
+    patch: string;
+    html?: string;
+}
+
+type ChangedFiles = () => Promise<Result<readonly string[]>>;
 
 type Absence = (dir: string, plan: Plan) => string | undefined;
 
@@ -78,8 +86,8 @@ function placements(input: unknown): string[] {
     return [...sections, ...(optional(guide, "unplacedFiles", "$", stringArray) ?? [])];
 }
 
-function readPlacements(dir: string): Result<string[]> {
-    const json = readJson(join(dir, GUIDE));
+function readPlacements(guide: string): Result<string[]> {
+    const json = readJson(guide);
     return json.ok ? toResult(() => placements(json.value)) : json;
 }
 
@@ -94,43 +102,55 @@ function placementProblems(placed: readonly string[], changed: readonly string[]
     ];
 }
 
-async function misplaced(dir: string, subject: Subject, git: Exec): Promise<string | undefined> {
-    const placed = readPlacements(dir);
+async function misplaced(guide: string, changed: ChangedFiles): Promise<string | undefined> {
+    const name = basename(guide);
+    const placed = readPlacements(guide);
     if (!placed.ok) {
-        return `${GUIDE} is not a guide: ${placed.error}`;
+        return `${name} is not a guide: ${placed.error}`;
     }
-    const changed = await changedFiles(subject, git);
-    if (!changed.ok) {
-        return changed.error;
+    const files = await changed();
+    if (!files.ok) {
+        return files.error;
     }
-    const problems = placementProblems(placed.value, changed.value);
-    return problems.length === 0 ? undefined : `${GUIDE} is not valid: ${problems.join("; ")}`;
+    const problems = placementProblems(placed.value, files.value);
+    return problems.length === 0 ? undefined : `${name} is not valid: ${problems.join("; ")}`;
 }
 
-async function exported(dir: string, plannotator: Exec): Promise<WalkthroughGuide> {
-    const out = join(dir, HTML);
-    try {
-        rmSync(out, { force: true });
-    } catch (error) {
-        return {
-            guide: null,
-            patch: PATCH,
-            reason: `removing ${HTML}: ${(error as Error).message}`,
-        };
+// Without a page to keep, Plannotator writes it to its output, which is dropped.
+async function exported(files: GuideFiles, plannotator: Exec): Promise<Result<void>> {
+    if (files.html !== undefined) {
+        try {
+            rmSync(files.html, { force: true });
+        } catch (error) {
+            return {
+                ok: false,
+                error: `removing ${basename(files.html)}: ${(error as Error).message}`,
+            };
+        }
     }
     const result = await plannotator([
         "guide",
         "export",
         "--guide",
-        join(dir, GUIDE),
+        files.guide,
         "--patch",
-        join(dir, PATCH),
+        files.patch,
         "--out",
-        out,
+        files.html ?? "-",
     ]);
     return result.ok
-        ? { guide: GUIDE, patch: PATCH, html: HTML }
-        : { guide: null, patch: PATCH, reason: `plannotator guide export: ${result.error}` };
+        ? { ok: true, value: undefined }
+        : { ok: false, error: `plannotator guide export: ${result.error}` };
+}
+
+// Publish mode checks its updated walkthrough with it (design D14).
+export async function checkGuide(
+    files: GuideFiles,
+    changed: ChangedFiles,
+    plannotator: Exec,
+): Promise<Result<void>> {
+    const invalid = await misplaced(files.guide, changed);
+    return invalid === undefined ? exported(files, plannotator) : { ok: false, error: invalid };
 }
 
 export async function validateGuide(
@@ -146,8 +166,12 @@ export async function validateGuide(
     if (!patch.ok) {
         return { guide: null, reason: patch.error };
     }
-    const invalid = await misplaced(dir, plan.subject, deps.git);
-    return invalid === undefined
-        ? exported(dir, deps.plannotator)
-        : { guide: null, patch: PATCH, reason: invalid };
+    const checked = await checkGuide(
+        { guide: join(dir, GUIDE), patch: join(dir, PATCH), html: join(dir, HTML) },
+        () => changedFiles(plan.subject, deps.git),
+        deps.plannotator,
+    );
+    return checked.ok
+        ? { guide: GUIDE, patch: PATCH, html: HTML }
+        : { guide: null, patch: PATCH, reason: checked.error };
 }

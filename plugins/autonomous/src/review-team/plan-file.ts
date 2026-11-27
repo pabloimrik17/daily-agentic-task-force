@@ -81,7 +81,7 @@ function plannedReviewer(value: unknown, path: string): PlannedReviewer {
     };
 }
 
-function skippedReviewer(value: unknown, path: string): SkippedReviewer {
+export function skippedReviewer(value: unknown, path: string): SkippedReviewer {
     const parent = object(value, path);
     rejectUnknownKeys(parent, ["reviewer", "reason"], path);
     return {

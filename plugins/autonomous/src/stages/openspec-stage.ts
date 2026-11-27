@@ -1,7 +1,8 @@
 // Design D2: what the stages working on an OpenSpec change share, proposal preparation, the
-// implementation stage and the verification stage, so the prompts cannot drift on the comments,
-// the stage summary, the logbook entry, the machine's details, the orchestration, the commit rules
-// or the transition. Each stage passes its own text where they differ.
+// implementation stage, the verification stage and the code review stage, so the prompts cannot
+// drift on the comments, the stage summary, the logbook entry, the machine's details, the
+// orchestration, the commit rules or the transition. Each stage passes its own text where they
+// differ.
 
 import { stat } from "node:fs/promises";
 import { dirname, join } from "node:path";
@@ -18,6 +19,7 @@ import type { Result } from "../result.ts";
 import { stageAutonomy, type TransitionStage, transitionRow } from "../transition/table.ts";
 import { findBranchChange } from "./openspec-change.ts";
 import { findWorkflow, missingWorkflow } from "./openspec-workflows.ts";
+import { loadPluginSkill, type PluginSkillOptions } from "./plugin-skill.ts";
 import { renderPrompt } from "./prompt.ts";
 import { HANDOFF_SKILL, loadSkills, SKILLS_PLUGIN } from "./skills.ts";
 import type { StageContext, StageEnv, StagePrerequisites, StagePromptInput } from "./stage.ts";
@@ -28,7 +30,7 @@ export const PULL_REQUEST_KEY = "pullRequest"; // absent when the branch has no 
 export const UPDATE_WORKFLOW_KEY = "updateWorkflow"; // `/openspec-update-change` or `/opsx:update`
 export const CHANGE_KEY = "change"; // the name of the OpenSpec change the branch adds
 
-type OpenspecStage = Extract<TransitionStage, "proposal" | "implement" | "verify">;
+type OpenspecStage = Extract<TransitionStage, "proposal" | "implement" | "verify" | "code-review">;
 
 type OpenspecWorkflow = Parameters<typeof findWorkflow>[1];
 
@@ -105,7 +107,7 @@ export function contextSection(
 }
 
 interface LogbookSection {
-    name: "Proposal" | "Implementation" | "Verification";
+    name: "Proposal" | "Implementation" | "Verification" | "Code review";
     holds: string;
 }
 
@@ -136,7 +138,7 @@ export function closingSection(paths: Paths, closing: Closing): Section {
     return {
         title: "Closing",
         lines: [
-            `${closing.done}, close the stage in this order. Never skip or reorder a step.`,
+            `${closing.done}, close the stage in this order. Never skip or reorder a step. The end of a command, \`/autonomous:run\` in any mode, is not the end of your turn: after its report, go on to the next step, and end your turn only to wait for the human or after you write the result marker.`,
             "",
             ...numbered(steps),
             "",
@@ -250,6 +252,88 @@ export function hitlTransition({ task }: Paths, { left, reached }: Move, approve
     return `Run \`/autonomous:run --apply --transition ${task} --from ${left}\`. It asks the human whether to approve ${approves} and move the task to \`${reached}\`, and applies the answer. If it exits non-zero, the transition was refused (for example a task of the change is unchecked or a commit is unpushed) and it asked no question: tell the human what it reported and stop as for "Later". When the human answers "Later", or the answer is not applied, stop here: publish no logbook entry, do not write the result marker, and leave this session open, so the human can come back to it.`;
 }
 
+export const REVIEW_TITLE = "The adversarial review";
+
+// The adversarial review's parameter "whether a human follows the review".
+export const HUMAN_FOLLOWS: Record<AutonomyLabel, string> = {
+    AFK: "no: this task carries `AFK`.",
+    HITL: "yes: this task carries `HITL`.",
+};
+
+export const PROPOSED_FOLLOW_UPS =
+    "Each deferred finding that survives the refutation becomes a proposed follow-up task, with its title, its reason and the finding it comes from, in the stage summary and the logbook entry.";
+
+export const NO_FOLLOW_UPS = "Create none: no human vets them.";
+
+export const CONFIRMED_FOLLOW_UPS =
+    "Show the human the proposed follow-up tasks, and create only those they confirm, in the task's own tracker, labelled at creation by following the autonomous plugin's `labelling-new-tasks` skill. Relate each one to the task, never as its subtask: on Linear, `linear issue relation add <new> related <task>`; on Beads, `bd dep add <new> <task> --type related`; on GitHub, which has no such relation, a link to the task in the new issue's body. A follow-up task the human does not confirm stays proposed.";
+
+export const UNCLAIMED: Record<AutonomyLabel, string> = {
+    AFK: `Uncommitted changes that no finding claims by the end of the round block the attempt: follow the section "${BLOCKED_TITLE}", and name them in the stage summary.`,
+    HITL: "Show the human the uncommitted changes that no finding claims by the end of the round, and do with them only what they decide.",
+};
+
+// `left` names what an earlier attempt left, `unclaimed` what happens to uncommitted changes no
+// finding claims.
+export function resumeReview(left: string, unclaimed: string): string {
+    return `Before the report, look for what an earlier attempt of this task left in this workspace: ${left}. This round starts afresh: the earlier attempt's stage summary, among the comments, says what it did. Its fix commits stay, and are part of what the report checks; do not revert or redo them. Treat uncommitted changes as an unfinished fix: keep them in the working tree, and commit them only once a fix check of this round accepts them as the fix of a surviving finding. Never discard them: no \`git checkout --\`, \`git restore\`, \`git reset --hard\`, \`git clean\` or stash. ${unclaimed}`;
+}
+
+export function checksStep(onFailure: string): string {
+    return `Once the fixes are committed and pushed, run every check the repository defines: its tests, linters and type checks, and whatever its contributor instructions or scripts name. Fix what fails, commit and push the fix, and run them again until they all pass. If a check cannot be made to pass, ${onFailure}.`;
+}
+
+export function confirmStep(onFailure: string): string {
+    return `Confirm that every check the repository defines passes, that nothing is left uncommitted, and that every commit is pushed. If something is not, finish it first; if a check cannot be made to pass, or a push fails, ${onFailure}.`;
+}
+
+// `rules` are the stage's own commit rules, after the shared ones.
+export function fixCommitsSection(rules: readonly string[]): Section {
+    const shared = commitsSection({
+        unit: "each fixed finding on its own: its fix, and its reproduction test when it has one",
+        next: "the next fix",
+    });
+    return { ...shared, lines: [...shared.lines, ...rules] };
+}
+
+// `inside` says how the rule holds inside the skills and workflows the stage follows.
+export function afkReviewSection(name: string, inside: string): Section {
+    return {
+        title: "Working without a human (AFK)",
+        lines: [
+            "This task carries `AFK`: no human follows this session, and nobody will answer a question.",
+            "",
+            `- Never ask the human anything, and never wait for an answer: a question hangs the session until someone happens to look at it. ${inside}`,
+            "- Decide the finding triage yourself: each finding's destination, with its reason.",
+            `- Record each decision and each assumption you make in the stage summary and the logbook entry's \`### Decisions\` and \`### Assumptions\`. A human reviews ${name} later, and must see what you decided without asking you.`,
+            `- If you cannot finish ${name}, do not force it: follow the section "${BLOCKED_TITLE}".`,
+        ],
+    };
+}
+
+// `rules` are the stage's own, after the shared ones.
+export function hitlReviewSection(name: string, rules: readonly string[]): Section {
+    return {
+        title: "Working with the human (HITL)",
+        lines: [
+            `This task carries \`HITL\`: a human follows this session and reviews ${name} before the task moves on.`,
+            "",
+            "- Ask the human when a choice is theirs to make, rather than guessing.",
+            "- Show the human the finding triage, each finding with its destination and reason, before the refutation starts, and apply their changes to it.",
+            "- A fix rejected by two fix checks goes to the human: show them the finding and the rejections, and continue only as they decide.",
+            ...rules,
+        ],
+    };
+}
+
+// The blocked section's opening: `causes` lists what blocks the stage.
+export function reviewBlockedWhen(name: string, causes: string): string {
+    return `When you cannot finish ${name} (${causes}), do not force it: a human settles it from your explanation, and a forced fix costs more than a late one. Instead:`;
+}
+
+export const ACCEPTED_FIXES =
+    "Commit and push the fixes their fix checks accepted, by the rules of the commits section, so no work is lost. Commit no fix that no fix check accepted, and name its finding and its rejections in the stage summary. If the push fails, do not retry it and do not start this section over: keep the commits, and name the push's error and the unpushed commits in the stage summary and the logbook entry.";
+
 // How a deviation from the proposal is decided, per autonomy.
 export const DEVIATION: Record<AutonomyLabel, string> = {
     AFK: "Decide the deviation yourself, without asking, and record it as an assumption as well.",
@@ -294,7 +378,8 @@ export function openspecPrompt(
 // The checks run in order and stop at the first failure, so each reason names the one thing
 // missing; together they read everything the shared prompt pieces need.
 
-export type Check = (env: StageEnv) => Promise<Result<StageContext>>;
+// `read` is what the checks before it read.
+export type Check = (env: StageEnv, read: StageContext) => Promise<Result<StageContext>>;
 
 const NOTHING: Result<StageContext> = { ok: true, value: {} };
 
@@ -386,6 +471,19 @@ export const changeCheck: Check = async ({ repository, branch, readers }) => {
     return change.ok ? { ok: true, value: { [CHANGE_KEY]: change.value } } : change;
 };
 
+// A skill this plugin ships, read from the plugin this run belongs to, never from an installed
+// copy (design D3), under the context key `key`.
+export function pluginSkillCheck(
+    name: string,
+    key: string,
+    options: PluginSkillOptions = {},
+): Check {
+    return async () => {
+        const body = await loadPluginSkill(name, undefined, options);
+        return body.ok ? { ok: true, value: { [key]: body.value } } : body;
+    };
+}
+
 export interface OpenspecChecks {
     stage: OpenspecStage;
     workflows: Readonly<Record<string, OpenspecWorkflow>>; // keyed by the context key each fills
@@ -416,7 +514,7 @@ export function checkAll(checks: readonly Check[]): (env: StageEnv) => Promise<S
     return async (env) => {
         const context: Record<string, string> = {};
         for (const check of checks) {
-            const result = await check(env);
+            const result = await check(env, context);
             if (!result.ok) {
                 return { ok: false, reason: result.error };
             }
