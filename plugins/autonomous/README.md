@@ -2762,7 +2762,10 @@ the proofs do not hold becomes `retained`, with the reason and the time; the
 last lines of the session are captured first when it still exists. A retained
 attempt keeps its session and `taken`, and no run retries it, relaunches it or
 removes it. The user discards it with `--discard` (see
-[Discard mode](#discard-mode)).
+[Discard mode](#discard-mode)). An attempt of a stage this build has no
+implementation for is never retained or finalised here, whatever its session
+reports: it is only observed, so the build that implements the stage can still
+finish it.
 
 **Pending cleanup.** When the session cannot be removed after both proofs hold,
 or `taken` cannot be removed afterwards, the attempt is marked `completed` with
@@ -4085,7 +4088,10 @@ exist yet (see [The label contract](#the-label-contract)).
 This release itself writes no `code-review`, `qa`, `external-review` or
 `wrap-up` attempt record, and no `qa`, `external-review`, `wrap-up` or
 `ready-to-merge` label. They come from a development build of one of those
-stages, or from a person setting a label by hand.
+stages, or from a person setting a label by hand. When this release meets such
+an attempt it only observes it, even once its session has ended: it never
+retains or finalises it, so the development build finishes its own attempt.
+Discard one that build left behind with `--discard`.
 
 An older version that does not declare these stages cannot read such records:
 it rejects any attempt record whose stage is `code-review`, `qa`,

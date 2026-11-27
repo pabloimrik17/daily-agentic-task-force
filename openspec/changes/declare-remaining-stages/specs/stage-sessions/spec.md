@@ -49,3 +49,22 @@ A stage SHALL declare: its id, its emoji, its prerequisites, its prompt for a ta
 
 - **WHEN** `launch` is reached with the declared stage `qa`, which has no implementation
 - **THEN** `launch` waits with `stage qa has no implementation` and writes nothing
+
+### Requirement: Retained attempts
+
+When a `started` attempt's session is `exited` or `gone` and the stage is not completed, the attempt SHALL be marked `retained`, with the reason and the time, and the last lines of the session captured into the attempt directory when the session still exists. A retained attempt SHALL keep `taken`, keep its session, and SHALL NOT be retried, relaunched or removed by any run. Every run SHALL list it until the user discards it. An attempt of a stage the running build registers no implementation for SHALL NOT be retained or finalised by that build, whatever its session reports: it is only observed, so the build that implements the stage can still finish it.
+
+#### Scenario: Session exited without result
+
+- **WHEN** the session of a started attempt reports `stopped` and no valid marker exists
+- **THEN** the attempt reads `retained`, its capture file exists, and the task still carries `taken`
+
+#### Scenario: Retained attempt on later runs
+
+- **WHEN** a run reconciles a retained attempt
+- **THEN** it is listed in the report and nothing changes
+
+#### Scenario: Ended session of a stage this build does not implement
+
+- **WHEN** the session of the started attempt `linear:DOT-121:code-review:1` reports `stopped` or is gone, a valid marker exists, and the running build registers no implementation for `code-review`
+- **THEN** the attempt stays `started` and is reported as observed, nothing is captured or removed, and the task still carries `taken`

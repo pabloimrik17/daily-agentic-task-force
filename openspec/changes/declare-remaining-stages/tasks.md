@@ -12,6 +12,7 @@
 
 - [x] 3.1 Add `code-review`, `qa`, `external-review` and `wrap-up` to `STAGE_IDS`, and not `ready-to-merge` (design D2). Verify with `state.test.ts`: a record of each parses, and one naming `ready-to-merge` does not; and that reading the real state with `listRecords` now succeeds.
 - [x] 3.2 Verify, with no code change expected, that nothing is launched: `candidates.test.ts` excludes a task in each new label as an unsupported stage, and `launch.test.ts` waits as excluded for a supplied task labelled `qa`, and with `stage <id> has no implementation` for a declared stage that reaches `launch`.
+- [x] 3.3 Make reconcile only observe an attempt of a stage with no registered implementation, never retain or finalise it, whatever its session reports (design D5). Verify with `reconcile.test.ts`: a `code-review` attempt whose session is idle, stopped or gone stays `started` and is reported as observed.
 
 ## 4. Docs
 
