@@ -7,7 +7,6 @@ import { join } from "node:path";
 
 import type { Result } from "../result.ts";
 import {
-    array,
     boolean,
     choice,
     type Json,
@@ -17,7 +16,17 @@ import {
     rejectUnknownKeys,
     string,
 } from "../validate.ts";
-import { engine, measure, nonEmpty, security, subject, tierChoice, toResult } from "./schema.ts";
+import {
+    engine,
+    list,
+    measure,
+    nonEmpty,
+    security,
+    subject,
+    tierChoice,
+    toResult,
+    withOptional,
+} from "./schema.ts";
 import {
     type Plan,
     PLAN_SCHEMA,
@@ -32,10 +41,6 @@ export function readJson(path: string): Result<unknown> {
     } catch (error) {
         return { ok: false, error: (error as Error).message };
     }
-}
-
-function withOptional<K extends string, V>(key: K, value: V | undefined): { [P in K]?: V } {
-    return (value === undefined ? {} : { [key]: value }) as { [P in K]?: V };
 }
 
 // The plan names files of the report directory: never absolute, never outside it.
@@ -99,10 +104,6 @@ function guide(value: unknown, path: string): Plan["guide"] {
     };
 }
 
-function list<T>(parent: Json, key: string, read: (value: unknown, path: string) => T): T[] {
-    return array(parent[key], `$.${key}`).map((entry, index) => read(entry, `$.${key}[${index}]`));
-}
-
 function plan(input: unknown): Plan {
     const parent = object(input, "$");
     rejectUnknownKeys(
@@ -131,8 +132,8 @@ function plan(input: unknown): Plan {
         measure: measure(parent.measure, "$.measure"),
         tier: tierChoice(parent.tier, "$.tier"),
         security: security(parent.security, "$.security"),
-        team: list(parent, "team", plannedReviewer),
-        skipped: list(parent, "skipped", skippedReviewer),
+        team: list(parent, "team", "$", plannedReviewer),
+        skipped: list(parent, "skipped", "$", skippedReviewer),
         guide: guide(parent.guide, "$.guide"),
     };
 }

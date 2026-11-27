@@ -95,6 +95,7 @@ function setup({
                 return review;
             },
         dir: directories.make("report"),
+        repoRoot: ROOT,
         plan: PLAN,
         row: {
             reviewer: "codex",

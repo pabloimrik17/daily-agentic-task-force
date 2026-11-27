@@ -16,7 +16,9 @@ import { buildPlan, type PlanRequest } from "./plan.ts";
 import { readPlan } from "./plan-file.ts";
 import { RUNNERS } from "./runners.ts";
 import type { Runner } from "./runners/shared.ts";
+import { headMoved } from "./subject.ts";
 import {
+    isReviewerId,
     type Plan,
     type PlannedReviewer,
     type Report,
@@ -204,10 +206,6 @@ async function plan(request: PlanRequest, deps: CliDeps): Promise<number> {
     return 0;
 }
 
-function isReviewerId(value: string): value is ReviewerId {
-    return (REVIEWER_IDS as readonly string[]).includes(value);
-}
-
 function runnerFor(
     reviewer: ReviewerId,
     plan: Plan,
@@ -239,18 +237,6 @@ function record(file: ReviewerFile, output: string, deps: CliDeps): number {
     return 0;
 }
 
-// The error of a HEAD that is not the planned one, or of a HEAD that cannot be read.
-async function headError(deps: CliDeps, root: string, plan: Plan): Promise<string | undefined> {
-    const head = await deps.exec("git", CLI_TIMEOUT_MS, { cwd: root })(["rev-parse", "HEAD"]);
-    if (!head.ok) {
-        return `could not check HEAD: ${head.error}`;
-    }
-    const now = head.stdout.trim();
-    return now === plan.subject.head
-        ? undefined
-        : `HEAD moved since the plan, from ${plan.subject.head} to ${now}`;
-}
-
 async function run(reviewer: string, dir: string, deps: CliDeps): Promise<number> {
     if (!isReviewerId(reviewer)) {
         return fail(
@@ -272,7 +258,10 @@ async function run(reviewer: string, dir: string, deps: CliDeps): Promise<number
         return fail(deps, root.error);
     }
     // A reviewer run on another HEAD would review other commits under the planned subject.
-    const moved = await headError(deps, root.value, plan.value);
+    const moved = await headMoved(
+        deps.exec("git", CLI_TIMEOUT_MS, { cwd: root.value }),
+        plan.value.subject.head,
+    );
     if (moved !== undefined) {
         return fail(deps, moved);
     }
@@ -280,6 +269,7 @@ async function run(reviewer: string, dir: string, deps: CliDeps): Promise<number
         exec: (command, timeoutMs, options) =>
             deps.exec(command, timeoutMs, { ...options, cwd: root.value }),
         dir,
+        repoRoot: root.value,
         plan: plan.value,
         row,
         now: () => deps.now().getTime(),
@@ -296,6 +286,7 @@ async function collectReport(dir: string, deps: CliDeps): Promise<number> {
     const report = await deps.collect(dir, {
         git: bound("git"),
         plannotator: bound("plannotator"),
+        repoRoot: root.value,
     });
     if (!report.ok) {
         return fail(deps, report.error);
@@ -327,7 +318,7 @@ export async function main(argv: readonly string[], deps: CliDeps): Promise<numb
 if (import.meta.main) {
     const home = process.env.HOME ?? homedir();
     process.exitCode = await main(process.argv.slice(2), {
-        exec: (command, timeoutMs, options) => execCommand(command, timeoutMs, options),
+        exec: execCommand,
         env: process.env,
         cwd: process.cwd(),
         home,

@@ -11,6 +11,7 @@ import {
     boolean,
     choice,
     type Json,
+    integerAtLeast,
     number,
     object,
     optional,
@@ -76,14 +77,6 @@ function oneLine(parent: Json, key: string, path: string): string {
     return value;
 }
 
-function integerAtLeast(parent: Json, key: string, path: string, minimum: number): number {
-    const value = number(parent, key, path);
-    if (!Number.isInteger(value) || value < minimum) {
-        throw new ParseError(`${path}.${key} must be an integer >= ${minimum}`);
-    }
-    return value;
-}
-
 const UNSAFE_PATH: ReadonlyArray<(value: string) => boolean> = [
     (value) => value.startsWith("/") || /^[a-z]:/i.test(value),
     (value) => value.includes("\\"),
@@ -100,7 +93,7 @@ function relativePath(parent: Json, key: string, path: string): string {
     return value;
 }
 
-function list<T>(parent: Json, key: string, path: string, read: Reader<T>): T[] {
+export function list<T>(parent: Json, key: string, path: string, read: Reader<T>): T[] {
     return array(parent[key], `${path}.${key}`).map((entry, index) =>
         read(entry, `${path}.${key}[${index}]`),
     );
@@ -110,7 +103,7 @@ function field<T>(read: Reader<T>): (parent: Json, key: string, path: string) =>
     return (parent, key, path) => read(parent[key], `${path}.${key}`);
 }
 
-function withOptional<K extends string, V>(key: K, value: V | undefined): { [P in K]?: V } {
+export function withOptional<K extends string, V>(key: K, value: V | undefined): { [P in K]?: V } {
     return (value === undefined ? {} : { [key]: value }) as { [P in K]?: V };
 }
 

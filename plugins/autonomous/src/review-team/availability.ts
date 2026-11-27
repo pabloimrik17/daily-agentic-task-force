@@ -5,7 +5,7 @@
 
 import { join } from "node:path";
 
-import type { Exec, ExecResult } from "../exec.ts";
+import type { Exec } from "../exec.ts";
 import type { ReviewerId } from "./types.ts";
 
 export interface AvailabilityDeps {
@@ -30,12 +30,8 @@ function failureReason(error: string, answer: string): string {
     return / failed: /.test(error) ? answer : error;
 }
 
-async function run(deps: AvailabilityDeps, command: string, args: string[]): Promise<ExecResult> {
-    return deps.exec(command)(args);
-}
-
 async function checkCodex(deps: AvailabilityDeps): Promise<Availability> {
-    const result = await run(deps, "codex", ["login", "status"]);
+    const result = await deps.exec("codex")(["login", "status"]);
     return result.ok ? AVAILABLE : skip(failureReason(result.error, "not logged in"));
 }
 
@@ -50,7 +46,7 @@ function isAuthenticated(stdout: string): boolean {
 }
 
 async function checkCoderabbit(deps: AvailabilityDeps): Promise<Availability> {
-    const result = await run(deps, "coderabbit", ["auth", "status", "--agent"]);
+    const result = await deps.exec("coderabbit")(["auth", "status", "--agent"]);
     if (!result.ok) {
         return skip(failureReason(result.error, "not logged in"));
     }
@@ -73,7 +69,7 @@ async function checkFallow(deps: AvailabilityDeps): Promise<Availability> {
     if (!deps.exists(join(deps.repoRoot, "package.json"))) {
         return skip("not applicable: no package.json");
     }
-    const tool = await run(deps, "fallow", ["--version"]);
+    const tool = await deps.exec("fallow")(["--version"]);
     if (!tool.ok) {
         return skip(tool.error);
     }

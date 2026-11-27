@@ -61,6 +61,14 @@ export function number(parent: Json, key: string, path: string): number {
     return value;
 }
 
+export function integerAtLeast(parent: Json, key: string, path: string, minimum: number): number {
+    const value = number(parent, key, path);
+    if (!Number.isInteger(value) || value < minimum) {
+        throw new ParseError(`${path}.${key} must be an integer >= ${minimum}`);
+    }
+    return value;
+}
+
 export function boolean(parent: Json, key: string, path: string): boolean {
     const value = parent[key];
     if (typeof value !== "boolean") {

@@ -64,7 +64,8 @@ const plannotator: Exec = (args) => {
     return Promise.resolve({ ok: true, stdout: "Exported\n" });
 };
 
-const deps = () => ({ git, plannotator });
+// git names the repository by its real path, as the CLI passes it.
+const deps = () => ({ git, plannotator, repoRoot: realpathSync(repo) });
 
 function row(reviewer: ReviewerId, engine: Obj = {}): PlannedReviewer {
     const entry = REGISTRY[reviewer];

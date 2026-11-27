@@ -7,9 +7,16 @@
 import type { ExecResult } from "../../exec.ts";
 import { SEVERITY_TABLES } from "../severity.ts";
 import type { RawFinding, ReviewerFile } from "../types.ts";
-import { REVIEW_TIMEOUT_MS, type RunContext, runTimed, saveRaw, type Verdict } from "./shared.ts";
-
-const VERSION_TIMEOUT_MS = 30_000;
+import {
+    messageOf,
+    REVIEW_TIMEOUT_MS,
+    type RunContext,
+    runTimed,
+    saveOutput,
+    saveVersion,
+    type Verdict,
+    withStatement,
+} from "./shared.ts";
 
 // The line types seen in the recorded `--agent` stream are `review_context`,
 // `status`, `heartbeat`, `finding` and `complete`. How a rate limit is worded is unknown, so any
@@ -23,10 +30,6 @@ interface Numbered {
 const SEVERITIES = Object.keys(SEVERITY_TABLES.coderabbit);
 const ISSUE_SEVERITIES = new Set(["critical", "major"]);
 const SUGGESTED_FIX = /<details>\s*<summary>\s*Suggested fix\s*<\/summary>([\s\S]*?)<\/details>/i;
-
-function messageOf(error: unknown): string {
-    return error instanceof Error ? error.message : String(error);
-}
 
 function readLines(stdout: string): Numbered[] {
     return stdout.split("\n").flatMap((text, index) => {
@@ -69,8 +72,7 @@ function requiredLine(entry: Numbered, key: string): number {
 function splitComment(title: string, comment: string): { statement: string; evidence: string } {
     const [first = "", ...rest] = comment.trim().split("\n");
     const body = (first.trim() === `**${title}**` ? rest.join("\n") : comment).trim();
-    const evidence = body === "" ? title : body;
-    return { statement: evidence.split(/\n\s*\n/)[0]?.trim() ?? evidence, evidence };
+    return withStatement(body === "" ? title : body);
 }
 
 function suggestionStrings(line: Line): string[] {
@@ -166,13 +168,8 @@ function verdictOfFailure(result: Extract<ExecResult, { ok: false }>): Verdict {
     return { skip: `coderabbit exited with code ${result.exit.code}: ${detail}` };
 }
 
-async function saveVersion(ctx: RunContext): Promise<void> {
-    const version = await ctx.exec("coderabbit", VERSION_TIMEOUT_MS)(["--version"]);
-    await saveRaw(ctx.dir, "coderabbit.version.txt", version.ok ? version.stdout : version.error);
-}
-
 async function review(ctx: RunContext): Promise<Verdict> {
-    await saveVersion(ctx);
+    await saveVersion(ctx, "coderabbit");
     const result = await ctx.exec("coderabbit", REVIEW_TIMEOUT_MS, { keepOutputOnExit: true })([
         "review",
         "--agent",
@@ -180,10 +177,7 @@ async function review(ctx: RunContext): Promise<Verdict> {
         "--base-commit",
         ctx.plan.subject.mergeBase,
     ]);
-    const stdout = result.ok ? result.stdout : (result.exit?.stdout ?? "");
-    // An Exec reports stderr only inside a failure's error, so a clean run leaves it empty.
-    await saveRaw(ctx.dir, "coderabbit.stdout.ndjson", stdout);
-    await saveRaw(ctx.dir, "coderabbit.stderr.txt", result.ok ? "" : result.error);
+    await saveOutput(ctx.dir, "coderabbit", "coderabbit.stdout.ndjson", result);
     return result.ok ? verdictOfOutput(result.stdout) : verdictOfFailure(result);
 }
 

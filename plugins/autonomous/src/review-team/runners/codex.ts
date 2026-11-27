@@ -16,9 +16,17 @@ import { hideMachinePaths } from "../report.ts";
 import { SEVERITY_TABLES } from "../severity.ts";
 import { insideRepository } from "../subject.ts";
 import type { DroppedEntry, RawFinding, RawItem, ReviewerFile } from "../types.ts";
-import { REVIEW_TIMEOUT_MS, type RunContext, runTimed, saveRaw, type Verdict } from "./shared.ts";
+import {
+    messageOf,
+    REVIEW_TIMEOUT_MS,
+    type RunContext,
+    runTimed,
+    saveOutput,
+    saveVersion,
+    type Verdict,
+    withStatement,
+} from "./shared.ts";
 
-const SHORT_TIMEOUT_MS = 30_000;
 const LAST_MESSAGE = "codex.last-message.txt";
 
 const ENTRY_START = "- [";
@@ -55,16 +63,15 @@ function splitEntries(text: string): Entry[] {
     return entries;
 }
 
-// The same convention as the CodeRabbit runner: the evidence is the whole paragraph text and the
-// statement its first paragraph.
 function paragraphOf(body: string[]): { statement: string; evidence: string } {
     const indented = body.filter((line) => line.trim() !== "");
     const indent = Math.min(...indented.map((line) => line.length - line.trimStart().length));
-    const evidence = body
-        .map((line) => line.slice(indent).trimEnd())
-        .join("\n")
-        .trim();
-    return { statement: evidence.split(/\n\s*\n/)[0] ?? evidence, evidence };
+    return withStatement(
+        body
+            .map((line) => line.slice(indent).trimEnd())
+            .join("\n")
+            .trim(),
+    );
 }
 
 // The path relative to the repository, or undefined when it is not inside it.
@@ -159,8 +166,7 @@ export function parseCodexReview(text: string, repoRoot: string): Result<CodexRe
             },
         };
     } catch (error) {
-        const detail = error instanceof Error ? error.message : String(error);
-        return { ok: false, error: detail };
+        return { ok: false, error: messageOf(error) };
     }
 }
 
@@ -202,42 +208,26 @@ async function readLastMessage(path: string): Promise<string> {
     }
 }
 
-async function repositoryRoot(ctx: RunContext): Promise<Result<string>> {
-    const result = await ctx.exec("git", SHORT_TIMEOUT_MS)(["rev-parse", "--show-toplevel"]);
-    return result.ok ? { ok: true, value: result.stdout.trim() } : result;
-}
-
-async function verdictOfMessage(ctx: RunContext, text: string): Promise<Verdict> {
+function verdictOfMessage(ctx: RunContext, text: string): Verdict {
     if (text.trim() === "") {
         return { skip: `codex wrote no last message to raw/${LAST_MESSAGE}` };
     }
-    const root = await repositoryRoot(ctx);
-    if (!root.ok) {
-        return { skip: root.error };
-    }
-    const parsed = parseCodexReview(text, root.value);
+    const parsed = parseCodexReview(text, ctx.repoRoot);
     return parsed.ok
         ? { items: parsed.value.items, dropped: parsed.value.dropped }
         : { skip: `codex output could not be read: ${parsed.error}` };
 }
 
-async function saveVersion(ctx: RunContext): Promise<void> {
-    const version = await ctx.exec("codex", SHORT_TIMEOUT_MS)(["--version"]);
-    await saveRaw(ctx.dir, "codex.version.txt", version.ok ? version.stdout : version.error);
-}
-
 async function review(ctx: RunContext): Promise<Verdict> {
     await mkdir(join(ctx.dir, "raw"), { recursive: true });
-    await saveVersion(ctx);
+    await saveVersion(ctx, "codex");
     // A message left by an earlier run must not pass for this one's.
     const lastMessage = join(ctx.dir, "raw", LAST_MESSAGE);
     await rm(lastMessage, { force: true });
     const result = await ctx.exec("codex", REVIEW_TIMEOUT_MS, { keepOutputOnExit: true })(
         codexArguments(ctx, lastMessage),
     );
-    const stdout = result.ok ? result.stdout : (result.exit?.stdout ?? "");
-    await saveRaw(ctx.dir, "codex.stdout.txt", stdout);
-    await saveRaw(ctx.dir, "codex.stderr.txt", result.ok ? "" : result.error);
+    await saveOutput(ctx.dir, "codex", "codex.stdout.txt", result);
     return result.ok
         ? verdictOfMessage(ctx, await readLastMessage(lastMessage))
         : verdictOfFailure(result);

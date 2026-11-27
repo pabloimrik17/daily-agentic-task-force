@@ -25,6 +25,17 @@ async function stdoutOf(exec: Exec, args: string[]): Promise<Result<string>> {
     return result.ok ? { ok: true, value: result.stdout.trim() } : result;
 }
 
+// The error of a HEAD that is not the planned one, or of a HEAD that cannot be read.
+export async function headMoved(git: Exec, planned: string): Promise<string | undefined> {
+    const head = await stdoutOf(git, ["rev-parse", "HEAD"]);
+    if (!head.ok) {
+        return `could not check HEAD: ${head.error}`;
+    }
+    return head.value === planned
+        ? undefined
+        : `HEAD moved since the plan, from ${planned} to ${head.value}`;
+}
+
 function openBase(stdout: string): string | undefined {
     try {
         const pr = JSON.parse(stdout) as { baseRefName?: unknown; state?: unknown };
@@ -42,12 +53,9 @@ async function pullRequestBase(gh: Exec): Promise<string | undefined> {
     return view.ok ? openBase(view.stdout) : undefined;
 }
 
-async function defaultBranch(git: Exec): Promise<Result<string>> {
+export async function defaultBranch(git: Exec): Promise<Result<string>> {
     const head = await stdoutOf(git, ["symbolic-ref", "refs/remotes/origin/HEAD"]);
-    if (!head.ok) {
-        return { ok: false, error: `no base given, no open pull request, and ${head.error}` };
-    }
-    return { ok: true, value: head.value.replace(/^refs\/remotes\/origin\//, "") };
+    return head.ok ? { ok: true, value: head.value.replace(/^refs\/remotes\/origin\//, "") } : head;
 }
 
 async function resolveBase(deps: SubjectDeps, given?: string): Promise<Result<Base>> {
@@ -61,7 +69,7 @@ async function resolveBase(deps: SubjectDeps, given?: string): Promise<Result<Ba
     const fallback = await defaultBranch(deps.git);
     return fallback.ok
         ? { ok: true, value: { base: fallback.value, baseSource: "default-branch" } }
-        : fallback;
+        : { ok: false, error: `no base given, no open pull request, and ${fallback.error}` };
 }
 
 // The remote-tracking ref when it exists, so a stale local branch does not move the merge base.
