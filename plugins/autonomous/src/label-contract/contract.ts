@@ -5,7 +5,17 @@
 // labels is derived from these.
 const SCOPE_LABELS = ["work", "personal"] as const;
 const AUTONOMY_LABELS = ["AFK", "HITL"] as const;
-const STAGE_LABELS = ["grill-me", "proposal", "implement", "verify", "code-review"] as const;
+const STAGE_LABELS = [
+    "grill-me",
+    "proposal",
+    "implement",
+    "verify",
+    "code-review",
+    "qa",
+    "external-review",
+    "wrap-up",
+    "ready-to-merge",
+] as const;
 export const TAKEN_LABEL = "taken";
 export const TRIAGE_LABEL = "triage-me";
 // The labels outside every group: never required, never missing, never in conflict,
@@ -50,6 +60,10 @@ export const COLOURS: Record<ContractLabel, string> = {
     implement: "#26b5ce",
     verify: "#d6409f",
     "code-review": "#a3e635",
+    qa: "#0d9488",
+    "external-review": "#8b5e3c",
+    "wrap-up": "#64748b",
+    "ready-to-merge": "#15803d",
     work: "#2f80ed",
     personal: "#27ae60",
     taken: "#95a2b3",
@@ -67,6 +81,10 @@ export const MEANINGS: Record<ContractLabel, string> = {
     implement: "The task has a proposal and is ready to implement.",
     verify: "The task is implemented and ready to verify against its proposal.",
     "code-review": "The task is verified and ready for code review.",
+    qa: "The task has passed code review and is ready for QA.",
+    "external-review": "The task has passed every review stage and is ready for external review.",
+    "wrap-up": "The task has passed external review and is ready for wrap-up.",
+    "ready-to-merge": "The task is wrapped up and waits for a person to merge its pull request.",
     taken: "An agent or a person is advancing the task now; it is not selected until the label is removed.",
     "triage-me":
         "The task's scope or autonomy could not be decided without the human; it is neither judged again nor selected until the label is removed.",

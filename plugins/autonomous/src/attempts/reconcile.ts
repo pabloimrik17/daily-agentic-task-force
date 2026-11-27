@@ -334,6 +334,12 @@ function decide(observed: Observed, holds: boolean): Decision {
     return observed.state === "open" ? "observe" : "retain";
 }
 
+// An attempt of a stage with no implementation here belongs to a build that has one: it is
+// only observed, never retained or finalised, so that build can still finish it.
+function decideFor(record: AttemptRecord, observed: Observed, holds: boolean): Decision {
+    return STAGES.has(record.stage) ? decide(observed, holds) : "observe";
+}
+
 const DRY_ACTIONS: Record<Decision, ReconcileAction> = {
     finalise: "finalised",
     completing: "completing",
@@ -377,7 +383,7 @@ async function reconcileStarted(r: Reconciler, record: AttemptRecord): Promise<R
         ? await save(r, record, { observed: observation(r, observed) })
         : record;
     const proofs = await checkProofs(r, record);
-    const decision = decide(observed, proofs.holds);
+    const decision = decideFor(record, observed, proofs.holds);
     const parts = viewParts(observed, proofs, decision);
     if (proofs.error !== null) {
         return failed(current, proofs.error, parts);

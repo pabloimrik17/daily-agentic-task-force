@@ -2,7 +2,6 @@ import { existsSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { mkdir } from "node:fs/promises";
 
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { STAGES } from "../stages/registry.ts";
 
 import type { ConfigLoad } from "../config.ts";
 import { task, trackers, triageContext } from "../label-triage/test-fixtures.ts";
@@ -340,25 +339,39 @@ describe("reconcile: completion needs two proofs", () => {
         expect((await stored()).state).toBe("started");
     });
 
-    it("does not complete a stage without an implementation", async () => {
-        const unknown = record({ id: "linear:DOT-109:proposal:1", stage: "proposal" });
-        // Every stage id is registered, so the registry is made to lack this one.
-        vi.spyOn(STAGES, "get").mockReturnValue(undefined);
-        await given(unknown);
-        await marker(unknown.id);
-        const sessions = fakeSessions({
-            observe: () => ok(seen("stopped")),
-            capture: () => ok("pane"),
-        });
-        const result = await reconcileStep.run(context({ sessions, trackers: linear([]) }));
-        expect(result.data.attempts[0]).toMatchObject({
-            marker: { ok: true },
-            action: "retained",
-        });
-        expect((await stored(unknown.id)).retained?.reason).toBe(
-            "session stopped; stage proposal has no implementation",
-        );
-    });
+    // The session's state does not matter: only the build that implements the stage may
+    // retain or finalise its attempt.
+    it.each(["idle", "stopped", "gone"])(
+        "reads a record of a stage this build does not implement and only observes it, its session %s",
+        async (status) => {
+            const declared = record({
+                id: "linear:DOT-121:code-review:1",
+                task: { source: "linear", id: "DOT-121", title: "Code review stage" },
+                stage: "code-review",
+            });
+            await given(declared);
+            await marker(declared.id);
+            const sessions = fakeSessions({ observe: () => ok(seen(status)) });
+            const fakes = trackers([], {
+                linear: [task("linear", "DOT-121", ["taken", "code-review"])],
+            });
+            const result = await reconcileStep.run(context({ sessions, trackers: fakes }));
+            expect(result.data.attempts).toHaveLength(1);
+            expect(result.data.attempts[0]).toMatchObject({
+                id: declared.id,
+                state: "started",
+                marker: { ok: true },
+                action: "observed",
+            });
+            expect(result.data.retained).toEqual([]);
+            expect(result.reasons).toEqual(["1 attempt observed", "nothing changed"]);
+            const after = await stored(declared.id);
+            expect(after.state).toBe("started");
+            expect(after.retained).toBeNull();
+            expect(after.taken.removed).toBeNull();
+            expect(sessions.calls).toEqual([`observe ${SESSION}`]);
+        },
+    );
 
     it("makes an attempt with both proofs eligible for finalisation", async () => {
         await given(record());

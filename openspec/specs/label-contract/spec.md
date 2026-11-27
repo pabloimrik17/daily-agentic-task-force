@@ -8,7 +8,7 @@ The label vocabulary shared by every tracker the autonomous loop reads — which
 
 ### Requirement: Three label groups
 
-Every task SHALL carry labels from three groups. The **scope** group is `work` and `personal`. The **autonomy** group is `AFK` and `HITL`. The **stage** group is `grill-me`, `proposal`, `implement`, `verify` and `code-review`. Each group SHALL hold exactly one label on a task: two labels of the same group are a conflict. A task without a label of a group is untagged for that group, except that a task whose stage is `grill-me` MAY lack autonomy. Missing groups and conflicts SHALL be detected and reported per group, and SHALL NOT be resolved by the system removing or replacing a label.
+Every task SHALL carry labels from three groups. The **scope** group is `work` and `personal`. The **autonomy** group is `AFK` and `HITL`. The **stage** group is `grill-me`, `proposal`, `implement`, `verify`, `code-review`, `qa`, `external-review`, `wrap-up` and `ready-to-merge`. Each group SHALL hold exactly one label on a task: two labels of the same group are a conflict. A task without a label of a group is untagged for that group, except that a task whose stage is `grill-me` MAY lack autonomy. Missing groups and conflicts SHALL be detected and reported per group, and SHALL NOT be resolved by the system removing or replacing a label.
 
 #### Scenario: Complete task
 
@@ -85,9 +85,19 @@ Every task SHALL carry labels from three groups. The **scope** group is `work` a
 - **WHEN** a task carries `verify` and `code-review`
 - **THEN** it is reported as a stage conflict for a human to resolve
 
+#### Scenario: Task in a stage with no implementation
+
+- **WHEN** a task carries `personal`, `AFK` and one of `qa`, `external-review`, `wrap-up` or `ready-to-merge`
+- **THEN** it is complete for all three groups
+
+#### Scenario: code-review with qa
+
+- **WHEN** a task carries `code-review` and `qa`
+- **THEN** it is reported as a stage conflict for a human to resolve
+
 ### Requirement: Meaning of each label
 
-The contract SHALL fix one meaning per label: `work` is Nazaries work; `personal` is the user's own work; `AFK` means an agent may advance the task without a human; `HITL` means an agent may advance the task but a human intervenes during or at the end of each stage; `grill-me` means the task must be refined with a human in a grill before anyone works on it; `proposal` means the task is ready for proposal preparation, its autonomy decided and any grill it needed over; `implement` means the task has a proposal and is ready to implement; `verify` means the task is implemented and ready to verify against its proposal; `code-review` means the task is verified and ready for code review; `taken` means an agent or a person is advancing the task now. Scope and autonomy are properties, kept for the whole life of a task; the stage says where the task is and is replaced by each transition. While a task is in `grill-me`, its autonomy, when it has one, is provisional until the grill confirms it. No scope has priority over the other in the contract. What each label implies for selecting work, including the preference for the machine's scope, is defined by the capability that selects work, not by this contract.
+The contract SHALL fix one meaning per label: `work` is Nazaries work; `personal` is the user's own work; `AFK` means an agent may advance the task without a human; `HITL` means an agent may advance the task but a human intervenes during or at the end of each stage; `grill-me` means the task must be refined with a human in a grill before anyone works on it; `proposal` means the task is ready for proposal preparation, its autonomy decided and any grill it needed over; `implement` means the task has a proposal and is ready to implement; `verify` means the task is implemented and ready to verify against its proposal; `code-review` means the task is verified and ready for code review; `qa` means the task has passed code review and is ready for QA; `external-review` means the task has passed every review stage and is ready for external review; `wrap-up` means the task has passed external review and is ready for wrap-up; `ready-to-merge` means the task is wrapped up and waits for a person to merge its pull request; `taken` means an agent or a person is advancing the task now. Scope and autonomy are properties, kept for the whole life of a task; the stage says where the task is and is replaced by each transition. While a task is in `grill-me`, its autonomy, when it has one, is provisional until the grill confirms it. No scope has priority over the other in the contract. What each label implies for selecting work, including the preference for the machine's scope, is defined by the capability that selects work, not by this contract.
 
 #### Scenario: grill-me with AFK
 
@@ -119,9 +129,14 @@ The contract SHALL fix one meaning per label: `work` is Nazaries work; `personal
 - **WHEN** triage offers `work` as an option
 - **THEN** its description says it is Nazaries work and does not claim priority over personal work
 
+#### Scenario: ready-to-merge with AFK
+
+- **WHEN** a task carries `AFK` and `ready-to-merge`
+- **THEN** the contract reads it as waiting for a person to merge its pull request, with no stage for an agent to run
+
 ### Requirement: One spelling and one colour per label
 
-Each label SHALL have exactly one spelling, used verbatim on every tracker: `work`, `personal`, `AFK`, `HITL`, `grill-me`, `proposal`, `implement`, `verify`, `code-review`, `taken`. Matching SHALL be exact and case-sensitive; a label that differs only in case or spacing (for example `Grill Me`) is not the contract label. Each label SHALL have one colour, applied on trackers that support colour: `AFK` `#5e6ad2`, `HITL` `#eb5757`, `grill-me` `#f2994a`, `proposal` `#bb87fc`, `implement` `#26b5ce`, `verify` `#d6409f`, `code-review` `#a3e635`, `work` `#2f80ed`, `personal` `#27ae60`, `taken` `#95a2b3`. A tracker without label colours carries the name only.
+Each label SHALL have exactly one spelling, used verbatim on every tracker: `work`, `personal`, `AFK`, `HITL`, `grill-me`, `proposal`, `implement`, `verify`, `code-review`, `qa`, `external-review`, `wrap-up`, `ready-to-merge`, `taken`. Matching SHALL be exact and case-sensitive; a label that differs only in case or spacing (for example `Grill Me`) is not the contract label. Each label SHALL have one colour, applied on trackers that support colour: `AFK` `#5e6ad2`, `HITL` `#eb5757`, `grill-me` `#f2994a`, `proposal` `#bb87fc`, `implement` `#26b5ce`, `verify` `#d6409f`, `code-review` `#a3e635`, `qa` `#0d9488`, `external-review` `#8b5e3c`, `wrap-up` `#64748b`, `ready-to-merge` `#15803d`, `work` `#2f80ed`, `personal` `#27ae60`, `taken` `#95a2b3`. A tracker without label colours carries the name only.
 
 #### Scenario: Near-miss spelling
 
@@ -162,6 +177,11 @@ Each label SHALL have exactly one spelling, used verbatim on every tracker: `wor
 
 - **WHEN** a task carries `Code Review` and the configuration declares no alias for it
 - **THEN** the task is untagged for the stage group
+
+#### Scenario: Declared stage labels bootstrapped
+
+- **WHEN** Linear lacks `qa`, `external-review`, `wrap-up` and `ready-to-merge` and the bootstrap runs
+- **THEN** each is created at workspace level with its colour and reported as created
 
 ### Requirement: Aliases are evidence, never removed
 

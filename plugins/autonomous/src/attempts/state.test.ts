@@ -153,6 +153,21 @@ describe("parseRecord", () => {
         expect(parse((r) => (r.attempt = 0))).toThrow("$.attempt");
     });
 
+    it.each(["code-review", "qa", "external-review", "wrap-up"] as const)(
+        "reads a record of the declared stage %s, whether or not it has an implementation",
+        (stage) => {
+            const declared = record({ id: `linear:DOT-109:${stage}:1`, stage });
+            expect(parseRecord(structuredClone(declared))).toEqual(declared);
+        },
+    );
+
+    it("rejects a record naming ready-to-merge, a stage label no attempt names", () => {
+        const copy = structuredClone(record()) as unknown as Record<string, unknown>;
+        copy.id = "linear:DOT-109:ready-to-merge:1";
+        copy.stage = "ready-to-merge";
+        expect(() => parseRecord(copy)).toThrow("$.stage must be one of");
+    });
+
     it("rejects unknown keys, missing fields and bad nested values", () => {
         expect(parse((r) => (r.extra = 1))).toThrow("$.extra");
         expect(parse((r) => delete r.taken)).toThrow("$.taken");

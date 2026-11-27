@@ -74,6 +74,10 @@ judges what others found, not the work from its own angle. It does not exist
 yet.
 _Avoid_: bot review, pull request review, code review
 
+**Wrap-up**:
+The stage that follows external review and precedes the merge. It does not
+exist yet.
+
 **Adversarial review**:
 The way a review stage, or any other review, handles what it finds: a
 reviewer reports findings, the orchestrator triages them, other teammates try
@@ -340,13 +344,15 @@ the whole life of the task, and provisional while the task is in its grill.
 _Avoid_: participation mode
 
 **Stage label**:
-Where a task is in the process: `grill-me`, `proposal`, `implement`, `verify`
-or `code-review`. Every task has exactly one, and each transition replaces it.
+Where a task is in the process: `grill-me`, `proposal`, `implement`, `verify`,
+`code-review`, `qa`, `external-review`, `wrap-up` or `ready-to-merge`. Every
+task has exactly one, and each transition replaces it.
 A task whose autonomy is decided starts at `proposal`, a task in `grill-me`
 moves to `proposal` when the grill ends, a task in `proposal` moves to
 `implement` when its proposal preparation ends, a task in `implement` moves to
 `verify` when its implementation ends, and a task in `verify` moves to
-`code-review` when its verification ends.
+`code-review` when its verification ends. `ready-to-merge` is a label with no
+stage: the task waits there for a person to merge its pull request.
 
 **Taken label**:
 `taken`: marks a taken task for as long as an agent or a person advances it.
