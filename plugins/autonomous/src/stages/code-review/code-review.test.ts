@@ -659,10 +659,10 @@ describe("The human round", () => {
 
     it("Comment on GitHub: a finding of the reviewer human, linked to its thread, answered by publish mode and resolved when its outcome does", () => {
         expect(rounds()).toContain(
-            "on GitHub, the comments and review threads on the pull request that carry no marker of a stage and were posted since the previous human round began its collection, or since this attempt launched when this is the first human round",
+            "on GitHub, the comments and review threads on the pull request that carry no marker of a stage and were posted up to that time and after the time the previous human round noted, or after this attempt launched when this is the first human round",
         );
         expect(rounds()).toContain(
-            "A comment the human posts while the stage's round or a human round runs is then collected by the next human round.",
+            "A comment the human posts after the noted time is collected by the next human round, never by this one.",
         );
         expect(rounds()).toContain("Make each comment a finding of the reviewer `human`");
         expect(rounds()).toContain(

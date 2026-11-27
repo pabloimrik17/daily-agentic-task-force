@@ -55,6 +55,20 @@ A published thread SHALL be resolved when the finding is accounted for: a fixed 
 - **WHEN** an `HITL` record holds a deferred finding whose follow-up task was created at `https://linear.app/monolab/issue/DOT-170`
 - **THEN** its thread is published resolved, and its status line holds that URL
 
+### Requirement: A thread several entries share stays open while one needs it
+
+When several entries of the record are answered in one thread, each SHALL be answered in it, and the thread SHALL be resolved only when none of them needs it open.
+
+#### Scenario: Two entries in one thread, one open
+
+- **WHEN** the record links two findings to one thread, the first fixed and the second blocked
+- **THEN** both are answered in the thread, and the thread stays open
+
+#### Scenario: Two entries in one thread, both fixed
+
+- **WHEN** the record links two fixed findings to one thread
+- **THEN** both are answered in the thread, and the thread is resolved once
+
 ### Requirement: A finding passed on is addressed to its stage
 
 A finding passed on to a later stage SHALL be published as an open thread carrying the visible tag `#<stage>` and a hidden marker `for=<stage>`, so that the stage it is addressed to finds it.

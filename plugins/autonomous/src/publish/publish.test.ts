@@ -487,6 +487,41 @@ describe("runPublish: existing threads are answered, never duplicated", () => {
         expect(report.threads.unresolved.map(({ finding: id }) => id)).toEqual(["f7"]);
     });
 
+    it("Two entries in one thread, one open: both are answered and the thread stays open", async () => {
+        const port = fakePort({ threads: [human("H1")] });
+        const fixed = fixedByHuman({ id: "h1", thread: "H1" });
+        const blocked = fixedByHuman({
+            id: "h2",
+            round: 3,
+            thread: "H1",
+            publication: { state: "blocked", reason: "needs the owner" },
+        });
+        const harness = await setup({ port, entries: [fixed, blocked] });
+        const report = await publish(harness);
+        expect(report.outcome).toBe("advance");
+        expect(posts(port.calls)).toEqual(["reply H1", "reply H1"]);
+        expect(port.threads[0]?.resolved).toBe(false);
+        const before = port.calls.length;
+        expect((await publish(harness)).outcome).toBe("advance");
+        expect(posts(port.calls.slice(before))).toEqual([]);
+    });
+
+    it("Two entries in one thread, both fixed: the thread is resolved once", async () => {
+        const port = fakePort({ threads: [human("H1")] });
+        const first = fixedByHuman({ id: "h1", thread: "H1" });
+        const second = fixedByHuman({
+            id: "h2",
+            round: 3,
+            thread: "H1",
+            publication: { state: "fixed", commit: "def5678" },
+        });
+        const harness = await setup({ port, entries: [first, second] });
+        const report = await publish(harness);
+        expect(report.outcome).toBe("advance");
+        expect(posts(port.calls)).toEqual(["reply H1", "resolve H1", "reply H1"]);
+        expect(report.threads.resolved).toHaveLength(1);
+    });
+
     it("refuses, before any post, an entry linked to a thread the pull request does not hold", async () => {
         const harness = await setup({ entries: [fixedByHuman({ id: "h1", thread: "GONE" })] });
         const report = await publish(harness);
@@ -697,6 +732,16 @@ describe("runPublish: one publication per attempt at a time", () => {
         const refused = reports.find(({ outcome }) => outcome === "not-evaluable");
         const lock = publishLockPath(harness.dir);
         expect(refused?.reasons[0]).toContain(`another publication holds ${lock}`);
+    });
+
+    it("reads the findings only once it holds the lock", async () => {
+        const harness = await setup({ text: null });
+        const lock = publishLockPath(harness.dir);
+        await writeFile(lock, JSON.stringify({ pid: process.pid, startedAt: "t" }));
+        const report = await publish(harness);
+        expect(report.reasons).toEqual([
+            `another publication holds ${lock} (pid ${process.pid}, started t)`,
+        ]);
     });
 
     it("releases the lock when it ends, published or failed", async () => {

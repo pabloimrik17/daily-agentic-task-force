@@ -192,8 +192,19 @@ export function showsState(thread: ReviewThread, attempt: string, planned: Plann
     return last !== null && last.status === status && (last.state ?? publication) === publication;
 }
 
-// Null: the thread keeps its state (an entry not published).
-export function wantsResolved(planned: Planned): boolean | null {
-    const { state } = planned.published;
-    return state === "kept" ? null : state === "resolved";
+const threadIdOf = ({ target }: Planned) => (target.kind === "thread" ? target.thread.id : null);
+
+// The entries answered in the same thread as this one, itself included.
+function sharing(planned: Planned, all: readonly Planned[]): readonly Planned[] {
+    const id = threadIdOf(planned);
+    return id === null ? [planned] : all.filter((item) => threadIdOf(item) === id);
+}
+
+// Null: the thread keeps its state (an entry not published). A thread several entries share
+// stays open while any of them needs it open.
+export function wantsResolved(planned: Planned, all: readonly Planned[]): boolean | null {
+    if (planned.published.state === "kept") {
+        return null;
+    }
+    return sharing(planned, all).every(({ published }) => published.state !== "open");
 }

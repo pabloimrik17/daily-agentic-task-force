@@ -32,6 +32,8 @@ export interface PrepareDeps {
     git: Exec; // run with `-C <directory>`
 }
 
+type FoundAttempt = Pick<Attempt, "record" | "dir">;
+
 interface Attempt {
     record: AttemptRecord;
     dir: string;
@@ -53,13 +55,19 @@ export interface Prepared extends Attempt, FinalDiff {
 
 const messageOf = (error: unknown) => (error instanceof Error ? error.message : String(error));
 
-// What follows the attempt's record and findings, which `readAttempt` reads.
+// Everything publish mode reads after `findAttempt`, the findings first: the caller holds the
+// attempt's publication lock, so the record it publishes is the one its receipt names.
 export async function prepare(
-    read: Attempt,
+    found: FoundAttempt,
     deps: PrepareDeps,
     report: PublishReport,
 ): Promise<Result<Prepared>> {
-    const { record } = read;
+    const { record, dir } = found;
+    const findings = await readFindings(dir, record.id);
+    if (!findings.ok) {
+        return findings;
+    }
+    const read: Attempt = { record, dir, ...findings.value };
     const port = deps.pullRequests(record.workspace.path);
     const open = await openPullRequest(port, record, deps.git, report);
     if (!open.ok) {
@@ -84,11 +92,12 @@ export async function prepare(
         : threads;
 }
 
-export async function readAttempt(
+// The attempt's record and directory, which name the lock; nothing of the findings yet.
+export async function findAttempt(
     attempt: AttemptId,
     deps: PrepareDeps,
     report: PublishReport,
-): Promise<Result<Attempt>> {
+): Promise<Result<FoundAttempt>> {
     const found = await readOpenAttempt(deps.state, attempt, deps.config);
     if (!found.ok) {
         return found;
@@ -101,8 +110,7 @@ export async function readAttempt(
             error: `attempt ${attempt} belongs to the ${record.stage} stage; publish mode publishes ${STAGE} attempts only`,
         };
     }
-    const findings = await readFindings(dir, attempt);
-    return findings.ok ? { ok: true, value: { record, dir, ...findings.value } } : findings;
+    return { ok: true, value: { record, dir } };
 }
 
 // The digest is of the bytes validated, so the receipt names exactly the record published.

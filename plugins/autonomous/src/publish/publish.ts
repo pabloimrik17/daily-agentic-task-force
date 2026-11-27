@@ -15,7 +15,7 @@ import { guideAvailability } from "../review-team/availability.ts";
 import { continuingReply, firstComment, reviewBody, stateReply } from "./format.ts";
 import { threadMarker } from "./markers.ts";
 import { type Planned, planEntries, showsState, STAGE, wantsResolved } from "./plan.ts";
-import { type PrepareDeps, prepare, type Prepared, readAttempt } from "./prepare.ts";
+import { type PrepareDeps, prepare, type Prepared, findAttempt } from "./prepare.ts";
 import { PUBLISH_RECEIPT_SCHEMA, readPublishReceipt, writePublishReceipt } from "./receipt.ts";
 import { blankPublish, type PublishReport, type ThreadPost } from "./report.ts";
 import type {
@@ -60,24 +60,25 @@ export async function runPublish(
     return report;
 }
 
-// One publication per attempt at a time: the lock is held from before the threads are read
-// until the receipt is written, so two runs never post one round's review twice.
+// One publication per attempt at a time: the lock is held from before the findings and the
+// threads are read until the receipt is written, so two runs never post one round's review
+// twice, and none publishes a record another has already replaced.
 async function publishLocked(
     attempt: AttemptId,
     deps: PublishDeps,
     report: PublishReport,
 ): Promise<string | null> {
-    const read = await readAttempt(attempt, deps, report);
-    if (!read.ok) {
-        return read.error;
+    const found = await findAttempt(attempt, deps, report);
+    if (!found.ok) {
+        return found.error;
     }
-    const file = publishLockPath(read.value.dir);
+    const file = publishLockPath(found.value.dir);
     const lock = await acquireLockAt(file, undefined, undefined, "publication");
     if (!lock.ok) {
         return lock.error;
     }
     try {
-        const prepared = await prepare(read.value, deps, report);
+        const prepared = await prepare(found.value, deps, report);
         return prepared.ok ? await publish({ ...prepared.value, deps, report }) : prepared.error;
     } finally {
         await lock.release();
@@ -256,17 +257,24 @@ async function answer(
     publishing: Publishing,
     threaded: readonly Threaded[],
 ): Promise<string | null> {
+    const settling: Settling = { threaded, settled: new Set() };
     for (const planned of threaded) {
         const replied = await reply(publishing, planned);
         if (replied !== null) {
             return replied;
         }
-        const resolved = await settle(publishing, planned);
+        const resolved = await settle(publishing, planned, settling);
         if (resolved !== null) {
             return resolved;
         }
     }
     return null;
+}
+
+// The threads this run already resolved or unresolved: entries that share one settle it once.
+interface Settling {
+    threaded: readonly Threaded[];
+    settled: Set<string>;
 }
 
 async function reply(publishing: Publishing, planned: Threaded): Promise<string | null> {
@@ -289,12 +297,17 @@ async function reply(publishing: Publishing, planned: Threaded): Promise<string 
     return null;
 }
 
-async function settle({ port, report }: Publishing, planned: Threaded): Promise<string | null> {
+async function settle(
+    { port, report }: Publishing,
+    planned: Threaded,
+    { threaded, settled }: Settling,
+): Promise<string | null> {
     const { thread } = planned.target;
-    const resolved = wantsResolved(planned);
-    if (resolved === null || thread.resolved === resolved) {
+    const resolved = wantsResolved(planned, threaded);
+    if (resolved === null || thread.resolved === resolved || settled.has(thread.id)) {
         return null;
     }
+    settled.add(thread.id);
     const changed = await (resolved ? port.resolve(thread.id) : port.unresolve(thread.id));
     if (!changed.ok) {
         return changed.error;
@@ -320,7 +333,7 @@ function misplaced(
         if (!showsState(thread, attempt, planned)) {
             return [`the thread of ${id} does not show "${planned.published.status}"`];
         }
-        const wanted = wantsResolved(planned);
+        const wanted = wantsResolved(planned, threaded);
         return wanted === null || thread.resolved === wanted
             ? []
             : [`the thread of ${id} is ${thread.resolved ? "resolved" : "open"}`];
