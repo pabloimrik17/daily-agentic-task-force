@@ -1992,8 +1992,8 @@ A thread's state follows the finding's outcome:
 
 #### A linked entry that is not published
 
-A refuted or dismissed finding, a fixed `SUGGESTION` and a settled or asked doubt
-are not published, but the agent may have linked them to an existing thread: a
+A refuted or dismissed finding and a settled or asked doubt are not published,
+but the agent may have linked them to an existing thread: a
 doubt of an earlier attempt that this attempt raised again and refuted, or the
 human's own finding that the human withdrew in a human round. Publish mode
 replies in that thread with one status line and the entry's reason, under a
@@ -2007,6 +2007,10 @@ it neither resolves nor unresolves it, so closing it is left to a person.
 | A settled doubt               | `not published (settled): <reason>`   |
 | A doubt the human answered    | `not published (asked): <reason>`     |
 | Any other entry not published | `not published: <reason>`             |
+
+A fixed `SUGGESTION` linked to a thread, such as a `nit:` the human left on
+GitHub, is answered like a fixed `WARNING`: `fixed in <commit>`, and the thread
+is resolved.
 
 The reply is not posted twice in an attempt, and the report lists the thread
 among those answered. The record has no state for a finding the human withdrew,

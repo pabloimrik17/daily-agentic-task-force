@@ -78,6 +78,7 @@ Findings of the verify run on this change (2026-11-27), fixed here by the user's
 - [x] 13.4 S1 (evidence F25): reword "SHALL open no review" in the finding-threads spec and design D11 to say that publish mode posts no review of its own for a reply. Verify with `openspec validate add-code-review-stage --strict`.
 - [x] 13.5 S2: remove the unused export `Publication` from `publish/record.ts`. Verify with `bun run lint:knip` and `bun run typecheck`.
 - [x] 13.6 Run the full toolchain of 11.1 again.
+- [x] 13.7 Defect of 13.3: answer a fixed `SUGGESTION` linked to an existing thread as `fixed in <commit>` and resolve the thread, as a fixed `WARNING` is, instead of `not published`. Add the scenario "Human suggestion fixed" to the finding-threads spec. Verify with `outcome.test.ts` and `publish.test.ts`.
 
 ## Workflow follow-up
 

@@ -25,14 +25,17 @@ export function stageName(stage: string): string {
     return STAGE_NAMES[stage] ?? stage;
 }
 
-function survives(entry: FindingEntry): boolean {
-    const { destination, refutation, severity, publication } = entry;
-    if (publication.state === "fixed" && severity === "SUGGESTION") {
-        return false;
-    }
+function survivesRefutation({ destination, refutation }: FindingEntry): boolean {
     return refutation.outcome === "survived"
         ? destination === "fix" || destination === "defer"
         : refutation.outcome === "not-refuted" && destination === "pass-on";
+}
+
+function survives(entry: FindingEntry): boolean {
+    const { severity, publication } = entry;
+    return (
+        !(publication.state === "fixed" && severity === "SUGGESTION") && survivesRefutation(entry)
+    );
 }
 
 type Placement = Pick<Published, "state" | "status" | "for">;
@@ -77,9 +80,10 @@ export function publicationOf(entry: RecordEntry): Published | null {
             : null;
     }
     const placed = survives(entry) ? placement(entry) : null;
-    if (placed === null) {
-        return null;
-    }
+    return placed === null ? null : placedFinding(entry, placed);
+}
+
+function placedFinding(entry: FindingEntry, placed: Placement): Published {
     return {
         ...placed,
         label: entry.label,
@@ -101,8 +105,8 @@ function notPublishedAs(entry: RecordEntry): string | null {
     return entry.destination === "dismiss" ? "dismissed" : null;
 }
 
-// The reply for an entry that is not published but is linked to a thread: its outcome and the
-// record's reason, with the thread's state left as it is.
+// The reply for a refuted or dismissed finding or a settled doubt linked to a thread: its outcome
+// and the record's reason, with the thread's state left as it is.
 function unpublished(entry: RecordEntry): Published {
     const as = notPublishedAs(entry);
     const reason = entry.reason.split(/\s+/u).filter(Boolean).join(" ");
@@ -115,9 +119,18 @@ function unpublished(entry: RecordEntry): Published {
     };
 }
 
+// A finding that survived the refutation but is not published, a fixed `SUGGESTION`, is answered
+// in its thread as it stands: `fixed in <commit>`, resolved.
+function linkedOutcome(entry: RecordEntry): Published {
+    const placed = entry.kind === "finding" && survivesRefutation(entry) ? placement(entry) : null;
+    return entry.kind === "finding" && placed !== null
+        ? placedFinding(entry, placed)
+        : unpublished(entry);
+}
+
 // What publish mode answers in the entry's thread: its publication, or, for a linked entry that
-// is not published (a refuted or dismissed finding, a settled doubt), its outcome. Null for an
-// unpublished entry with no linked thread, which posts nothing.
+// is not published, its outcome. Null for an unpublished entry with no linked thread, which
+// posts nothing.
 export function outcomeOf(entry: RecordEntry): Published | null {
-    return publicationOf(entry) ?? (entry.thread === null ? null : unpublished(entry));
+    return publicationOf(entry) ?? (entry.thread === null ? null : linkedOutcome(entry));
 }

@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import { outcomeOf, publicationOf } from "./outcome.ts";
+import type { FindingEntry } from "./record.ts";
 import { doubt, finding } from "./test-fixtures.ts";
 
 describe("Only surviving findings are published", () => {
@@ -124,6 +125,9 @@ describe("Existing threads are answered, never duplicated", () => {
         publication: { state: "none" },
     });
 
+    const fixedSuggestion = (overrides: Partial<FindingEntry>) =>
+        finding({ severity: "SUGGESTION", label: "suggestion", ...overrides });
+
     it("Linked entry refuted: a reply that keeps the thread's state", () => {
         expect(outcomeOf(refuted)).toEqual({
             state: "kept",
@@ -152,6 +156,23 @@ describe("Existing threads are answered, never duplicated", () => {
 
     it("Unpublished entry with no linked thread: nothing to answer", () => {
         expect(outcomeOf({ ...refuted, thread: null })).toBeNull();
+        expect(outcomeOf(fixedSuggestion({ thread: null }))).toBeNull();
+    });
+
+    it("Human suggestion fixed: a linked fixed SUGGESTION is answered as fixed and resolved", () => {
+        expect(outcomeOf(fixedSuggestion({ thread: "E1" }))).toEqual({
+            state: "resolved",
+            status: "fixed in abc1234",
+            label: "suggestion",
+            blocking: false,
+            publication: "fixed",
+        });
+    });
+
+    it("a refuted finding that records a fix is still answered as not published", () => {
+        expect(
+            outcomeOf({ ...refuted, publication: { state: "fixed", commit: "abc1234" } }),
+        ).toMatchObject({ state: "kept" });
     });
 
     it("answers a published entry as it is published", () => {

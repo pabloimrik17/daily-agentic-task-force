@@ -430,6 +430,33 @@ describe("runPublish: existing threads are answered, never duplicated", () => {
         ]);
     });
 
+    it("Human suggestion fixed: the thread gains a reply naming the commit and is resolved, no new thread", async () => {
+        const port = fakePort({ threads: [human("H1", "nit: rename it.")] });
+        const nit = fixedByHuman({
+            id: "h1",
+            thread: "H1",
+            severity: "SUGGESTION",
+            label: "suggestion",
+        });
+        const unlinked = { ...nit, id: "h2", thread: null };
+        const harness = await setup({ port, entries: [nit, unlinked] });
+        const report = await publish(harness);
+        expect(report.outcome).toBe("advance");
+        expect(posts(port.calls)).toEqual(["reply H1", "resolve H1"]);
+        expect(port.threads).toHaveLength(1);
+        const [, reply] = port.threads[0]?.comments ?? [];
+        expect(reply?.body).toContain("Status: fixed in abc1234");
+        expect(parseMarkers(reply?.body ?? "")).toEqual([
+            { kind: "resolution", attempt: ATTEMPT, finding: "h1", state: "fixed" },
+        ]);
+        expect(port.threads[0]?.resolved).toBe(true);
+        expect(report.threads.answered.map(({ finding: id }) => id)).toEqual(["h1"]);
+        expect(report.threads.resolved.map(({ finding: id }) => id)).toEqual(["h1"]);
+        const before = port.calls.length;
+        expect((await publish(harness)).outcome).toBe("advance");
+        expect(posts(port.calls.slice(before))).toEqual([]);
+    });
+
     it("Earlier fix that did not hold: a second attempt replies and unresolves", async () => {
         const earlier = published("E1", ATTEMPT, finding(), true);
         const port = fakePort({ threads: [earlier] });

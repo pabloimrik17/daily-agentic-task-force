@@ -129,6 +129,11 @@ For a record entry linked to an existing thread, publish mode SHALL reply in tha
 - **WHEN** a finding of the reviewer `human` is linked to the human's GitHub thread and is fixed
 - **THEN** the thread gains a reply naming the commit and is resolved
 
+#### Scenario: Human suggestion fixed
+
+- **WHEN** a `suggestion` of the reviewer `human` is linked to the human's GitHub thread and is fixed
+- **THEN** the thread gains a reply naming the commit and is resolved, and no new thread is opened
+
 #### Scenario: Earlier fix that did not hold
 
 - **WHEN** a second attempt links a finding to a thread the first attempt resolved as fixed, and the finding is open again
