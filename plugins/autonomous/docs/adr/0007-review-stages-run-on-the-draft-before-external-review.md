@@ -23,7 +23,7 @@ the code review has changed it.
 
 - External review sees only code that has passed every review stage, and its
   fixes are the only ones no review stage has judged.
-- Until QA exists, a task leaves `code-review` for `external-review` with its
-  pull request still a draft, and a person takes it from there. `external-review`
-  is the stage label for a task whose review stages are done and which waits for
-  the review of the bots and the human reviewers; the loop runs no stage for it.
+- Until QA exists, a task leaves `code-review` straight for `external-review`.
+  The transition that reaches `external-review` marks the pull request ready
+  for review, and external review takes it from there
+  ([ADR 0009](0009-external-review-runs-as-bounded-rounds-outside-the-wait.md)).

@@ -70,12 +70,24 @@ A stage that judges what a task's implementation produced, each from its own
 angle: verification, code review and QA.
 
 **External review**:
-The stage that follows every review stage: it opens a task's pull request to
-the review bots and the human reviewers, waits for what the bots report and
-handles it through an adversarial review. It is not a review stage, since it
-judges what others found, not the work from its own angle. It does not exist
-yet.
+The stage that follows every review stage: once a task's pull request is open
+to the review bots and the human reviewers, it handles what they report
+through an adversarial review, one review round per attempt, until a quiet
+round. It is not a review stage, since it judges what others found, not the
+work from its own angle.
 _Avoid_: bot review, pull request review, code review
+
+**Review bot**:
+An external service that reviews a pull request on its own once it is no
+longer a draft, such as CodeRabbit, Greptile or Pullfrog. As a reviewer it
+only reports.
+_Avoid_: external agent, bot reviewer
+
+**Quiet round**:
+The review round of an external review in which no review bot brings a new
+finding or contests an answer, and the pull request's checks pass. It is the
+only one that resolves the review bots' threads and ends with the transition.
+_Avoid_: final round, clean round
 
 **Wrap-up**:
 The stage that follows external review and precedes the merge. It does not
@@ -93,7 +105,7 @@ check (see the README's
 **Review round**:
 One pass of an adversarial review through its phases, from one report to its
 fix checks. A review stage runs one, and an `HITL` code review adds human
-rounds after it.
+rounds after it. An external review runs one per attempt, up to its limit.
 _Avoid_: round (alone), pass, iteration
 
 **Human round**:
@@ -369,9 +381,9 @@ moves to `proposal` when the grill ends, a task in `proposal` moves to
 `implement` when its proposal preparation ends, a task in `implement` moves to
 `verify` when its implementation ends, and a task in `verify` moves to
 `code-review` when its verification ends, and a task in `code-review` moves to
-`external-review` when its code review ends. `external-review` means the task
-waits for the review of the pull request's bots and reviewers; no stage runs
-for it yet. `ready-to-merge` is a label with no stage: the task waits there for
+`external-review` when its code review ends. `external-review` means the
+task's pull request is open to the review bots and the human reviewers, and
+its external review handles what they report. `ready-to-merge` is a label with no stage: the task waits there for
 a person to merge its pull request.
 
 **Taken label**:
