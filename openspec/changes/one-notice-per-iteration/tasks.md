@@ -23,4 +23,4 @@
 ## 5. Checks
 
 - [x] 5.1 `bun run test`, `bun run typecheck`, `bun run lint:eslint`, `bun run lint:oxfmt`, `bun run lint:knip`, `bun run lint:fallow` and `bun run lint:marketplace` pass, and `openspec validate one-notice-per-iteration --strict` passes.
-- [ ] 5.2 Run the loop with `--apply` for two iterations with a 1-minute interval and show the person the real notices before the pull request is marked ready (the task is `HITL` for this reason).
+- [x] 5.2 Run the loop with `--apply` for two iterations with a 1-minute interval and show the person the real notices before the pull request is marked ready (the task is `HITL` for this reason).
