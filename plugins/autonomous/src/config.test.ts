@@ -36,7 +36,7 @@ const REVIEW = {
                 check: "Greptile Review",
                 mention: null,
             },
-            { id: "pullfrog", login: "pullfrog[bot]", check: "pullfrog", mention: null },
+            { id: "pullfrog", login: "pullfrog[bot]", check: "pullfrog", mention: "@pullfrog" },
         ],
     },
 };

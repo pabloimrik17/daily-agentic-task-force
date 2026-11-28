@@ -63,7 +63,7 @@ Thread authors come from GraphQL, where a bot's login has no `[bot]` suffix; the
     "bots": [
         { "id": "coderabbit", "login": "coderabbitai[bot]", "check": "CodeRabbit", "mention": null },
         { "id": "greptile", "login": "greptile-apps[bot]", "check": "Greptile Review", "mention": null },
-        { "id": "pullfrog", "login": "pullfrog[bot]", "check": "pullfrog", "mention": null }
+        { "id": "pullfrog", "login": "pullfrog[bot]", "check": "pullfrog", "mention": "@pullfrog" }
     ]
 }
 ```
@@ -176,7 +176,7 @@ Every round shows the human the finding triage before the refutation, as the adv
 - **The runner resolves threads it did not open and dismisses a review** → only in the quiet round, only threads with an accounting reply and no later comment, each resolution preceded by a reply saying why.
 - **A task whose earlier stages ran on another machine waits forever on this one** → reported at every run with its reason; `--task` launches it by hand.
 - **The contested `AFK` thread stops the stage** → by design (ADR 0008: an open thread blocks the merge); the wait's report names it.
-- **Mentioning Greptile may start a full review** → `mention` is `null` by default; the end-to-end run measures it before any default changes.
+- **Mentioning Greptile may start a full review** → `mention` is `null` for Greptile and CodeRabbit by default; Pullfrog is mentioned by default, since the end-to-end run measured that its mention starts one agent run that answers in the thread, not a full review.
 
 ## Migration Plan
 
@@ -187,4 +187,4 @@ Every round shows the human the finding triage before the refutation, as the adv
 
 ## Open Questions
 
-- Whether Greptile and Pullfrog answer a reply, with or without a mention: measured in the end-to-end run, and it decides the default of `mention` and of `answerWaitMinutes`.
+- Whether Greptile and Pullfrog answer a reply, with or without a mention: answered for Pullfrog by the end-to-end run (it answers only when mentioned, so its default `mention` is `@pullfrog`); still open for Greptile, and for CodeRabbit, which keep `null` and keep `answerWaitMinutes` at 10 until measured.

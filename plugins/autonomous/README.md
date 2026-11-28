@@ -2039,7 +2039,7 @@ A round that acted:
   entry, so a fixed finding in a thread addressed with `for=external-review` is
   resolved.
 - When the entry's reporter is a review bot whose `mention` is set, the reply
-  starts with it. Without a mention the reply holds none (see
+  starts with it; Pullfrog's is set by default. Without a mention the reply holds none (see
   [The review bots](#the-review-bots)).
 - It never marks the pull request ready, approves it or requests changes, and a
   bot thread no entry links to is left alone.
@@ -5095,7 +5095,7 @@ are:
     "bots": [
         { "id": "coderabbit", "login": "coderabbitai[bot]", "check": "CodeRabbit", "mention": null },
         { "id": "greptile", "login": "greptile-apps[bot]", "check": "Greptile Review", "mention": null },
-        { "id": "pullfrog", "login": "pullfrog[bot]", "check": "pullfrog", "mention": null }
+        { "id": "pullfrog", "login": "pullfrog[bot]", "check": "pullfrog", "mention": "@pullfrog" }
     ]
 }
 ```
@@ -5108,7 +5108,11 @@ are:
 | `bots`              | The expected bots, each with an `id`, a `login`, the name of its `check` run and a `mention`                                               |
 
 `mention` is the text a reply to that bot's thread starts with, or `null` for
-none. A `bots` list in the user's file replaces the shipped list whole, so a file
+none. Pullfrog is mentioned by default, with `@pullfrog`, because it answers a
+reply only when it is mentioned. The mention starts one agent run of the
+repository's Pullfrog workflow for each reply, which answers in the thread and
+does not review the pull request again. CodeRabbit and Greptile have no mention
+by default. Set `mention` to `null` to turn the mention off. A `bots` list in the user's file replaces the shipped list whole, so a file
 that lists CodeRabbit only expects CodeRabbit only. A negative `waitMinutes`, a
 `rounds` below 1, an unknown key or a duplicate bot `id` is an error naming its
 path. A bot that leaves no trace when its quota is spent, as Greptile does, is

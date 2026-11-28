@@ -17,7 +17,7 @@ A task that passes the code review stops at `external-review` with its pull requ
 - Persist mode, the transition table, the approval question and the guards gain `external-review`; the sixth transition is `external-review → wrap-up`.
 - Documentation: the README's stage sections, `commands/run.md`, the glossary (already updated in the grill: External review, Review bot, Quiet round, Review round, Stage label), ADR 0009 (written in the grill) and the amended consequence of ADR 0007.
 
-Not in this change: the wrap-up stage, the open finding threads no stage owns (wrap-up's), QA, mentioning a bot by default, chasing Greptile's confidence score, and invoking the `autofix`, `greploop` or `check-pr` skills.
+Not in this change: the wrap-up stage, the open finding threads no stage owns (wrap-up's), QA, mentioning CodeRabbit or Greptile by default, chasing Greptile's confidence score, and invoking the `autofix`, `greploop` or `check-pr` skills.
 
 ## Capabilities
 

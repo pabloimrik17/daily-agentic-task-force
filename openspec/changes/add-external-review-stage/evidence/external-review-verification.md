@@ -307,7 +307,7 @@ The 71 s is the substantive answer. A placeholder, "Review submitted. Leaping in
 
 ### Proposal for the defaults
 
-The sample is two pull requests on one day, with Greptile missing. No default was changed.
+The sample is two pull requests on one day, with Greptile missing.
 
 - **`mention`**: Pullfrog answers a reply only when it is mentioned, and the mention costs one
   agent run of the Pullfrog workflow on the repository's own model key for each reply. Proposed:
@@ -319,7 +319,13 @@ The sample is two pull requests on one day, with Greptile missing. No default wa
   `10` until Greptile and CodeRabbit are measured. A reader of the thread that counts the first bot
   comment as the answer would see the placeholder first, 3 s after the mention, not the answer.
 
-The user's decision on both is asked in the Inbox thread and recorded here when it arrives.
+### Decision
+
+On 2026-11-28 the user decided in the Inbox thread to change Pullfrog's default `mention` to
+`"@pullfrog"`, on the condition that the mention starts an agent run for the message and not a
+full review, which is what was measured once; what a mention does with several open threads was not
+measured. They also decided to keep `answerWaitMinutes` at 10 until Greptile and CodeRabbit are
+measured. CodeRabbit and Greptile keep `null`.
 
 ## 13.4 Sandbox cases
 
@@ -781,7 +787,7 @@ PASS.
 - 13.2, a contested answer, a human reviewer's thread, a round past the limit, an `AFK` task and a
   run with the loop running.
 - 13.3, Greptile's two measurements (no credits) and any measurement of CodeRabbit (rate limited).
-  The defaults of `mention` and `answerWaitMinutes` were not changed.
+  The default of `mention` was changed for Pullfrog only, after this measurement (see 13.3, Decision); `answerWaitMinutes` was not.
 - The real bots' answers to a reply, and the answer wait with the loop running. The 30-minute wait
   and the 10-minute answer wait were observed once each against CodeRabbit, Greptile and Pullfrog
   (13.2).

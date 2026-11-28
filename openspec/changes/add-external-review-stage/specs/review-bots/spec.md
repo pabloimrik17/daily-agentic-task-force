@@ -2,7 +2,7 @@
 
 ### Requirement: Review bot settings
 
-The optional `review.external` block SHALL hold `waitMinutes`, `answerWaitMinutes`, `rounds` and `bots`, each bot with an `id`, a `login`, the name of its `check` run and a `mention` that is a string or null. The shipped defaults SHALL be 30, 10, 3 and CodeRabbit, Greptile and Pullfrog with no mention. A `bots` list in the user's file replaces the shipped list whole. An invalid value is an error naming its path.
+The optional `review.external` block SHALL hold `waitMinutes`, `answerWaitMinutes`, `rounds` and `bots`, each bot with an `id`, a `login`, the name of its `check` run and a `mention` that is a string or null. The shipped defaults SHALL be 30, 10, 3 and CodeRabbit and Greptile with no mention and Pullfrog with the mention `@pullfrog`. A `bots` list in the user's file replaces the shipped list whole. An invalid value is an error naming its path.
 
 #### Scenario: Block omitted
 
