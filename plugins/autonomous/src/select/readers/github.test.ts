@@ -153,6 +153,19 @@ it("fails when a repository lists more than the 1000 issues gh is asked for", as
     );
 });
 
+it("reports the listing cap when the sentinel issue's blocker list is cut short", async () => {
+    const issues = Array.from({ length: 1001 }, (_, index) => ({
+        ...listing[0]!,
+        number: index + 1,
+        ...(index === 1000 && { blockedBy: { nodes: [], totalCount: 1 } }),
+    }));
+    expect(await failure(issues)).toBe(
+        "gh issue list --repo demo/one --state open --json " +
+            "number,title,body,labels,updatedAt,state,blockedBy,blocking: " +
+            "more than 1000 results; the listing would be incomplete",
+    );
+});
+
 it("fails the whole list when a later repository fails after an earlier one succeeded", async () => {
     const exec = vi
         .fn<Exec>()
