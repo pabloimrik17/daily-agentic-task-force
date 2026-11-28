@@ -1,4 +1,4 @@
-import { mkdirSync, mkdtempSync, readdirSync } from "node:fs";
+import { mkdirSync, mkdtempSync, readdirSync, writeFileSync } from "node:fs";
 import { rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -133,6 +133,74 @@ describe("the test stage", () => {
     it("passes the model and effort for claude and the effort alone for codex", () => {
         expect(testStage.agentArgs("claude")).toEqual(["--model", "haiku", "--effort", "low"]);
         expect(testStage.agentArgs("codex")).toEqual(["-c", "model_reasoning_effort=low"]);
+    });
+});
+
+// Spec stage-sessions, "Prerequisites that cannot be read", through the grill-me stage.
+describe("prerequisites that cannot be read", () => {
+    let state: string;
+    let root: string;
+    let home: string;
+
+    beforeEach(() => {
+        state = tempState();
+        root = mkdtempSync(join(tmpdir(), "stages-root-"));
+        home = mkdtempSync(join(tmpdir(), "stages-home-"));
+        mkdirSync(join(root, "dotfiles", ".git"), { recursive: true });
+    });
+
+    afterEach(async () => {
+        await Promise.all(
+            [state, root, home].map((dir) => rm(dir, { recursive: true, force: true })),
+        );
+    });
+
+    const registry = () => join(home, ".claude", "plugins", "installed_plugins.json");
+
+    it("Plugin registry cannot be read: unreadable with the read error, and launch waits with that reason", async () => {
+        const ready = await grillMeStage.prerequisites(stageEnv({ tool: "claude", home }));
+        const calls: string[] = [];
+        const ctx = selectedLaunch({
+            calls,
+            task: workTask("linear", "DOT-122", ["personal", "HITL", "grill-me"]),
+            stage: "grill-me",
+            autonomy: "HITL",
+            root,
+            state,
+            home,
+            worktree: "/unused/worktree",
+            readers: stageEnv().readers,
+            specs: [],
+        });
+
+        const run = await launchStep.run(ctx);
+
+        expect(ready).toMatchObject({
+            ok: false,
+            reason: expect.stringContaining(
+                `cannot read the plugin registry ${registry()}`,
+            ) as string,
+            unreadable: true,
+        });
+        expect(run).toMatchObject({
+            outcome: "wait",
+            reasons: [ready.ok ? "unreachable" : ready.reason],
+            data: { workspace: null, attempt: null },
+        });
+        expect(readdirSync(state)).toEqual([]);
+    });
+
+    it("Skill missing from a readable registry: fails, not as unreadable", async () => {
+        mkdirSync(join(home, ".claude", "plugins"), { recursive: true });
+        writeFileSync(registry(), JSON.stringify({ version: 2, plugins: {} }));
+
+        const ready = await grillMeStage.prerequisites(stageEnv({ tool: "claude", home }));
+
+        expect(ready).toMatchObject({
+            ok: false,
+            reason: expect.stringContaining("not installed") as string,
+        });
+        expect(ready).not.toHaveProperty("unreadable");
     });
 });
 

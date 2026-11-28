@@ -15,6 +15,7 @@ import { implementStage } from "./implement/stage.ts";
 import {
     afkTransition,
     blockedSection,
+    changeCheck,
     type Check,
     commitsSection,
     constraintsSection,
@@ -48,7 +49,11 @@ function pullRequestCheck(pullRequest: "required" | "optional"): Check {
 }
 
 function lookUp(found: PullRequest | null): Promise<Result<StageContext>> {
-    const find: PullRequests["find"] = () => Promise.resolve({ ok: true, value: found });
+    return lookUpAs({ ok: true, value: found });
+}
+
+function lookUpAs(found: Result<PullRequest | null>): Promise<Result<StageContext>> {
+    const find: PullRequests["find"] = () => Promise.resolve(found);
     const env = stageEnv({ branch: BRANCH });
     return pullRequestCheck("required")(
         {
@@ -103,10 +108,43 @@ describe("required pull request", () => {
         });
     });
 
+    it("Lookup fails: unreadable, naming the branch", async () => {
+        expect(await lookUpAs({ ok: false, error: "gh failed: HTTP 502" })).toEqual({
+            ok: false,
+            error: `cannot look up the open pull request of ${BRANCH}: gh failed: HTTP 502`,
+            unreadable: true,
+        });
+    });
+
     it("Pull request open: the context holds it", async () => {
         expect(await lookUp(PULL_REQUEST)).toEqual({
             ok: true,
             value: { [PULL_REQUEST_KEY]: JSON.stringify(PULL_REQUEST) },
+        });
+    });
+});
+
+describe("the change check", () => {
+    it("Default branch cannot be read: unreadable, naming the repository", async () => {
+        const defaultBranch: PullRequests["defaultBranch"] = () =>
+            Promise.resolve({ ok: false, error: "gh failed: HTTP 502" });
+        const env = stageEnv({ branch: BRANCH });
+
+        const found = await changeCheck(
+            {
+                ...env,
+                readers: {
+                    ...env.readers,
+                    pullRequests: { defaultBranch } as Partial<PullRequests> as PullRequests,
+                },
+            },
+            {},
+        );
+
+        expect(found).toEqual({
+            ok: false,
+            error: `cannot read the default branch of ${env.repository}: gh failed: HTTP 502`,
+            unreadable: true,
         });
     });
 });

@@ -1,7 +1,13 @@
 import { isAutonomyLabel } from "../../label-contract/contract.ts";
 import type { TrackerTask } from "../../label-triage/trackers/tracker.ts";
 import { transitionRow } from "../../transition/table.ts";
-import { opusHighArgs, type Stage, type StageEnv, type StagePrerequisites } from "../stage.ts";
+import {
+    notMet,
+    opusHighArgs,
+    type Stage,
+    type StageEnv,
+    type StagePrerequisites,
+} from "../stage.ts";
 import { loadSkills } from "../skills.ts";
 import { GRILL_ME_SKILLS, grillMePrompt, SKILLS_PLUGIN } from "./prompt.ts";
 
@@ -10,7 +16,7 @@ async function prerequisites({ tool, home }: StageEnv): Promise<StagePrerequisit
         return { ok: false, reason: `grill-me runs only with claude; sessions.tool is ${tool}` };
     }
     const skills = await loadSkills(home, SKILLS_PLUGIN, GRILL_ME_SKILLS);
-    return skills.ok ? { ok: true, context: skills.value } : { ok: false, reason: skills.error };
+    return skills.ok ? { ok: true, context: skills.value } : notMet(skills);
 }
 
 const { from, to } = transitionRow("grill-me");

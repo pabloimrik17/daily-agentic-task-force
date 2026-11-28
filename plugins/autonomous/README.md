@@ -3012,15 +3012,19 @@ In order, the step:
    fails, the `proposal` candidates set aside are compared. At most 4 chosen
    tasks are checked in a run; when all 4 fail, the step is `wait`, its reasons
    say that 4 choices failed their prerequisites and give the counts per
-   exclusion, and the tier is `llm`. A prerequisite that cannot be read makes
-   the step `not-evaluable`. With `--task`, selection does not run and
-   `launch` alone checks them.
+   exclusion, and the tier is `llm`. A prerequisite that cannot be read (the
+   plugin registry, `openspec --version`, the task's context, a pull request or
+   git read) is not a failed one: it makes the step `not-evaluable` with its
+   reason instead of excluding the task, since it is a problem of the machine,
+   not of the task. With `--task`, selection does not run and `launch` alone
+   checks them.
 
 In an iteration of the loop, the step also remembers the tasks excluded as
 prerequisites earlier in the same loop (`loop.stuck`, see [Files](#files)). It
 checks their prerequisites before the comparison and excludes the ones that
 still fail, so the comparison is not given them and does not spend a choice on
-them every iteration. A task whose prerequisites now hold is a candidate again.
+them every iteration. A task whose prerequisites now hold is a candidate again,
+and one whose prerequisites now cannot be read makes the step `not-evaluable`.
 Outside the loop nothing is remembered.
 
 ### Stuck tasks

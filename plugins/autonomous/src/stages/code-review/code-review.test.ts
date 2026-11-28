@@ -465,6 +465,7 @@ describe("Finding threads read at launch", () => {
         expect(ready).toEqual({
             ok: false,
             reason: "cannot read the review threads of pull request #90: gh failed: HTTP 502",
+            unreadable: true,
         });
     });
 });

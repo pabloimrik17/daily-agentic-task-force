@@ -76,6 +76,7 @@ export const findingThreads: Check = async ({ readers }, read) => {
         return {
             ok: false,
             error: `cannot read the review threads of pull request #${number}: ${threads.error}`,
+            unreadable: true,
         };
     }
     return { ok: true, value: { [THREADS_KEY]: JSON.stringify(threads.value.flatMap(listed)) } };

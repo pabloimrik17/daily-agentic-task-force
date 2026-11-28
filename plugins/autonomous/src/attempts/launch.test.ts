@@ -508,6 +508,20 @@ describe("launch: stage prerequisites", () => {
         expect(workspace.calls).toEqual([]);
     });
 
+    it("Prerequisites cannot be read: waits with the same reason, and writes nothing", async () => {
+        prerequisites({ ok: false, reason: REASON, unreadable: true });
+        const { ctx, workspace, sessions } = setup();
+
+        expect(await launchStep.run(ctx)).toMatchObject({
+            outcome: "wait",
+            reasons: [REASON],
+            data: { workspace: null, attempt: null },
+        });
+        expect(await readdir(state)).toEqual([]);
+        expect(sessionCalls(sessions.calls)).toEqual([]);
+        expect(workspace.calls).toEqual([]);
+    });
+
     it("is checked before the open-attempt check", async () => {
         unmet();
         await writeRecord(state, record());

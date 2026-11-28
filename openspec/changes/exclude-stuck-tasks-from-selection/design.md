@@ -69,6 +69,10 @@ Two limits come from the measurement in Context; the person confirmed both on 20
 
 Alternative rejected: one notice per reason with a count. It hides which tasks, which is the thing the person needs.
 
+### D8. A prerequisite that cannot be read is not a failed one
+
+Found in verification: the stages reported a read error (the plugin registry, `openspec --version`, the task's context, the pull request or git lookups) as an ordinary failed prerequisite, so a problem of the whole machine marked every chosen task stuck, told a notice for each and spent up to 4 comparisons per iteration. A failed `StagePrerequisites` gains an optional `unreadable: true`, set by the checks whose read failed; a check that read and found something missing (a skill not installed, a workflow absent, no pull request, no OpenSpec root) stays a plain failure. `launch` ignores the flag and waits with the reason, as before. `select` makes the step `not-evaluable` with the reason, for the chosen task and for a task remembered under D6, and excludes nothing for it. The person decided this on 2026-11-28, over narrowing the spec to a check that throws.
+
 ## Risks / Trade-offs
 
 - [A repository-level check that is wrong excludes every task of a repository] → the reason names the repository and what it lacks, and the tasks are listed as stuck in every report.

@@ -496,7 +496,7 @@ describe("Proposal prerequisites", () => {
         expect(readdirSync(repository)).toEqual(["openspec"]);
     });
 
-    it("CLI missing: fails naming the command", async () => {
+    it("OpenSpec CLI cannot run: fails as unreadable, naming the command", async () => {
         const calls: string[] = [];
         withOpenspec();
         install();
@@ -505,6 +505,7 @@ describe("Proposal prerequisites", () => {
         expect(await proposalStage.prerequisites(env(calls, {}, { openspec: missing }))).toEqual({
             ok: false,
             reason: "`openspec --version` cannot run: openspec CLI not found on PATH",
+            unreadable: true,
         });
         expect(calls).toEqual(["openspec --version"]);
     });
@@ -571,6 +572,7 @@ describe("Proposal prerequisites", () => {
         expect(ready).toEqual({
             ok: false,
             reason: "cannot read the context of linear DOT-121: linear failed: comments: network down",
+            unreadable: true,
         });
         expect(calls).toEqual(["openspec --version", "context:DOT-121"]);
         expect(readdirSync(repository)).toEqual([".claude", "openspec"]);

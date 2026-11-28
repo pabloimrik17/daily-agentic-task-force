@@ -568,6 +568,21 @@ const prerequisitesFailing = (stage: Stage, failing: readonly string[]) =>
             ),
         );
 
+const UNREADABLE =
+    "cannot read the plugin registry /home/me/.claude/plugins/installed_plugins.json";
+
+// The grill-me prerequisites of `ids` cannot be read (design D8); the others hold.
+const prerequisitesUnreadable = (ids: readonly string[]) =>
+    vi
+        .spyOn(grillMeStage, "prerequisites")
+        .mockImplementation(({ task }) =>
+            Promise.resolve(
+                ids.includes(task.id)
+                    ? { ok: false, reason: UNREADABLE, unreadable: true }
+                    : { ok: true, context: {} },
+            ),
+        );
+
 const prerequisitesExcluded = (source: "beads" | "linear", id: string) => ({
     source,
     id,
@@ -842,6 +857,21 @@ describe("select: the chosen task's prerequisites", () => {
         ]);
         expect(result.data.selected).toBeNull();
     });
+
+    it("Prerequisites cannot be read: not evaluable with the reason, nothing excluded and no other choice", async () => {
+        prerequisitesUnreadable(["DOT-120"]);
+        const calls: string[] = [];
+        const selection = pickDot120();
+        const result = await selectStep.run(
+            selectContext({ workspace, calls, readers: twoCandidates(calls), selection }),
+        );
+
+        expect(result.outcome).toBe("not-evaluable");
+        expect(result.reasons).toEqual([UNREADABLE]);
+        expect(result.data.excluded).toEqual([]);
+        expect(result.data.selected).toBeNull();
+        expect(selection.requests).toHaveLength(1);
+    });
 });
 
 describe("select: prerequisites that failed earlier in the loop", () => {
@@ -889,6 +919,27 @@ describe("select: prerequisites that failed earlier in the loop", () => {
 
         expect(selection.requests[0]?.candidates.map((c) => c.task.id)).toEqual(["B-7", "DOT-120"]);
         expect(result.data.selected).toMatchObject({ id: "DOT-120" });
+    });
+
+    it("Cannot be read now: not evaluable with the reason, and no comparison", async () => {
+        await remember("DOT-120");
+        prerequisitesUnreadable(["DOT-120"]);
+        const calls: string[] = [];
+        const selection = pickDot120();
+        const result = await selectStep.run(
+            selectContext({
+                workspace,
+                calls,
+                readers: twoCandidates(calls),
+                selection,
+                args: { loop: true },
+            }),
+        );
+
+        expect(result.outcome).toBe("not-evaluable");
+        expect(result.reasons).toEqual([UNREADABLE]);
+        expect(result.data.excluded).toEqual([]);
+        expect(selection.requests).toEqual([]);
     });
 
     it("Manual run: the task reaches the comparison", async () => {

@@ -811,8 +811,8 @@ describe("main with the real steps", () => {
     });
 
     // A home without Claude Code's plugin registry: select checks the chosen task's grill-me
-    // prerequisites, so each choice is excluded and the run waits in select.
-    it("runs the example configuration up to select, which excludes the tasks whose prerequisites fail", async () => {
+    // prerequisites, which cannot be read, so select is not evaluable and excludes nothing.
+    it("runs the example configuration up to select, which is not evaluable when the prerequisites cannot be read", async () => {
         let judged = 0;
         const calls: string[] = [];
         const { d, out, err } = deps(undefined, {
@@ -825,38 +825,26 @@ describe("main with the real steps", () => {
             },
             ...selecting(calls),
         });
-        expect(await main(["--json"], d)).toBe(2);
+        expect(await main(["--json"], d)).toBe(3);
         expect(err).toEqual([]);
         expect(judged).toBe(0);
         const report = JSON.parse(out[0] as string) as {
             outcome: string;
             steps: StepResult<SelectData>[];
         };
-        expect(report.outcome).toBe("wait");
+        expect(report.outcome).toBe("not-evaluable");
         expect(report.steps.map((s) => [s.step, s.outcome])).toEqual([
             ["reconcile", "advance"],
             ["capacity", "advance"],
             ["quota-gate", "advance"],
             ["label-triage", "advance"],
-            ["select", "wait"],
+            ["select", "not-evaluable"],
         ]);
         const select = report.steps[4]!;
         expect(select.tier).toBe("llm");
-        expect(select.reasons).toEqual(["2 choices failed their prerequisites", "2 prerequisites"]);
-        expect(select.data.excluded).toEqual(
-            [
-                ["linear", "DOT-120"],
-                ["beads", "B-7"],
-            ].map(([source, id]) => ({
-                source,
-                id,
-                title: `Task ${id}`,
-                reason: "prerequisites",
-                detail: expect.stringContaining(REGISTRY_REASON()) as string,
-                stuck: true,
-                scope: "personal",
-            })),
-        );
+        expect(select.reasons).toEqual([expect.stringContaining(REGISTRY_REASON())]);
+        expect(select.data.selected).toBeNull();
+        expect(select.data.excluded).toEqual([]);
     });
 
     it("Launch never tries another task: launch waits on the stage when its prerequisites fail after select", async () => {
@@ -936,6 +924,7 @@ describe("main with the real steps", () => {
     });
 
     it("writes nothing and carries no question from the select step with --apply", async () => {
+        holdInSelectOnly();
         const calls: string[] = [];
         const { d, out } = deps(undefined, {
             env: { AUTONOMOUS_CONFIG: configPath, HOME: dir },
@@ -1005,6 +994,7 @@ describe("main with the real steps", () => {
     });
 
     it("prints an autonomous.run.v2 document that names no entry group with --json", async () => {
+        holdInSelectOnly();
         const calls: string[] = [];
         const { d, out } = deps(undefined, {
             env: { AUTONOMOUS_CONFIG: configPath, HOME: dir },
@@ -1347,9 +1337,13 @@ describe("main --answer", () => {
             ],
         };
 
-        // launch waits: the home holds no plugin registry for the grill-me prerequisites.
+        // launch waits: the home holds no plugin registry for the grill-me prerequisites, which
+        // hold in select only, as an unreadable one would make select not evaluable.
+        vi.spyOn(grillMeStage, "prerequisites").mockResolvedValueOnce({ ok: true, context: {} });
         const run = deps(undefined, shared);
-        expect(await main(["--apply", "--json"], run.d)).toBe(2);
+        const exit = await main(["--apply", "--json"], run.d);
+        vi.restoreAllMocks();
+        expect(exit).toBe(2);
         const { handoff } = JSON.parse(run.out[0] as string) as {
             handoff?: { questions: HandoffQuestion[]; remaining: number };
         };

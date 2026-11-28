@@ -39,3 +39,10 @@
 
 - [x] 8.1 `bun run test`, `bun run typecheck`, `bun run lint:eslint`, `bun run lint:oxfmt`, `bun run lint:knip`, `bun run lint:fallow` and `bun run lint:marketplace` pass, and `openspec validate exclude-stuck-tasks-from-selection --strict` passes.
 - [x] 8.2 With the loop stopped, run one dry iteration against the real trackers (`run.ts --loop` without `--apply`) and verify that the report lists stuck tasks with reasons and that the selected task is one `launch` reports it would launch.
+
+## 9. Unreadable prerequisites (design D8)
+
+- [x] 9.1 Add the optional `unreadable` flag to a failed `StagePrerequisites` and set it in every stage check whose read failed (plugin registry read, parse or shape; `openspec --version`; task context; pull request lookup; git reads of the change check), leaving the checks that read and found something missing as plain failures. `launch` keeps waiting with the same reason texts. Verify with `skills.test.ts`, `openspec-stage.test.ts`, `stages.test.ts` and `launch.test.ts`: one test per scenario of the stage-sessions delta "Prerequisites that cannot be read".
+- [x] 9.2 In `select`, a chosen or remembered task whose prerequisites fail as unreadable makes the step `not-evaluable` with the reason and excludes nothing. Verify with `step.test.ts` and `run.test.ts`: the scenarios "Prerequisites cannot be read" and "Cannot be read now".
+- [x] 9.3 README: say that a prerequisite that cannot be read makes `select` not evaluable instead of excluding the task. Verify with `bun run lint:markdownlint`.
+- [x] 9.4 The checks of 8.1 pass again.

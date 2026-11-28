@@ -5,7 +5,7 @@
 import { readdir, readFile } from "node:fs/promises";
 import { join } from "node:path";
 
-import type { Result } from "../result.ts";
+import type { ReadResult } from "./stage.ts";
 import { array, object, optional, string } from "../validate.ts";
 
 const SKILL_FILE = "SKILL.md";
@@ -52,12 +52,21 @@ function parseInstallations(json: unknown, plugin: string): Installation[] {
         });
 }
 
-async function readInstallations(file: string, plugin: string): Promise<Result<Installation[]>> {
+// Every failure here is a registry that cannot be read (design D8 of
+// exclude-stuck-tasks-from-selection), unlike a registry read without the plugin.
+async function readInstallations(
+    file: string,
+    plugin: string,
+): Promise<ReadResult<Installation[]>> {
     let text: string;
     try {
         text = await readFile(file, "utf8");
     } catch (error) {
-        return { ok: false, error: `cannot read the plugin registry ${file}: ${messageOf(error)}` };
+        return {
+            ok: false,
+            error: `cannot read the plugin registry ${file}: ${messageOf(error)}`,
+            unreadable: true,
+        };
     }
     let json: unknown;
     try {
@@ -66,6 +75,7 @@ async function readInstallations(file: string, plugin: string): Promise<Result<I
         return {
             ok: false,
             error: `the plugin registry ${file} is not valid JSON: ${messageOf(error)}`,
+            unreadable: true,
         };
     }
     try {
@@ -74,11 +84,12 @@ async function readInstallations(file: string, plugin: string): Promise<Result<I
         return {
             ok: false,
             error: `the plugin registry ${file} is malformed: ${messageOf(error)}`,
+            unreadable: true,
         };
     }
 }
 
-async function findInstallPath(home: string, plugin: string): Promise<Result<string>> {
+async function findInstallPath(home: string, plugin: string): Promise<ReadResult<string>> {
     const file = registryPath(home);
     const installations = await readInstallations(file, plugin);
     if (!installations.ok) {
@@ -137,7 +148,7 @@ export function stripFrontmatter(text: string): string {
     return text.replace(FRONTMATTER, "");
 }
 
-async function loadSkill(skillsDir: string, name: string): Promise<Result<string>> {
+async function loadSkill(skillsDir: string, name: string): Promise<ReadResult<string>> {
     let text: string | null;
     try {
         text = await findSkill(skillsDir, name);
@@ -145,6 +156,7 @@ async function loadSkill(skillsDir: string, name: string): Promise<Result<string
         return {
             ok: false,
             error: `cannot read the skill ${name} under ${skillsDir}: ${messageOf(error)}`,
+            unreadable: true,
         };
     }
     if (text === null) {
@@ -153,12 +165,13 @@ async function loadSkill(skillsDir: string, name: string): Promise<Result<string
     return { ok: true, value: stripFrontmatter(text) };
 }
 
-// The first failure, in `names` order, is the error.
+// The first failure, in `names` order, is the error; a plugin or skill that is absent is not
+// `unreadable`.
 export async function loadSkills(
     home: string,
     plugin: string,
     names: readonly string[],
-): Promise<Result<Record<string, string>>> {
+): Promise<ReadResult<Record<string, string>>> {
     const installPath = await findInstallPath(home, plugin);
     if (!installPath.ok) {
         return installPath;

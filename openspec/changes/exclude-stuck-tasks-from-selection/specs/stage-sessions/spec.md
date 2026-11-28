@@ -21,6 +21,25 @@ A stage MAY declare repository prerequisites: checks that read only the reposito
 - **WHEN** a task is supplied with `--task` for `proposal` and its repository has no OpenSpec root
 - **THEN** `launch` waits with the same reason, and nothing is written
 
+### Requirement: Prerequisites that cannot be read
+
+A stage's prerequisites SHALL tell a check that cannot read what it needs (a file that cannot be read or parsed, a command that cannot run, a tracker, pull request or git read that fails) apart from a check that read and found the prerequisite missing. `launch` SHALL wait with the reason in both cases.
+
+#### Scenario: Plugin registry cannot be read
+
+- **WHEN** the plugin registry under the home of a `grill-me` task's session cannot be read
+- **THEN** the prerequisites fail as unreadable with the read error, and `launch` waits with that reason
+
+#### Scenario: Skill missing from a readable registry
+
+- **WHEN** the plugin registry is read and the plugin that holds a required skill is not installed
+- **THEN** the prerequisites fail, not as unreadable
+
+#### Scenario: OpenSpec CLI cannot run
+
+- **WHEN** `openspec --version` cannot run for a task in `proposal`
+- **THEN** the prerequisites fail as unreadable
+
 ### Requirement: Launch never tries another task
 
 When a precondition of `launch` fails, the step SHALL wait with that reason and SHALL NOT choose, read or launch any other task. Every precondition of `launch` SHALL stay in force whatever `select` checked.

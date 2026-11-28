@@ -88,6 +88,11 @@ After a choice, the step SHALL check the prerequisites of the chosen task's stag
 - **WHEN** four chosen tasks in a row fail their prerequisites
 - **THEN** all four are excluded as prerequisites and no fifth choice is made
 
+#### Scenario: Prerequisites cannot be read
+
+- **WHEN** the chosen task's prerequisites fail as unreadable
+- **THEN** the step is `not-evaluable` with that reason, the task is not excluded, and no other task is chosen
+
 #### Scenario: Supplied stage
 
 - **WHEN** the run is given `--task`
@@ -106,6 +111,11 @@ In an iteration of the loop, a task that an earlier iteration of the same loop e
 
 - **WHEN** the previous iteration excluded a task as prerequisites and its prerequisites now hold
 - **THEN** the task is a candidate
+
+#### Scenario: Cannot be read now
+
+- **WHEN** the previous iteration excluded a task as prerequisites and its prerequisites now fail as unreadable
+- **THEN** the step is `not-evaluable` with that reason
 
 #### Scenario: Manual run
 

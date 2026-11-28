@@ -49,9 +49,25 @@ export interface StageEnv {
 
 export type StageContext = Readonly<Record<string, string>>;
 
+// Design D8: `unreadable` marks a check that could not read what it needs, apart from one that
+// read and found the prerequisite missing. `launch` waits with the reason either way.
 export type StagePrerequisites =
     | { ok: true; context: StageContext }
-    | { ok: false; reason: string };
+    | { ok: false; reason: string; unreadable?: true };
+
+// What a check reads: a value, or an error that is `unreadable` when the read itself failed.
+export type ReadResult<T> =
+    | { ok: true; value: T }
+    | { ok: false; error: string; unreadable?: true };
+
+type ReadFailure = Extract<ReadResult<unknown>, { ok: false }>;
+
+// The failed prerequisites a failed check gives, keeping whether it could read at all.
+export function notMet({ error, unreadable }: ReadFailure): StagePrerequisites {
+    return unreadable === true
+        ? { ok: false, reason: error, unreadable }
+        : { ok: false, reason: error };
+}
 
 export type RepositoryPrerequisites = { ok: true } | { ok: false; reason: string };
 

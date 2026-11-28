@@ -9,7 +9,7 @@ import type { StuckEntry } from "../loop/files.ts";
 import type { Result } from "../result.ts";
 import type { RunContext } from "../runner.ts";
 import { STAGES } from "../stages/registry.ts";
-import { isStageId } from "../stages/stage.ts";
+import { isStageId, type StagePrerequisites } from "../stages/stage.ts";
 import { inferRepository } from "../workspace/infer.ts";
 import { excludedTask } from "./excluded.ts";
 import type { Candidate, Excluded } from "./types.ts";
@@ -23,9 +23,19 @@ export interface PrerequisiteEnv {
 
 const messageOf = (error: unknown) => (error instanceof Error ? error.message : String(error));
 
+// Design D8: a prerequisite that cannot be read is an error, never a reason to exclude the task.
+function verdict(ready: StagePrerequisites): Result<string | null> {
+    if (ready.ok) {
+        return { ok: true, value: null };
+    }
+    return ready.unreadable === true
+        ? { ok: false, error: ready.reason }
+        : { ok: true, value: ready.reason };
+}
+
 // The failing prerequisite's reason, or null when they hold. A candidate passed the stage and
 // repository checks, so a stage or repository missing here means there is nothing to check. A
-// check that throws cannot be read: an error.
+// check that throws or cannot read what it needs is an error.
 export async function failingPrerequisites(
     env: PrerequisiteEnv,
     { task, stage }: Candidate,
@@ -40,7 +50,7 @@ export async function failingPrerequisites(
         const ready = await found.prerequisites(
             stageEnv(io, config, task, inferred.repository, records),
         );
-        return { ok: true, value: ready.ok ? null : ready.reason };
+        return verdict(ready);
     } catch (error) {
         return {
             ok: false,

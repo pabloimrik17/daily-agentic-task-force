@@ -7,8 +7,8 @@ import { readFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 
-import type { Result } from "../result.ts";
 import { stripFrontmatter } from "./skills.ts";
+import type { ReadResult } from "./stage.ts";
 
 export const ADVERSARIAL_REVIEW_SKILL = "adversarial-review";
 export const REVIEW_TEAM_SKILL = "review-team";
@@ -33,7 +33,7 @@ export async function loadPluginSkill(
     name: string,
     root: string = PLUGIN_ROOT,
     options: PluginSkillOptions = {},
-): Promise<Result<string>> {
+): Promise<ReadResult<string>> {
     const file = join(root, "skills", name, "SKILL.md");
     try {
         const body = stripFrontmatter(await readFile(file, "utf8"));
@@ -46,6 +46,7 @@ export async function loadPluginSkill(
         return {
             ok: false,
             error: `cannot read the skill ${name} of the autonomous plugin at ${file}: ${messageOf(error)}`,
+            unreadable: true,
         };
     }
 }
