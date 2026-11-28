@@ -60,9 +60,9 @@
 
 Results go to `openspec/changes/add-external-review-stage/evidence/external-review-verification.md`. Every tracker, pull request or repository write here needs the user's go-ahead first.
 
-- [ ] 13.1 With the loop stopped, check that `wrap-up` exists on the trackers and bootstrap it with the user's go-ahead where it does not. Record the report.
-- [ ] 13.2 Real task: take a task from `code-review` to `wrap-up` from this branch. Record the pull request marked ready by the transition, the wait as each run reports it, the check runs observed while a bot reviews (the state "reviewing" was only inferred in the design), each round's report, record, replies, push and logbook entry, the quiet round's resolutions and dismissal, the labels, and that no session was open during any wait.
-- [ ] 13.3 Measure on that pull request, and record: whether Greptile and Pullfrog answer a reply without a mention, and whether a reply that mentions Greptile starts a full review. Propose the defaults of `mention` and `answerWaitMinutes` from it; change no default without the user's decision.
+- [x] 13.1 With the loop stopped, check that `wrap-up` exists on the trackers and bootstrap it with the user's go-ahead where it does not. Record the report.
+- [x] 13.2 Real task: take a task from `code-review` to `wrap-up` from this branch. Record the pull request marked ready by the transition, the wait as each run reports it, the check runs observed while a bot reviews (the state "reviewing" was only inferred in the design), each round's report, record, replies, push and logbook entry, the quiet round's resolutions and dismissal, the labels, and that no session was open during any wait.
+- [x] 13.3 Measure on that pull request, and record: whether Greptile and Pullfrog answer a reply without a mention, and whether a reply that mentions Greptile starts a full review. Propose the defaults of `mention` and `answerWaitMinutes` from it; change no default without the user's decision.
 - [x] 13.4 Sandbox cases, each recorded with its tracker and pull request state:
     1. a task already in `external-review` with a draft pull request, marked ready by a run with `--apply` and only reported without it;
     2. a transition from `code-review` refused for a failed check, then applied with a check still running;

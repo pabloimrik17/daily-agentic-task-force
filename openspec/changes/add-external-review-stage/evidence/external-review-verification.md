@@ -4,14 +4,17 @@ End-to-end checks of tasks 13.1–13.4. The plugin code under test is this featu
 `feature/DOT-157-add-external-review-stage`, run from source. Phase 1 (cases 1, 2, 3 and 6) ran at
 commit `d05be61`; phase 2 (cases 7, 5 and 4) ran at commit `be39496`, the fix of the defect case 1
 found (see "Findings"). The worktree had only `bun.lock` modified in both phases (operator's log,
-10:35:05 and 10:52:28).
+10:35:05 and 10:52:28). The real-tracker runs, 13.1 and 13.2, ran at commit `0045776`
+(`verification-real/evidence-13/plugin-head.txt`), the head after the sandbox phases.
 
 Go-aheads, all in the Plannotator Inbox thread "DOT-157 external review stage: implementación",
 2026-11-28, relayed by the orchestrator (the thread is not in the evidence directory). At 10:16 the
 user approved "Solo el sandbox (13.4) y el bootstrap (13.1)". At about 10:42 they approved the
 bootstrap creating three labels, and one minute later withdrew it: "crea solo los que necesitemos
-para las pruebas ... así validamos el proceso de bootstrap cuando toque". 13.2 and 13.3 were not
-approved. Only 13.4 ran.
+para las pruebas ... así validamos el proceso de bootstrap cuando toque". 13.4 ran first, from 10:35
+to 11:23. At 12:16 they approved the full bootstrap, which ran as 13.1 (see its section). For 13.2
+they chose the task DOT-121 in the same thread, confirmed keeping the merge of `main` into #90, and
+answered Approve to the transition (see 13.2). 13.3 has its own section.
 
 The raw files are in `~/.local/state/autonomous/verification-sandbox/evidence-13` and are cited by
 file name. The operator's log (`operator-log.txt`) holds every step with its UTC time, its verdict
@@ -22,44 +25,301 @@ directory listing shows local time (UTC+1); this text converts it.
 
 ## 13.1 Bootstrap of `wrap-up`
 
-Not run. Open.
+Run on 2026-11-28 at 12:18 UTC, with the loop stopped. The user approved it in the Inbox thread at
+12:16: "Ejecuta el bootstrap completo ahora (15 etiquetas) y registra el informe". This replaced the
+go-ahead withdrawn at 10:37. The raw files of this section and of 13.2 and 13.3 are in
+`~/.local/state/autonomous/verification-real/evidence-13`; its `operator-log.txt` holds each step
+with its UTC time.
 
-Only the read-only preflight exists (`13.1-before.txt`, written at 10:43). It lists, for the four
-repositories of the real configuration (`dotfiles`, `kinkoi-project`, `monolab`,
-`daily-agentic-task-force`), the matches of `qa`, `wrap-up`, `ready-to-merge`, `external-review` and
-`code-review` among their labels, and the matches in Linear. Each scope shows
-`external-review #8b5e3c` and nothing else: `wrap-up`, `qa` and `ready-to-merge` are absent in the
-four repositories and in Linear. The operator's log (A2, 10:35:05) also lists `code-review` as
-present in the four repositories; the file does not show it. The file ends: "NOT RUN: the user
-withdrew the go-ahead for the real-tracker bootstrap ... nothing was written to the real trackers."
+- **Loop stopped.** `pgrep` found no `run.ts` or `loop.ts` process (`pgrep.exit`: 1), and the
+  pid 76811 named by `loop.lock` was dead and `run.lock` was absent (`locks-before.txt`,
+  `loop-pid.exit`).
+- **Configuration.** A copy of the real configuration that differs only in `sessions`
+  (`config-diff.txt`), with the real state directory. The code is this worktree at `0045776`
+  (`plugin-head.txt`).
+- **Before** (`13.1-before.json`, 12:18:15): `qa`, `wrap-up` and `ready-to-merge` absent in
+  `dotfiles`, `kinkoi-project`, `monolab`, `daily-agentic-task-force` and in Linear; Beads had no
+  `wrap-up`.
+- **The run** (`13.1-bootstrap.json`, exit 0, 12:18:15 to 12:18:31): `--bootstrap-labels --json`,
+  schema `autonomous.bootstrap.v1`, outcome `advance`. GitHub: 12 labels `created` and
+  48 `present` over the four repositories, none recoloured. Linear: `qa`, `wrap-up` and
+  `ready-to-merge` `created`, the other 12 `present`. Beads: not applicable, "Beads needs no label
+  creation: labels exist by use". 15 creations in all.
+- **After** (`13.1-after.json`, 12:19:04, and an independent listing at 12:36, orchestrator only):
+  the three labels exist in the four repositories and in Linear with the contract's colours
+  (`qa` `0d9488`, `wrap-up` `64748b`, `ready-to-merge` `15803d`).
 
-The same file's process check shows one `bun .../run.ts` process of this worktree. The log's own
-check at 10:35:05 (A1) found none. At 10:43 the operator was running case 3's sandbox runs
-(`3c.json` started 10:43:34); that process is most likely one of them (inferred).
-
-What 13.1 still needs: the user's go-ahead for the labels the bootstrap would create. The contract
-now holds 15 labels, so one run creates `wrap-up`, `qa` and `ready-to-merge` in each of the five
-scopes; the runner has no per-label option. Then the run with the loop stopped, its report and the
-read-back.
+Not run: a second run to show that nothing is created twice. It was not approved.
 
 ## 13.2 Real task
 
-Not run. Open. Not approved.
+Run on 2026-11-28 from 12:57 to 15:03 UTC on the real task `linear:DOT-121` ("Read GitHub blockers
+in the selection reader", labels `personal`, `HITL`) and its pull request
+`pabloimrik17/daily-agentic-task-force#90`, with the real bots. The code is this worktree at
+`0045776` (`plugin-head.txt`), with the configuration copy of 13.1 (`config-diff.txt`: only
+`sessions` differs). Sessions ran `opus` at effort `high` (`13.2-attempt-1/record.json`). The
+runbook followed is `runbook-13-dot121.md` in the orchestrator's scratchpad; it is not in the
+evidence directory. Each claim below names its raw file; a claim only the orchestrator saw is marked
+"orchestrator only". Times are UTC; the directory listing shows local time (UTC+1).
 
-What it still needs: the user's go-ahead to take a real task from `code-review` to `wrap-up` from
-this branch, with the real bots. Then everything the task lists: the pull request marked ready, each
-run's wait, the check runs while a bot reviews, each round's report, record, replies, push and
-logbook entry, the quiet round's resolutions and dismissal, the labels, and that no session was open
-during a wait.
+### Task and preparation
+- **Choice** (orchestrator only). The user picked DOT-121 in the Inbox thread at 12:16, over the
+  scout's first candidate. No real task was in `code-review`. DOT-121 was already in
+  `external-review` from an earlier build, so the orchestrator put it back by hand: added
+  `code-review`, removed `external-review` (`13.2-reset-1.exit`, `13.2-reset-2.exit`). Read-back:
+  labels `personal`, `HITL`, `code-review`; Linear state `backlog` (`13.2-reset-readback.json`;
+  before: `13.2-task-before-query.json`).
+- **Merge of `main`** (operator's log, 12:59:14). #90 conflicted with `main`. A merge of
+  `origin/main`, not a rebase, was committed as `b059b1b` and pushed by 12:59. The commit was made
+  with `--no-verify` because lint-staged's backup fails on a directory-to-symlink change that came
+  from `main`; gitleaks and oxfmt were run by hand, and pre-push passed (3836 tests). The user
+  confirmed keeping the merge and the edited delta spec at about 14:04 UTC (orchestrator only). Its
+  CI (`main`, `audit`, `Fallow`) passed (`13.2-checks-before.tsv`). The log calls it the first CI on
+  this work since 2026-11-15 (orchestrator only).
+- **Preconditions** (operator's log, 12:59:40). #90 draft, `MERGEABLE`, head `b059b1b`; four
+  threads, all resolved, all by the user's account (`13.2-threads-before.json`); workspace in sync
+  with its remote (`13.2-workspace-before.txt`); attempts dir held no `external-review` attempt
+  (`13.2-attempts-before.txt`); aoe baseline of 8 sessions (`aoe-baseline.tsv`).
+
+### The transition marks the pull request ready
+- **No dry mode.** `--transition` has no dry run. With `--apply` on a `HITL` task it only hands off
+  the question: outcome `advance`, `applied` false, one question "the code review is ready. Approve
+  it to move the task to external-review?" with the options Approve and Later
+  (`13.2-transition-handoff.json`, 12:59:59). Labels and the draft were unchanged afterwards:
+  `personal`, `HITL`, `code-review`, draft (operator's log, 13:00:08).
+- **The answer.** The user answered Approve in the Inbox (orchestrator only; the log gives the
+  message id and 13:02:24). `--apply --answer transition:linear:DOT-121=external-review`
+  (`13.2-transition.json`, started 13:02:03, exit 0): status `applied`, "added external-review,
+  removed code-review on linear DOT-121, read back".
+- **Pull request marked ready** at 13:02:13 by the user's account (`13.2-ready-event.json`, one
+  `ready_for_review` event), before the label change was read back. Labels after: `personal`,
+  `HITL`, `external-review` (operator's log, 13:02:24). Call this T0.
+
+### First wait, on `b059b1b`
+- **Check runs while the bots reviewed** (`13.2-checks-timeline.tsv`, sampled about every 20 s from
+  13:02:41):
+  - CodeRabbit: `completed`, `neutral`, "Review rate limited", created and completed 13:02:22, 9 s
+    after T0. It never changed.
+  - Pullfrog: `in_progress` from 13:02:18, "Pullfrog is running"; `completed` `success` at 13:04:30.
+    Its review (`COMMENTED`) is at 13:04:19 and its one inline thread at 13:04:18
+    (`13.2-r1-threads.json`).
+  - Greptile: no check run on any head of #90, at any time in the timeline. The user's note at about
+    14:50 explains it: without quota (50 a month) it does not activate at all (operator's log;
+    orchestrator only).
+- **The wait as the run reports it** (`13.2-poll.log`, `--task` dry polls). Poll 1, 13:03:36:
+  "greptile is waiting, 29 minutes left; pullfrog is reviewing". So the state `reviewing` was
+  observed for a real bot, while its check run was `in_progress`. Poll 2, 13:08:57: "greptile is
+  waiting, 24 minutes left", Pullfrog no longer listed. Polls 3 and 4: 20 and 16 minutes left
+  (13:13:07, 13:17:17). No poll ran between 13:17 and 14:04, so the instant the wait ended was not
+  observed. Poll 5, 14:04:32, exit 0: "would launch external-review for linear:DOT-121".
+- **The same wait in the pipeline dry run** (`13.2-wait-1.json`, started 13:03:38, 10 s after poll 1
+  at 13:03:28). The task is under `select` `data.excluded[]` with reason `waiting-for-review-bots`;
+  `wait.bots`: `coderabbit` `not-reviewing` ("Review rate limited"), `greptile` `waiting` with
+  `minutesLeft` 29, `pullfrog` `reported`; the only reason "greptile is waiting, 29 minutes left".
+  The pipeline selected an unrelated Beads task. Pullfrog reads `reported` here and `reviewing` in
+  poll 1, 10 s earlier: a pipeline dry run takes several minutes (label triage and the comparison),
+  so its select step read the bots after Pullfrog's check had ended at 13:04:30. After the wait,
+  `13.2-wait-2.json` (started 14:04:34) selected DOT-121 for `external-review` and did not list it
+  as excluded.
+- **No session during the wait.** `13.2-aoe-wait-1.diff` (written 13:03) is empty against the
+  baseline, and so is `13.2-aoe-wait-2.diff` (14:04). The pipeline's reconcile step reported "2
+  retained, nothing changed" in each, and no `external-review` attempt existed.
+- **CodeRabbit's rate limit counts as settled.** It is `not-reviewing` and it appears in no wait
+  reason; only Greptile's minutes held the task (`13.2-poll-1.json`).
+
+### Round 1 (attempt 1)
+- **Launch.** `--apply --task linear:DOT-121 --stage external-review` (`13.2-r1-launch.json`,
+  started 14:09:28): "launched linear:DOT-121:external-review:1", aoe session `678a765a28e14eed`
+  (`13.2-attempt-1/record.json`). The session title came from the fallback, because the generated
+  name had five words, not one to four (`13.2-poll.log`, poll 5).
+- **Report.** The prompt (`13.2-attempt-1/prompt.md`) lists, on `b059b1b`: Pullfrog reported;
+  CodeRabbit not reviewing, review rate limited; Greptile not reviewing, no check run in 30 minutes;
+  no failed check, no human thread (`13.2-attempt-1/stage-summary.md`).
+- **Triage and question.** One finding, f1, from Pullfrog: the test file
+  `github-listing-cap.test.ts` reads like a leftover probe (`13.2-attempt-1/findings.json`:
+  `WARNING`, label `issue`, destination `fix`, refutation `survived`). The triage went to the
+  Plannotator Inbox as a question, not through `AskUserQuestion`: thread
+  `msg_01M8H7WTXFT3TS9DW0AV08PK74`, sent at about 14:10 (orchestrator only; the log records 0
+  `AskUserQuestion`). The aoe status read `idle` from 14:10:52 to 14:16:49 and `running` again from
+  14:17:10 (`13.2-r1-watch.log`). The user approved the triage (`findings.json`, `reason`: "The
+  human approved the triage").
+- **Record.** `findings.json` holds one entry; the receipt `published.json` is stamped 14:22:14.853;
+  `persisted.json` 14:22:38 (stage summary saved); `logbook.json` 14:22:52.
+- **Push.** The fix is one commit, `6011a37` "test(autonomous): move the listing cap sentinel test
+  beside the reader (DOT-121)", pushed as `b059b1b..6011a37`; the record's head column changes at
+  14:19:14 (`13.2-r1-watch.log`). Before the push the repository checks passed (3835 tests) and so
+  did the hooks (`stage-summary.md`).
+- **Reply.** The thread got "Status: fixed in 6011a37" with the `autonomous:resolution` marker,
+  authored by the user's account at 14:22:18 (`13.2-r1-threads.json`). The runner left the thread
+  open, since only the quiet round resolves (`stage-summary.md`). Pullfrog replied "Addressed in
+  6011a37." at 14:22:52, 34 s after the runner's reply. The thread reads `isResolved` true and
+  `isOutdated` true in that file. Pullfrog resolved it: `resolvedBy` is `pullfrog[bot]` (live
+  GraphQL read-back by the verifier, 15:4x UTC).
+- **Logbook entry** (`13.2-attempt-1/logbook-entry.md`, posted as a comment on #90): "Round 1 of 3",
+  the push range, the three bots' state on `b059b1b`, "Threads, answered as fixed: f1".
+- **Result** (`13.2-attempt-1/result.json`): `round-ended`, finished 14:23:07. The session was
+  `idle` at 14:23:28.
+
+### Between the rounds
+- **A dry `--task` poll cannot show the wait while the attempt is unreconciled.** Poll 6 (14:24:09)
+  said "linear:DOT-121 is excluded: taken", although the result was written at 14:23:07. An `--apply
+  --task` run (`13.2-r1-finalise.json`, started 14:24:21) reconciled it: "1 attempt observed, 1
+  finalised, 2 retained". Its launch step then waited, with one reason holding three facts:
+  "coderabbit is reviewing; greptile is waiting, 25 minutes left; the review bots have 8 minutes
+  left to answer the last external review reply". The answer wait is the 10 minutes after the
+  runner's reply of 14:22:18.
+- **The wait after the push** (`13.2-wait-3.json`, started 14:24:53; `13.2-poll.log`). `coderabbit`
+  `reported`, `greptile` `waiting` 25 minutes, `pullfrog` `reported`; the reasons are Greptile's 25
+  minutes and the answer wait, 8 minutes. Poll 7, 14:30:13: "greptile is waiting, 19 minutes left;
+  the review bots have 3 minutes left to answer the last external review reply". From poll 8
+  (14:34:25, 15 minutes) only Greptile remained, down to 4 minutes at poll 12 (14:45:43). Poll 13,
+  14:50:01, exit 0: "would launch external-review". Greptile's 30 minutes were counted from the head
+  commit's time, 14:19:02 (orchestrator only); poll 7 agrees (19 minutes left at 14:30).
+- **Check runs on `6011a37`** (`13.2-checks-timeline.tsv`). Pullfrog `in_progress` 14:22:02,
+  `completed` `success` 14:23:05; its reviews are at 14:22:52 and 14:23:01, both `COMMENTED`
+  (`13.2-r1-threads.json`). CodeRabbit `in_progress` "Review in progress" from 14:22:17 to
+  `completed` `success` "Finished" at 14:27:01. The final state shows a CodeRabbit review `APPROVED`
+  (`13.2-final-state.txt`), submitted at 14:26:59 (live read-back by the verifier, 15:4x UTC).
+  Greptile: none. CI `main`, `audit`, `Fallow` passed.
+- **No session during the wait.** `13.2-aoe-wait-3.diff` (written 14:24) and `13.2-aoe-wait-4.diff`
+  (14:50) are empty against the baseline.
+
+### Round 2, the quiet round (attempt 2)
+- **Launch** (`13.2-r2-launch.json`, started 14:50:04): "launched linear:DOT-121:external-review:2",
+  aoe session `61f1447be15540fc`. Labels were `personal`, `HITL`, `external-review` (operator's
+  log).
+- **Report.** CodeRabbit reported and approved, with no finding; Pullfrog reported, "No new issues
+  found"; Greptile not reviewing, no check run in 30 minutes; all checks green on `6011a37`; no
+  human thread (`13.2-attempt-2/stage-summary.md`).
+- **Record.** `13.2-attempt-2/findings.json`: `entries` empty, `quiet` true. Receipt
+  `published.json` stamped 14:53:05, `quiet` true. Nothing pushed; head stays `6011a37`.
+- **The quiet round's resolutions and dismissal were not exercised.** The one thread, f1's, was
+  already resolved by Pullfrog and outdated, so the quiet round found nothing left to resolve, and
+  `stage-summary.md` says publish mode "answered and resolved nothing new". No review on #90 was
+  ever `CHANGES_REQUESTED` (`13.2-final-state.txt`: `COMMENTED` and one `APPROVED`), so there was
+  nothing to dismiss. Case 6 of 13.4 covers both with a sandbox bot; the real bots did not.
+- **Wrap-up approval.** It was asked with `AskUserQuestion` inside the aoe pane, not in the Inbox.
+  The aoe status was `waiting` from 14:54:03 to 15:01:17 (`13.2-r2-watch.log`; the log says "about
+  14:57"). The user was told in the Inbox that the pane was waiting (orchestrator only).
+  `transition.json`: answer `["wrap-up"]`, by `human`, at 15:01:57.
+- **Logbook and result.** `logbook.json` 15:02:04, with "Round 2, the quiet round"; `result.json`:
+  `completed`, finished 15:02:13; session `idle` at 15:02:20.
+
+### Final state
+- `13.2-final-dry.json` (15:02:42, dry): reconcile "1 would-finalise", launch "excluded: taken".
+  `13.2-final.json` (`--apply --task` without `--stage`, 15:02:46): reconcile "1 finalised"; launch
+  "linear:DOT-121 is excluded: unsupported stage". Nothing launched.
+- **Labels**: `personal`, `HITL`, `wrap-up` (`13.2-final-state.txt`). **Linear state**: `started`;
+  it was `backlog` before (`13.2-reset-readback.json`). Linear's `issue.history` (live read-back by
+  the verifier, 15:4x UTC) dates the move: Backlog to In Progress at 13:02:16, by the user's
+  account, during the transition (3 s after the ready event). Likely Linear's GitHub integration;
+  not confirmed.
+- **Pull request**: `OPEN`, not a draft, head `6011a37`, `MERGEABLE`, `reviewDecision` empty, six
+  reviews, in order: the user, Pullfrog, the user, Pullfrog, Pullfrog (all `COMMENTED`) and
+  CodeRabbit (`APPROVED`) (`13.2-final-state.txt`);
+  the branch equals its remote; `pgrep` found no `run.ts` or `loop.ts` process.
+- **Rounds**: 2 of the limit 3.
+- **No session open in any of the four waits**: `13.2-aoe-wait-1.diff` to `13.2-aoe-wait-4.diff` are
+  all empty.
+
+### Not exercised by the real run
+
+A contested answer, a human reviewer's thread, a round past the limit, a dismissal, a resolution by
+the quiet round, an `AFK` task and a run with the loop running. The first four and the AFK case are
+covered only by the sandbox cases of 13.4.
+
+### Findings of the real run
+- **A dry `--task` poll hides the wait while the last attempt is not reconciled.** After round 1 it
+  said "excluded: taken" (poll 6, `13.2-poll-6.json`); the wait appeared only after an `--apply
+  --task` run finalised the attempt (`13.2-r1-finalise.json`). The wait cannot be observed with a
+  dry `--task` in that window.
+- **`--transition` has no dry mode.** `--apply` on a `HITL` task hands off the question and applies
+  nothing; `--apply --answer` applies it (`13.2-transition-handoff.json`, `13.2-transition.json`).
+- **The Linear state changed from `backlog` to `started`** at 13:02:16, during the transition,
+  with no step of the runner that writes it. The actor is the user's account; likely Linear's
+  GitHub integration reacting to ready-for-review (not confirmed).
+- **Pullfrog resolves its own thread** when it considers the finding addressed, so a thread the
+  runner holds open can still be resolved before the quiet round.
+- **A rate-limited CodeRabbit counts as settled.** Its `neutral` "Review rate limited" check made it
+  `not-reviewing`, so it did not hold the wait (`13.2-wait-1.json`). It reviewed only after the
+  push: `in_progress` 14:22:17, approved.
+- **Greptile without quota never creates a check run**, so its 30-minute wait always runs to its
+  end: about 13:02 to 13:33 in the first wait (first seen ended at 14:04) and 14:19 to 14:49 in the
+  second (seen at 14:50).
+- **The two HITL questions of the stage appeared in different places.** The triage of round 1 went
+  to the Plannotator Inbox; the wrap-up approval of round 2 was asked with `AskUserQuestion` in the
+  aoe pane. The aoe status was `idle` during the first and `waiting` during the second.
+- **The session title came from the fallback** every time: polls 5 and 13 (`13.2-poll.log`),
+  `13.2-wait-2.json`, and both launches (`titleSource` `fallback` in `13.2-attempt-1/record.json`
+  and `13.2-attempt-2/record.json`): the generated name had five words and the validator wants one
+  to four.
 
 ## 13.3 Measurements of Greptile and Pullfrog
 
-Not run. Open. Not approved.
+Run on 2026-11-28 from 14:22 to 15:43 UTC, after DOT-121 reached `wrap-up`, so no round could read
+the replies as findings. Raw files: `13.3-*` in `verification-real/evidence-13`. The user chose
+the order in the Inbox thread at about 15:02: first the resolved thread of #90 and, only with no
+answer there, a throwaway pull request (orchestrator only).
 
-What it still needs: 13.2's pull request and the user's go-ahead to reply on it. Then the three
-measurements (Greptile and Pullfrog answering a reply without a mention; a reply that mentions
-Greptile starting a full review) and a proposal for the defaults of `mention` and
-`answerWaitMinutes`, changed only on the user's decision.
+| Bot      | Reply                                   | Answer in the thread   | New check run             |
+| -------- | --------------------------------------- | ---------------------- | ------------------------- |
+| Greptile | none sent                               | not measurable         | not measurable            |
+| Pullfrog | no mention, a push in flight (#90)      | 34 s, "Addressed in"   | the push's own run        |
+| Pullfrog | no mention, resolved thread (#90)       | none in 15 minutes     | none                      |
+| Pullfrog | no mention, open thread (#120)          | none in 15 minutes     | none                      |
+| Pullfrog | `@pullfrog`, the same open thread (#120) | 71 s                   | one, 15:41:47 to 15:43:01 |
+
+The 71 s is the substantive answer. A placeholder, "Review submitted. Leaping into action...", came
+3 s after the mention and was later replaced.
+
+- **Greptile: not measurable.** It left no check run, review or comment on any head of #90 or on
+  #120 (`13.2-checks-timeline.tsv`, `13.3-probe-checks.tsv`). Its organisation is out of credits
+  since 2026-11-26 (`pabloimrik17/monolab#448`), and the user confirmed that without quota it does
+  not activate at all. Nothing was sent to it: neither "answers without a mention" nor "a mention
+  starts a full review" was measured.
+- **Pullfrog with a push in flight** (round 1 of 13.2, not a clean measurement). The runner replied
+  "Status: fixed in 6011a37" at 14:22:18 and Pullfrog answered "Addressed in 6011a37." at 14:22:52
+  (`13.2-r1-threads.json`). Its check run on the pushed commit ran from 14:22:02 to 14:23:05, so
+  the answer may belong to that review of the push.
+- **Pullfrog, no mention, resolved thread.** Reply at 15:03:40 on the thread of round 1, resolved
+  and outdated (`13.3-M2-reply.json`). In 15 minutes: no comment in the thread, no review, no new
+  check run (`13.3-M2-observe.tsv` records the thread and reviews; `13.2-checks-timeline.tsv` shows
+  no new run on `6011a37` through 15:45). The resolved state is a confound.
+- **The throwaway pull request.** `pabloimrik17/daily-agentic-task-force#120`, branch
+  `chore/review-bot-reply-probe`, one commit `74b19c3` with a port parser that accepts "80abc".
+  Pullfrog's check ran from 15:24:10 to 15:25:16 and left one open inline thread on the flaw;
+  CodeRabbit was "Review rate limited" again (`13.3-probe-checks.tsv`,
+  `13.3-probe-threads-before.json`).
+- **Pullfrog, no mention, open thread.** Reply at 15:25:41 (`13.3-M2b-reply.json`). Up to 15:41: no
+  comment, no review, no check run (`13.3-M2b-observe.tsv`). Pullfrog does not answer a bare reply.
+- **Pullfrog with a mention.** Reply starting with `@pullfrog` at 15:41:42 on the same thread
+  (`13.3-M4-reply.json`). A workflow run "Address reviews on #120" started at 15:41:48 and Pullfrog
+  answered in the thread at 15:42:53, 71 s after the mention. A placeholder, "Review submitted.
+  Leaping into action...", came as a thread comment and a review at 15:41:45, 3 s after the
+  mention (`13.3-M4-observe.tsv`); it is not in the final thread and was later replaced by the
+  answer. The answer concedes that the finding has no
+  caller (`13.3-M4-observe.tsv`, `13.3-probe-threads-after.json`). The `pullfrog` check run of the
+  head was replaced by a new one, 15:41:47 to 15:43:01 (`13.3-probe-checks-after.tsv`). It posted
+  no new review summary and pushed nothing: the head stayed `74b19c3`.
+- **Cleanup.** #120 was closed without merging at 15:43, and its branch and worktree were deleted.
+- **CodeRabbit** was not part of the task and could not be measured: rate limited on #120 and on
+  the first head of #90.
+
+### Proposal for the defaults
+
+The sample is two pull requests on one day, with Greptile missing. No default was changed.
+
+- **`mention`**: Pullfrog answers a reply only when it is mentioned, and the mention costs one
+  agent run of the Pullfrog workflow on the repository's own model key for each reply. Proposed:
+  keep `null` for the three bots, and document `"@pullfrog"` as the value that makes Pullfrog
+  answer. Greptile's and CodeRabbit's values stay unmeasured.
+- **`answerWaitMinutes`**: the one measured answer took 71 s, and its check run ended 79 s after
+  the mention, so the wait for a running check already covers it. With `mention` `null` the answer
+  wait serves only bots that answer a bare reply, which this run could not measure. Proposed: keep
+  `10` until Greptile and CodeRabbit are measured. A reader of the thread that counts the first bot
+  comment as the answer would see the placeholder first, 3 s after the mention, not the answer.
+
+The user's decision on both is asked in the Inbox thread and recorded here when it arrives.
 
 ## 13.4 Sandbox cases
 
@@ -514,14 +774,19 @@ PASS.
 
 ### Not verified
 
-- 13.1, the bootstrap of `wrap-up`, `qa` and `ready-to-merge` on the real trackers: the go-ahead was
-  withdrawn; only the preflight exists.
-- 13.2, the real task from `code-review` to `wrap-up`: not approved.
-- 13.3, the measurements of Greptile and Pullfrog and the defaults of `mention` and
-  `answerWaitMinutes`: not approved.
-- The real bots' behaviour: first lines, check runs, answers to a reply, timing, with the shipped
-  30-minute wait and 10-minute answer wait. The sandbox bot is a workflow script.
-- The state `reviewing` of a real bot. Only `sbxbot`'s `in_progress` workflow check run showed
-  `reviewing` (`1a.json`, `3a.json`).
+- 13.1, a second bootstrap run to show that nothing is created twice: not approved.
+- 13.2, the quiet round's resolutions and dismissal against real bots: round 2 found nothing to
+  resolve or dismiss (see "Not exercised by the real run" in 13.2). The sandbox covers them with a
+  script bot (case 6).
+- 13.2, a contested answer, a human reviewer's thread, a round past the limit, an `AFK` task and a
+  run with the loop running.
+- 13.3, Greptile's two measurements (no credits) and any measurement of CodeRabbit (rate limited).
+  The defaults of `mention` and `answerWaitMinutes` were not changed.
+- The real bots' answers to a reply, and the answer wait with the loop running. The 30-minute wait
+  and the 10-minute answer wait were observed once each against CodeRabbit, Greptile and Pullfrog
+  (13.2).
+- In the sandbox phases only: the state `reviewing` of a real bot. 13.2 observed it for Pullfrog
+  (poll 1) and CodeRabbit (`13.2-r1-finalise.json`).
 - The text form of case 1b.
-- An `HITL` task, a fix pushed by an external review round, and a run with the loop running.
+- A fix pushed by an external review round and an `HITL` task are covered by 13.2, not by the
+  sandbox cases.
