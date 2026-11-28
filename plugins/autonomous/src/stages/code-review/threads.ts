@@ -37,7 +37,7 @@ function groupOf(thread: ReviewThread): ThreadGroup | null {
 
 const SIDES: Record<DiffSide, string> = { RIGHT: "new side", LEFT: "old side" };
 
-function locationOf({ path, subjectType, line, startLine, side }: ReviewThread): string {
+export function locationOf({ path, subjectType, line, startLine, side }: ReviewThread): string {
     if (subjectType === "FILE") {
         return `\`${path}\`, file level`;
     }

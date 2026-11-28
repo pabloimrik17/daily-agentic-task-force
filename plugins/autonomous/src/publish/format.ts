@@ -68,8 +68,16 @@ export function firstComment(attempt: string, entry: RecordEntry, published: Pub
     return `${comment(entry, published)}\n${marker}`;
 }
 
-export function stateReply(attempt: string, entry: RecordEntry, published: Published): string {
-    return `Status: ${published.status}\n${resolutionMarker(attempt, entry, published)}`;
+// `mention`: what a reply to a review bot starts with (spec finding-threads, "A reply may mention
+// its review bot"); its own paragraph, so the status line still starts a line.
+export function stateReply(
+    attempt: string,
+    entry: RecordEntry,
+    published: Published,
+    mention: string | null = null,
+): string {
+    const reply = `Status: ${published.status}\n${resolutionMarker(attempt, entry, published)}`;
+    return mention === null ? reply : `${mention}\n\n${reply}`;
 }
 
 export function continuingReply(attempt: string, entry: RecordEntry, published: Published): string {

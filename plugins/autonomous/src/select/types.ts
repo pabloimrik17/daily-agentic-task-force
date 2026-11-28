@@ -41,6 +41,7 @@ export type Exclusion =
     | "unsupported-stage"
     | "blocked"
     | "split"
+    | "waiting-for-review-bots"
     | "no-free-slot";
 
 type Autonomy = AutonomyLabel;

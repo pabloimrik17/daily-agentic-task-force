@@ -1,0 +1,63 @@
+{
+    "total_count": 4,
+    "check_runs": [
+        {
+            "name": "CodeRabbit",
+            "status": "completed",
+            "conclusion": "success",
+            "html_url": "https://github.com/demo/repo/runs/1001",
+            "started_at": "2026-03-12T09:56:02Z",
+            "completed_at": "2026-03-12T10:03:41Z",
+            "output": {
+                "title": "Review completed",
+                "summary": "CodeRabbit reviewed 6 files and left 3 comments."
+            },
+            "app": {
+                "slug": "coderabbitai"
+            }
+        },
+        {
+            "name": "Greptile Review",
+            "status": "in_progress",
+            "conclusion": null,
+            "html_url": "https://github.com/demo/repo/runs/1002",
+            "started_at": "2026-03-12T09:56:20Z",
+            "completed_at": null,
+            "output": {
+                "title": null,
+                "summary": null
+            },
+            "app": {
+                "slug": "greptile-apps"
+            }
+        },
+        {
+            "name": "pullfrog",
+            "status": "completed",
+            "conclusion": "failure",
+            "html_url": "https://github.com/demo/repo/runs/1003",
+            "started_at": "2026-03-12T09:56:11Z",
+            "completed_at": "2026-03-12T09:58:09Z",
+            "output": {
+                "title": "Review failed",
+                "summary": "The review could not read the diff."
+            },
+            "app": {
+                "slug": "pullfrog"
+            }
+        },
+        {
+            "name": "lint",
+            "status": "queued",
+            "conclusion": null,
+            "html_url": "https://github.com/demo/repo/runs/1004",
+            "started_at": null,
+            "completed_at": null,
+            "output": {
+                "title": null,
+                "summary": null
+            },
+            "app": null
+        }
+    ]
+}

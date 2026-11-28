@@ -11,6 +11,7 @@ const EXCLUSION_NAMES: Record<Exclusion, string> = {
     "unsupported-stage": "unsupported stage",
     blocked: "blocked",
     split: "split",
+    "waiting-for-review-bots": "waiting for review bots",
     "no-free-slot": "no free slot",
 };
 

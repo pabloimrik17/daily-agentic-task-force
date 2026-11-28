@@ -19,6 +19,7 @@ const STAGE_NAMES: Readonly<Record<string, string>> = {
     qa: "QA",
     verify: "verification",
     "code-review": "code review",
+    "external-review": "external review",
 };
 
 export function stageName(stage: string): string {

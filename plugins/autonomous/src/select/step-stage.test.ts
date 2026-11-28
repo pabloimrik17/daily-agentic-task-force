@@ -62,6 +62,22 @@ describe("select: most advanced stage first", () => {
         expect(result.data.setAside.map((c) => c.id)).toEqual(["P-1"]);
     });
 
+    it("External review before code review: selects the external-review candidate and sets the code-review one aside", async () => {
+        const calls: string[] = [];
+        const result = await selectStep.run(
+            selectContext({
+                calls,
+                readers: readers(calls, [
+                    workTask("linear", "C-1", ["personal", "AFK", "code-review"]),
+                    workTask("linear", "E-1", ["personal", "HITL", "external-review"]),
+                ]),
+            }),
+        );
+
+        expect(result.data.selected).toMatchObject({ id: "E-1", stage: "external-review" });
+        expect(result.data.setAside.map((c) => c.id)).toEqual(["C-1"]);
+    });
+
     it("gives the LLM the two proposal candidates only", async () => {
         const calls: string[] = [];
         const selection = fakeSelection(() => ({

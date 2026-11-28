@@ -113,6 +113,17 @@ function fakePort(script: PortScript = {}): FakePort {
         reply: (thread, body) => act("reply", [thread, body], () => undefined),
         resolve: (thread) => act("resolve", [thread], () => undefined),
         unresolve: (thread) => act("unresolve", [thread], () => undefined),
+        state: (number) =>
+            act("state", [number], () => ({
+                draft: false,
+                head: { sha: "0ddba11", committedAt: "2026-01-01T00:00:00Z" },
+                readyAt: null,
+            })),
+        ready: (number) => act("ready", [number], () => undefined),
+        checkRuns: (sha) => act("checkRuns", [sha], () => []),
+        reviews: (number) => act("reviews", [number], () => []),
+        dismiss: (number, review, message) =>
+            act("dismiss", [number, review, message], () => undefined),
     };
     const factory = (directory: string) => {
         directories.push(directory);

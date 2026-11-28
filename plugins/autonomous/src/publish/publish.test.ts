@@ -9,15 +9,22 @@ import { attemptDir, publishLockPath, writeRecord } from "../attempts/state.ts";
 import { record as startedAttempt, tempState } from "../attempts/test-fixtures.ts";
 import type { Exec, ExecResult } from "../exec.ts";
 import { config } from "../label-triage/test-fixtures.ts";
-import type { NewThread, PullRequests, ReviewThread, ThreadAnchor } from "../pull-request/port.ts";
+import type {
+    NewThread,
+    PullRequests,
+    Review,
+    ReviewThread,
+    ThreadAnchor,
+} from "../pull-request/port.ts";
 import { READ_BACK_TRIES } from "../read-back.ts";
 import type { Result } from "../result.ts";
+import type { ReviewBot } from "../review-bots/types.ts";
 import type { StageId } from "../stages/stage.ts";
-import { firstComment } from "./format.ts";
+import { firstComment, stateReply } from "./format.ts";
 import { parseMarkers, threadMarker } from "./markers.ts";
-import { publicationOf } from "./outcome.ts";
+import { outcomeOf, publicationOf } from "./outcome.ts";
 import { type PublishDeps, runPublish } from "./publish.ts";
-import { digestOf, FINDINGS_FILE, PUBLISH_RECEIPT_FILE } from "./receipt.ts";
+import { digestOf, FINDINGS_FILE, isQuietReceipt, PUBLISH_RECEIPT_FILE } from "./receipt.ts";
 import type { FindingEntry, RecordEntry } from "./record.ts";
 import { PUBLISH_SCHEMA, renderPublishText, type PublishReport } from "./report.ts";
 import {
@@ -49,6 +56,7 @@ type Method = keyof PullRequests;
 
 interface PortOptions {
     threads?: ReviewThread[];
+    reviews?: Review[]; // the pull request's reviews, which a quiet round reads and dismisses
     pending?: string | null;
     failing?: { method: Method; error: string }; // every call of that method fails
     sticky?: boolean; // false: resolve and unresolve succeed but change nothing
@@ -60,6 +68,8 @@ interface FakePort {
     calls: string[];
     threads: ReviewThread[];
     reviews: { body: string; threads: readonly NewThread[] }[];
+    prReviews: Review[];
+    dismissals: { review: string; message: string }[];
     options: PortOptions;
 }
 
@@ -109,6 +119,8 @@ function fakePort(options: PortOptions = {}): FakePort {
         calls: [],
         threads: structuredClone(options.threads ?? []),
         reviews: [],
+        prReviews: structuredClone(options.reviews ?? []),
+        dismissals: [],
         options,
     };
     const call = <T>(method: Method, detail: string, value: () => T): Promise<Result<T>> => {
@@ -175,6 +187,18 @@ function fakePort(options: PortOptions = {}): FakePort {
             }),
         resolve: (id) => call("resolve", id, () => setResolved(id, true)),
         unresolve: (id) => call("unresolve", id, () => setResolved(id, false)),
+        state: unexpected("state"),
+        ready: unexpected("ready"),
+        checkRuns: unexpected("checkRuns"),
+        reviews: () => call("reviews", "", () => structuredClone(fake.prReviews)),
+        dismiss: (_number, review, message) =>
+            call("dismiss", review, () => {
+                fake.dismissals.push({ review, message });
+                const found = fake.prReviews.find((item) => item.id === review);
+                if (found !== undefined && fake.options.sticky !== false) {
+                    found.state = "DISMISSED";
+                }
+            }),
     };
     return fake;
 }
@@ -202,6 +226,8 @@ interface Setup {
     id?: AttemptId;
     text?: string | null; // findings.json; null: none
     entries?: readonly RecordEntry[];
+    quiet?: boolean; // the record marks a quiet round
+    bots?: readonly ReviewBot[]; // review.external.bots; BOTS by default
     port?: FakePort;
     plannotator?: boolean;
     walkthrough?: WalkthroughOutcome;
@@ -217,8 +243,23 @@ interface Harness {
     walkthroughs: { input: WalkthroughInput; plannotator: PlannotatorAccess }[];
 }
 
-function textOf(id: AttemptId, entries: readonly RecordEntry[]): string {
-    return `${JSON.stringify({ ...findingsRecord(entries), attempt: id }, null, 2)}\n`;
+function textOf(id: AttemptId, entries: readonly RecordEntry[], quiet = false): string {
+    const record = { ...findingsRecord(entries), attempt: id, ...(quiet ? { quiet: true } : {}) };
+    return `${JSON.stringify(record, null, 2)}\n`;
+}
+
+// The shipped review bots, without mentions; GraphQL names their thread comments' authors
+// without the `[bot]` suffix.
+const BOTS: readonly ReviewBot[] = [
+    { id: "coderabbit", login: "coderabbitai[bot]", check: "CodeRabbit", mention: null },
+    { id: "greptile", login: "greptile-apps[bot]", check: "Greptile Review", mention: null },
+    { id: "pullfrog", login: "pullfrog[bot]", check: "pullfrog", mention: null },
+];
+
+function configWith(bots: readonly ReviewBot[]): PublishDeps["config"] {
+    const base = config();
+    const external = { waitMinutes: 30, answerWaitMinutes: 10, rounds: 3, bots: [...bots] };
+    return { ...base, review: { ...base.review, external } };
 }
 
 // A started attempt of linear:DOT-121 whose stage and number come from its id; its directory.
@@ -257,7 +298,9 @@ async function setup(options: Setup = {}): Promise<Harness> {
     const id = options.id ?? ATTEMPT;
     const dir = await writeAttempt(state, id);
     const text =
-        options.text === undefined ? textOf(id, options.entries ?? ROUND_ONE) : options.text;
+        options.text === undefined
+            ? textOf(id, options.entries ?? ROUND_ONE, options.quiet)
+            : options.text;
     if (text !== null) {
         await writeFile(join(dir, FINDINGS_FILE), text);
     }
@@ -265,7 +308,7 @@ async function setup(options: Setup = {}): Promise<Harness> {
     const walkthroughs: Harness["walkthroughs"] = [];
     const outcome = options.walkthrough ?? { outcome: "saved", digest: "0f".repeat(32) };
     const deps: PublishDeps = {
-        config: config(),
+        config: configWith(options.bots ?? BOTS),
         state,
         pullRequests: () => fake.port,
         git: fakeGit({ ahead: options.ahead, diff: options.diff }),
@@ -282,7 +325,68 @@ async function setup(options: Setup = {}): Promise<Harness> {
 const publish = (harness: Harness, id: AttemptId = ATTEMPT) =>
     runPublish(id, harness.deps, STARTED);
 
-const POSTS: readonly string[] = ["review", "reply", "resolve", "unresolve"];
+const EXTERNAL = "linear:DOT-121:external-review:1" as AttemptId;
+const QUIET = "linear:DOT-121:external-review:2" as AttemptId;
+const GREPTILE = "greptile-apps";
+const CODERABBIT = "coderabbitai";
+
+// A review bot's thread: its first comment, and any given in `by`, are the bot's.
+function botThread(
+    id: string,
+    author: string,
+    bodies: string[],
+    overrides: Partial<Omit<ReviewThread, "comments">> = {},
+    by: readonly number[] = [0],
+): ReviewThread {
+    const made = thread(id, bodies, overrides);
+    return {
+        ...made,
+        comments: made.comments.map((item, index) =>
+            by.includes(index) ? { ...item, author } : item,
+        ),
+    };
+}
+
+function reportedBy(reviewer: string, overrides: Partial<FindingEntry> = {}): FindingEntry {
+    return finding({ reporters: [{ reviewer, ids: [] }], ...overrides });
+}
+
+function refutedBy(reviewer: string, overrides: Partial<FindingEntry> = {}): FindingEntry {
+    return reportedBy(reviewer, {
+        refutation: { outcome: "refuted", reproduction: null },
+        publication: { state: "none" },
+        reason: "The token is checked before the loop.",
+        ...overrides,
+    });
+}
+
+// The reply an attempt posted for `entry`, as publish mode writes it.
+function replyOf(attempt: string, entry: RecordEntry): string {
+    const outcome = outcomeOf(entry);
+    if (outcome === null) {
+        throw new Error(`${entry.id} posts nothing`);
+    }
+    return stateReply(attempt, entry, outcome);
+}
+
+const lastBody = (item: ReviewThread | undefined) => item?.comments.at(-1)?.body ?? "";
+
+function changesRequested(id: string, author: string): Review {
+    return {
+        id,
+        author,
+        state: "CHANGES_REQUESTED",
+        commit: "0ddba11",
+        body: "Please fix the loop.",
+        url: `${PR_URL}#pullrequestreview-${id}`,
+    };
+}
+
+// A quiet round of the second external review attempt, whose record holds no entry.
+const quietRound = (port: FakePort, bots: readonly ReviewBot[] = BOTS) =>
+    setup({ id: QUIET, port, entries: [], quiet: true, bots });
+
+const POSTS: readonly string[] = ["review", "reply", "resolve", "unresolve", "dismiss"];
 
 const posts = (calls: readonly string[]) =>
     calls.filter((call) => POSTS.includes(call.split(" ")[0] ?? ""));
@@ -528,6 +632,34 @@ describe("runPublish: existing threads are answered, never duplicated", () => {
         expect(report.outcome).toBe("not-evaluable");
         expect(report.reasons.join("\n")).toContain("GONE");
         expect(posts(harness.fake.calls)).toEqual([]);
+    });
+
+    it("Linked entry of an external review: the bot's thread gains a reply naming the commit, and is not resolved", async () => {
+        const port = fakePort({
+            threads: [botThread("G1", GREPTILE, ["**P1** The loop never stops."])],
+        });
+        const entry = reportedBy("greptile", { id: "g1", thread: "G1" });
+        const harness = await setup({ id: EXTERNAL, port, entries: [entry] });
+        const report = await publish(harness, EXTERNAL);
+        expect(report.outcome).toBe("advance");
+        expect(posts(port.calls)).toEqual(["reply G1"]);
+        expect(lastBody(port.threads[0])).toContain("Status: fixed in abc1234");
+        expect(port.threads[0]?.resolved).toBe(false);
+        expect(report.threads.resolved).toEqual([]);
+    });
+
+    it("never unresolves a review bot's thread an external review answers as open again", async () => {
+        const resolved = botThread("C1", CODERABBIT, ["The loop never stops."], { resolved: true });
+        const port = fakePort({ threads: [resolved] });
+        const entry = reportedBy("coderabbit", {
+            id: "c1",
+            thread: "C1",
+            publication: { state: "blocked", reason: "needs the owner" },
+        });
+        const harness = await setup({ id: EXTERNAL, port, entries: [entry] });
+        expect((await publish(harness, EXTERNAL)).outcome).toBe("advance");
+        expect(posts(port.calls)).toEqual(["reply C1"]);
+        expect(port.threads[0]?.resolved).toBe(true);
     });
 });
 
@@ -844,6 +976,15 @@ describe("runPublish: only the stage's own threads are touched", () => {
         await publish(harness);
         expect(port.calls.filter((call) => call.includes("V1"))).toEqual([]);
     });
+    it("Bot thread linked by an external review: publish mode replies in that thread", async () => {
+        const port = fakePort({
+            threads: [botThread("C1", CODERABBIT, ["The loop never stops."])],
+        });
+        const entry = refutedBy("coderabbit", { id: "c1", thread: "C1" });
+        const harness = await setup({ id: EXTERNAL, port, entries: [entry] });
+        expect((await publish(harness, EXTERNAL)).outcome).toBe("advance");
+        expect(posts(port.calls)).toEqual(["reply C1"]);
+    });
 });
 
 describe("runPublish: the publish receipt", () => {
@@ -1010,7 +1151,7 @@ describe("runPublish: preconditions", () => {
         const harness = await setup({ id });
         const report = await publish(harness, id);
         expect(report.reasons).toEqual([
-            `attempt ${id} belongs to the verify stage; publish mode publishes code-review attempts only`,
+            `attempt ${id} belongs to the verify stage; publish mode publishes code-review and external-review attempts only`,
         ]);
         expect(harness.fake.calls).toEqual([]);
     });
@@ -1019,6 +1160,326 @@ describe("runPublish: preconditions", () => {
         const harness = await setup({ text: null });
         const report = await publish(harness);
         expect(report.reasons).toEqual([`${join(harness.dir, FINDINGS_FILE)} is missing`]);
+    });
+});
+
+describe("runPublish: an external review holds the threads it answers open", () => {
+    it("Refuted bot finding: the Greptile thread gains one reply, not published (refuted) with the reason, and stays open", async () => {
+        const port = fakePort({
+            threads: [botThread("G1", GREPTILE, ["**P2** The loop never stops."])],
+        });
+        const entry = refutedBy("greptile", { id: "g1", thread: "G1" });
+        const harness = await setup({ id: EXTERNAL, port, entries: [entry] });
+        expect((await publish(harness, EXTERNAL)).outcome).toBe("advance");
+        expect((await publish(harness, EXTERNAL)).outcome).toBe("advance");
+        const replies = port.threads[0]?.comments.slice(1) ?? [];
+        expect(replies).toHaveLength(1);
+        expect(replies[0]?.body).toContain(
+            "Status: not published (refuted): The token is checked before the loop.",
+        );
+        expect(parseMarkers(replies[0]?.body ?? "")).toEqual([
+            { kind: "resolution", attempt: EXTERNAL, finding: "g1", state: "none" },
+        ]);
+        expect(port.threads[0]?.resolved).toBe(false);
+        expect(posts(port.calls)).toEqual(["reply G1"]);
+    });
+
+    it("Already decided by the code review: the reply says not published (dismissed), gives the reason and holds that URL", async () => {
+        const decision = "https://github.com/o/r/pull/9#discussion_r1";
+        const port = fakePort({
+            threads: [botThread("C1", CODERABBIT, ["The loop never stops."])],
+        });
+        const entry = reportedBy("coderabbit", {
+            id: "c1",
+            thread: "C1",
+            destination: "dismiss",
+            refutation: { outcome: "not-refuted", reproduction: null },
+            publication: { state: "none" },
+            reason: `Decided in the code review, ${decision}: a revoked token is retried once.`,
+        });
+        const harness = await setup({ id: EXTERNAL, port, entries: [entry] });
+        expect((await publish(harness, EXTERNAL)).outcome).toBe("advance");
+        const reply = lastBody(port.threads[0]);
+        expect(reply).toContain("Status: not published (dismissed): Decided in the code review");
+        expect(reply).toContain("a revoked token is retried once.");
+        expect(reply).toContain(decision);
+        expect(port.threads[0]?.resolved).toBe(false);
+    });
+
+    it("Finding thread addressed to external review: the thread gains a reply naming the commit and is resolved", async () => {
+        const passed = finding({
+            destination: "pass-on",
+            refutation: { outcome: "not-refuted", reproduction: null },
+            publication: { state: "passed-on", stage: "external-review" },
+        });
+        const addressed = published("P1", ATTEMPT, passed, false);
+        expect(threadMarker(addressed.comments[0]?.body ?? "")?.for).toBe("external-review");
+        const port = fakePort({ threads: [addressed] });
+        const harness = await setup({
+            id: EXTERNAL,
+            port,
+            entries: [finding({ id: "e1", thread: "P1" })],
+        });
+        expect((await publish(harness, EXTERNAL)).outcome).toBe("advance");
+        expect(posts(port.calls)).toEqual(["reply P1", "resolve P1"]);
+        expect(lastBody(port.threads[0])).toContain("Status: fixed in abc1234");
+        expect(port.threads[0]?.resolved).toBe(true);
+    });
+});
+
+describe("runPublish: a reply may mention its review bot", () => {
+    it("No mention configured: the reply in a Greptile thread holds no @ mention of Greptile", async () => {
+        const port = fakePort({
+            threads: [botThread("G1", GREPTILE, ["**P1** The loop never stops."])],
+        });
+        const entry = reportedBy("greptile", { id: "g1", thread: "G1" });
+        const harness = await setup({ id: EXTERNAL, port, entries: [entry] });
+        expect((await publish(harness, EXTERNAL)).outcome).toBe("advance");
+        expect(lastBody(port.threads[0])).not.toMatch(/@greptile/iu);
+        expect(lastBody(port.threads[0]).startsWith("Status: ")).toBe(true);
+    });
+
+    it("Mention configured: the reply in a CodeRabbit thread starts with @coderabbitai", async () => {
+        const bots = BOTS.map((bot) =>
+            bot.id === "coderabbit" ? { ...bot, mention: "@coderabbitai" } : bot,
+        );
+        const port = fakePort({
+            threads: [botThread("C1", CODERABBIT, ["The loop never stops."])],
+        });
+        const entry = refutedBy("coderabbit", { id: "c1", thread: "C1" });
+        const harness = await setup({ id: EXTERNAL, port, entries: [entry], bots });
+        expect((await publish(harness, EXTERNAL)).outcome).toBe("advance");
+        expect(lastBody(port.threads[0]).startsWith("@coderabbitai")).toBe(true);
+        expect((await publish(harness, EXTERNAL)).outcome).toBe("advance");
+        expect(posts(port.calls)).toEqual(["reply C1"]);
+    });
+
+    it("does not mention a bot in its thread when another reporter's entry is answered there", async () => {
+        const bots = BOTS.map((bot) =>
+            bot.id === "coderabbit" ? { ...bot, mention: "@coderabbitai" } : bot,
+        );
+        const port = fakePort({
+            threads: [botThread("C1", CODERABBIT, ["The loop never stops."])],
+        });
+        const entry = refutedBy("ci", { id: "c1", thread: "C1" });
+        const harness = await setup({ id: EXTERNAL, port, entries: [entry], bots });
+        expect((await publish(harness, EXTERNAL)).outcome).toBe("advance");
+        expect(lastBody(port.threads[0])).not.toContain("@coderabbitai");
+    });
+});
+
+describe("runPublish: the record may mark a quiet round", () => {
+    it("Quiet mark on a code review record: nothing is posted, the report names the field, and the mode fails", async () => {
+        const harness = await setup({ entries: [], quiet: true });
+        const report = await publish(harness);
+        expect(report.outcome).toBe("not-evaluable");
+        expect(report.reasons.join("\n")).toContain("$.quiet");
+        expect(harness.fake.calls).toEqual([]);
+        expect(report.receipt).toBeNull();
+    });
+
+    it("refuses a quiet record of an external review that sends an entry to fix", async () => {
+        const harness = await setup({ id: QUIET, entries: [reportedBy("greptile")], quiet: true });
+        const report = await publish(harness, QUIET);
+        expect(report.reasons.join("\n")).toContain("$.entries[f1] is sent to fix");
+        expect(harness.fake.calls).toEqual([]);
+    });
+});
+
+describe("runPublish: the quiet round resolves the answered threads", () => {
+    it("Greptile thread answered as fixed: the thread is resolved", async () => {
+        const entry = reportedBy("greptile", { id: "g1", thread: "G1" });
+        const answered = botThread("G1", GREPTILE, [
+            "**P1** The loop never stops.",
+            replyOf(EXTERNAL, entry),
+        ]);
+        const port = fakePort({ threads: [answered] });
+        const harness = await quietRound(port);
+        const report = await publish(harness, QUIET);
+        expect(report.outcome).toBe("advance");
+        expect(posts(port.calls)).toEqual(["resolve G1"]);
+        expect(port.threads[0]?.resolved).toBe(true);
+        expect(report.threads.resolved).toEqual([
+            { finding: "g1", url: `${PR_URL}#discussion-G1-0` },
+        ]);
+    });
+
+    it("Bot answered after the reply: the CodeRabbit thread is left open", async () => {
+        const entry = refutedBy("coderabbit", { id: "c1", thread: "C1" });
+        const contested = botThread(
+            "C1",
+            CODERABBIT,
+            [
+                "The loop never stops.",
+                replyOf(EXTERNAL, entry),
+                "The check runs after the first send.",
+            ],
+            {},
+            [0, 2],
+        );
+        const port = fakePort({ threads: [contested] });
+        const harness = await quietRound(port);
+        expect((await publish(harness, QUIET)).outcome).toBe("advance");
+        expect(posts(port.calls)).toEqual([]);
+        expect(port.threads[0]?.resolved).toBe(false);
+    });
+
+    it("Human reviewer's thread refuted: the thread is left open", async () => {
+        const entry = refutedBy("human", { id: "h1", thread: "H1" });
+        const port = fakePort({ threads: [human("H1", "This retry never stops.")] });
+        port.threads[0]?.comments.push({ ...comment("H1", 1, replyOf(EXTERNAL, entry)) });
+        const harness = await quietRound(port);
+        expect((await publish(harness, QUIET)).outcome).toBe("advance");
+        expect(lastBody(port.threads[0])).toContain("Status: not published (refuted)");
+        expect(posts(port.calls)).toEqual([]);
+    });
+
+    it("resolves a human reviewer's thread whose finding was fixed", async () => {
+        const entry = reportedBy("human", { id: "h1", thread: "H1" });
+        const port = fakePort({ threads: [human("H1", "This retry never stops.")] });
+        port.threads[0]?.comments.push({ ...comment("H1", 1, replyOf(EXTERNAL, entry)) });
+        const harness = await quietRound(port);
+        expect((await publish(harness, QUIET)).outcome).toBe("advance");
+        expect(posts(port.calls)).toEqual(["resolve H1"]);
+    });
+
+    it("leaves open a thread whose last reply says blocked, or deferred to a proposed task", async () => {
+        const blocked = reportedBy("greptile", {
+            id: "g1",
+            publication: { state: "blocked", reason: "needs the owner" },
+        });
+        const proposed = reportedBy("greptile", {
+            id: "g2",
+            destination: "defer",
+            publication: { state: "deferred", proposedTitle: "Bound the retries" },
+        });
+        const port = fakePort({
+            threads: [
+                botThread("G1", GREPTILE, [
+                    "**P1** The loop never stops.",
+                    replyOf(EXTERNAL, blocked),
+                ]),
+                botThread("G2", GREPTILE, ["**P2** Bound it.", replyOf(EXTERNAL, proposed)]),
+            ],
+        });
+        const harness = await quietRound(port);
+        expect((await publish(harness, QUIET)).outcome).toBe("advance");
+        expect(posts(port.calls)).toEqual([]);
+    });
+});
+
+describe("runPublish: the quiet round dismisses a review bot's request for changes", () => {
+    const fixed = reportedBy("coderabbit", { id: "c1", thread: "C1" });
+    const answeredThread = () =>
+        botThread("C1", CODERABBIT, ["The loop never stops.", replyOf(EXTERNAL, fixed)]);
+
+    it("Every CodeRabbit thread resolved: that review is dismissed with a message starting Addressed:", async () => {
+        const port = fakePort({
+            threads: [answeredThread()],
+            reviews: [changesRequested("R9", "coderabbitai[bot]")],
+        });
+        const harness = await quietRound(port);
+        const report = await publish(harness, QUIET);
+        expect(report.outcome).toBe("advance");
+        expect(posts(port.calls)).toEqual(["resolve C1", "dismiss R9"]);
+        expect(port.dismissals).toEqual([
+            { review: "R9", message: "Addressed: 1 fixed, 0 answered" },
+        ]);
+        expect(report.dismissed).toEqual([
+            { bot: "coderabbit", url: `${PR_URL}#pullrequestreview-R9` },
+        ]);
+    });
+
+    it("One CodeRabbit thread left open: CodeRabbit's review is not dismissed", async () => {
+        const contested = refutedBy("coderabbit", {
+            id: "c2",
+            thread: "C2",
+            refutation: { outcome: "survived", reproduction: null },
+            publication: { state: "blocked", reason: "refuted twice; the human decides" },
+        });
+        const port = fakePort({
+            threads: [
+                answeredThread(),
+                botThread("C2", CODERABBIT, ["Bound it.", replyOf(EXTERNAL, contested)]),
+            ],
+            reviews: [changesRequested("R9", "coderabbitai[bot]")],
+        });
+        const harness = await quietRound(port);
+        expect((await publish(harness, QUIET)).outcome).toBe("advance");
+        expect(posts(port.calls)).toEqual(["resolve C1"]);
+        expect(port.prReviews[0]?.state).toBe("CHANGES_REQUESTED");
+    });
+
+    it("Human request for changes: it is not dismissed", async () => {
+        const port = fakePort({
+            threads: [answeredThread()],
+            reviews: [changesRequested("R8", "a-reviewer")],
+        });
+        const harness = await quietRound(port);
+        expect((await publish(harness, QUIET)).outcome).toBe("advance");
+        expect(port.calls.filter((call) => call.startsWith("dismiss"))).toEqual([]);
+    });
+
+    it("run twice, posts no second reply, resolution or dismissal, and never marks ready", async () => {
+        const port = fakePort({
+            threads: [answeredThread()],
+            reviews: [changesRequested("R9", "coderabbitai[bot]")],
+        });
+        const harness = await quietRound(port);
+        expect((await publish(harness, QUIET)).outcome).toBe("advance");
+        const before = port.calls.length;
+        expect((await publish(harness, QUIET)).outcome).toBe("advance");
+        expect(posts(port.calls.slice(before))).toEqual([]);
+        expect(port.calls.some((call) => ["ready", "state"].includes(call))).toBe(false);
+    });
+});
+
+describe("runPublish: the receipt records a quiet round", () => {
+    it("Resolution not read back: no receipt is written and the mode fails", async () => {
+        const entry = reportedBy("greptile", { id: "g1", thread: "G1" });
+        const port = fakePort({
+            threads: [
+                botThread("G1", GREPTILE, [
+                    "**P1** The loop never stops.",
+                    replyOf(EXTERNAL, entry),
+                ]),
+            ],
+            sticky: false,
+        });
+        const harness = await quietRound(port);
+        const report = await publish(harness, QUIET);
+        expect(report.outcome).toBe("not-evaluable");
+        expect(report.reasons.join("\n")).toContain(`the thread ${PR_URL}#discussion-G1-0 is open`);
+        expect(report.receipt).toBeNull();
+        expect(existsSync(join(harness.dir, PUBLISH_RECEIPT_FILE))).toBe(false);
+    });
+
+    it("refuses the receipt when a dismissal reads back undismissed", async () => {
+        const port = fakePort({
+            threads: [],
+            reviews: [changesRequested("R9", "coderabbitai[bot]")],
+            sticky: false,
+        });
+        const harness = await quietRound(port);
+        const report = await publish(harness, QUIET);
+        expect(report.reasons.join("\n")).toContain("the review R9 is CHANGES_REQUESTED");
+        expect(report.receipt).toBeNull();
+    });
+
+    it("marks the receipt of a quiet round quiet, and only that one", async () => {
+        const quiet = await quietRound(fakePort());
+        expect((await publish(quiet, QUIET)).outcome).toBe("advance");
+        const marked = JSON.parse(
+            readFileSync(join(quiet.dir, PUBLISH_RECEIPT_FILE), "utf8"),
+        ) as Parameters<typeof isQuietReceipt>[0];
+        expect(marked.quiet).toBe(true);
+        expect(isQuietReceipt(marked)).toBe(true);
+        const round = await setup({ id: EXTERNAL, entries: [] });
+        expect((await publish(round, EXTERNAL)).outcome).toBe("advance");
+        const plain = JSON.parse(
+            readFileSync(join(round.dir, PUBLISH_RECEIPT_FILE), "utf8"),
+        ) as Parameters<typeof isQuietReceipt>[0];
+        expect("quiet" in plain).toBe(false);
     });
 });
 

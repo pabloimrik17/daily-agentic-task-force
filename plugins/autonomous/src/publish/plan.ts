@@ -1,7 +1,8 @@
 // What publish mode does with each published entry of the record, and with each unpublished entry
 // linked to a thread (spec finding-threads, "Existing threads are answered, never duplicated",
 // "Publishing is idempotent within an attempt", "An exact match continues an existing thread" and
-// "Only the stage's own threads are touched"; design D10).
+// "Only the stage's own threads are touched"; design D10; spec finding-threads, "An external review
+// holds the threads it answers open", design D12 of add-external-review-stage).
 // The plan is read from the pull request's threads alone, so a run cut short is completed by the
 // next one.
 
@@ -14,7 +15,7 @@ import { type Marker, parseMarkers, threadMarker } from "./markers.ts";
 import { outcomeOf, type Published } from "./outcome.ts";
 import type { RecordEntry } from "./record.ts";
 
-export const STAGE = "code-review";
+const STAGE = "code-review";
 
 // `match`: an exact match this run continues with the full comment.
 type Target =
@@ -25,6 +26,9 @@ export interface Planned {
     entry: RecordEntry;
     published: Published;
     target: Target;
+    // An external review's thread that no stage of the runner published: answered, never resolved
+    // or unresolved, since a review bot or a person may still contest the answer.
+    held: boolean;
 }
 
 export interface PlanInput {
@@ -137,6 +141,14 @@ function held(input: PlanInput): Set<string> {
     );
 }
 
+function holds(input: PlanInput, target: Target): boolean {
+    return (
+        target.kind === "thread" &&
+        parseAttemptId(input.attempt)?.stage === "external-review" &&
+        threadMarker(target.thread.comments[0]?.body ?? "") === null
+    );
+}
+
 // Every published entry, and every unpublished one linked to a thread, with what to do; an entry
 // linked to a thread the pull request does not hold fails the plan, so nothing is posted.
 export function planEntries(input: PlanInput): Result<Planned[]> {
@@ -154,7 +166,7 @@ export function planEntries(input: PlanInput): Result<Planned[]> {
         if (target.value.kind === "thread") {
             taken.add(target.value.thread.id);
         }
-        planned.push({ entry, published, target: target.value });
+        planned.push({ entry, published, target: target.value, held: holds(input, target.value) });
     }
     return { ok: true, value: planned };
 }
@@ -163,7 +175,7 @@ export function planEntries(input: PlanInput): Result<Planned[]> {
 // line that starts with `Status: ` too, above it.
 const STATUS = /^Status: (.*)\r?\n(?:<details><summary>Trace<\/summary>|<!-- autonomous:)/gmu;
 
-function statusOf(body: string): string {
+export function statusOf(body: string): string {
     return [...body.matchAll(STATUS)].at(-1)?.[1]?.trimEnd() ?? "";
 }
 
@@ -200,10 +212,10 @@ function sharing(planned: Planned, all: readonly Planned[]): readonly Planned[] 
     return id === null ? [planned] : all.filter((item) => threadIdOf(item) === id);
 }
 
-// Null: the thread keeps its state (an entry not published). A thread several entries share
-// stays open while any of them needs it open.
+// Null: the thread keeps its state (an entry not published, or a held thread). A thread several
+// entries share stays open while any of them needs it open.
 export function wantsResolved(planned: Planned, all: readonly Planned[]): boolean | null {
-    if (planned.published.state === "kept") {
+    if (planned.published.state === "kept" || planned.held) {
         return null;
     }
     return sharing(planned, all).every(({ published }) => published.state !== "open");

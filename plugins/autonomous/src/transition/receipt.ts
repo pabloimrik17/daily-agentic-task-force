@@ -69,7 +69,7 @@ function awaitedDetail({ stage, attempt, receipt }: AwaitedReceipt): string {
     return `${stage} attempt ${attempt} has no persistence receipt at ${receipt}; persist its ${transitionRow(stage).persisted} with --apply --persist ${attempt}, or discard the attempt`;
 }
 
-async function exists(file: string): Promise<boolean> {
+export async function exists(file: string): Promise<boolean> {
     try {
         await access(file);
         return true;
@@ -104,6 +104,15 @@ async function awaitedPublish(
     return { ok: true, value: null };
 }
 
+// Whether the `findings.json` in `dir` is the record whose digest `published` names.
+export async function isCurrentFindings(dir: string, published: string): Promise<boolean> {
+    try {
+        return digestOf(await readFile(join(dir, FINDINGS_FILE))) === published;
+    } catch {
+        return false; // a record that cannot be read differs from the one published
+    }
+}
+
 async function unpublished(
     attempt: AttemptId,
     dir: string,
@@ -114,13 +123,7 @@ async function unpublished(
         const file = join(dir, PUBLISH_RECEIPT_FILE);
         return `code-review attempt ${attempt} has no publish receipt at ${file}, so its record is not published; ${publish}, or discard the attempt`;
     }
-    let current: string | null = null;
-    try {
-        current = digestOf(await readFile(join(dir, FINDINGS_FILE)));
-    } catch {
-        // a record that cannot be read differs from the one published
-    }
-    return current === published
+    return (await isCurrentFindings(dir, published))
         ? null
         : `code-review attempt ${attempt} has a ${FINDINGS_FILE} that differs from the one published, so its record is not published; ${publish}, or discard the attempt`;
 }

@@ -1,8 +1,10 @@
 // Publish mode (spec autonomous-run, "Publish mode"; spec finding-threads; design D6 and D9 to
-// D13): posts a code-review attempt's findings as finding threads, one post at a time, reads them
-// back, brings the walkthrough up to date and writes `published.json`. It posts only COMMENT
-// reviews, replies and resolutions: the pull request stays a draft. A failed post stops the run,
-// and the next run continues from the markers.
+// D13): posts a code-review or external-review attempt's findings as finding threads, one post at
+// a time, reads them back, brings the walkthrough up to date and writes `published.json`. It posts
+// only COMMENT reviews, replies and resolutions, and in an external review's quiet round the
+// dismissal of a review bot's request for changes (design D12 of add-external-review-stage): it
+// never marks a pull request ready, approves or requests changes. A failed post stops the run, and
+// the next run continues from the markers.
 
 import { acquireLockAt } from "../attempts/lock.ts";
 import type { AttemptId } from "../attempts/record.ts";
@@ -11,11 +13,13 @@ import type { Exec } from "../exec.ts";
 import type { ReviewThread } from "../pull-request/port.ts";
 import { READ_BACK_TRIES, readUntil, type Wait } from "../read-back.ts";
 import type { Result } from "../result.ts";
+import { botOf } from "../review-bots/identify.ts";
 import { guideAvailability } from "../review-team/availability.ts";
 import { continuingReply, firstComment, reviewBody, stateReply } from "./format.ts";
 import { threadMarker } from "./markers.ts";
-import { type Planned, planEntries, showsState, STAGE, wantsResolved } from "./plan.ts";
+import { type Planned, planEntries, showsState, wantsResolved } from "./plan.ts";
 import { type PrepareDeps, prepare, type Prepared, findAttempt } from "./prepare.ts";
+import { settleQuietRound } from "./quiet.ts";
 import { PUBLISH_RECEIPT_SCHEMA, readPublishReceipt, writePublishReceipt } from "./receipt.ts";
 import { blankPublish, type PublishReport, type ThreadPost } from "./report.ts";
 import type {
@@ -104,7 +108,27 @@ async function publish(publishing: Publishing): Promise<string | null> {
         return answered;
     }
     const back = await readBack(publishing, threaded);
-    return back.ok ? finish(publishing, threaded, back.value) : back.error;
+    return back.ok ? conclude(publishing, threaded, back.value) : back.error;
+}
+
+// A quiet round settles the threads its entries answered before the receipt is written.
+async function conclude(
+    publishing: Publishing,
+    threaded: readonly Threaded[],
+    threads: readonly ReviewThread[],
+): Promise<string | null> {
+    const { deps, findings, port, pullRequest, report } = publishing;
+    if (findings.quiet === true) {
+        const round = { port, number: pullRequest.number, report, wait: deps.wait };
+        const settled = await settleQuietRound(
+            { ...round, bots: deps.config.review.external.bots },
+            threads,
+        );
+        if (settled !== null) {
+            return settled;
+        }
+    }
+    return finish(publishing, threaded, threads);
 }
 
 function plan(publishing: Publishing, threads: readonly ReviewThread[]): Result<Planned[]> {
@@ -158,7 +182,7 @@ async function postReview(
     }
     const body = reviewBody({
         attempt: findings.attempt,
-        stage: STAGE,
+        stage: publishing.record.stage,
         round,
         states: anchored.flatMap(({ item }) =>
             item.published.state === "kept" ? [] : [item.published.state],
@@ -284,7 +308,9 @@ async function reply(publishing: Publishing, planned: Threaded): Promise<string 
     if (!match && showsState(thread, findings.attempt, planned)) {
         return null;
     }
-    const body = (match ? continuingReply : stateReply)(findings.attempt, entry, published);
+    const body = match
+        ? continuingReply(findings.attempt, entry, published)
+        : stateReply(findings.attempt, entry, published, mentionOf(publishing, planned));
     const posted = await port.reply(thread.id, body);
     if (!posted.ok) {
         return posted.error;
@@ -295,6 +321,15 @@ async function reply(publishing: Publishing, planned: Threaded): Promise<string 
         report.matches.push(post);
     }
     return null;
+}
+
+// Spec finding-threads, "A reply may mention its review bot": in the thread of a review bot that
+// reported the entry, when its settings give a mention.
+function mentionOf({ deps }: Publishing, { entry, target }: Threaded): string | null {
+    const author = target.thread.comments[0]?.author ?? "";
+    const bot = botOf(author, deps.config.review.external.bots);
+    const reported = entry.reporters.some(({ reviewer }) => reviewer === bot?.id);
+    return bot !== null && reported ? bot.mention : null;
 }
 
 async function settle(
@@ -379,6 +414,7 @@ async function finish(
         findingsDigest: digest,
         walkthroughDigest: outcome.outcome === "none" ? null : outcome.digest,
         publishedAt: report.startedAt,
+        ...(findings.quiet === true ? { quiet: true as const } : {}),
     });
     if (!written.ok) {
         return written.error;

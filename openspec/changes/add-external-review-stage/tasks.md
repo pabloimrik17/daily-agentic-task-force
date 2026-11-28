@@ -2,11 +2,11 @@
 
 ## 1. Baseline
 
-- [ ] 1.1 Verify the starting point: `bun run test`, `bun run typecheck` and `bun run lint:fallow` pass before any code change, and the branch already holds the grill's documents (glossary terms External review, Review bot, Quiet round, Review round, Stage label; ADR 0009; the amended consequence of ADR 0007). Verify by running the three commands and `bun run lint:markdownlint`.
+- [x] 1.1 Verify the starting point: `bun run test`, `bun run typecheck` and `bun run lint:fallow` pass before any code change, and the branch already holds the grill's documents (glossary terms External review, Review bot, Quiet round, Review round, Stage label; ADR 0009; the amended consequence of ADR 0007). Verify by running the three commands and `bun run lint:markdownlint`.
 
 ## 2. Configuration
 
-- [ ] 2.1 Add the optional `review.external` block to `config.ts`, `config.defaults.json` and `config.example.json` (design D3): `waitMinutes`, `answerWaitMinutes`, `rounds`, `bots` with `id`, `login`, `check`, `mention`; a user's `bots` replaces the list whole. Verify with `config.test.ts`, one test per scenario of the review-bots requirement "Review bot settings", every existing test unchanged.
+- [x] 2.1 Add the optional `review.external` block to `config.ts`, `config.defaults.json` and `config.example.json` (design D3): `waitMinutes`, `answerWaitMinutes`, `rounds`, `bots` with `id`, `login`, `check`, `mention`; a user's `bots` replaces the list whole. Verify with `config.test.ts`, one test per scenario of the review-bots requirement "Review bot settings", every existing test unchanged.
 
 ## 3. The pull-request port
 
@@ -14,13 +14,13 @@
 
 ## 4. Review bots
 
-- [ ] 4.1 Implement the classification in `review-bots/` (design D4): a bot's state for a head commit, the wait of a bot with no check run, and the checks of a pull request. Pure functions over check runs and a clock. Verify with unit tests, one per scenario of "A review bot's state for a head commit", "A review bot with no check run waits, then is not reviewing" and "The checks of a pull request".
-- [ ] 4.2 Implement settled (design D6), including the answer wait read from external review replies newer than the head commit. Verify with one test per scenario of "A settled pull request".
-- [ ] 4.3 Implement the report (design D7, D8, D9): findings from review bot threads with the login compared without its `[bot]` suffix, contested answers, review bodies as material, failed checks, human reviewers' threads, passed-on threads, the accounted threads, severity from each reporter's mark, the rounds that pushed fixes and the quiet report. Verify with unit tests on thread fixtures, one per scenario of "The reported findings of a round", "A contested answer is reported as such", "Review bodies are material", "Failed checks, human reviewers and passed-on threads are reported", "Severity comes from the reporter's own mark", "Rounds are counted from the pull request" and "A quiet report". The severity fixtures are the real first lines of a CodeRabbit `Major` and `Minor` comment and a Greptile `P1` and `P2` comment.
+- [x] 4.1 Implement the classification in `review-bots/` (design D4): a bot's state for a head commit, the wait of a bot with no check run, and the checks of a pull request. Pure functions over check runs and a clock. Verify with unit tests, one per scenario of "A review bot's state for a head commit", "A review bot with no check run waits, then is not reviewing" and "The checks of a pull request".
+- [x] 4.2 Implement settled (design D6), including the answer wait read from external review replies newer than the head commit. Verify with one test per scenario of "A settled pull request".
+- [x] 4.3 Implement the report (design D7, D8, D9): findings from review bot threads with the login compared without its `[bot]` suffix, contested answers, review bodies as material, failed checks, human reviewers' threads, passed-on threads, the accounted threads, severity from each reporter's mark, the rounds that pushed fixes and the quiet report. Verify with unit tests on thread fixtures, one per scenario of "The reported findings of a round", "A contested answer is reported as such", "Review bodies are material", "Failed checks, human reviewers and passed-on threads are reported", "Severity comes from the reporter's own mark", "Rounds are counted from the pull request" and "A quiet report". The severity fixtures are the real first lines of a CodeRabbit `Major` and `Minor` comment and a Greptile `P1` and `P2` comment.
 
 ## 5. Selection and the wait
 
-- [ ] 5.1 Support `external-review` in `select/stage.ts` and put it last in the stage order. Verify with `stage.test.ts`, `step-stage.test.ts` and `candidates.test.ts`, one test per changed or new scenario of the work-selection deltas "Next stage of a task" and "Most advanced stage first".
+- [x] 5.1 Support `external-review` in `select/stage.ts` and put it last in the stage order. Verify with `stage.test.ts`, `step-stage.test.ts` and `candidates.test.ts`, one test per changed or new scenario of the work-selection deltas "Next stage of a task" and "Most advanced stage first".
 - [ ] 5.2 Add the exclusion `waiting-for-review-bots` after split (design D5): find the pull request from the task's latest attempt record, classify, and with `--apply` mark a draft ready. Never applied to a supplied task. Verify with `candidates.test.ts` and `step.test.ts` on fakes, one test per scenario of the work-selection delta "Candidates and exclusions" and of the review-bots requirements "The pull request of a task in external-review" and "A draft pull request in external-review is marked ready".
 - [ ] 5.3 Report the wait in the text and JSON reports (`select/render.ts`). Verify with `render.test.ts`, one test per scenario of "The wait is reported".
 
@@ -32,16 +32,16 @@
 
 ## 7. Completion of a round
 
-- [ ] 7.1 Accept the outcome `round-ended` in `attempts/result.ts`, add the optional check of an ended round to the stage contract, and complete such an attempt in reconcile only with both receipts, the publish receipt current (design D11). Verify with `result.test.ts` and `reconcile.test.ts`, one test per new scenario of the stage-sessions deltas "Completion needs two proofs" and "Stage contract", every existing reconcile test unchanged.
+- [x] 7.1 Accept the outcome `round-ended` in `attempts/result.ts`, add the optional check of an ended round to the stage contract, and complete such an attempt in reconcile only with both receipts, the publish receipt current (design D11). Verify with `result.test.ts` and `reconcile.test.ts`, one test per new scenario of the stage-sessions deltas "Completion needs two proofs" and "Stage contract", every existing reconcile test unchanged.
 
 ## 8. Publish mode
 
-- [ ] 8.1 Accept `external-review` attempts in publish mode and hold the threads they answer (design D12): reply under a resolution marker, no resolve or unresolve except for a finding thread of the runner, the status line of each outcome, and the reply's mention. Verify with `publish.test.ts`, `format.test.ts` and `run.test.ts`, one test per scenario of the finding-threads requirements "An external review holds the threads it answers open" and "A reply may mention its review bot", of the two modified requirements, and of the autonomous-run deltas "Publish mode" and "Publish preconditions".
-- [ ] 8.2 Implement the quiet round in publish mode (design D12): the record's `quiet` field and its validation, the resolution of the answered threads, the dismissal of a review bot's request for changes, the read-back and the receipt's quiet mark. Verify with `record.test.ts`, `publish.test.ts` and `receipt.test.ts`, one test per scenario of "The record may mark a quiet round", "The quiet round resolves the answered threads", "The quiet round dismisses a review bot's request for changes" and "The receipt records a quiet round".
+- [x] 8.1 Accept `external-review` attempts in publish mode and hold the threads they answer (design D12): reply under a resolution marker, no resolve or unresolve except for a finding thread of the runner, the status line of each outcome, and the reply's mention. Verify with `publish.test.ts`, `format.test.ts` and `run.test.ts`, one test per scenario of the finding-threads requirements "An external review holds the threads it answers open" and "A reply may mention its review bot", of the two modified requirements, and of the autonomous-run deltas "Publish mode" and "Publish preconditions".
+- [x] 8.2 Implement the quiet round in publish mode (design D12): the record's `quiet` field and its validation, the resolution of the answered threads, the dismissal of a review bot's request for changes, the read-back and the receipt's quiet mark. Verify with `record.test.ts`, `publish.test.ts` and `receipt.test.ts`, one test per scenario of "The record may mark a quiet round", "The quiet round resolves the answered threads", "The quiet round dismisses a review bot's request for changes" and "The receipt records a quiet round".
 
 ## 9. Persist mode
 
-- [ ] 9.1 Add the `external-review` plan to persist mode. Verify with `persist.test.ts`: every existing test unchanged, plus one test per new scenario of the autonomous-run deltas "Persist mode" and "Persist preconditions" and of the external-review-stage scenario "Comment header".
+- [x] 9.1 Add the `external-review` plan to persist mode. Verify with `persist.test.ts`: every existing test unchanged, plus one test per new scenario of the autonomous-run deltas "Persist mode" and "Persist preconditions" and of the external-review-stage scenario "Comment header".
 
 ## 10. The external review stage
 

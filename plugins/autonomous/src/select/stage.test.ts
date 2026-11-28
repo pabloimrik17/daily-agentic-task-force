@@ -34,11 +34,20 @@ describe("nextStage", () => {
         expect(stage !== null && isSupported(stage)).toBe(true);
     });
 
-    it("Task waiting for external review: gives external-review, which is not supported", () => {
+    it("Task waiting for external review: gives external-review, which is supported", () => {
         const stage = nextStage(["personal", "HITL", "external-review"]);
         expect(stage).toBe("external-review");
-        expect(stage !== null && isSupported(stage)).toBe(false);
+        expect(stage !== null && isSupported(stage)).toBe(true);
     });
+
+    it.each(["qa", "wrap-up", "ready-to-merge"])(
+        "Task in a stage declared later: %s is not supported",
+        (label) => {
+            const stage = nextStage(["personal", "AFK", label]);
+            expect(stage).toBe(label);
+            expect(stage !== null && isSupported(stage)).toBe(false);
+        },
+    );
 
     it("gives grill-me for an HITL task that also carries grill-me", () => {
         const stage = nextStage(["work", "HITL", "grill-me"]);
@@ -91,6 +100,15 @@ describe("splitByStage", () => {
         const verify = at("a", "verify");
         const review = at("b", "code-review");
         expect(splitByStage([verify, review])).toEqual({ kept: [review], setAside: [verify] });
+    });
+
+    it("External review before code review: keeps the external-review candidate and sets the code-review one aside", () => {
+        const review = at("a", "code-review");
+        const external = at("b", "external-review");
+        expect(splitByStage([review, external])).toEqual({
+            kept: [external],
+            setAside: [review],
+        });
     });
 
     it("keeps every candidate of the most advanced stage, in order", () => {

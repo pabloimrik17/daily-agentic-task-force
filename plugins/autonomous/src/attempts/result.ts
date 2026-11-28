@@ -1,7 +1,8 @@
 // The result marker (spec stage-sessions, "Completion needs two proofs";
 // design D7): the file an agent writes to say its stage is done. It counts
-// only when it parses, names this attempt and reports `completed`; anything
-// else counts as absent, with the reason for the report.
+// only when it parses, names this attempt and reports an outcome the caller
+// accepts: `completed`, or `round-ended` for a stage that declares an ended
+// round (design D11); anything else counts as absent, with the reason for the report.
 
 import { readFile } from "node:fs/promises";
 
@@ -9,10 +10,12 @@ import { array, type Json, object, ParseError, rejectUnknownKeys, string } from 
 
 export const RESULT_SCHEMA = "autonomous.result.v1";
 
+export type MarkerOutcome = "completed" | "round-ended";
+
 interface ResultMarker {
     schema: typeof RESULT_SCHEMA;
     attempt: string;
-    outcome: "completed";
+    outcome: MarkerOutcome;
     summary: string;
     artifacts: string[];
     finishedAt: string;
@@ -89,7 +92,15 @@ function parseText(text: string): { raw: RawMarker } | MarkerRead {
     }
 }
 
-export async function readMarker(file: string, attemptId: string): Promise<MarkerRead> {
+function isAccepted(outcome: string, accepted: readonly MarkerOutcome[]): outcome is MarkerOutcome {
+    return (accepted as readonly string[]).includes(outcome);
+}
+
+export async function readMarker(
+    file: string,
+    attemptId: string,
+    accepted: readonly MarkerOutcome[] = ["completed"],
+): Promise<MarkerRead> {
     const read = await readText(file);
     if (!("text" in read)) {
         return read;
@@ -102,8 +113,10 @@ export async function readMarker(file: string, attemptId: string): Promise<Marke
     if (raw.attempt !== attemptId) {
         return absent(`result marker names attempt ${raw.attempt}, expected ${attemptId}`);
     }
-    if (raw.outcome !== "completed") {
-        return absent(`result marker outcome is "${raw.outcome}", expected "completed"`);
+    const { outcome } = raw;
+    if (!isAccepted(outcome, accepted)) {
+        const expected = accepted.map((each) => `"${each}"`).join(" or ");
+        return absent(`result marker outcome is "${outcome}", expected ${expected}`);
     }
-    return { ok: true, marker: { schema: RESULT_SCHEMA, ...raw, outcome: "completed" } };
+    return { ok: true, marker: { schema: RESULT_SCHEMA, ...raw, outcome } };
 }

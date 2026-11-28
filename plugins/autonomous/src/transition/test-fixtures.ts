@@ -6,13 +6,14 @@ import { type AttemptId, attemptId, type AttemptRecord, type TaskRef } from "../
 import { attemptDir, receiptPath, writeJsonAtomic, writeRecord } from "../attempts/state.ts";
 import { record, tempState } from "../attempts/test-fixtures.ts";
 import type { ExecResult } from "../exec.ts";
-import type { PullRequests } from "../pull-request/port.ts";
+import type { CheckRun, PullRequests } from "../pull-request/port.ts";
 import {
     digestOf,
     FINDINGS_FILE,
     PUBLISH_RECEIPT_SCHEMA,
     writePublishReceipt,
 } from "../publish/receipt.ts";
+import type { Result } from "../result.ts";
 import type { GuardTools } from "./guards.ts";
 
 export const BRANCH = "feature/DOT-110-implement-stage";
@@ -38,6 +39,10 @@ export interface Work {
     remote?: boolean; // whether origin/<branch> exists
     ahead?: number;
     fetchError?: string;
+    draft?: boolean; // whether the pull request is still a draft
+    readyError?: string; // the failure of marking the pull request ready
+    checkRuns?: CheckRun[]; // the head commit's check runs
+    checkRunsError?: string;
 }
 
 // Fake git and openspec execs that answer by their arguments and log "<command> <arguments>".
@@ -65,11 +70,37 @@ export function workTools(work: Work = {}, calls: string[] = []): GuardTools {
             calls.push(`openspec ${args.join(" ")}`);
             return Promise.resolve({ ok: true, stdout: listing });
         },
-        pullRequests: () =>
-            ({
-                defaultBranch: () => Promise.resolve({ ok: true, value: "main" }),
-            }) as PullRequests,
+        pullRequests: () => workPullRequests(work, calls),
     };
+}
+
+// A pull request that is not a draft, with no check run and no review, unless `work` says otherwise.
+function workPullRequests(work: Work, calls: string[]): PullRequests {
+    const answer = <T>(error: string | undefined, value: T): Promise<Result<T>> =>
+        Promise.resolve(error === undefined ? { ok: true, value } : { ok: false, error });
+    return {
+        defaultBranch: () => Promise.resolve({ ok: true, value: "main" }),
+        state: (number) => {
+            calls.push(`pr state ${number}`);
+            return answer(undefined, {
+                draft: work.draft ?? false,
+                head: { sha: "0ddba11", committedAt: "2026-01-01T00:00:00Z" },
+                readyAt: null,
+            });
+        },
+        ready: (number) => {
+            calls.push(`pr ready ${number}`);
+            return answer(work.readyError, undefined);
+        },
+        checkRuns: (sha) => {
+            calls.push(`pr checkRuns ${sha}`);
+            return answer(work.checkRunsError, work.checkRuns ?? []);
+        },
+        reviews: (number) => {
+            calls.push(`pr reviews ${number}`);
+            return answer(undefined, []);
+        },
+    } as Partial<PullRequests> as PullRequests;
 }
 
 // A state directory with one attempt of the task, whose workspace is a directory that exists. The

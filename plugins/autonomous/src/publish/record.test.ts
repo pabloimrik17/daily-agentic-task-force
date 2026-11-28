@@ -46,6 +46,63 @@ describe("The record of the findings", () => {
     });
 });
 
+describe("The record may mark a quiet round", () => {
+    const EXTERNAL = "linear:DOT-121:external-review:2";
+    const refuted = finding({
+        refutation: { outcome: "refuted", reproduction: null },
+        publication: { state: "none" },
+    });
+
+    it("reads quiet: true on an external review record whose refuted findings send nothing to fix", () => {
+        const parsed = parseFindingsRecord(
+            recordText([refuted], { attempt: EXTERNAL, quiet: true }),
+            FILE,
+        );
+        expect(parsed.ok && parsed.value.quiet).toBe(true);
+    });
+
+    it("reads a record without the field as before, with no quiet key", () => {
+        const parsed = parseFindingsRecord(recordText([], { attempt: EXTERNAL }), FILE);
+        expect(parsed.ok && "quiet" in parsed.value).toBe(false);
+    });
+
+    it("refuses the mark on a code review record, naming the field", () => {
+        expect(errorOf(recordText([], { quiet: true }))).toContain(
+            "$.quiet marks an external review's quiet round",
+        );
+    });
+
+    it("refuses the mark on an external review record that sends an entry to fix", () => {
+        const error = errorOf(
+            recordText([finding({ id: "f7" })], { attempt: EXTERNAL, quiet: true }),
+        );
+        expect(error).toContain("$.entries[f7] is sent to fix");
+    });
+
+    it("refuses a mark other than true", () => {
+        expect(errorOf(recordText([], { attempt: EXTERNAL, quiet: false }))).toContain(
+            "$.quiet must be true",
+        );
+    });
+});
+
+describe("Reporters of an external review", () => {
+    const greptile = finding({ reporters: [{ reviewer: "greptile", ids: [] }] });
+
+    it("accepts the reporters the caller adds, such as a review bot's id", () => {
+        const parsed = parseFindingsRecord(recordText([greptile]), FILE, {
+            reporters: ["ci", "greptile"],
+        });
+        expect(parsed.ok && parsed.value.entries[0]?.reporters).toEqual([
+            { reviewer: "greptile", ids: [] },
+        ]);
+    });
+
+    it("refuses a reporter no one adds", () => {
+        expect(errorOf(recordText([greptile]))).toContain("$.entries[f1].reporters[0].reviewer");
+    });
+});
+
 describe("An invalid record publishes nothing", () => {
     it("Missing destination: names the file, the entry and the field", () => {
         const error = errorOf(recordText([without(finding({ id: "f7" }), "destination")]));

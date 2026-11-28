@@ -30,10 +30,10 @@ import {
 export const FINDINGS_SCHEMA = "autonomous.findings.v1";
 
 const REPORTERS = [...REVIEWER_IDS, "verification", "human"] as const;
-type RecordReviewer = (typeof REPORTERS)[number];
 
 interface EntryReporter {
-    reviewer: RecordReviewer;
+    // One of REPORTERS, or a reporter the caller adds: an external review's `ci` and review bots.
+    reviewer: string;
     ids: string[];
     engine?: string;
 }
@@ -102,6 +102,11 @@ export interface FindingsRecord {
     attempt: string;
     review: { tier: Tier; skipped: SkippedReviewer[] }; // the review team run of the stage's round
     entries: RecordEntry[];
+    quiet?: true; // an external review's quiet round (design D12 of add-external-review-stage)
+}
+
+export interface RecordOptions {
+    reporters?: readonly string[]; // accepted beside REPORTERS
 }
 
 type FieldReader = (parent: Json, path: string) => unknown;
@@ -136,23 +141,23 @@ function statement(parent: Json, path: string): string {
     return value;
 }
 
-function reporter(value: unknown, path: string): EntryReporter {
+function reporter(value: unknown, path: string, allowed: readonly string[]): EntryReporter {
     const parent = object(value, path);
     rejectUnknownKeys(parent, ["reviewer", "ids", "engine"], path);
     const engine = optional(parent, "engine", path, nonEmpty);
     return {
-        reviewer: choice(parent, "reviewer", path, REPORTERS),
+        reviewer: choice(parent, "reviewer", path, allowed),
         ids: stringArray(parent, "ids", path),
         ...(engine === undefined ? {} : { engine }),
     };
 }
 
-function reporters(parent: Json, path: string): EntryReporter[] {
+function reporters(parent: Json, path: string, allowed: readonly string[]): EntryReporter[] {
     const values = array(parent.reporters, `${path}.reporters`);
     if (values.length === 0) {
         throw new ParseError(`${path}.reporters must name at least one reporter`);
     }
-    return values.map((value, index) => reporter(value, `${path}.reporters[${index}]`));
+    return values.map((value, index) => reporter(value, `${path}.reporters[${index}]`, allowed));
 }
 
 function thread(parent: Json, path: string): string | null {
@@ -224,7 +229,7 @@ const COMMON_READERS: Readonly<Record<string, FieldReader>> = {
     id: (parent, path) => matching(parent, "id", path, ID, "made of [A-Za-z0-9._-]"),
     round: (parent, path) => integerAtLeast(parent, "round", path, 1),
     kind: (parent, path) => choice(parent, "kind", path, ["finding", "doubt"]),
-    reporters,
+    reporters: (parent, path) => reporters(parent, path, REPORTERS),
     title: (parent, path) => oneLine(parent, "title", path),
     statement,
     location: (parent, path) => location(parent.location, `${path}.location`),
@@ -326,7 +331,12 @@ function entryPath(parent: Json, index: number): string {
     return typeof id === "string" && ID.test(id) ? `$.entries[${id}]` : `$.entries[${index}]`;
 }
 
-function entry(value: unknown, index: number, errors: string[]): RecordEntry | undefined {
+function entry(
+    value: unknown,
+    index: number,
+    errors: string[],
+    readers: Readonly<Record<string, FieldReader>>,
+): RecordEntry | undefined {
     const parent = check(errors, () => object(value, `$.entries[${index}]`));
     if (parent === undefined) {
         return undefined;
@@ -337,7 +347,7 @@ function entry(value: unknown, index: number, errors: string[]): RecordEntry | u
         check(errors, () => rejectUnknownKeys({ [key]: null }, ENTRY_KEYS, path));
     }
     const fields = {
-        ...readFields(parent, path, COMMON_READERS, errors),
+        ...readFields(parent, path, readers, errors),
         destination: check(errors, () => destination(parent, path, parent.kind)),
         ...kindFields(parent, path, parent.kind, errors),
     };
@@ -385,31 +395,79 @@ function duplicates(entries: RecordEntry[]): string[] {
     return [...twice].map((id) => `$.entries holds the id ${JSON.stringify(id)} more than once`);
 }
 
-function entries(parent: Json, errors: string[]): RecordEntry[] {
+function commonReaders(options: RecordOptions): Readonly<Record<string, FieldReader>> {
+    const allowed = [...REPORTERS, ...(options.reporters ?? [])];
+    return { ...COMMON_READERS, reporters: (parent, path) => reporters(parent, path, allowed) };
+}
+
+function entries(parent: Json, errors: string[], options: RecordOptions): RecordEntry[] {
     const values = check(errors, () => array(parent.entries, "$.entries")) ?? [];
-    const read = values.map((value, index) => entry(value, index, errors));
+    const readers = commonReaders(options);
+    const read = values.map((value, index) => entry(value, index, errors, readers));
     const valid = read.filter((item): item is RecordEntry => item !== undefined);
     errors.push(...duplicates(valid));
     return valid;
 }
 
-function record(input: unknown, errors: string[]): FindingsRecord | undefined {
+// Spec finding-threads, "The record may mark a quiet round": only `true`, and only for an
+// external review whose round sends nothing to fix. A refuted finding keeps the destination it
+// was triaged to, so only a surviving one counts as sent to fix.
+function quiet(parent: Json): true | undefined {
+    if (!("quiet" in parent)) {
+        return undefined;
+    }
+    if (parent.quiet !== true) {
+        throw new ParseError("$.quiet must be true when present");
+    }
+    return true;
+}
+
+function quietFaults(value: { attempt?: string; entries: RecordEntry[] }): string[] {
+    const stage = parseAttemptId(value.attempt ?? "")?.stage;
+    if (stage !== undefined && stage !== "external-review") {
+        return [`$.quiet marks an external review's quiet round, not a ${stage} attempt's record`];
+    }
+    return value.entries
+        .filter(
+            (item) =>
+                item.kind === "finding" &&
+                item.destination === "fix" &&
+                item.refutation.outcome === "survived",
+        )
+        .map(({ id }) => `$.quiet marks a quiet round, but $.entries[${id}] is sent to fix`);
+}
+
+function record(
+    input: unknown,
+    errors: string[],
+    options: RecordOptions,
+): FindingsRecord | undefined {
     const parent = check(errors, () => object(input, "$"));
     if (parent === undefined) {
         return undefined;
     }
-    check(errors, () => rejectUnknownKeys(parent, ["schema", "attempt", "review", "entries"], "$"));
+    const keys = ["schema", "attempt", "review", "entries", "quiet"];
+    check(errors, () => rejectUnknownKeys(parent, keys, "$"));
     const value = {
         schema: check(errors, () => choice(parent, "schema", "$", [FINDINGS_SCHEMA])),
         attempt: check(errors, () => attemptId(parent)),
         review: review(parent.review, errors),
-        entries: entries(parent, errors),
+        entries: entries(parent, errors, options),
     };
-    return errors.length === 0 ? (value as FindingsRecord) : undefined;
+    const marked = check(errors, () => quiet(parent));
+    if (marked !== undefined) {
+        errors.push(...quietFaults(value));
+    }
+    const read = marked === undefined ? value : { ...value, quiet: marked };
+    return errors.length === 0 ? (read as FindingsRecord) : undefined;
 }
 
 // `file` names the record in the error, which lists every fault found.
-export function parseFindingsRecord(text: string, file: string): Result<FindingsRecord> {
+export function parseFindingsRecord(
+    text: string,
+    file: string,
+    options: RecordOptions = {},
+): Result<FindingsRecord> {
     let input: unknown;
     try {
         input = JSON.parse(text);
@@ -417,7 +475,7 @@ export function parseFindingsRecord(text: string, file: string): Result<Findings
         return { ok: false, error: `${file} is not valid JSON: ${(error as Error).message}` };
     }
     const errors: string[] = [];
-    const value = record(input, errors);
+    const value = record(input, errors, options);
     return value === undefined
         ? { ok: false, error: `${file} is invalid: ${errors.join("; ")}` }
         : { ok: true, value };

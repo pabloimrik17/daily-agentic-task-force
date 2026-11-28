@@ -18,6 +18,7 @@ import {
     isScope,
     type Scope,
 } from "./label-contract/contract.ts";
+import type { ExternalReviewConfig, ReviewBot } from "./review-bots/types.ts";
 import {
     REVIEWER_IDS,
     type ReviewConfig,
@@ -245,9 +246,30 @@ const SESSIONS_KEYS = ["tool", "profile", "binary"];
 const WORKSPACE_KEYS = ["root"];
 const NAMING_KEYS = ["model", "effort"];
 const RUNNER_KEYS = ["grills", "parallel", "intervalMinutes"];
-const REVIEW_KEYS = ["tiers", "team", "security"];
+const REVIEW_KEYS = ["tiers", "team", "security", "external"];
+const EXTERNAL_KEYS = ["waitMinutes", "answerWaitMinutes", "rounds", "bots"];
 
-// Design D13. The filled values are validated afterwards, by the caller.
+// Design D13. The filled values are validated afterwards, by the caller. `label` names the
+// block in the list of defaulted keys.
+function fill(
+    given: Json,
+    path: string,
+    keys: readonly string[],
+    shipped: Json,
+    label: string,
+    defaulted: string[],
+): Json {
+    rejectUnknownKeys(given, keys, path);
+    const filled: Json = { ...given };
+    for (const key of keys) {
+        if (!(key in given)) {
+            filled[key] = shipped[key];
+            defaulted.push(`${label}.${key}`);
+        }
+    }
+    return filled;
+}
+
 function overlay(
     root: Json,
     block: keyof ConfigDefaults,
@@ -257,15 +279,27 @@ function overlay(
 ): Json {
     const path = `$.${block}`;
     const given = block in root ? object(root[block], path) : {};
-    rejectUnknownKeys(given, keys, path);
-    const filled: Json = { ...given };
-    for (const key of keys) {
-        if (!(key in given)) {
-            filled[key] = defaults[block][key];
-            defaulted.push(`${block}.${key}`);
-        }
+    return fill(given, path, keys, defaults[block], block, defaulted);
+}
+
+// `review.external` fills key by key, so a file may set `bots` alone (spec review-bots,
+// "Review bot settings"). When the block is absent the whole of it is already defaulted.
+function overlayExternal(root: Json, review: Json, defaults: ConfigDefaults, defaulted: string[]) {
+    const given = object(root.review, "$.review").external;
+    if (given === undefined) {
+        return review;
     }
-    return filled;
+    const path = "$.review.external";
+    const shipped = object(defaults.review.external, path);
+    const filled = fill(
+        object(given, path),
+        path,
+        EXTERNAL_KEYS,
+        shipped,
+        "review.external",
+        defaulted,
+    );
+    return { ...review, external: filled };
 }
 
 function optionalConfig(
@@ -281,12 +315,13 @@ function optionalConfig(
     const naming = overlay(root, "naming", NAMING_KEYS, defaults, defaulted);
     const runner = overlay(root, "runner", RUNNER_KEYS, defaults, defaulted);
     const review = overlay(root, "review", REVIEW_KEYS, defaults, defaulted);
+    const external = "review" in root ? overlayExternal(root, review, defaults, defaulted) : review;
     return {
         sessions: sessionsConfig(sessions, "$.sessions"),
         workspace: workspaceConfig(workspace, "$.workspace", home),
         naming: modelSettings(naming, "$.naming"),
         runner: runnerConfig(runner, "$.runner"),
-        review: reviewConfig(review, "$.review"),
+        review: reviewConfig(external, "$.review"),
         defaulted,
     };
 }
@@ -499,6 +534,47 @@ function reviewConfig(entry: Json, blockPath: string): ReviewConfig {
             object(entry.security, `${blockPath}.security`),
             `${blockPath}.security`,
         ),
+        external: externalConfig(
+            object(entry.external, `${blockPath}.external`),
+            `${blockPath}.external`,
+        ),
+    };
+}
+
+const BOT_KEYS = ["id", "login", "check", "mention"];
+
+function externalConfig(entry: Json, path: string): ExternalReviewConfig {
+    rejectUnknownKeys(entry, EXTERNAL_KEYS, path);
+    return {
+        waitMinutes: integerAtLeast(entry, "waitMinutes", path, 0),
+        answerWaitMinutes: integerAtLeast(entry, "answerWaitMinutes", path, 0),
+        rounds: integerAtLeast(entry, "rounds", path, 1),
+        bots: botsConfig(entry.bots, `${path}.bots`),
+    };
+}
+
+function botsConfig(value: unknown, path: string): ReviewBot[] {
+    const bots = array(value, path).map((bot, index) =>
+        botConfig(object(bot, `${path}[${index}]`), `${path}[${index}]`),
+    );
+    bots.forEach((bot, index) => {
+        const first = bots.findIndex((other) => other.id === bot.id);
+        if (first !== index) {
+            throw new ParseError(
+                `${path}[${index}].id repeats ${bot.id} (already at ${path}[${first}])`,
+            );
+        }
+    });
+    return bots;
+}
+
+function botConfig(entry: Json, path: string): ReviewBot {
+    rejectUnknownKeys(entry, BOT_KEYS, path);
+    return {
+        id: nonEmpty(entry, "id", path),
+        login: nonEmpty(entry, "login", path),
+        check: nonEmpty(entry, "check", path),
+        mention: nullableString(entry, "mention", path),
     };
 }
 

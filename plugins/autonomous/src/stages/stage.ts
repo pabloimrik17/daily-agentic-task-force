@@ -65,6 +65,9 @@ export interface Stage {
     agentArgs(tool: SessionTool): string[]; // model and effort flags the stage wants
     prompt(input: StagePromptInput): string; // the whole prompt file
     completed(task: TrackerTask): boolean; // the tracker check; reconcile checks the marker
+    // The tracker check of an attempt whose marker reports `round-ended`; a stage without it never
+    // accepts that outcome.
+    roundEnded?(task: TrackerTask): boolean;
 }
 
 // The model and effort of grill-me and the OpenSpec stages; DOT-119 replaces the fixed model. No

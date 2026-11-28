@@ -22,6 +22,7 @@ export interface AttemptOptions {
     source?: Source;
     taskId?: string;
     stage?: StageId;
+    number?: number; // the attempt's number in its id, 1 by default
     status?: AttemptState;
     definition?: string | null; // null: no definition.md
     summary?: string | null; // null: no stage-summary.md
@@ -36,14 +37,16 @@ export async function startAttempt(
         source = "linear",
         taskId = "DOT-121",
         stage = "grill-me",
+        number = 1,
         status = "started",
     } = options;
     const ref = { source, id: taskId };
-    const id = attemptId(ref, stage, 1);
+    const id = attemptId(ref, stage, number);
     const record: AttemptRecord = startedAttempt({
         id,
         task: { ...ref, title: "Fix the login" },
         stage,
+        attempt: number,
         state: status,
     });
     await writeRecord(state, record);

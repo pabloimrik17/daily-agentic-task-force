@@ -68,8 +68,8 @@ interface Plan {
     saved: string; // ends the comment's header
 }
 
-// Proposal preparation, the implementation, verification and code review stages leave the
-// description alone.
+// Proposal preparation, the implementation, verification, code review and external review stages
+// leave the description alone.
 const SUMMARY_ONLY: Plan = {
     requires: ["summary"],
     steps: [readTask, saveComment, writeReceipt],
@@ -86,6 +86,7 @@ const PLANS: Readonly<Partial<Record<StageId, Plan>>> = {
     implement: SUMMARY_ONLY,
     verify: SUMMARY_ONLY,
     "code-review": SUMMARY_ONLY,
+    "external-review": SUMMARY_ONLY,
 };
 
 const supportedStages = () => {

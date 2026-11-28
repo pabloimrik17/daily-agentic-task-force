@@ -47,6 +47,26 @@
                 "\\bnew\\s+Function\\s*\\(",
                 "\\b(readFile|writeFile|readdir|createReadStream|createWriteStream)\\w*\\s*\\([^)]*\\b(req|request|params|query|body|userInput)\\b"
             ]
+        },
+        "external": {
+            "waitMinutes": 30,
+            "answerWaitMinutes": 10,
+            "rounds": 3,
+            "bots": [
+                {
+                    "id": "coderabbit",
+                    "login": "coderabbitai[bot]",
+                    "check": "CodeRabbit",
+                    "mention": null
+                },
+                {
+                    "id": "greptile",
+                    "login": "greptile-apps[bot]",
+                    "check": "Greptile Review",
+                    "mention": null
+                },
+                { "id": "pullfrog", "login": "pullfrog[bot]", "check": "pullfrog", "mention": null }
+            ]
         }
     }
 }

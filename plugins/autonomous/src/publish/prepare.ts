@@ -1,6 +1,6 @@
 // Everything publish mode reads before its first post (spec autonomous-run, "Publish
 // preconditions"; spec finding-threads, "An invalid record publishes nothing"; design D6, D9 and
-// Risks): the open code-review attempt, its whole record, the pull request with no pending review
+// Risks): the open code-review or external-review attempt, its whole record, the pull request with no pending review
 // of this account, the pushed branch, the final diff and the threads. Any failure posts nothing.
 
 import { readFile } from "node:fs/promises";
@@ -20,9 +20,8 @@ import type { Result } from "../result.ts";
 import { findBranchChange } from "../stages/openspec-change.ts";
 import { unpushedCommits } from "../transition/guards.ts";
 import { type DiffFile, parseDiff } from "./anchor.ts";
-import { STAGE } from "./plan.ts";
 import { digestOf, FINDINGS_FILE } from "./receipt.ts";
-import { type FindingsRecord, parseFindingsRecord } from "./record.ts";
+import { type FindingsRecord, parseFindingsRecord, type RecordOptions } from "./record.ts";
 import type { PublishReport } from "./report.ts";
 
 export interface PrepareDeps {
@@ -55,6 +54,16 @@ export interface Prepared extends Attempt, FinalDiff {
 
 const messageOf = (error: unknown) => (error instanceof Error ? error.message : String(error));
 
+const PUBLISHED_STAGES: readonly string[] = ["code-review", "external-review"];
+
+// An external review's record names the reporters of its report: `ci` and the review bots
+// (design D7 of add-external-review-stage).
+function recordOptions(record: AttemptRecord, config: AutonomousConfig): RecordOptions {
+    return record.stage === "external-review"
+        ? { reporters: ["ci", ...config.review.external.bots.map(({ id }) => id)] }
+        : {};
+}
+
 // Everything publish mode reads after `findAttempt`, the findings first: the caller holds the
 // attempt's publication lock, so the record it publishes is the one its receipt names.
 export async function prepare(
@@ -63,7 +72,7 @@ export async function prepare(
     report: PublishReport,
 ): Promise<Result<Prepared>> {
     const { record, dir } = found;
-    const findings = await readFindings(dir, record.id);
+    const findings = await readFindings(dir, record.id, recordOptions(record, deps.config));
     if (!findings.ok) {
         return findings;
     }
@@ -104,10 +113,10 @@ export async function findAttempt(
     }
     const { record, dir } = found.value;
     report.task = { ...record.task };
-    if (record.stage !== STAGE) {
+    if (!PUBLISHED_STAGES.includes(record.stage)) {
         return {
             ok: false,
-            error: `attempt ${attempt} belongs to the ${record.stage} stage; publish mode publishes ${STAGE} attempts only`,
+            error: `attempt ${attempt} belongs to the ${record.stage} stage; publish mode publishes ${PUBLISHED_STAGES.join(" and ")} attempts only`,
         };
     }
     return { ok: true, value: { record, dir } };
@@ -117,6 +126,7 @@ export async function findAttempt(
 async function readFindings(
     dir: string,
     attempt: AttemptId,
+    options: RecordOptions,
 ): Promise<Result<Pick<Attempt, "findings" | "digest">>> {
     const file = join(dir, FINDINGS_FILE);
     let bytes: Buffer;
@@ -129,7 +139,7 @@ async function readFindings(
             error: missing ? `${file} is missing` : `cannot read ${file}: ${messageOf(error)}`,
         };
     }
-    const parsed = parseFindingsRecord(bytes.toString("utf8"), file);
+    const parsed = parseFindingsRecord(bytes.toString("utf8"), file, options);
     if (!parsed.ok) {
         return parsed;
     }

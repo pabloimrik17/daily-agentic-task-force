@@ -11,16 +11,19 @@ import type { TrackerTask, Trackers } from "../label-triage/trackers/tracker.ts"
 import type { Result } from "../result.ts";
 import type { RunContext, Step, StepResult } from "../runner.ts";
 import type { Observed, SessionManager } from "../sessions/manager.ts";
+import { FINDINGS_FILE, PUBLISH_RECEIPT_FILE, readPublishReceipt } from "../publish/receipt.ts";
 import { STAGES } from "../stages/registry.ts";
-import type { StageId } from "../stages/stage.ts";
+import type { Stage, StageId } from "../stages/stage.ts";
+import { exists, isCurrentFindings } from "../transition/receipt.ts";
 import type { AttemptId, AttemptRecord, AttemptSession, AttemptState } from "./record.ts";
 import { renderReconcile } from "./reconcile-render.ts";
-import { readMarker } from "./result.ts";
+import { type MarkerOutcome, readMarker } from "./result.ts";
 import {
     attemptDir,
     capturePath,
     listRecords,
     logbookReceiptPath,
+    receiptPath,
     resultPath,
     writeRecord,
 } from "./state.ts";
@@ -290,8 +293,14 @@ interface Proofs {
     error: string | null; // the tracker read that failed
 }
 
+// Only a stage that declares the check of an ended round accepts that outcome (design D11).
+function acceptedOutcomes(stage: Stage | undefined): MarkerOutcome[] {
+    return stage?.roundEnded === undefined ? ["completed"] : ["completed", "round-ended"];
+}
+
 async function checkProofs(r: Reconciler, record: AttemptRecord): Promise<Proofs> {
-    const read = await readMarker(resultPath(attemptDir(r.state, record.id)), record.id);
+    const accepted = acceptedOutcomes(STAGES.get(record.stage));
+    const read = await readMarker(resultPath(attemptDir(r.state, record.id)), record.id, accepted);
     if (!read.ok) {
         const marker = { ok: false as const, reason: read.reason };
         return { marker, holds: false, failure: read.reason, stageNow: null, error: null };
@@ -301,7 +310,7 @@ async function checkProofs(r: Reconciler, record: AttemptRecord): Promise<Proofs
     if (!task.ok) {
         return { marker, holds: false, failure: null, stageNow: null, error: task.error };
     }
-    const failure = stageCheck(record.stage, task.value);
+    const failure = await completionFailure(r, record, read.marker.outcome, task.value);
     const stageNow = failure === null ? stageOf(task.value) : null;
     return { marker, holds: failure === null, failure, stageNow, error: null };
 }
@@ -314,13 +323,49 @@ function stageOf({ closed, labels }: TrackerTask): ReconciledAttempt["stageNow"]
     return stage !== undefined && rest.length === 0 ? stage : null;
 }
 
-// null when the stage's own tracker check holds; an unregistered stage never does.
-function stageCheck(stage: StageId, task: TrackerTask): string | null {
+// null when the stage's own tracker check holds, and for an ended round when both receipts do
+// too; an unregistered stage never holds.
+async function completionFailure(
+    r: Reconciler,
+    record: AttemptRecord,
+    outcome: MarkerOutcome,
+    task: TrackerTask,
+): Promise<string | null> {
+    const failure = stageCheck(record.stage, task, outcome);
+    if (failure !== null || outcome === "completed") {
+        return failure;
+    }
+    return receiptsFailure(attemptDir(r.state, record.id));
+}
+
+function stageCheck(stage: StageId, task: TrackerTask, outcome: MarkerOutcome): string | null {
     const implementation = STAGES.get(stage);
     if (implementation === undefined) {
         return `stage ${stage} has no implementation`;
     }
+    if (outcome === "round-ended") {
+        const ended = implementation.roundEnded?.(task) === true;
+        return ended ? null : `stage ${stage} ended-round check does not hold`;
+    }
     return implementation.completed(task) ? null : `stage ${stage} check does not hold`;
+}
+
+// Design D11: an ended round needs the persistence receipt and a publish receipt whose digest is
+// the record's; what a transition would wait for, so a finished round never leaves a record unpublished.
+async function receiptsFailure(dir: string): Promise<string | null> {
+    if (!(await exists(receiptPath(dir)))) {
+        return `round ended without a persistence receipt (${basename(receiptPath(dir))})`;
+    }
+    const published = await readPublishReceipt(dir);
+    if (!published.ok) {
+        return published.error;
+    }
+    if (published.value === null) {
+        return `round ended without a publish receipt (${PUBLISH_RECEIPT_FILE})`;
+    }
+    return (await isCurrentFindings(dir, published.value.findingsDigest))
+        ? null
+        : `round ended with a ${FINDINGS_FILE} that differs from the one published`;
 }
 
 type Decision = "finalise" | "completing" | "retain" | "observe";

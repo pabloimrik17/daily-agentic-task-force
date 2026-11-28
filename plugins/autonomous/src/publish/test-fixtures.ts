@@ -90,9 +90,13 @@ export function findingsRecord(entries: readonly RecordEntry[] = ROUND_ONE): Fin
     };
 }
 
-// `findings.json` as the agent writes it; `entries` may hold invalid entries for a test.
-export function recordText(entries: readonly unknown[] = ROUND_ONE): string {
-    return JSON.stringify({ ...findingsRecord([]), entries }, null, 2);
+// `findings.json` as the agent writes it; `entries` may hold invalid entries for a test, and
+// `fields` replaces or adds top-level fields, such as another attempt or `quiet`.
+export function recordText(
+    entries: readonly unknown[] = ROUND_ONE,
+    fields: Readonly<Record<string, unknown>> = {},
+): string {
+    return JSON.stringify({ ...findingsRecord([]), entries, ...fields }, null, 2);
 }
 
 // A final diff with a modified, an added, a renamed, a deleted and a binary file, as

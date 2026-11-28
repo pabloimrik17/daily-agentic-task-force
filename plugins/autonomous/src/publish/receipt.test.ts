@@ -9,6 +9,7 @@ import {
     PUBLISH_RECEIPT_FILE,
     PUBLISH_RECEIPT_SCHEMA,
     type PublishReceipt,
+    isQuietReceipt,
     readPublishReceipt,
     writePublishReceipt,
 } from "./receipt.ts";
@@ -35,6 +36,34 @@ function directory(): string {
     made.push(dir);
     return dir;
 }
+
+describe("The receipt records a quiet round", () => {
+    it("a quiet round's receipt is read back with its mark", async () => {
+        const dir = directory();
+        const receipt: PublishReceipt = { ...RECEIPT, quiet: true };
+        await writePublishReceipt(dir, receipt);
+        const read = await readPublishReceipt(dir);
+        expect(read).toEqual({ ok: true, value: receipt });
+        expect(read.ok && read.value !== null && isQuietReceipt(read.value)).toBe(true);
+    });
+
+    it("a receipt without the mark, as every earlier one, reads as not quiet", async () => {
+        const dir = directory();
+        writeFileSync(join(dir, PUBLISH_RECEIPT_FILE), JSON.stringify(RECEIPT));
+        const read = await readPublishReceipt(dir);
+        expect(read.ok && read.value !== null && isQuietReceipt(read.value)).toBe(false);
+    });
+
+    it("refuses a mark other than true", async () => {
+        const dir = directory();
+        writeFileSync(
+            join(dir, PUBLISH_RECEIPT_FILE),
+            JSON.stringify({ ...RECEIPT, quiet: false }),
+        );
+        const read = await readPublishReceipt(dir);
+        expect(!read.ok && read.error).toContain("$.quiet must be true");
+    });
+});
 
 describe("publish receipt", () => {
     it("the digest is the sha256 hex of the bytes, whether text or bytes", () => {
