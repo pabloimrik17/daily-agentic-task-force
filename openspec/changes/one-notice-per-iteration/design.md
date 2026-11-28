@@ -60,6 +60,6 @@ The `next` time is the moment the summary is built plus `io.intervalMs()`, the s
 
 ## Migration Plan
 
-This change modifies "Stuck task notices", which `exclude-stuck-tasks-from-selection` adds: that change is archived first, and until then `openspec validate` notes that the requirement is not in the main spec yet.
+This change modifies "Stuck task notices", which `exclude-stuck-tasks-from-selection` added. That change is archived in the pull request below this one, so the requirement is in the main spec. "Order of the stuck task notices" and "Unreadable prerequisites are remembered", which it also added, are not modified: the order applies to the detail lines as it applied to the notices.
 
 No data migration. `loop.notices` is reset when a loop starts, so old and new formats never mix in one file. Rollback is reverting the change.
