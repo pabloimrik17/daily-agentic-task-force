@@ -1,9 +1,17 @@
 import type { GithubConfig } from "../../config.ts";
 import type { Exec } from "../../exec.ts";
-import { runJson } from "../../label-triage/trackers/cli-json.ts";
-import { githubTracker } from "../../label-triage/trackers/github.ts";
-import { array, type Json, number, object, string } from "../../validate.ts";
+import { parseError, runJson } from "../../label-triage/trackers/cli-json.ts";
+import {
+    withinListCap,
+    LIST_FIELDS,
+    LIST_LIMIT,
+    listedIssue,
+} from "../../label-triage/trackers/github.ts";
+import { array, type Json, number, object, ParseError, string } from "../../validate.ts";
+import type { TrackerResult } from "../../label-triage/trackers/tracker.ts";
 import type { TaskLink, WorkReader, WorkTask } from "../types.ts";
+
+const READER_FIELDS = `${LIST_FIELDS},blockedBy,blocking`;
 
 // gh 2.100 gives a sub-issue node no repository field: its `url` is the only place a cross-repo
 // sub-issue names its own.
@@ -66,23 +74,78 @@ function parseDetail(value: unknown, task: WorkTask, repository: string, issue: 
     };
 }
 
+// gh asks for the first 50 nodes of each list: a higher totalCount, including a blocker the token
+// cannot see, means the read is incomplete.
+function openIds(entry: Json, key: string, path: string, id: string): string[] {
+    const listPath = `${path}.${key}`;
+    const list = object(entry[key], listPath);
+    const nodes = array(list.nodes, `${listPath}.nodes`);
+    const total = number(list, "totalCount", listPath);
+    if (total > nodes.length) {
+        throw new ParseError(
+            `${id} ${key} has totalCount ${total} but ${nodes.length} nodes; ` +
+                `some are missing or not visible`,
+        );
+    }
+    return nodes.flatMap((item, index) => {
+        const nodePath = `${listPath}.nodes[${index}]`;
+        const node = object(item, nodePath);
+        if (string(node, "state", nodePath) === "CLOSED") return [];
+        const repositoryPath = `${nodePath}.repository`;
+        const repository = string(
+            object(node.repository, repositoryPath),
+            "nameWithOwner",
+            repositoryPath,
+        );
+        return [`${repository}#${number(node, "number", nodePath)}`];
+    });
+}
+
+function parseListing(repo: string, items: unknown[]): WorkTask[] {
+    return items.map((item, index) => {
+        const path = `$[${index}]`;
+        const entry = object(item, path);
+        const task = listedIssue(repo, entry, path);
+        return {
+            ...task,
+            priority: null,
+            project: null,
+            repository: repo,
+            blockedBy: openIds(entry, "blockedBy", path, task.id),
+            children: null,
+            childCount: null,
+            blocks: openIds(entry, "blocking", path, task.id),
+        };
+    });
+}
+
+async function listRepository(exec: Exec, repo: string): Promise<TrackerResult<WorkTask[]>> {
+    const command = `gh issue list --repo ${repo} --state open --json ${READER_FIELDS}`;
+    const args = ["issue", "list", "--repo", repo, "--state", "open", "--limit", LIST_LIMIT];
+    const listed = withinListCap(
+        command,
+        await runJson(exec, command, [...args, "--json", READER_FIELDS], (value) =>
+            array(value, "$"),
+        ),
+    );
+    if (!listed.ok) return listed;
+    try {
+        return { ok: true, value: parseListing(repo, listed.value) };
+    } catch (error) {
+        return { ok: false, error: parseError(command, error) };
+    }
+}
+
 export function githubWorkReader(exec: Exec, config: GithubConfig): WorkReader {
-    const tracker = githubTracker(exec, config);
     return {
         source: "github",
         async list() {
-            const result = await tracker.listTasks();
-            if (!result.ok) return result;
-            const tasks: WorkTask[] = result.value.map((task) => ({
-                ...task,
-                priority: null,
-                project: null,
-                repository: splitId(task.id).repository,
-                blockedBy: null,
-                children: null,
-                childCount: null,
-                blocks: [],
-            }));
+            const tasks: WorkTask[] = [];
+            for (const repo of config.repos) {
+                const result = await listRepository(exec, repo);
+                if (!result.ok) return result;
+                tasks.push(...result.value);
+            }
             return { ok: true, value: tasks };
         },
         detail(task) {

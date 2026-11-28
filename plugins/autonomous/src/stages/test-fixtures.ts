@@ -277,7 +277,6 @@ export function selectedLaunch(setup: SelectedLaunch): RunContext {
                     setAside: [],
                     excluded: [],
                     readyToClose: [],
-                    notEvaluated: [],
                     comparison: null,
                 },
             },

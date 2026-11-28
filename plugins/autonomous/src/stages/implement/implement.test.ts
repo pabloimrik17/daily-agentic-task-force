@@ -371,7 +371,6 @@ describe("The implementation stage", () => {
                         setAside: [],
                         excluded: [],
                         readyToClose: [],
-                        notEvaluated: [],
                         comparison: null,
                     },
                 },

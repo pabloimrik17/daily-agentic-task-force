@@ -14,7 +14,7 @@ export interface TaskLink {
 export interface WorkTask extends TrackerTask {
     priority: string | null; // the tracker's own priority label; null when it has none (GitHub)
     blocks: string[]; // ids this task blocks while it is open
-    blockedBy: string[] | null; // open blockers; null: not evaluated (GitHub)
+    blockedBy: string[]; // open blockers
     children: string[] | null; // open children; null until detail reads them (GitHub, Linear)
     childCount: number | null; // children in all, closed included; null until detail reads them
     project: string | null; // Linear project name, read by detail; null elsewhere, when absent and before detail
@@ -98,6 +98,5 @@ export interface SelectData {
     setAside: Summary[]; // candidates at a less advanced stage, left for a later run
     excluded: Excluded[];
     readyToClose: { source: Source; id: string; title: string }[]; // split parents whose children are all closed
-    notEvaluated: string[]; // e.g. "github: dependencies"
     comparison: { model: string; effort: string } | null; // set only when the LLM was called
 }

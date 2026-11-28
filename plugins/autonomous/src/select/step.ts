@@ -26,8 +26,6 @@ import type {
 
 const SELECT = "select";
 
-const GITHUB_NOT_EVALUATED = "github: dependencies";
-
 const EMPTY: SelectData = {
     machineScope: null,
     selected: null,
@@ -35,7 +33,6 @@ const EMPTY: SelectData = {
     setAside: [],
     excluded: [],
     readyToClose: [],
-    notEvaluated: [],
     comparison: null,
 };
 
@@ -63,8 +60,7 @@ export const selectStep: Step<SelectData> = {
             return result("not-evaluable", [scope.error], EMPTY);
         }
         const read = await readTasks(ctx.io.work(config));
-        const notEvaluated = config.sources.github.enabled ? [GITHUB_NOT_EVALUATED] : [];
-        const known = { ...EMPTY, machineScope: scope.scope, notEvaluated };
+        const known = { ...EMPTY, machineScope: scope.scope };
         if (!read.ok) {
             return result("not-evaluable", [read.error], known);
         }

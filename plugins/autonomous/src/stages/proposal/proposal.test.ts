@@ -340,7 +340,6 @@ describe("launch: a proposal unit", () => {
             setAside: [],
             excluded: [],
             readyToClose: [],
-            notEvaluated: [],
             comparison: null,
         },
     };

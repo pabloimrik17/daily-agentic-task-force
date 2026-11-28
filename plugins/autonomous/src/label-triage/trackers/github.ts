@@ -17,7 +17,7 @@ function labelNames(entry: Json, path: string): string[] {
     });
 }
 
-function task(repo: string, entry: Json, path: string): TrackerTask {
+export function listedIssue(repo: string, entry: Json, path: string): TrackerTask {
     const number = entry.number;
     if (typeof number !== "number" || !Number.isFinite(number)) {
         throw new ParseError(`${path}.number must be a finite number`);
@@ -38,12 +38,14 @@ function task(repo: string, entry: Json, path: string): TrackerTask {
 function parseTasks(repo: string): (value: unknown) => TrackerTask[] {
     return (value) => {
         const items = array(value, "$");
-        return items.map((item, index) => task(repo, object(item, `$[${index}]`), `$[${index}]`));
+        return items.map((item, index) =>
+            listedIssue(repo, object(item, `$[${index}]`), `$[${index}]`),
+        );
     };
 }
 
 function parseTask(repo: string): (value: unknown) => TrackerTask {
-    return (value) => task(repo, object(value, "$"), "$");
+    return (value) => listedIssue(repo, object(value, "$"), "$");
 }
 
 function parseComments(value: unknown): string[] {
@@ -115,14 +117,14 @@ function onIssue<T>(
     return act(parsedId.repo, parsedId.number);
 }
 
-const LIST_FIELDS = "number,title,body,labels,updatedAt,state";
+export const LIST_FIELDS = "number,title,body,labels,updatedAt,state";
 
 // `gh` has no unlimited listing, so every list asks for one past the cap:
 // getting that extra entry back means the listing would be incomplete.
 const LIST_CAP = 1000;
-const LIST_LIMIT = String(LIST_CAP + 1);
+export const LIST_LIMIT = String(LIST_CAP + 1);
 
-function complete<T>(command: string, result: TrackerResult<T[]>): TrackerResult<T[]> {
+export function withinListCap<T>(command: string, result: TrackerResult<T[]>): TrackerResult<T[]> {
     if (result.ok && result.value.length > LIST_CAP) {
         return {
             ok: false,
@@ -144,7 +146,7 @@ export function githubTracker(exec: Exec, config: GithubConfig): Tracker {
             const tasks: TrackerTask[] = [];
             for (const repo of repos) {
                 const command = `gh issue list --repo ${repo} --state open --json ${LIST_FIELDS}`;
-                const result = complete(
+                const result = withinListCap(
                     command,
                     await runJson(
                         exec,
@@ -237,7 +239,7 @@ export function githubTracker(exec: Exec, config: GithubConfig): Tracker {
             const labels: TrackerLabel[] = [];
             for (const repo of repos) {
                 const command = `gh label list --repo ${repo} --json name,color`;
-                const result = complete(
+                const result = withinListCap(
                     command,
                     await runJson(
                         exec,

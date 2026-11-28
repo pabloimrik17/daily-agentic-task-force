@@ -150,7 +150,7 @@ export function linearWorkReader(exec: Exec, _config: LinearConfig): WorkReader 
                 }));
             for (const task of tasks) {
                 task.blocks = tasks
-                    .filter((other) => other.blockedBy?.includes(task.id))
+                    .filter((other) => other.blockedBy.includes(task.id))
                     .map((other) => other.id);
             }
             return { ok: true, value: tasks };

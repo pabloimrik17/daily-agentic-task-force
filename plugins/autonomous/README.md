@@ -90,9 +90,10 @@ slot limits bind only the loop.
 - [`bd`](https://github.com/steveyegge/beads) on `PATH`, verified against
   1.3.0.
 - [`gh`](https://cli.github.com) on `PATH`, 2.100.0 or later, authenticated
-  through its own keyring. The `select` step reads a GitHub issue's sub-issues
-  with `gh issue view --json subIssues`, a field that 2.100.0 provides; with an
-  older `gh` that read fails and the step is `not-evaluable`. For every source,
+  through its own keyring. The `select` step reads a GitHub issue's blockers with
+  `gh issue list --json blockedBy,blocking` and its sub-issues with
+  `gh issue view --json subIssues`, fields that 2.100.0 provides; with an older
+  `gh` those reads fail and the step is `not-evaluable`. For every source,
   not only GitHub tasks, [pull-request mode](#pull-request-mode) and
   [log mode](#log-mode) also need `gh` authenticated and a repository whose
   remote is on GitHub.
@@ -2994,11 +2995,22 @@ open (see [The selection report](#the-selection-report)), and a human closes it.
 The autonomy of a selected unit is `AFK`, `HITL` or, for a task in `grill-me`
 without one, none: `none` in the text report and `null` in the JSON data.
 
-Blockers, the tasks a task blocks, its open children and its tracker priority
-are read for Beads and Linear. A blocker or child is open unless it is closed:
-in Beads, unless its status is `closed`; in Linear, unless its state is
-completed or canceled. Beads decides which tasks are blocked by its own
-dependency rules.
+Open blockers and the tasks a task blocks are read for Beads, Linear and
+GitHub; open children and tracker priority are read for Beads and Linear. A
+blocker or child is open unless it is closed: in Beads, unless its status is
+`closed`; in Linear, unless its state is completed or canceled; in GitHub,
+unless its state is `CLOSED`, whatever the reason it was closed. Beads decides
+which tasks are blocked by its own dependency rules.
+
+For GitHub, the step reads each task's blockers and the tasks it blocks from
+the same `gh issue list` call that lists the task, asking for `blockedBy` and
+`blocking`; there is no further call per task. Only an open blocker blocks, and
+a blocker in any repository blocks, including one outside `sources.github.repos`,
+under the id `<owner/name>#<number>`. `blocks` comes from `blocking`: the open
+issues the task blocks, in any repository. A list is cut short when its
+`totalCount` is above the nodes returned, which `gh` limits to 50, or when a
+blocker the token cannot see counts without a node. A cut-short list fails the
+read: the step is `not-evaluable` and the error names the task.
 
 For Beads, the children of a task in `proposal` are counted with one more
 read-only command, `bd -C <dir> list --json --limit 0 --all --parent <id>`,
@@ -3010,8 +3022,7 @@ open unless its state is `CLOSED`, and each open one is a child with the id
 split, like a Linear or Beads parent. The read runs only for a task that passes
 the earlier exclusions, so its cost is per candidate, and a failed read makes
 the step `not-evaluable` (see [Requirements](#requirements) for the minimum
-`gh`). GitHub tasks are treated as having no blockers and no tracker priority,
-and the report says that dependencies were not evaluated for GitHub.
+`gh`). GitHub tasks are treated as having no tracker priority.
 
 ### The comparison
 
@@ -3046,9 +3057,7 @@ The text report shows:
 - the excluded tasks, grouped by reason, each with its source, id and title;
 - the `ready to close` tasks: the tasks excluded as split that have no open
   child, as `ready to close: N task(s)` followed by one line per task with its
-  source, id and title. Nothing is written for them;
-- the note that GitHub dependencies were not evaluated, when GitHub is
-  enabled.
+  source, id and title. Nothing is written for them.
 
 With `--json`, the step's data carries the same information, with the ready
 to close tasks as `readyToClose`, `{ source, id, title }` each, plus the

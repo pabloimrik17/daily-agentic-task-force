@@ -25,16 +25,8 @@ export function byReason(excluded: readonly Excluded[]): { name: string; tasks: 
 }
 
 export function renderSelect(result: StepResult<SelectData>): string {
-    const {
-        machineScope,
-        selected,
-        candidates,
-        setAside,
-        excluded,
-        readyToClose,
-        notEvaluated,
-        comparison,
-    } = result.data;
+    const { machineScope, selected, candidates, setAside, excluded, readyToClose, comparison } =
+        result.data;
     const lines = [`[${result.step}] ${result.outcome} (${result.tier})`];
 
     if (machineScope !== null) {
@@ -60,7 +52,6 @@ export function renderSelect(result: StepResult<SelectData>): string {
             ...readyToClose.map((t) => `    ${t.source} → ${t.id} → ${t.title}`),
         );
     }
-    lines.push(...notEvaluated.map((part) => `  not evaluated: ${part}`));
     if (comparison !== null) {
         lines.push(`  comparison: ${comparison.model} (${comparison.effort})`);
     }

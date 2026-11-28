@@ -1,0 +1,523 @@
+[
+    {
+        "number": 7,
+        "title": "Synthetic issue",
+        "body": "Example description",
+        "labels": [
+            {
+                "name": "personal"
+            }
+        ],
+        "updatedAt": "2026-01-01T00:00:00Z",
+        "state": "OPEN",
+        "blockedBy": {
+            "nodes": [
+                {
+                    "id": "I_demo_one_100",
+                    "number": 100,
+                    "title": "Blocker 100",
+                    "url": "https://github.com/demo/one/issues/100",
+                    "state": "OPEN",
+                    "repository": {
+                        "nameWithOwner": "demo/one"
+                    }
+                },
+                {
+                    "id": "I_demo_one_101",
+                    "number": 101,
+                    "title": "Blocker 101",
+                    "url": "https://github.com/demo/one/issues/101",
+                    "state": "OPEN",
+                    "repository": {
+                        "nameWithOwner": "demo/one"
+                    }
+                },
+                {
+                    "id": "I_demo_one_102",
+                    "number": 102,
+                    "title": "Blocker 102",
+                    "url": "https://github.com/demo/one/issues/102",
+                    "state": "OPEN",
+                    "repository": {
+                        "nameWithOwner": "demo/one"
+                    }
+                },
+                {
+                    "id": "I_demo_one_103",
+                    "number": 103,
+                    "title": "Blocker 103",
+                    "url": "https://github.com/demo/one/issues/103",
+                    "state": "OPEN",
+                    "repository": {
+                        "nameWithOwner": "demo/one"
+                    }
+                },
+                {
+                    "id": "I_demo_one_104",
+                    "number": 104,
+                    "title": "Blocker 104",
+                    "url": "https://github.com/demo/one/issues/104",
+                    "state": "OPEN",
+                    "repository": {
+                        "nameWithOwner": "demo/one"
+                    }
+                },
+                {
+                    "id": "I_demo_one_105",
+                    "number": 105,
+                    "title": "Blocker 105",
+                    "url": "https://github.com/demo/one/issues/105",
+                    "state": "OPEN",
+                    "repository": {
+                        "nameWithOwner": "demo/one"
+                    }
+                },
+                {
+                    "id": "I_demo_one_106",
+                    "number": 106,
+                    "title": "Blocker 106",
+                    "url": "https://github.com/demo/one/issues/106",
+                    "state": "OPEN",
+                    "repository": {
+                        "nameWithOwner": "demo/one"
+                    }
+                },
+                {
+                    "id": "I_demo_one_107",
+                    "number": 107,
+                    "title": "Blocker 107",
+                    "url": "https://github.com/demo/one/issues/107",
+                    "state": "OPEN",
+                    "repository": {
+                        "nameWithOwner": "demo/one"
+                    }
+                },
+                {
+                    "id": "I_demo_one_108",
+                    "number": 108,
+                    "title": "Blocker 108",
+                    "url": "https://github.com/demo/one/issues/108",
+                    "state": "OPEN",
+                    "repository": {
+                        "nameWithOwner": "demo/one"
+                    }
+                },
+                {
+                    "id": "I_demo_one_109",
+                    "number": 109,
+                    "title": "Blocker 109",
+                    "url": "https://github.com/demo/one/issues/109",
+                    "state": "OPEN",
+                    "repository": {
+                        "nameWithOwner": "demo/one"
+                    }
+                },
+                {
+                    "id": "I_demo_one_110",
+                    "number": 110,
+                    "title": "Blocker 110",
+                    "url": "https://github.com/demo/one/issues/110",
+                    "state": "OPEN",
+                    "repository": {
+                        "nameWithOwner": "demo/one"
+                    }
+                },
+                {
+                    "id": "I_demo_one_111",
+                    "number": 111,
+                    "title": "Blocker 111",
+                    "url": "https://github.com/demo/one/issues/111",
+                    "state": "OPEN",
+                    "repository": {
+                        "nameWithOwner": "demo/one"
+                    }
+                },
+                {
+                    "id": "I_demo_one_112",
+                    "number": 112,
+                    "title": "Blocker 112",
+                    "url": "https://github.com/demo/one/issues/112",
+                    "state": "OPEN",
+                    "repository": {
+                        "nameWithOwner": "demo/one"
+                    }
+                },
+                {
+                    "id": "I_demo_one_113",
+                    "number": 113,
+                    "title": "Blocker 113",
+                    "url": "https://github.com/demo/one/issues/113",
+                    "state": "OPEN",
+                    "repository": {
+                        "nameWithOwner": "demo/one"
+                    }
+                },
+                {
+                    "id": "I_demo_one_114",
+                    "number": 114,
+                    "title": "Blocker 114",
+                    "url": "https://github.com/demo/one/issues/114",
+                    "state": "OPEN",
+                    "repository": {
+                        "nameWithOwner": "demo/one"
+                    }
+                },
+                {
+                    "id": "I_demo_one_115",
+                    "number": 115,
+                    "title": "Blocker 115",
+                    "url": "https://github.com/demo/one/issues/115",
+                    "state": "OPEN",
+                    "repository": {
+                        "nameWithOwner": "demo/one"
+                    }
+                },
+                {
+                    "id": "I_demo_one_116",
+                    "number": 116,
+                    "title": "Blocker 116",
+                    "url": "https://github.com/demo/one/issues/116",
+                    "state": "OPEN",
+                    "repository": {
+                        "nameWithOwner": "demo/one"
+                    }
+                },
+                {
+                    "id": "I_demo_one_117",
+                    "number": 117,
+                    "title": "Blocker 117",
+                    "url": "https://github.com/demo/one/issues/117",
+                    "state": "OPEN",
+                    "repository": {
+                        "nameWithOwner": "demo/one"
+                    }
+                },
+                {
+                    "id": "I_demo_one_118",
+                    "number": 118,
+                    "title": "Blocker 118",
+                    "url": "https://github.com/demo/one/issues/118",
+                    "state": "OPEN",
+                    "repository": {
+                        "nameWithOwner": "demo/one"
+                    }
+                },
+                {
+                    "id": "I_demo_one_119",
+                    "number": 119,
+                    "title": "Blocker 119",
+                    "url": "https://github.com/demo/one/issues/119",
+                    "state": "OPEN",
+                    "repository": {
+                        "nameWithOwner": "demo/one"
+                    }
+                },
+                {
+                    "id": "I_demo_one_120",
+                    "number": 120,
+                    "title": "Blocker 120",
+                    "url": "https://github.com/demo/one/issues/120",
+                    "state": "OPEN",
+                    "repository": {
+                        "nameWithOwner": "demo/one"
+                    }
+                },
+                {
+                    "id": "I_demo_one_121",
+                    "number": 121,
+                    "title": "Blocker 121",
+                    "url": "https://github.com/demo/one/issues/121",
+                    "state": "OPEN",
+                    "repository": {
+                        "nameWithOwner": "demo/one"
+                    }
+                },
+                {
+                    "id": "I_demo_one_122",
+                    "number": 122,
+                    "title": "Blocker 122",
+                    "url": "https://github.com/demo/one/issues/122",
+                    "state": "OPEN",
+                    "repository": {
+                        "nameWithOwner": "demo/one"
+                    }
+                },
+                {
+                    "id": "I_demo_one_123",
+                    "number": 123,
+                    "title": "Blocker 123",
+                    "url": "https://github.com/demo/one/issues/123",
+                    "state": "OPEN",
+                    "repository": {
+                        "nameWithOwner": "demo/one"
+                    }
+                },
+                {
+                    "id": "I_demo_one_124",
+                    "number": 124,
+                    "title": "Blocker 124",
+                    "url": "https://github.com/demo/one/issues/124",
+                    "state": "OPEN",
+                    "repository": {
+                        "nameWithOwner": "demo/one"
+                    }
+                },
+                {
+                    "id": "I_demo_one_125",
+                    "number": 125,
+                    "title": "Blocker 125",
+                    "url": "https://github.com/demo/one/issues/125",
+                    "state": "OPEN",
+                    "repository": {
+                        "nameWithOwner": "demo/one"
+                    }
+                },
+                {
+                    "id": "I_demo_one_126",
+                    "number": 126,
+                    "title": "Blocker 126",
+                    "url": "https://github.com/demo/one/issues/126",
+                    "state": "OPEN",
+                    "repository": {
+                        "nameWithOwner": "demo/one"
+                    }
+                },
+                {
+                    "id": "I_demo_one_127",
+                    "number": 127,
+                    "title": "Blocker 127",
+                    "url": "https://github.com/demo/one/issues/127",
+                    "state": "OPEN",
+                    "repository": {
+                        "nameWithOwner": "demo/one"
+                    }
+                },
+                {
+                    "id": "I_demo_one_128",
+                    "number": 128,
+                    "title": "Blocker 128",
+                    "url": "https://github.com/demo/one/issues/128",
+                    "state": "OPEN",
+                    "repository": {
+                        "nameWithOwner": "demo/one"
+                    }
+                },
+                {
+                    "id": "I_demo_one_129",
+                    "number": 129,
+                    "title": "Blocker 129",
+                    "url": "https://github.com/demo/one/issues/129",
+                    "state": "OPEN",
+                    "repository": {
+                        "nameWithOwner": "demo/one"
+                    }
+                },
+                {
+                    "id": "I_demo_one_130",
+                    "number": 130,
+                    "title": "Blocker 130",
+                    "url": "https://github.com/demo/one/issues/130",
+                    "state": "OPEN",
+                    "repository": {
+                        "nameWithOwner": "demo/one"
+                    }
+                },
+                {
+                    "id": "I_demo_one_131",
+                    "number": 131,
+                    "title": "Blocker 131",
+                    "url": "https://github.com/demo/one/issues/131",
+                    "state": "OPEN",
+                    "repository": {
+                        "nameWithOwner": "demo/one"
+                    }
+                },
+                {
+                    "id": "I_demo_one_132",
+                    "number": 132,
+                    "title": "Blocker 132",
+                    "url": "https://github.com/demo/one/issues/132",
+                    "state": "OPEN",
+                    "repository": {
+                        "nameWithOwner": "demo/one"
+                    }
+                },
+                {
+                    "id": "I_demo_one_133",
+                    "number": 133,
+                    "title": "Blocker 133",
+                    "url": "https://github.com/demo/one/issues/133",
+                    "state": "OPEN",
+                    "repository": {
+                        "nameWithOwner": "demo/one"
+                    }
+                },
+                {
+                    "id": "I_demo_one_134",
+                    "number": 134,
+                    "title": "Blocker 134",
+                    "url": "https://github.com/demo/one/issues/134",
+                    "state": "OPEN",
+                    "repository": {
+                        "nameWithOwner": "demo/one"
+                    }
+                },
+                {
+                    "id": "I_demo_one_135",
+                    "number": 135,
+                    "title": "Blocker 135",
+                    "url": "https://github.com/demo/one/issues/135",
+                    "state": "OPEN",
+                    "repository": {
+                        "nameWithOwner": "demo/one"
+                    }
+                },
+                {
+                    "id": "I_demo_one_136",
+                    "number": 136,
+                    "title": "Blocker 136",
+                    "url": "https://github.com/demo/one/issues/136",
+                    "state": "OPEN",
+                    "repository": {
+                        "nameWithOwner": "demo/one"
+                    }
+                },
+                {
+                    "id": "I_demo_one_137",
+                    "number": 137,
+                    "title": "Blocker 137",
+                    "url": "https://github.com/demo/one/issues/137",
+                    "state": "OPEN",
+                    "repository": {
+                        "nameWithOwner": "demo/one"
+                    }
+                },
+                {
+                    "id": "I_demo_one_138",
+                    "number": 138,
+                    "title": "Blocker 138",
+                    "url": "https://github.com/demo/one/issues/138",
+                    "state": "OPEN",
+                    "repository": {
+                        "nameWithOwner": "demo/one"
+                    }
+                },
+                {
+                    "id": "I_demo_one_139",
+                    "number": 139,
+                    "title": "Blocker 139",
+                    "url": "https://github.com/demo/one/issues/139",
+                    "state": "OPEN",
+                    "repository": {
+                        "nameWithOwner": "demo/one"
+                    }
+                },
+                {
+                    "id": "I_demo_one_140",
+                    "number": 140,
+                    "title": "Blocker 140",
+                    "url": "https://github.com/demo/one/issues/140",
+                    "state": "OPEN",
+                    "repository": {
+                        "nameWithOwner": "demo/one"
+                    }
+                },
+                {
+                    "id": "I_demo_one_141",
+                    "number": 141,
+                    "title": "Blocker 141",
+                    "url": "https://github.com/demo/one/issues/141",
+                    "state": "OPEN",
+                    "repository": {
+                        "nameWithOwner": "demo/one"
+                    }
+                },
+                {
+                    "id": "I_demo_one_142",
+                    "number": 142,
+                    "title": "Blocker 142",
+                    "url": "https://github.com/demo/one/issues/142",
+                    "state": "OPEN",
+                    "repository": {
+                        "nameWithOwner": "demo/one"
+                    }
+                },
+                {
+                    "id": "I_demo_one_143",
+                    "number": 143,
+                    "title": "Blocker 143",
+                    "url": "https://github.com/demo/one/issues/143",
+                    "state": "OPEN",
+                    "repository": {
+                        "nameWithOwner": "demo/one"
+                    }
+                },
+                {
+                    "id": "I_demo_one_144",
+                    "number": 144,
+                    "title": "Blocker 144",
+                    "url": "https://github.com/demo/one/issues/144",
+                    "state": "OPEN",
+                    "repository": {
+                        "nameWithOwner": "demo/one"
+                    }
+                },
+                {
+                    "id": "I_demo_one_145",
+                    "number": 145,
+                    "title": "Blocker 145",
+                    "url": "https://github.com/demo/one/issues/145",
+                    "state": "OPEN",
+                    "repository": {
+                        "nameWithOwner": "demo/one"
+                    }
+                },
+                {
+                    "id": "I_demo_one_146",
+                    "number": 146,
+                    "title": "Blocker 146",
+                    "url": "https://github.com/demo/one/issues/146",
+                    "state": "OPEN",
+                    "repository": {
+                        "nameWithOwner": "demo/one"
+                    }
+                },
+                {
+                    "id": "I_demo_one_147",
+                    "number": 147,
+                    "title": "Blocker 147",
+                    "url": "https://github.com/demo/one/issues/147",
+                    "state": "OPEN",
+                    "repository": {
+                        "nameWithOwner": "demo/one"
+                    }
+                },
+                {
+                    "id": "I_demo_one_148",
+                    "number": 148,
+                    "title": "Blocker 148",
+                    "url": "https://github.com/demo/one/issues/148",
+                    "state": "OPEN",
+                    "repository": {
+                        "nameWithOwner": "demo/one"
+                    }
+                },
+                {
+                    "id": "I_demo_one_149",
+                    "number": 149,
+                    "title": "Blocker 149",
+                    "url": "https://github.com/demo/one/issues/149",
+                    "state": "OPEN",
+                    "repository": {
+                        "nameWithOwner": "demo/one"
+                    }
+                }
+            ],
+            "totalCount": 51
+        },
+        "blocking": {
+            "nodes": [],
+            "totalCount": 0
+        }
+    }
+]

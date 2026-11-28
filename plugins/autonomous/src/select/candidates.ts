@@ -79,7 +79,7 @@ function exclusionBeforeDetail(task: WorkTask, deps: CandidateDeps): Exclusion |
     if (isUnsupportedStage(task, deps)) {
         return "unsupported-stage";
     }
-    if (task.blockedBy !== null && task.blockedBy.length > 0) {
+    if (task.blockedBy.length > 0) {
         return "blocked";
     }
     return null;

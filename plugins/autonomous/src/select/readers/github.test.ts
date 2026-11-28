@@ -1,5 +1,13 @@
 import { expect, it, vi } from "vitest";
 import type { Exec } from "../../exec.ts";
+import { LIST_LIMIT } from "../../label-triage/trackers/github.ts";
+import blockedByCut from "./fixtures/github-blockedby-cut.json";
+import blockerClosed from "./fixtures/github-blocker-closed.json";
+import blockerForeign from "./fixtures/github-blocker-foreign.json";
+import blockerHidden from "./fixtures/github-blocker-hidden.json";
+import blockerOpen from "./fixtures/github-blocker-open.json";
+import blocking from "./fixtures/github-blocking.json";
+import blockingCut from "./fixtures/github-blocking-cut.json";
 import subIssueView from "./fixtures/github-issue-subissue.json";
 import topLevelView from "./fixtures/github-issue-toplevel.json";
 import listing from "./fixtures/github-list.json";
@@ -21,7 +29,7 @@ const PARENT: WorkTask = {
     priority: null,
     project: null,
     repository: "ghrecon-ec0359/sv-issues",
-    blockedBy: null,
+    blockedBy: [],
     children: null,
     childCount: null,
     blocks: [],
@@ -36,19 +44,139 @@ function withNodes(nodes: unknown[]) {
     return { subIssues: { nodes, totalCount: nodes.length } };
 }
 
-it("marks priority, blockers and children unevaluated for every GitHub task until detail", async () => {
-    const { exec, work } = reading(listing);
+it("leaves priority and children unevaluated for every GitHub task until detail", async () => {
+    const { work } = reading(listing);
     const result = await work.list();
     if (!result.ok) throw new Error(result.error);
     expect(result.value).toHaveLength(2);
     for (const task of result.value) {
         expect(task.priority).toBeNull();
-        expect(task.blockedBy).toBeNull();
         expect(task.children).toBeNull();
+        expect(task.blockedBy).toEqual([]);
         expect(task.childCount).toBeNull();
         expect(task.blocks).toEqual([]);
     }
+});
+
+it("lists each configured repository once, asking for the blockers in the same call", async () => {
+    const { exec, work } = reading(listing);
+    await work.list();
     expect(exec).toHaveBeenCalledTimes(2);
+    for (const [index, repo] of CONFIG.repos.entries()) {
+        const args = exec.mock.calls[index]![0];
+        expect(args.slice(0, 4)).toEqual(["issue", "list", "--repo", repo]);
+        expect(args[args.indexOf("--limit") + 1]).toBe(LIST_LIMIT);
+        expect(args[args.indexOf("--json") + 1]).toBe(
+            "number,title,body,labels,updatedAt,state,blockedBy,blocking",
+        );
+    }
+});
+
+async function listOne(stdout: unknown) {
+    const exec = vi.fn<Exec>().mockResolvedValue({ ok: true, stdout: JSON.stringify(stdout) });
+    return githubWorkReader(exec, { enabled: true, repos: ["demo/one"] }).list();
+}
+
+it("has an open blocker when a blockedBy node is OPEN", async () => {
+    expect(await listOne(blockerOpen)).toMatchObject({
+        ok: true,
+        value: [{ id: "demo/one#7", blockedBy: ["demo/one#3"] }],
+    });
+});
+
+it("has no open blocker when every blocker is closed, whatever the reason", async () => {
+    expect(await listOne(blockerClosed)).toMatchObject({
+        ok: true,
+        value: [{ id: "demo/one#7", blockedBy: [] }],
+    });
+});
+
+it("counts an open blocker of a repository outside the configuration", async () => {
+    expect(await listOne(blockerForeign)).toMatchObject({
+        ok: true,
+        value: [{ id: "demo/one#7", blockedBy: ["other/elsewhere#12"] }],
+    });
+});
+
+it("blocks only the open tasks of the blocking list, from any repository", async () => {
+    expect(await listOne(blocking)).toMatchObject({
+        ok: true,
+        value: [{ id: "demo/one#3", blocks: ["demo/one#7"] }],
+    });
+});
+
+async function failure(stdout: unknown): Promise<string> {
+    const result = await listOne(stdout);
+    if (result.ok) throw new Error("expected the read to fail");
+    return result.error;
+}
+
+it("fails naming the task, the field and both counts when blockedBy is cut short", async () => {
+    expect(await failure(blockedByCut)).toContain(
+        "demo/one#7 blockedBy has totalCount 51 but 50 nodes",
+    );
+});
+
+it("fails naming the task and the field when blocking is cut short", async () => {
+    expect(await failure(blockingCut)).toContain(
+        "demo/one#7 blocking has totalCount 51 but 50 nodes",
+    );
+});
+
+it("fails naming the task when a blocker has no node, as for one the token cannot see", async () => {
+    expect(await failure(blockerHidden)).toContain(
+        "demo/one#7 blockedBy has totalCount 1 but 0 nodes",
+    );
+});
+
+it.each([
+    ["state", "must be a string"],
+    ["repository", "must be an object"],
+    ["number", "must be a finite number"],
+])("fails naming the node when a blocker has no %s", async (field, problem) => {
+    const [issue] = blockerOpen;
+    const [node] = issue!.blockedBy.nodes;
+    const { [field as keyof typeof node]: _omitted, ...broken } = node!;
+    const listed = [{ ...issue!, blockedBy: { nodes: [broken], totalCount: 1 } }];
+    expect(await failure(listed)).toContain(`$[0].blockedBy.nodes[0].${field} ${problem}`);
+});
+
+it("fails when a repository lists more than the 1000 issues gh is asked for", async () => {
+    const issues = Array.from({ length: 1001 }, (_, index) => ({
+        ...listing[0]!,
+        number: index + 1,
+    }));
+    expect(await failure(issues)).toBe(
+        "gh issue list --repo demo/one --state open --json " +
+            "number,title,body,labels,updatedAt,state,blockedBy,blocking: " +
+            "more than 1000 results; the listing would be incomplete",
+    );
+});
+
+it("reports the listing cap when the sentinel issue's blocker list is cut short", async () => {
+    const issues = Array.from({ length: 1001 }, (_, index) => ({
+        ...listing[0]!,
+        number: index + 1,
+        ...(index === 1000 && { blockedBy: { nodes: [], totalCount: 1 } }),
+    }));
+    expect(await failure(issues)).toBe(
+        "gh issue list --repo demo/one --state open --json " +
+            "number,title,body,labels,updatedAt,state,blockedBy,blocking: " +
+            "more than 1000 results; the listing would be incomplete",
+    );
+});
+
+it("fails the whole list when a later repository fails after an earlier one succeeded", async () => {
+    const exec = vi
+        .fn<Exec>()
+        .mockResolvedValueOnce({ ok: true, stdout: JSON.stringify(listing) })
+        .mockResolvedValueOnce({ ok: false, error: "gh failed: HTTP 502" });
+    expect(await githubWorkReader(exec, CONFIG).list()).toEqual({
+        ok: false,
+        error:
+            "gh issue list --repo demo/two --state open --json " +
+            "number,title,body,labels,updatedAt,state,blockedBy,blocking: gh failed: HTTP 502",
+    });
 });
 
 it("reads the repository from each task id and no project", async () => {

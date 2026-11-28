@@ -1,10 +1,11 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 
-import type { AutonomousConfig } from "../config.ts";
+import type { Exec } from "../exec.ts";
 import type { LabelTriageData } from "../label-triage/step.ts";
-import { config } from "../label-triage/test-fixtures.ts";
 import { exitCodeFor } from "../report.ts";
 import type { StepResult } from "../runner.ts";
+import blockedByCut from "./readers/fixtures/github-blockedby-cut.json";
+import { githubWorkReader } from "./readers/github.ts";
 import { selectStep } from "./step.ts";
 import {
     fakeChezmoi,
@@ -22,15 +23,7 @@ const EMPTY: SelectData = {
     setAside: [],
     excluded: [],
     readyToClose: [],
-    notEvaluated: [],
     comparison: null,
-};
-
-const GITHUB_NOTE = ["github: dependencies"];
-
-const withoutGithub = (): AutonomousConfig => {
-    const settings = config();
-    return { ...settings, sources: { ...settings.sources, github: { enabled: false, repos: [] } } };
 };
 
 // Two in-scope grill-me candidates, one per source; the LLM picks DOT-120.
@@ -139,7 +132,7 @@ describe("select: reading the tasks again", () => {
             tier: "code",
             outcome: "not-evaluable",
             reasons: ["linear: linear issue view DOT-1: linear failed: boom"],
-            data: { ...EMPTY, machineScope: "personal", notEvaluated: GITHUB_NOTE },
+            data: { ...EMPTY, machineScope: "personal" },
         });
     });
 
@@ -157,6 +150,25 @@ describe("select: reading the tasks again", () => {
         expect(result.outcome).toBe("not-evaluable");
         expect(result.reasons).toEqual(["beads: bd list --json: bd CLI not found on PATH"]);
         expect(calls).not.toContain("linear:list");
+    });
+
+    it("is not evaluable naming the task when a GitHub blockedBy list is cut short", async () => {
+        const calls: string[] = [];
+        const exec = vi.fn<Exec>().mockResolvedValue({
+            ok: true,
+            stdout: JSON.stringify(blockedByCut),
+        });
+        const result = await selectStep.run(
+            selectContext({
+                calls,
+                readers: [githubWorkReader(exec, { enabled: true, repos: ["demo/one"] })],
+            }),
+        );
+        expect(result.outcome).toBe("not-evaluable");
+        expect(result.reasons).toEqual([
+            expect.stringContaining("demo/one#7 blockedBy has totalCount 51 but 50 nodes"),
+        ]);
+        expect(result.data.selected).toBeNull();
     });
 
     it("details each surviving task through the reader of its own source", async () => {
@@ -407,7 +419,6 @@ describe("select: JSON data", () => {
                 { source: "linear", id: "DOT-4", title: "Task DOT-4", reason: "split" },
             ],
             readyToClose: [],
-            notEvaluated: GITHUB_NOTE,
             comparison: null,
         });
     });
@@ -470,17 +481,5 @@ describe("select: JSON data", () => {
         expect(result.outcome).toBe("advance");
         expect(data.selected).toMatchObject({ id: "DOT-1", stage: "grill-me", autonomy: null });
         expect(JSON.stringify(result.data)).toContain('"autonomy":null');
-    });
-
-    it("leaves the GitHub note out when GitHub is disabled", async () => {
-        const calls: string[] = [];
-        const result = await selectStep.run(
-            selectContext({
-                calls,
-                config: withoutGithub(),
-                readers: [fakeReader("linear", [workTask("linear", "DOT-1")], calls)],
-            }),
-        );
-        expect(result.data.notEvaluated).toEqual([]);
     });
 });

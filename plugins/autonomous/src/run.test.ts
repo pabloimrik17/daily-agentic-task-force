@@ -939,7 +939,6 @@ describe("main with the real steps", () => {
             ],
             setAside: [],
             excluded: [],
-            notEvaluated: ["github: dependencies"],
             comparison: { model: "sonnet", effort: "high" },
             readyToClose: [],
         } satisfies SelectData);
