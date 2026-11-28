@@ -1031,6 +1031,52 @@ describe("select: prerequisites that could not be read earlier in the loop", () 
         expect(result.data.unreadable).toEqual({ source: "beads", id: "B-7", reason: UNREADABLE });
     });
 
+    const outage = async (ids: readonly string[]) => {
+        for (const id of ids) {
+            await appendStuck(workspace.state, {
+                task: `linear:${id}`,
+                exclusion: UNREAD_ONCE,
+                detail: UNREADABLE,
+            });
+        }
+        prerequisitesUnreadable(ids);
+        const calls: string[] = [];
+        const tasks = [...ids, "OK-1"].map((id) => workTask("linear", id));
+        return selectStep.run(
+            selectContext({
+                workspace,
+                calls,
+                readers: [locatedReader("linear", tasks, calls)],
+                args: { loop: true },
+            }),
+        );
+    };
+
+    it("Three at once: all three are excluded and another task is selected", async () => {
+        const result = await outage(["DOT-1", "DOT-2", "DOT-3"]);
+
+        expect(result.outcome).toBe("advance");
+        expect(result.data.excluded.map(({ id, reason }) => [id, reason])).toEqual([
+            ["DOT-1", "unreadable-prerequisites"],
+            ["DOT-2", "unreadable-prerequisites"],
+            ["DOT-3", "unreadable-prerequisites"],
+        ]);
+        expect(result.data.selected).toMatchObject({ id: "OK-1" });
+    });
+
+    it("A fourth at once: not evaluable, naming the fourth, and nothing is selected", async () => {
+        const result = await outage(["DOT-1", "DOT-2", "DOT-3", "DOT-4"]);
+
+        expect(result.outcome).toBe("not-evaluable");
+        expect(result.reasons).toEqual([UNREADABLE]);
+        expect(result.data.unreadable).toEqual({
+            source: "linear",
+            id: "DOT-4",
+            reason: UNREADABLE,
+        });
+        expect(result.data.selected).toBeNull();
+    });
+
     it("Manual run: not evaluable, as nothing is remembered outside the loop", async () => {
         await remember(UNREAD_ONCE);
         prerequisitesUnreadable(["DOT-120"]);

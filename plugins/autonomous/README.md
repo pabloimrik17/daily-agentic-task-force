@@ -3038,7 +3038,8 @@ comparison too. When its prerequisites cannot be read again, it is excluded as
 the other candidates, so one task whose read always fails cannot hold the loop.
 The task is checked again in every iteration and is a candidate as soon as its
 prerequisites are read and hold. While a read of the whole machine fails, this
-sets one more task aside per iteration; they all come back when the read works.
+sets one more task aside per iteration, up to 3 at once: when one more cannot be
+read, the step is `not-evaluable` again. They all come back when the read works.
 Outside the loop nothing is remembered.
 
 ### Stuck tasks

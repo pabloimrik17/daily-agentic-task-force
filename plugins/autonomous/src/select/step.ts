@@ -208,7 +208,11 @@ type Round = { split: StageSplit<Candidate>; tier: StepTier } & (
     | { kind: "broken"; error: string; unreadable?: Unreadable }
 );
 
-async function round(remaining: readonly Candidate[], election: Election): Promise<Round> {
+async function round(
+    remaining: readonly Candidate[],
+    election: Election,
+    excluded: readonly Excluded[],
+): Promise<Round> {
     const split = splitByStage(remaining);
     const { machineScope, settings, selection, env } = election;
     const chosen = await choose(split.kept, machineScope, settings, selection);
@@ -219,7 +223,7 @@ async function round(remaining: readonly Candidate[], election: Election): Promi
     const candidate = split.kept.find(
         ({ task }) => task.source === selected.source && task.id === selected.id,
     )!; // validateSelection accepts only a candidate
-    const judged = await judgePrerequisites(env, candidate);
+    const judged = await judgePrerequisites(env, candidate, excluded);
     if (judged.kind === "unreadable") {
         const { unreadable } = judged;
         return { split, tier, kind: "broken", error: unreadable.reason, unreadable };
@@ -238,7 +242,7 @@ async function elect(
     const failed: Excluded[] = [];
     let tier: StepTier = "code";
     while (remaining.length > 0 && failed.length < MAX_CHOICES) {
-        const next = await round(remaining, election);
+        const next = await round(remaining, election, [...data.excluded, ...failed]);
         tier = next.tier === "llm" ? "llm" : tier;
         if (next.kind !== "failed") {
             return ended(next, { data, failed, tier, settings: election.settings });

@@ -587,6 +587,20 @@ A step that is `not-evaluable` for a task's unreadable prerequisites SHALL name 
 - **WHEN** `/autonomous:run` runs after a loop named a task for unreadable prerequisites, and they cannot be read
 - **THEN** the step is `not-evaluable` and the task is not excluded
 
+### Requirement: At most three tasks are excluded as unreadable prerequisites
+
+A run SHALL exclude at most 3 tasks as unreadable prerequisites. When the prerequisites of one more task cannot be read, the step SHALL be `not-evaluable` with that reason, whether or not an earlier iteration named the task.
+
+#### Scenario: Three at once
+
+- **WHEN** three tasks named by earlier iterations still cannot be read and a fourth candidate's prerequisites hold
+- **THEN** the three are excluded as unreadable prerequisites and the fourth is selected
+
+#### Scenario: A fourth at once
+
+- **WHEN** four tasks named by earlier iterations still cannot be read
+- **THEN** the step is `not-evaluable` with the fourth task's reason, and nothing is selected
+
 ### Requirement: Stuck tasks
 
 An excluded task SHALL be a **stuck task** when its exclusion is repository, repository prerequisites, prerequisites or unreadable prerequisites, or open attempt with a retained attempt. No other exclusion SHALL make a task stuck. The step SHALL NOT write to any tracker because a task is stuck.

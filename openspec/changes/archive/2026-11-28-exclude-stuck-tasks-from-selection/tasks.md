@@ -51,6 +51,7 @@
 
 - [x] 10.1 Name, in the select data, the task whose unreadable prerequisites made the step not evaluable, and have the loop record it in `loop.stuck` as a memory entry with no notice. Verify with `step.test.ts`, `notices.test.ts` and `loop.test.ts`: the scenarios "First time" and "Remembered without a notice".
 - [x] 10.2 In a loop iteration, check a remembered task's prerequisites before the comparison and exclude it as unreadable prerequisites, a stuck exclusion, when they cannot be read again. Verify with `step.test.ts`: one test per scenario of "Prerequisites that could not be read earlier in the loop".
+- [x] 10.4 Exclude at most 3 tasks as unreadable prerequisites in a run; one more makes the step not evaluable. Verify with `step.test.ts`: the scenarios of "At most three tasks are excluded as unreadable prerequisites".
 - [x] 10.3 README and glossary: the new exclusion, when it applies and how the task comes back. Verify with `bun run lint:markdownlint`.
 
 ## 11. Which stuck tasks are named (design D7)

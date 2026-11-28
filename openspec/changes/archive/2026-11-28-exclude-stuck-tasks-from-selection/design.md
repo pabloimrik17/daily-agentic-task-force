@@ -91,7 +91,7 @@ The person asked for "a read that failed in consecutive iterations". The memory 
 
 Alternatives rejected: treating the per-task reads as failed prerequisites again brings back D8's problem whenever `gh` or the tracker is down. Telling per-task reads from machine-wide ones by their reason text is fragile: a network failure names the task in the text too.
 
-The cost: while a machine-wide read fails for hours, each iteration sets one more task aside and tells it once, with one comparison per iteration, where D8 alone would report `not-evaluable` every time. The tasks come back by themselves when the read works again, and the first notice already names the cause.
+The cost: while a machine-wide read fails, each iteration sets one more task aside and tells it once, with one comparison per iteration, where D8 alone would report `not-evaluable` every time. A cap bounds it: a run excludes at most 3 tasks as unreadable prerequisites, and the next one makes the step `not-evaluable`, as under D8. So an outage costs three notices and then reads as an outage, and the tasks come back by themselves when the read works again. The price is that four tasks whose own reads fail at the same time hold the loop again until a person fixes one. The person chose 3 on 2026-11-28, over no cap and over a cap of 1.
 
 ## Risks / Trade-offs
 
@@ -100,7 +100,7 @@ The cost: while a machine-wide read fails for hours, each iteration sets one mor
 - [Up to 4 comparisons in one run lengthen an iteration] → bounded by the count and by the existing per-call limit; D6 keeps it to the first iteration that meets a failing task.
 - [The machine-scope limit hides a `work` task selected as an exception that is stuck] → it is still excluded and listed in the report; only the notice is skipped.
 - [`loop.stuck` grows] → it is bounded by the number of stuck tasks and reset on every loop start.
-- [A machine-wide read failure sets aside one task per iteration under D9] → each is told once with the cause, is checked again every iteration and returns when the read works.
+- [A machine-wide read failure sets aside one task per iteration under D9] → at most 3 at once; each is told once with the cause, is checked again every iteration and returns when the read works.
 - [The order of D7 hides a task with no repository behind five others] → the count line says how many are not named and the log lists them all.
 
 ## Migration Plan

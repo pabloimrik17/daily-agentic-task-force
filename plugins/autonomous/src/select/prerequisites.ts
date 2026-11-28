@@ -21,8 +21,7 @@ export function rememberedTasks(entries: readonly StuckEntry[]): Remembered {
         new Set(
             entries.filter(({ exclusion }) => exclusions.includes(exclusion)).map((e) => e.task),
         );
-    const set: Exclusion = "unreadable-prerequisites";
-    return { failed: tasks("prerequisites"), unreadable: tasks(UNREAD_ONCE, set) };
+    return { failed: tasks("prerequisites"), unreadable: tasks(UNREAD_ONCE, UNREADABLE) };
 }
 
 export interface PrerequisiteEnv {
@@ -65,6 +64,16 @@ async function check(env: PrerequisiteEnv, { task, stage }: Candidate): Promise<
     }
 }
 
+// Design D9: while a read of the whole machine fails, every task would be excluded in turn; past
+// this many at once the step is not evaluable instead.
+const MAX_UNREADABLE = 3;
+
+const UNREADABLE: Exclusion = "unreadable-prerequisites";
+
+function unreadableCount(excluded: readonly Excluded[]): number {
+    return excluded.filter(({ reason }) => reason === UNREADABLE).length;
+}
+
 export type Judged =
     | { kind: "hold" }
     | { kind: "excluded"; excluded: Excluded }
@@ -76,6 +85,7 @@ export type Judged =
 export async function judgePrerequisites(
     env: PrerequisiteEnv,
     candidate: Candidate,
+    excluded: readonly Excluded[], // the tasks this run already excluded
 ): Promise<Judged> {
     const checked = await check(env, candidate);
     if (checked.kind === "hold") {
@@ -89,11 +99,9 @@ export async function judgePrerequisites(
             excluded: excludedTask(task, { reason: "prerequisites", detail }),
         };
     }
-    return env.remembered.unreadable.has(taskKey(task.source, task.id))
-        ? {
-              kind: "excluded",
-              excluded: excludedTask(task, { reason: "unreadable-prerequisites", detail }),
-          }
+    const remembered = env.remembered.unreadable.has(taskKey(task.source, task.id));
+    return remembered && unreadableCount(excluded) < MAX_UNREADABLE
+        ? { kind: "excluded", excluded: excludedTask(task, { reason: UNREADABLE, detail }) }
         : { kind: "unreadable", unreadable: { source: task.source, id: task.id, reason: detail } };
 }
 
@@ -116,7 +124,7 @@ export async function dropRemembered(
         const key = taskKey(found.task.source, found.task.id);
         const judged: Judged =
             failed.has(key) || unreadable.has(key)
-                ? await judgePrerequisites(env, found)
+                ? await judgePrerequisites(env, found, kept.excluded)
                 : { kind: "hold" };
         if (judged.kind === "unreadable") {
             return { ok: false, unreadable: judged.unreadable };
