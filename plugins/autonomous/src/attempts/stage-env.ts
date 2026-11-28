@@ -1,6 +1,3 @@
-// The stage environment `launch` hands a stage's prerequisites, shared with `select` so both
-// check a task's prerequisites the same way (design D4).
-
 import type { AutonomousConfig } from "../config.ts";
 import type { RunContext } from "../runner.ts";
 import type { WorkTask } from "../select/types.ts";

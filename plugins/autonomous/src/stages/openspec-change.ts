@@ -26,7 +26,6 @@ function changeNames(paths: string): string[] {
     return [...names].sort();
 }
 
-// A git command that fails is `unreadable`; a diff that adds no change, or several, is not.
 export async function findBranchChange(
     git: Exec,
     lookup: ChangeLookup,

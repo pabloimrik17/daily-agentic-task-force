@@ -1,7 +1,6 @@
-// Spec stage-sessions, "Stage contract" and "Repository prerequisites of a stage". `prerequisites`
-// runs in `launch` before anything is written, and what it reads reaches the synchronous `prompt`
-// as `context`. `repositoryPrerequisites` reads only the repository, so `select` can check it
-// for every candidate; `prerequisites` checks it too.
+// `prerequisites` runs in `launch` before anything is written; what it reads reaches `prompt` as
+// `context`. `repositoryPrerequisites` reads only the repository, so `select` can check it for
+// every candidate; `prerequisites` checks it too.
 
 import type { AttemptRecord } from "../attempts/record.ts";
 import type { ContextReader } from "../context/types.ts";
@@ -49,20 +48,18 @@ export interface StageEnv {
 
 export type StageContext = Readonly<Record<string, string>>;
 
-// Design D8: `unreadable` marks a check that could not read what it needs, apart from one that
-// read and found the prerequisite missing. `launch` waits with the reason either way.
+// `unreadable`: the check could not read what it needs, as opposed to reading it and finding the
+// prerequisite missing. `launch` waits either way.
 export type StagePrerequisites =
     | { ok: true; context: StageContext }
     | { ok: false; reason: string; unreadable?: true };
 
-// What a check reads: a value, or an error that is `unreadable` when the read itself failed.
 export type ReadResult<T> =
     | { ok: true; value: T }
     | { ok: false; error: string; unreadable?: true };
 
 type ReadFailure = Extract<ReadResult<unknown>, { ok: false }>;
 
-// The failed prerequisites a failed check gives, keeping whether it could read at all.
 export function notMet({ error, unreadable }: ReadFailure): StagePrerequisites {
     return unreadable === true
         ? { ok: false, reason: error, unreadable }
@@ -82,7 +79,7 @@ export interface Stage {
     id: StageId;
     emoji: string;
     prerequisites(env: StageEnv): Promise<StagePrerequisites>;
-    repositoryPrerequisites?(repository: string): Promise<RepositoryPrerequisites>; // absent: none
+    repositoryPrerequisites?(repository: string): Promise<RepositoryPrerequisites>;
     agentArgs(tool: SessionTool): string[]; // model and effort flags the stage wants
     prompt(input: StagePromptInput): string; // the whole prompt file
     completed(task: TrackerTask): boolean; // the tracker check; reconcile checks the marker

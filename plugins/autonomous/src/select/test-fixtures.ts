@@ -32,11 +32,9 @@ export function workTask(
     };
 }
 
-// The repository every located task belongs to, under the root selectWorkspace makes.
 export const REPOSITORY = "repo";
 
-// The task with the signal its source infers `repo` from: Linear's project, GitHub's repository,
-// a Beads label.
+// Gives the task the signal its source infers the repository from.
 function located(listed: WorkTask): WorkTask {
     if (listed.source === "linear") {
         return { ...listed, project: REPOSITORY };
@@ -48,8 +46,8 @@ function located(listed: WorkTask): WorkTask {
 }
 
 export interface SelectWorkspace {
-    root: string; // holds `repo`, a git repository with an OpenSpec root
-    state: string; // an empty state directory
+    root: string;
+    state: string;
     remove(): Promise<void>;
 }
 
@@ -69,7 +67,7 @@ export function selectWorkspace(): SelectWorkspace {
     };
 }
 
-// Every registered stage's prerequisites hold; the caller restores the mocks.
+// The caller restores the mocks.
 export function holdPrerequisites(): void {
     for (const stage of STAGES.values()) {
         vi.spyOn(stage, "prerequisites").mockResolvedValue({ ok: true, context: {} });
@@ -121,7 +119,6 @@ export function fakeReader(
     };
 }
 
-// fakeReader over located tasks.
 export function locatedReader(
     source: Source,
     tasks: WorkTask[] | string,
@@ -169,7 +166,7 @@ export function selectContext(options: {
     config?: ConfigLoad | AutonomousConfig;
     results?: StepResult[];
     args?: Partial<RunArgs>;
-    workspace?: SelectWorkspace; // its root replaces the configured one, its state the state
+    workspace?: SelectWorkspace;
 }): RunContext {
     const base = triageContext({
         trackers: trackers(options.calls, {}),
@@ -207,8 +204,7 @@ function configOf(
         : { config: settings };
 }
 
-// The readers a stage environment is built with; the stages' prerequisites are mocked, so none is
-// ever read.
+// A stage environment needs these readers; with the prerequisites mocked, none is read.
 function inertStageReaders({ state }: SelectWorkspace): Partial<RunContext["io"]> {
     const unread = () => Promise.reject(new Error("select's mocked prerequisites read nothing"));
     const reader = (source: Source) => ({ source, read: unread });

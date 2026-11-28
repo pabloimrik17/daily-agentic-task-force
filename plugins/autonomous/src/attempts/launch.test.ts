@@ -427,8 +427,6 @@ describe("launch: preconditions", () => {
     });
 });
 
-// Design D5: launch passes a supplied or selected task through select's exclusions without the
-// attempt records and the repositories, so its own checks keep their reasons and order.
 describe("launch: select's exclusions leave launch's own checks alone", () => {
     afterEach(() => {
         vi.restoreAllMocks();

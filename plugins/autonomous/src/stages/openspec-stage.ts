@@ -385,8 +385,8 @@ export function openspecPrompt(
 // The checks run in order and stop at the first failure, so each reason names the one thing
 // missing; together they read everything the shared prompt pieces need.
 
-// `read` is what the checks before it read. A check whose read fails is `unreadable` (design D8 of
-// exclude-stuck-tasks-from-selection); one that read and found something missing has `failed`.
+// `read` is what the checks before it read. A read that fails is `unreadable`; a prerequisite
+// read and found missing is `failed`.
 export type Check = (env: StageEnv, read: StageContext) => Promise<ReadResult<StageContext>>;
 
 const NOTHING: ReadResult<StageContext> = { ok: true, value: {} };
@@ -423,8 +423,7 @@ async function isDirectory(path: string): Promise<boolean> {
     }
 }
 
-// The repository prerequisites of every OpenSpec stage. Only looked at: OpenSpec is initialised
-// by a human, never by a run.
+// Only looked at: OpenSpec is initialised by a human, never by a run.
 export async function openspecRepository(repository: string): Promise<RepositoryPrerequisites> {
     const root = join(repository, "openspec");
     return (await isDirectory(root))

@@ -1,9 +1,5 @@
 // What an iteration tells the agent that started the loop (spec autonomous-loop,
-// "Notices"; design D7, D9): finalised and newly retained attempts, read from the
-// iteration's reconcile data, and the tasks the iteration newly marked `triage-me`, read
-// from its label-triage data, and the stuck tasks of the machine scope the loop has not yet
-// told (design D7), from its select data. A launch or a session waiting for a person tells
-// nothing.
+// "Notices"; design D7, D9). A launch or a session waiting for a person tells nothing.
 
 import { parseAttemptId } from "../attempts/record.ts";
 import type { ReconciledAttempt, ReconcileData } from "../attempts/reconcile.ts";
@@ -70,7 +66,6 @@ export interface StuckTold {
     entries: StuckEntry[]; // every new stuck task of the iteration, of any scope
 }
 
-// The stuck tasks whose entry is not recorded yet, once each.
 function unrecorded(excluded: Excluded[], recorded: readonly StuckEntry[]): Excluded[] {
     const known = [...recorded];
     return excluded.filter((task) => {

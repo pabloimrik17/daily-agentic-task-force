@@ -1,6 +1,3 @@
-// The files of a loop in the state directory (design D7): the iteration log, the
-// notices and the stuck tasks. All belong to the current loop, which resets them when it starts.
-
 import { appendFile, mkdir, readFile, rename, stat, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 

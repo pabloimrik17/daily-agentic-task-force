@@ -1,5 +1,3 @@
-// Spec work-selection, "Stuck tasks": stuck is derived in one place.
-
 import { describe, expect, it } from "vitest";
 
 import { isStuck } from "./excluded.ts";

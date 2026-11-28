@@ -54,7 +54,6 @@ export function stuckTask(id: string, overrides: Partial<Excluded> = {}): Exclud
     };
 }
 
-// The select step's result, with the excluded tasks the notices read.
 export function selected(
     excluded: Excluded[],
     machineScope: Scope | null = "personal",

@@ -1,7 +1,3 @@
-// The stage prerequisites `select` checks, as `launch` does (design D4 and D6 of
-// exclude-stuck-tasks-from-selection): for the chosen task, and before the comparison for the
-// tasks an earlier iteration of the same loop excluded for them.
-
 import { stageEnv } from "../attempts/stage-env.ts";
 import { type AttemptRecord, type TaskKey, taskKey } from "../attempts/record.ts";
 import type { AutonomousConfig } from "../config.ts";
@@ -34,8 +30,7 @@ function verdict(ready: StagePrerequisites): Result<string | null> {
 }
 
 // The failing prerequisite's reason, or null when they hold. A candidate passed the stage and
-// repository checks, so a stage or repository missing here means there is nothing to check. A
-// check that throws or cannot read what it needs is an error.
+// repository checks, so a stage or repository missing here means there is nothing to check.
 export async function failingPrerequisites(
     env: PrerequisiteEnv,
     { task, stage }: Candidate,
@@ -63,7 +58,6 @@ export function prerequisitesExcluded({ task }: Candidate, reason: string): Excl
     return excludedTask(task, { reason: "prerequisites", detail: reason });
 }
 
-// The tasks `loop.stuck` records as excluded for their prerequisites.
 export function rememberedFailures(entries: readonly StuckEntry[]): Set<string> {
     return new Set(
         entries.filter((entry) => entry.exclusion === "prerequisites").map((entry) => entry.task),

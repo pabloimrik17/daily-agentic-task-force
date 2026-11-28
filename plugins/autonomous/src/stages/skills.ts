@@ -52,8 +52,8 @@ function parseInstallations(json: unknown, plugin: string): Installation[] {
         });
 }
 
-// Every failure here is a registry that cannot be read (design D8 of
-// exclude-stuck-tasks-from-selection), unlike a registry read without the plugin.
+// Every failure here is `unreadable`, a malformed registry included; only a registry read without
+// the plugin is not.
 async function readInstallations(
     file: string,
     plugin: string,
@@ -165,8 +165,7 @@ async function loadSkill(skillsDir: string, name: string): Promise<ReadResult<st
     return { ok: true, value: stripFrontmatter(text) };
 }
 
-// The first failure, in `names` order, is the error; a plugin or skill that is absent is not
-// `unreadable`.
+// The first failure, in `names` order, is the error.
 export async function loadSkills(
     home: string,
     plugin: string,

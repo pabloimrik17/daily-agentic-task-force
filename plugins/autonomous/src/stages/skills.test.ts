@@ -270,7 +270,6 @@ describe("loadSkills — frontmatter", () => {
     });
 });
 
-// Spec stage-sessions, "Prerequisites that cannot be read".
 describe("loadSkills — a registry that cannot be read", () => {
     it.each([
         ["is missing", () => undefined],

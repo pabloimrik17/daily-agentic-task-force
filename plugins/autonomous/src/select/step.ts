@@ -1,11 +1,6 @@
-// The select step (spec work-selection; design D1, D5, D9, D10): reads the
-// machine scope first, then the open tasks of every enabled source again,
-// excludes by the ordered checks and chooses among the candidates — by code for
-// a single one, by the LLM for two or more. Every read fails closed, and a
-// failed or rejected comparison makes the step not evaluable with no fallback
-// order. It never writes and never contributes questions. Before the comparison it also excludes
-// what `launch` would refuse, and it checks the chosen task's prerequisites, choosing again when
-// they fail (design D2 and D4 of exclude-stuck-tasks-from-selection).
+// The select step (spec work-selection): every read fails closed, and a failed
+// or rejected comparison makes the step not evaluable with no fallback order.
+// It never writes and never contributes questions.
 
 import { listRecords } from "../attempts/state.ts";
 import type { CapacityData } from "../capacity/step.ts";
@@ -47,7 +42,7 @@ const SELECT = "select";
 
 const GITHUB_NOT_EVALUATED = "github: dependencies";
 
-// Design D4: the chosen tasks whose prerequisites are checked in one run, three re-elections.
+// The chosen tasks whose prerequisites one run checks (design D4).
 const MAX_CHOICES = 4;
 
 const EMPTY: SelectData = {
@@ -153,8 +148,7 @@ interface Read extends PrerequisiteEnv {
 
 const messageOf = (error: unknown) => (error instanceof Error ? error.message : String(error));
 
-// The attempt records and the repositories, once per run (design D2); `loop.stuck` only in an
-// iteration of the loop, where it belongs to the running loop (design D6).
+// `loop.stuck` is read only in a loop iteration: it belongs to the running loop (design D6).
 async function readChecks(ctx: RunContext, config: AutonomousConfig): Promise<Result<Read>> {
     try {
         const records = await listRecords(ctx.io.state);
@@ -215,8 +209,6 @@ type Round = { split: StageSplit<Candidate>; tier: StepTier } & (
     | { kind: "broken"; error: string }
 );
 
-// One comparison among the candidates at the most advanced stage, then the chosen task's
-// prerequisites.
 async function round(remaining: readonly Candidate[], election: Election): Promise<Round> {
     const split = splitByStage(remaining);
     const { machineScope, settings, selection, env } = election;
@@ -237,7 +229,6 @@ async function round(remaining: readonly Candidate[], election: Election): Promi
         : { split, tier, kind: "failed", chosen: candidate, reason: failing.value };
 }
 
-// Each failed choice is excluded and the stage rule applied again to what remains (design D4).
 async function elect(
     candidates: readonly Candidate[],
     election: Election,

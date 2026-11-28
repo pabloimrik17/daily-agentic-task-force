@@ -1,6 +1,3 @@
-// An excluded task as the step reports it (design D5): its exclusion, the reason text when the
-// exclusion has one, and whether only a person can remove it.
-
 import type { HoldingAttempt } from "../attempts/open-attempt.ts";
 import type { Scope } from "../config.ts";
 import type { Excluded, Exclusion, WorkTask } from "./types.ts";

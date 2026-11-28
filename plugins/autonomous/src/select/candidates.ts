@@ -1,5 +1,5 @@
-// Ordered exclusions (work-selection, design D3; design D2 of exclude-stuck-tasks-from-selection):
-// the first check that applies wins. Only tasks surviving the inexpensive checks need detail.
+// Ordered exclusions (work-selection, design D3): the first check that applies wins. Only tasks
+// surviving the inexpensive checks need detail.
 
 import { type HoldingAttempt, holdingAttempt, holdingReason } from "../attempts/open-attempt.ts";
 import type { AttemptRecord } from "../attempts/record.ts";
@@ -31,13 +31,12 @@ interface CandidateDeps {
 }
 
 export interface RepositoryChecks {
-    repositories: readonly string[]; // listed once per run
+    repositories: readonly string[];
     prerequisites(stage: StageName, repository: string): Promise<RepositoryPrerequisites>;
 }
 
 const HOLDS: RepositoryPrerequisites = { ok: true };
 
-// The repository prerequisites of a stage, checked once per stage and repository (design D3).
 export function repositoryChecks(repositories: readonly string[]): RepositoryChecks {
     const checked = new Map<string, Promise<RepositoryPrerequisites>>();
     return {

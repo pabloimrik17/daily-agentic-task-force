@@ -136,7 +136,6 @@ describe("the test stage", () => {
     });
 });
 
-// Spec stage-sessions, "Prerequisites that cannot be read", through the grill-me stage.
 describe("prerequisites that cannot be read", () => {
     let state: string;
     let root: string;

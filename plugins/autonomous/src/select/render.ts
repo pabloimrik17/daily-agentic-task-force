@@ -65,8 +65,6 @@ export function renderSelect(result: StepResult<SelectData>): string {
     return lines.join("\n");
 }
 
-// Spec work-selection, "Stuck tasks in the report": apart from the other excluded tasks, each
-// with what a person needs to release it.
 function renderStuck(stuck: readonly Excluded[]): string[] {
     if (stuck.length === 0) {
         return [];

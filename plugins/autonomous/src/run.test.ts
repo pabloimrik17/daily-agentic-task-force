@@ -715,8 +715,8 @@ describe("main with the real steps", () => {
     const dir = mkdtempSync(join(tmpdir(), "autonomous-steps-"));
     const configPath = join(dir, "config.json");
     copyFileSync(EXAMPLE_PATH, configPath);
-    // The example's workspace root, under the HOME of these runs, with the repository of each task
-    // `selecting` lists: select and launch infer it before the stage's prerequisites.
+    // The repositories of the tasks `selecting` lists: select and launch infer them before the
+    // stage's prerequisites.
     mkdirSync(join(dir, "WebstormProjects", "dotfiles", ".git"), { recursive: true });
     mkdirSync(join(dir, "WebstormProjects", "monolab", ".git"), { recursive: true });
     afterAll(() => rmSync(dir, { recursive: true, force: true }));
@@ -810,8 +810,6 @@ describe("main with the real steps", () => {
         linear: empty("linear"),
     });
 
-    // A home without Claude Code's plugin registry: select checks the chosen task's grill-me
-    // prerequisites, which cannot be read, so select is not evaluable and excludes nothing.
     it("runs the example configuration up to select, which is not evaluable when the prerequisites cannot be read", async () => {
         let judged = 0;
         const calls: string[] = [];
@@ -1337,8 +1335,8 @@ describe("main --answer", () => {
             ],
         };
 
-        // launch waits: the home holds no plugin registry for the grill-me prerequisites, which
-        // hold in select only, as an unreadable one would make select not evaluable.
+        // The grill-me prerequisites hold in select only: the home has no plugin registry, so launch
+        // waits.
         vi.spyOn(grillMeStage, "prerequisites").mockResolvedValueOnce({ ok: true, context: {} });
         const run = deps(undefined, shared);
         const exit = await main(["--apply", "--json"], run.d);

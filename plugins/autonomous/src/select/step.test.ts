@@ -571,7 +571,6 @@ const prerequisitesFailing = (stage: Stage, failing: readonly string[]) =>
 const UNREADABLE =
     "cannot read the plugin registry /home/me/.claude/plugins/installed_plugins.json";
 
-// The grill-me prerequisites of `ids` cannot be read (design D8); the others hold.
 const prerequisitesUnreadable = (ids: readonly string[]) =>
     vi
         .spyOn(grillMeStage, "prerequisites")
