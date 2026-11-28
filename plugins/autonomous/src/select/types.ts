@@ -35,13 +35,18 @@ export type StageName = StageLabel;
 
 export type Exclusion =
     | "classification"
+    | "open-attempt"
     | "taken"
     | "triage-me"
     | "labelled-this-run"
     | "unsupported-stage"
     | "blocked"
     | "split"
-    | "no-free-slot";
+    | "repository"
+    | "repository-prerequisites"
+    | "no-free-slot"
+    | "prerequisites" // checked for the chosen task only, after the comparison
+    | "unreadable-prerequisites"; // only in a loop, for a task whose read failed before
 
 type Autonomy = AutonomyLabel;
 
@@ -58,6 +63,9 @@ export interface Excluded {
     id: string;
     title: string;
     reason: Exclusion;
+    detail: string | null; // the reason text: launch's, or the open attempt's id and state
+    stuck: boolean; // only a person can remove the exclusion (isStuck)
+    scope: Scope | null; // null only when the task fails classification
 }
 
 export interface SelectionRequest {
@@ -89,6 +97,12 @@ export interface SelectedUnit {
     exception: string | null; // non-null only when scope differs from the machine scope
 }
 
+export interface Unreadable {
+    source: Source;
+    id: string;
+    reason: string;
+}
+
 type Summary = { source: Source; id: string; title: string; scope: Scope; stage: StageName };
 
 export interface SelectData {
@@ -100,4 +114,5 @@ export interface SelectData {
     readyToClose: { source: Source; id: string; title: string }[]; // split parents whose children are all closed
     notEvaluated: string[]; // e.g. "github: dependencies"
     comparison: { model: string; effort: string } | null; // set only when the LLM was called
+    unreadable: Unreadable | null; // the task whose prerequisites made the step not evaluable
 }

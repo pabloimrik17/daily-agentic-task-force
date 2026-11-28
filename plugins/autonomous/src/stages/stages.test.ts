@@ -1,6 +1,14 @@
-import { describe, expect, it } from "vitest";
+import { mkdirSync, mkdtempSync, readdirSync, writeFileSync } from "node:fs";
+import { rm } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+
+import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { launchStep } from "../attempts/launch.ts";
 import { ATTEMPT_SCHEMA, type AttemptRecord } from "../attempts/record.ts";
+import { tempState } from "../attempts/test-fixtures.ts";
 import { workTask } from "../select/test-fixtures.ts";
+import type { SessionSpec } from "../sessions/manager.ts";
 import { codeReviewStage } from "./code-review/stage.ts";
 import { grillMeStage } from "./grill-me/stage.ts";
 import { implementStage } from "./implement/stage.ts";
@@ -8,7 +16,7 @@ import { proposalStage } from "./proposal/stage.ts";
 import { expectedMarker } from "./prompt.ts";
 import { STAGES, stageFor } from "./registry.ts";
 import type { StagePromptInput } from "./stage.ts";
-import { stageEnv } from "./test-fixtures.ts";
+import { selectedLaunch, stageEnv } from "./test-fixtures.ts";
 import { testStage } from "./test.ts";
 import { verifyStage } from "./verify/stage.ts";
 
@@ -125,5 +133,134 @@ describe("the test stage", () => {
     it("passes the model and effort for claude and the effort alone for codex", () => {
         expect(testStage.agentArgs("claude")).toEqual(["--model", "haiku", "--effort", "low"]);
         expect(testStage.agentArgs("codex")).toEqual(["-c", "model_reasoning_effort=low"]);
+    });
+});
+
+describe("prerequisites that cannot be read", () => {
+    let state: string;
+    let root: string;
+    let home: string;
+
+    beforeEach(() => {
+        state = tempState();
+        root = mkdtempSync(join(tmpdir(), "stages-root-"));
+        home = mkdtempSync(join(tmpdir(), "stages-home-"));
+        mkdirSync(join(root, "dotfiles", ".git"), { recursive: true });
+    });
+
+    afterEach(async () => {
+        await Promise.all(
+            [state, root, home].map((dir) => rm(dir, { recursive: true, force: true })),
+        );
+    });
+
+    const registry = () => join(home, ".claude", "plugins", "installed_plugins.json");
+
+    it("Plugin registry cannot be read: unreadable with the read error, and launch waits with that reason", async () => {
+        const ready = await grillMeStage.prerequisites(stageEnv({ tool: "claude", home }));
+        const calls: string[] = [];
+        const ctx = selectedLaunch({
+            calls,
+            task: workTask("linear", "DOT-122", ["personal", "HITL", "grill-me"]),
+            stage: "grill-me",
+            autonomy: "HITL",
+            root,
+            state,
+            home,
+            worktree: "/unused/worktree",
+            readers: stageEnv().readers,
+            specs: [],
+        });
+
+        const run = await launchStep.run(ctx);
+
+        expect(ready).toMatchObject({
+            ok: false,
+            reason: expect.stringContaining(
+                `cannot read the plugin registry ${registry()}`,
+            ) as string,
+            unreadable: true,
+        });
+        expect(run).toMatchObject({
+            outcome: "wait",
+            reasons: [ready.ok ? "unreachable" : ready.reason],
+            data: { workspace: null, attempt: null },
+        });
+        expect(readdirSync(state)).toEqual([]);
+    });
+
+    it("Skill missing from a readable registry: fails, not as unreadable", async () => {
+        mkdirSync(join(home, ".claude", "plugins"), { recursive: true });
+        writeFileSync(registry(), JSON.stringify({ version: 2, plugins: {} }));
+
+        const ready = await grillMeStage.prerequisites(stageEnv({ tool: "claude", home }));
+
+        expect(ready).toMatchObject({
+            ok: false,
+            reason: expect.stringContaining("not installed") as string,
+        });
+        expect(ready).not.toHaveProperty("unreadable");
+    });
+});
+
+describe("repository prerequisites of a stage", () => {
+    it.each([
+        ["test", testStage],
+        ["grill-me", grillMeStage],
+    ] as const)("Stage with no repository prerequisites: %s declares none", (_, stage) => {
+        expect("repositoryPrerequisites" in stage).toBe(false);
+    });
+
+    describe("Supplied task in a repository that fails them", () => {
+        let state: string;
+        let root: string;
+
+        beforeEach(() => {
+            state = tempState();
+            root = mkdtempSync(join(tmpdir(), "stages-root-"));
+            mkdirSync(join(root, "dotfiles", ".git"), { recursive: true });
+        });
+
+        afterEach(async () => {
+            await Promise.all(
+                [state, root].map((dir) => rm(dir, { recursive: true, force: true })),
+            );
+        });
+
+        it("launch waits with the repository prerequisites' reason, and nothing is written", async () => {
+            const calls: string[] = [];
+            const specs: SessionSpec[] = [];
+            const task = workTask("linear", "DOT-121", ["personal", "AFK", "proposal"]);
+            const ctx = selectedLaunch({
+                calls,
+                task,
+                stage: "proposal",
+                autonomy: "AFK",
+                root,
+                state,
+                home: "/unused/home",
+                worktree: "/unused/worktree",
+                readers: stageEnv().readers,
+                specs,
+            });
+            const repository = join(root, "dotfiles");
+            const failed = await proposalStage.repositoryPrerequisites?.(repository);
+
+            const run = await launchStep.run({
+                ...ctx,
+                args: { ...ctx.args, task: { source: "linear", id: "DOT-121" }, stage: "proposal" },
+            });
+
+            expect(failed).toMatchObject({ ok: false });
+            expect(run).toMatchObject({
+                outcome: "wait",
+                reasons: [failed?.ok === false ? failed.reason : "unreachable"],
+                data: { input: "supplied", workspace: null, attempt: null },
+            });
+            expect(readdirSync(state)).toEqual([]);
+            expect(readdirSync(repository)).toEqual([".git"]);
+            expect(calls.filter((call) => /addLabel/.test(call))).toEqual([]);
+            expect(specs).toEqual([]);
+        });
     });
 });

@@ -15,14 +15,21 @@ import type { AutonomyLabel } from "../label-contract/contract.ts";
 import type { TrackerTask } from "../label-triage/trackers/tracker.ts";
 import { MAX_WORDS, REQUIRED_SECTIONS } from "../logbook/body.ts";
 import type { PullRequest } from "../pull-request/port.ts";
-import type { Result } from "../result.ts";
 import { stageAutonomy, type TransitionStage, transitionRow } from "../transition/table.ts";
 import { findBranchChange } from "./openspec-change.ts";
 import { findWorkflow, missingWorkflow } from "./openspec-workflows.ts";
 import { loadPluginSkill, type PluginSkillOptions } from "./plugin-skill.ts";
 import { renderPrompt } from "./prompt.ts";
 import { HANDOFF_SKILL, loadSkills, SKILLS_PLUGIN } from "./skills.ts";
-import type { StageContext, StageEnv, StagePrerequisites, StagePromptInput } from "./stage.ts";
+import {
+    notMet,
+    type ReadResult,
+    type RepositoryPrerequisites,
+    type StageContext,
+    type StageEnv,
+    type StagePrerequisites,
+    type StagePromptInput,
+} from "./stage.ts";
 
 export { HANDOFF_SKILL } from "./skills.ts";
 export const CONTEXT_KEY = "context";
@@ -378,12 +385,19 @@ export function openspecPrompt(
 // The checks run in order and stop at the first failure, so each reason names the one thing
 // missing; together they read everything the shared prompt pieces need.
 
-// `read` is what the checks before it read.
-export type Check = (env: StageEnv, read: StageContext) => Promise<Result<StageContext>>;
+// `read` is what the checks before it read. A read that fails is `unreadable`; a prerequisite
+// read and found missing is `failed`.
+export type Check = (env: StageEnv, read: StageContext) => Promise<ReadResult<StageContext>>;
 
-const NOTHING: Result<StageContext> = { ok: true, value: {} };
+const NOTHING: ReadResult<StageContext> = { ok: true, value: {} };
 
-const failed = (error: string): Result<StageContext> => ({ ok: false, error });
+const failed = (error: string): ReadResult<StageContext> => ({ ok: false, error });
+
+const unreadable = (error: string): ReadResult<StageContext> => ({
+    ok: false,
+    error,
+    unreadable: true,
+});
 
 const claudeOnly =
     (stage: OpenspecStage): Check =>
@@ -401,20 +415,42 @@ const oneAutonomy =
         return Promise.resolve(found.ok ? NOTHING : failed(found.error));
     };
 
-async function isDirectory(path: string): Promise<boolean> {
-    try {
-        return (await stat(path)).isDirectory();
-    } catch {
-        return false;
-    }
+// The stat errors that say the path is not there, as opposed to not readable.
+const ABSENT = new Set(["ENOENT", "ENOTDIR", "ELOOP"]);
+
+function isAbsence(error: unknown): boolean {
+    return error instanceof Error && "code" in error && ABSENT.has(error.code as string);
 }
 
 // Only looked at: OpenSpec is initialised by a human, never by a run.
-const openspecRoot: Check = async ({ repository }) => {
+export async function openspecRepository(repository: string): Promise<RepositoryPrerequisites> {
     const root = join(repository, "openspec");
-    return (await isDirectory(root))
-        ? NOTHING
-        : failed(`the repository ${repository} has no OpenSpec root: ${root} is not a directory`);
+    try {
+        if ((await stat(root)).isDirectory()) {
+            return { ok: true };
+        }
+    } catch (error) {
+        if (!isAbsence(error)) {
+            const message = error instanceof Error ? error.message : String(error);
+            return {
+                ok: false,
+                reason: `the OpenSpec root ${root} of ${repository} cannot be read: ${message}`,
+                unreadable: true,
+            };
+        }
+    }
+    return {
+        ok: false,
+        reason: `the repository ${repository} has no OpenSpec root: ${root} is not a directory`,
+    };
+}
+
+const openspecRoot: Check = async ({ repository }) => {
+    const held = await openspecRepository(repository);
+    if (held.ok) {
+        return NOTHING;
+    }
+    return held.unreadable === true ? unreadable(held.reason) : failed(held.reason);
 };
 
 const workflowCheck =
@@ -428,7 +464,7 @@ const workflowCheck =
 
 const openspecCli: Check = async ({ readers }) => {
     const run = await readers.openspec(["--version"]);
-    return run.ok ? NOTHING : failed(`\`openspec --version\` cannot run: ${run.error}`);
+    return run.ok ? NOTHING : unreadable(`\`openspec --version\` cannot run: ${run.error}`);
 };
 
 const handoffSkill: Check = ({ home }) => loadSkills(home, SKILLS_PLUGIN, [HANDOFF_SKILL]);
@@ -437,7 +473,7 @@ const taskContext: Check = async ({ task, readers }) => {
     const read = await readers.context.read(task);
     return read.ok
         ? { ok: true, value: { [CONTEXT_KEY]: JSON.stringify(read.value) } }
-        : failed(`cannot read the context of ${task.source} ${task.id}: ${read.error}`);
+        : unreadable(`cannot read the context of ${task.source} ${task.id}: ${read.error}`);
 };
 
 const openPullRequest =
@@ -445,7 +481,7 @@ const openPullRequest =
     async ({ branch, readers }) => {
         const found = await readers.pullRequests.find(branch);
         if (!found.ok) {
-            return failed(`cannot look up the open pull request of ${branch}: ${found.error}`);
+            return unreadable(`cannot look up the open pull request of ${branch}: ${found.error}`);
         }
         if (found.value !== null) {
             return { ok: true, value: { [PULL_REQUEST_KEY]: JSON.stringify(found.value) } };
@@ -461,7 +497,7 @@ const openPullRequest =
 export const changeCheck: Check = async ({ repository, branch, readers }) => {
     const base = await readers.pullRequests.defaultBranch();
     if (!base.ok) {
-        return failed(`cannot read the default branch of ${repository}: ${base.error}`);
+        return unreadable(`cannot read the default branch of ${repository}: ${base.error}`);
     }
     const change = await findBranchChange(readers.git, {
         directory: repository,
@@ -516,7 +552,7 @@ export function checkAll(checks: readonly Check[]): (env: StageEnv) => Promise<S
         for (const check of checks) {
             const result = await check(env, context);
             if (!result.ok) {
-                return { ok: false, reason: result.error };
+                return notMet(result);
             }
             Object.assign(context, result.value);
         }

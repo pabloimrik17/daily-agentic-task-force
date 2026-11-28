@@ -270,6 +270,31 @@ describe("loadSkills — frontmatter", () => {
     });
 });
 
+describe("loadSkills — a registry that cannot be read", () => {
+    it.each([
+        ["is missing", () => undefined],
+        ["is not JSON", () => writeFileAt(registryFile(), "{not json")],
+        ["is malformed", () => writeFileAt(registryFile(), JSON.stringify({ version: 2 }))],
+    ])("Plugin registry cannot be read: unreadable when it %s", async (_, arrange) => {
+        arrange();
+
+        expect(await loadSkills(home, PLUGIN, ["handoff"])).toMatchObject({
+            ok: false,
+            error: expect.stringContaining(registryFile()) as string,
+            unreadable: true,
+        });
+    });
+
+    it("Skill missing from a readable registry: a plugin not installed is not unreadable", async () => {
+        writeRegistry({ "other@market": [installation(join(home, "other"))] });
+
+        const result = await loadSkills(home, PLUGIN, ["handoff"]);
+
+        expect(result.ok).toBe(false);
+        expect(result).not.toHaveProperty("unreadable");
+    });
+});
+
 describe("loadSkills — reasons", () => {
     it("names the registry file when it is missing", async () => {
         const result = await loadSkills(home, PLUGIN, ["handoff"]);

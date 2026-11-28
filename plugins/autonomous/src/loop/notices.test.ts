@@ -5,8 +5,9 @@ import { LABEL_TRIAGE } from "../label-triage/question-id.ts";
 import type { LabelTriageData } from "../label-triage/step.ts";
 import type { MarkRecord } from "../label-triage/write.ts";
 import type { StepResult } from "../runner.ts";
-import { iterationNotices, stopNotice } from "./notices.ts";
-import { attempt, reconciled, report } from "./test-fixtures.ts";
+import { type StuckEntry, UNREAD_ONCE } from "./files.ts";
+import { iterationNotices, stopNotice, stuckNotices } from "./notices.ts";
+import { attempt, reconciled, report, selected, stuckTask } from "./test-fixtures.ts";
 
 function mark(
     source: Source,
@@ -185,6 +186,155 @@ describe("iterationNotices of newly marked tasks", () => {
             "linear:DOT-98 grill-me → proposal",
             "triage-me +1: linear:DOT-130",
         ]);
+    });
+});
+
+const REPOSITORY = "no repository label names a directory of the workspace";
+
+function entry(
+    task: string,
+    exclusion = "repository",
+    detail = REPOSITORY,
+    scope: StuckEntry["scope"] = "personal",
+): StuckEntry {
+    return { task, exclusion, detail, scope };
+}
+
+describe("stuckNotices", () => {
+    it("names a stuck task of the machine scope the first time, with its reason", () => {
+        const told = stuckNotices(report("wait", [selected([stuckTask("X-12")])]), []);
+        expect(told.notices).toEqual([`stuck beads:X-12: ${REPOSITORY}`]);
+        expect(told.entries).toEqual([entry("beads:X-12")]);
+    });
+
+    it("tells nothing for the same task and reason as an earlier iteration", () => {
+        const told = stuckNotices(report("wait", [selected([stuckTask("X-12")])]), [
+            entry("beads:X-12"),
+        ]);
+        expect(told).toEqual({ notices: [], entries: [] });
+    });
+
+    it("tells a task again when its reason changed", () => {
+        const now = stuckTask("X-12", {
+            reason: "repository-prerequisites",
+            detail: "no OpenSpec root in /w/x",
+        });
+        const told = stuckNotices(report("wait", [selected([now])]), [entry("beads:X-12")]);
+        expect(told.notices).toEqual(["stuck beads:X-12: no OpenSpec root in /w/x"]);
+        expect(told.entries).toEqual([
+            entry("beads:X-12", "repository-prerequisites", "no OpenSpec root in /w/x"),
+        ]);
+    });
+
+    it("tells a changed detail of the same exclusion again", () => {
+        const now = stuckTask("X-12", { detail: "2 repository labels: a, b" });
+        const told = stuckNotices(report("wait", [selected([now])]), [entry("beads:X-12")]);
+        expect(told.notices).toEqual(["stuck beads:X-12: 2 repository labels: a, b"]);
+    });
+
+    it("names five tasks and counts the rest and the log when more are new", () => {
+        const tasks = Array.from({ length: 56 }, (_, n) => stuckTask(`X-${n}`));
+        const told = stuckNotices(report("wait", [selected(tasks)]), []);
+        expect(told.notices).toEqual([
+            ...[0, 1, 2, 3, 4].map((n) => `stuck beads:X-${n}: ${REPOSITORY}`),
+            "stuck +51 more: see loop.log",
+        ]);
+        expect(told.entries).toHaveLength(56);
+    });
+
+    it("adds no count line when exactly five are new", () => {
+        const tasks = [0, 1, 2, 3, 4].map((n) => stuckTask(`X-${n}`));
+        expect(stuckNotices(report("wait", [selected(tasks)]), []).notices).toHaveLength(5);
+    });
+
+    it("records a task of another scope without telling it", () => {
+        const work = stuckTask("X-12", { scope: "work" });
+        const told = stuckNotices(report("wait", [selected([work], "personal")]), []);
+        expect(told.notices).toEqual([]);
+        expect(told.entries).toEqual([entry("beads:X-12", "repository", REPOSITORY, "work")]);
+    });
+
+    it("tells a task of another scope once the machine scope takes it, and then no more", () => {
+        const work = stuckTask("X-12", { scope: "work" });
+        const first = stuckNotices(report("wait", [selected([work], "personal")]), []);
+        expect(first.notices).toEqual([]);
+
+        const now = stuckTask("X-12");
+        const second = stuckNotices(report("wait", [selected([now])]), first.entries);
+        expect(second.notices).toEqual([`stuck beads:X-12: ${REPOSITORY}`]);
+        expect(second.entries).toEqual([entry("beads:X-12")]);
+
+        const third = stuckNotices(report("wait", [selected([now])]), [
+            ...first.entries,
+            ...second.entries,
+        ]);
+        expect(third).toEqual({ notices: [], entries: [] });
+    });
+
+    it("does not let a task of another scope take one of the five", () => {
+        const tasks = [stuckTask("W-1", { scope: "work" }), stuckTask("X-1")];
+        expect(stuckNotices(report("wait", [selected(tasks)]), []).notices).toEqual([
+            `stuck beads:X-1: ${REPOSITORY}`,
+        ]);
+    });
+
+    it("uses the exclusion when the reason has no detail", () => {
+        const told = stuckNotices(
+            report("wait", [selected([stuckTask("X-12", { detail: null })])]),
+            [],
+        );
+        expect(told.notices).toEqual(["stuck beads:X-12: repository"]);
+    });
+
+    it("ignores an excluded task that is not stuck", () => {
+        const blocked = stuckTask("X-12", { reason: "blocked", stuck: false });
+        expect(stuckNotices(report("wait", [selected([blocked])]), [])).toEqual({
+            notices: [],
+            entries: [],
+        });
+    });
+
+    it("names retained attempts and failed prerequisites first, then repository prerequisites, then no repository", () => {
+        const tasks = [
+            ...[0, 1, 2].map((n) => stuckTask(`R-${n}`)),
+            stuckTask("O-1", { reason: "repository-prerequisites", detail: "no OpenSpec root" }),
+            stuckTask("A-1", { reason: "open-attempt", detail: "attempt a is retained" }),
+            stuckTask("P-1", { reason: "prerequisites", detail: "lacks a skill" }),
+            stuckTask("U-1", { reason: "unreadable-prerequisites", detail: "cannot read" }),
+        ];
+        const told = stuckNotices(report("wait", [selected(tasks)]), []);
+        expect(told.notices).toEqual([
+            "stuck beads:A-1: attempt a is retained",
+            "stuck beads:P-1: lacks a skill",
+            "stuck beads:U-1: cannot read",
+            "stuck beads:O-1: no OpenSpec root",
+            `stuck beads:R-0: ${REPOSITORY}`,
+            "stuck +2 more: see loop.log",
+        ]);
+        expect(told.entries.map(({ task }) => task)).toEqual(tasks.map(({ id }) => `beads:${id}`));
+    });
+
+    it("remembers the task whose prerequisites could not be read, without telling it", () => {
+        const unreadable = { source: "linear" as const, id: "DOT-1", reason: "cannot read" };
+        const iteration = report("not-evaluable", [selected([], "personal", unreadable)]);
+        const memory = { task: "linear:DOT-1", exclusion: UNREAD_ONCE, detail: "cannot read" };
+        expect(stuckNotices(iteration, [])).toEqual({ notices: [], entries: [memory] });
+        expect(stuckNotices(iteration, [memory])).toEqual({ notices: [], entries: [] });
+    });
+
+    it("tells a task excluded as unreadable prerequisites although it was remembered", () => {
+        const memory = { task: "beads:X-12", exclusion: UNREAD_ONCE, detail: "cannot read" };
+        const now = stuckTask("X-12", {
+            reason: "unreadable-prerequisites",
+            detail: "cannot read",
+        });
+        expect(stuckNotices(report("wait", [selected([now])]), [memory]).notices).toEqual([
+            "stuck beads:X-12: cannot read",
+        ]);
+    });
+
+    it("tells nothing when the iteration has no select data", () => {
+        expect(stuckNotices(report("not-evaluable"), [])).toEqual({ notices: [], entries: [] });
     });
 });
 

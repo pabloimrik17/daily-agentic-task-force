@@ -11,7 +11,7 @@ import {
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
-import { afterAll, describe, expect, it } from "vitest";
+import { afterAll, afterEach, describe, expect, it, vi } from "vitest";
 
 import type { Answer } from "./args.ts";
 import { fakeSessions, fakeWorkspace, record, tempState } from "./attempts/test-fixtures.ts";
@@ -27,6 +27,7 @@ import { capacityStep } from "./capacity/step.ts";
 import { type AutonomousConfig, CONFIG_SCHEMA, EXAMPLE_PATH } from "./config.ts";
 import type { ContextReader } from "./context/types.ts";
 import { COLOURS, LABELS } from "./label-contract/contract.ts";
+import { grillMeStage } from "./stages/grill-me/stage.ts";
 import type { TriageQuestionsReport } from "./label-triage/questions-mode.ts";
 import {
     config,
@@ -72,6 +73,7 @@ import type {
     HandoffQuestion,
     Step,
     StepOutcome,
+    StepResult,
 } from "./runner.ts";
 import { fakeChezmoi, fakeReader, fakeSelection, workTask } from "./select/test-fixtures.ts";
 import type { SelectData } from "./select/types.ts";
@@ -713,10 +715,24 @@ describe("main with the real steps", () => {
     const dir = mkdtempSync(join(tmpdir(), "autonomous-steps-"));
     const configPath = join(dir, "config.json");
     copyFileSync(EXAMPLE_PATH, configPath);
-    // The example's workspace root, under the HOME of these runs: launch infers the repository
-    // before the stage's prerequisites.
+    // The repositories of the tasks `selecting` lists: select and launch infer them before the
+    // stage's prerequisites.
     mkdirSync(join(dir, "WebstormProjects", "dotfiles", ".git"), { recursive: true });
+    mkdirSync(join(dir, "WebstormProjects", "monolab", ".git"), { recursive: true });
     afterAll(() => rmSync(dir, { recursive: true, force: true }));
+
+    afterEach(() => {
+        vi.restoreAllMocks();
+    });
+
+    // The HOME has no plugin registry, so the grill-me prerequisites fail. This makes them hold for
+    // select's check of the chosen task only: launch's own check then fails, as when the registry
+    // goes away between the two steps.
+    const holdInSelectOnly = () =>
+        vi.spyOn(grillMeStage, "prerequisites").mockResolvedValueOnce({ ok: true, context: {} });
+
+    const REGISTRY_REASON = () =>
+        `cannot read the plugin registry ${join(dir, ".claude", "plugins", "installed_plugins.json")}`;
 
     function empty(source: Tracker["source"]): Tracker {
         const unused = () => Promise.reject(new Error("unused"));
@@ -769,7 +785,11 @@ describe("main with the real steps", () => {
         return {
             chezmoi: fakeChezmoi({ machineType: "personal" }, calls),
             work: () => [
-                fakeReader("beads", [workTask("beads", "B-7", ["personal", "grill-me"])], calls),
+                fakeReader(
+                    "beads",
+                    [workTask("beads", "B-7", ["personal", "grill-me", "monolab"])],
+                    calls,
+                ),
                 fakeReader(
                     "linear",
                     [
@@ -790,8 +810,7 @@ describe("main with the real steps", () => {
         linear: empty("linear"),
     });
 
-    // A home without Claude Code's plugin registry, so launch waits on the grill-me prerequisites.
-    it("runs the five steps with the example configuration, launch waiting on the stage", async () => {
+    it("runs the example configuration up to select, which is not evaluable when the prerequisites cannot be read", async () => {
         let judged = 0;
         const calls: string[] = [];
         const { d, out, err } = deps(undefined, {
@@ -804,23 +823,48 @@ describe("main with the real steps", () => {
             },
             ...selecting(calls),
         });
-        expect(await main([], d)).toBe(2);
+        expect(await main(["--json"], d)).toBe(3);
         expect(err).toEqual([]);
         expect(judged).toBe(0);
+        const report = JSON.parse(out[0] as string) as {
+            outcome: string;
+            steps: StepResult<SelectData>[];
+        };
+        expect(report.outcome).toBe("not-evaluable");
+        expect(report.steps.map((s) => [s.step, s.outcome])).toEqual([
+            ["reconcile", "advance"],
+            ["capacity", "advance"],
+            ["quota-gate", "advance"],
+            ["label-triage", "advance"],
+            ["select", "not-evaluable"],
+        ]);
+        const select = report.steps[4]!;
+        expect(select.tier).toBe("llm");
+        expect(select.reasons).toEqual([expect.stringContaining(REGISTRY_REASON())]);
+        expect(select.data.selected).toBeNull();
+        expect(select.data.excluded).toEqual([]);
+    });
+
+    it("Launch never tries another task: launch waits on the stage when its prerequisites fail after select", async () => {
+        holdInSelectOnly();
+        const calls: string[] = [];
+        const { d, out } = deps(undefined, {
+            env: { AUTONOMOUS_CONFIG: configPath, HOME: dir },
+            ...capacity(),
+            trackers: emptyTrackers,
+            ...selecting(calls),
+        });
+        expect(await main([], d)).toBe(2);
         const text = out[0] as string;
         expect(text).toContain("outcome: wait");
-        expect(text).toContain("[reconcile] advance (code)");
-        expect(text).toContain("[capacity] advance (code)");
-        expect(text).toContain("[quota-gate] advance (code)");
-        expect(text).toContain("[label-triage] advance (code)");
         expect(text).toContain("[select] advance (llm)");
         expect(text).toContain("[launch] wait (code)");
-        expect(text).toContain(
-            `cannot read the plugin registry ${join(dir, ".claude", "plugins", "installed_plugins.json")}`,
-        );
+        expect(text).toContain(REGISTRY_REASON());
+        expect(calls.filter((call) => call.includes("detail:B-7"))).toEqual(["beads:detail:B-7"]);
     });
 
     it("runs reconcile, capacity, quota-gate, label-triage, select and launch, in that order", async () => {
+        holdInSelectOnly();
         const { d, out } = deps(undefined, {
             env: { AUTONOMOUS_CONFIG: configPath, HOME: dir },
             ...capacity(),
@@ -878,6 +922,7 @@ describe("main with the real steps", () => {
     });
 
     it("writes nothing and carries no question from the select step with --apply", async () => {
+        holdInSelectOnly();
         const calls: string[] = [];
         const { d, out } = deps(undefined, {
             env: { AUTONOMOUS_CONFIG: configPath, HOME: dir },
@@ -895,6 +940,7 @@ describe("main with the real steps", () => {
     });
 
     it("carries the select step's data in the --json report", async () => {
+        holdInSelectOnly();
         const calls: string[] = [];
         const { d, out } = deps(undefined, {
             env: { AUTONOMOUS_CONFIG: configPath, HOME: dir },
@@ -941,11 +987,13 @@ describe("main with the real steps", () => {
             excluded: [],
             notEvaluated: ["github: dependencies"],
             comparison: { model: "sonnet", effort: "high" },
+            unreadable: null,
             readyToClose: [],
         } satisfies SelectData);
     });
 
     it("prints an autonomous.run.v2 document that names no entry group with --json", async () => {
+        holdInSelectOnly();
         const calls: string[] = [];
         const { d, out } = deps(undefined, {
             env: { AUTONOMOUS_CONFIG: configPath, HOME: dir },
@@ -1288,9 +1336,13 @@ describe("main --answer", () => {
             ],
         };
 
-        // launch waits: the home holds no plugin registry for the grill-me prerequisites.
+        // The grill-me prerequisites hold in select only: the home has no plugin registry, so launch
+        // waits.
+        vi.spyOn(grillMeStage, "prerequisites").mockResolvedValueOnce({ ok: true, context: {} });
         const run = deps(undefined, shared);
-        expect(await main(["--apply", "--json"], run.d)).toBe(2);
+        const exit = await main(["--apply", "--json"], run.d);
+        vi.restoreAllMocks();
+        expect(exit).toBe(2);
         const { handoff } = JSON.parse(run.out[0] as string) as {
             handoff?: { questions: HandoffQuestion[]; remaining: number };
         };

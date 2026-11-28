@@ -1,25 +1,39 @@
-// The select step (spec work-selection; design D1, D5, D9, D10): reads the
-// machine scope first, then the open tasks of every enabled source again,
-// excludes by the ordered checks and chooses among the candidates — by code for
-// a single one, by the LLM for two or more. Every read fails closed, and a
-// failed or rejected comparison makes the step not evaluable with no fallback
-// order. It never writes and never contributes questions.
+// The select step (spec work-selection): every read fails closed, and a failed
+// or rejected comparison makes the step not evaluable with no fallback order.
+// It never writes and never contributes questions.
 
+import { listRecords } from "../attempts/state.ts";
 import type { CapacityData } from "../capacity/step.ts";
-import type { Scope, SelectionConfig } from "../config.ts";
+import type { AutonomousConfig, Scope, SelectionConfig } from "../config.ts";
 import { plural } from "../label-triage/render.ts";
 import type { TrackerResult } from "../label-triage/trackers/tracker.ts";
+import { readStuck } from "../loop/files.ts";
+import type { Result } from "../result.ts";
 import type { RunContext, Step, StepResult, StepTier } from "../runner.ts";
-import { labelledThisRun, selectCandidates, type SlotsFull } from "./candidates.ts";
+import { listRepositories } from "../workspace/infer.ts";
+import {
+    labelledThisRun,
+    repositoryChecks,
+    selectCandidates,
+    type SlotsFull,
+} from "./candidates.ts";
 import { choose } from "./compare.ts";
 import { readMachineScope } from "./machine-scope.ts";
+import {
+    dropRemembered,
+    judgePrerequisites,
+    type PrerequisiteEnv,
+    rememberedTasks,
+} from "./prerequisites.ts";
 import { byReason, renderSelect } from "./render.ts";
-import { splitByStage } from "./stage.ts";
+import { type StageSplit, splitByStage } from "./stage.ts";
 import type {
     Candidate,
     Excluded,
     SelectData,
+    SelectedUnit,
     SelectionExec,
+    Unreadable,
     WorkReader,
     WorkTask,
 } from "./types.ts";
@@ -27,6 +41,9 @@ import type {
 const SELECT = "select";
 
 const GITHUB_NOT_EVALUATED = "github: dependencies";
+
+// The chosen tasks whose prerequisites one run checks (design D4).
+const MAX_CHOICES = 4;
 
 const EMPTY: SelectData = {
     machineScope: null,
@@ -37,6 +54,7 @@ const EMPTY: SelectData = {
     readyToClose: [],
     notEvaluated: [],
     comparison: null,
+    unreadable: null,
 };
 
 function result(
@@ -69,28 +87,7 @@ export const selectStep: Step<SelectData> = {
             return result("not-evaluable", [read.error], known);
         }
 
-        const found = await selectCandidates(read.value.tasks, {
-            config,
-            labelledThisRun: labelledThisRun(ctx.results),
-            detail: read.value.detail,
-            ...slots(ctx),
-        });
-        if (!found.ok) {
-            return result("not-evaluable", [found.error], known);
-        }
-        const { candidates, excluded, readyToClose } = found.value;
-        if (candidates.length === 0) {
-            return result("wait", waitReasons(excluded), { ...known, excluded, readyToClose });
-        }
-        const { kept, setAside } = splitByStage(candidates);
-        const data = {
-            ...known,
-            candidates: kept.map(summary),
-            setAside: setAside.map(summary),
-            excluded,
-            readyToClose,
-        };
-        return compare(kept, scope.scope, config.selection, ctx.io.selection, data);
+        return selectAmong(ctx, config, scope.scope, read.value, known);
     },
     render: renderSelect,
 };
@@ -144,20 +141,159 @@ function waitReasons(excluded: readonly Excluded[]): string[] {
     return reasons.length > 0 ? reasons : ["no open task"];
 }
 
-async function compare(
-    candidates: readonly Candidate[],
+type Tasks = Extract<Awaited<ReturnType<typeof readTasks>>, { ok: true }>["value"];
+
+const messageOf = (error: unknown) => (error instanceof Error ? error.message : String(error));
+
+// `loop.stuck` is read only in a loop iteration: it belongs to the running loop (design D6).
+async function readChecks(
+    ctx: RunContext,
+    config: AutonomousConfig,
+): Promise<Result<PrerequisiteEnv>> {
+    try {
+        const records = await listRecords(ctx.io.state);
+        const repositories = await listRepositories(config.workspace.root);
+        const remembered = rememberedTasks(ctx.args.loop ? await readStuck(ctx.io.state) : []);
+        return { ok: true, value: { io: ctx.io, config, records, repositories, remembered } };
+    } catch (error) {
+        return { ok: false, error: messageOf(error) };
+    }
+}
+
+async function selectAmong(
+    ctx: RunContext,
+    config: AutonomousConfig,
     machineScope: Scope,
-    settings: SelectionConfig,
-    selection: SelectionExec,
+    { tasks, detail }: Tasks,
+    known: SelectData,
+): Promise<StepResult<SelectData>> {
+    const read = await readChecks(ctx, config);
+    if (!read.ok) {
+        return result("not-evaluable", [read.error], known);
+    }
+    const found = await selectCandidates(tasks, {
+        config,
+        labelledThisRun: labelledThisRun(ctx.results),
+        detail,
+        ...slots(ctx),
+        records: read.value.records,
+        workspace: repositoryChecks(read.value.repositories),
+    });
+    if (!found.ok) {
+        return result("not-evaluable", [found.error], known);
+    }
+    const kept = await dropRemembered(read.value, found.value.candidates);
+    if (!kept.ok) {
+        const { unreadable } = kept;
+        return result("not-evaluable", [unreadable.reason], { ...known, unreadable });
+    }
+    const excluded = [...found.value.excluded, ...kept.value.excluded];
+    const data = { ...known, excluded, readyToClose: found.value.readyToClose };
+    const election = { machineScope, settings: config.selection, selection: ctx.io.selection };
+    return kept.value.candidates.length === 0
+        ? result("wait", waitReasons(excluded), data)
+        : elect(kept.value.candidates, { ...election, env: read.value }, data);
+}
+
+interface Election {
+    machineScope: Scope;
+    settings: SelectionConfig;
+    selection: SelectionExec;
+    env: PrerequisiteEnv;
+}
+
+type Round = { split: StageSplit<Candidate>; tier: StepTier } & (
+    | { kind: "selected"; selected: SelectedUnit }
+    | { kind: "failed"; chosen: Candidate; excluded: Excluded }
+    | { kind: "broken"; error: string; unreadable?: Unreadable }
+);
+
+async function round(
+    remaining: readonly Candidate[],
+    election: Election,
+    excluded: readonly Excluded[],
+): Promise<Round> {
+    const split = splitByStage(remaining);
+    const { machineScope, settings, selection, env } = election;
+    const chosen = await choose(split.kept, machineScope, settings, selection);
+    if (!chosen.ok) {
+        return { split, tier: chosen.tier, kind: "broken", error: chosen.error };
+    }
+    const { selected, tier } = chosen;
+    const candidate = split.kept.find(
+        ({ task }) => task.source === selected.source && task.id === selected.id,
+    )!; // validateSelection accepts only a candidate
+    const judged = await judgePrerequisites(env, candidate, excluded);
+    if (judged.kind === "unreadable") {
+        const { unreadable } = judged;
+        return { split, tier, kind: "broken", error: unreadable.reason, unreadable };
+    }
+    return judged.kind === "hold"
+        ? { split, tier, kind: "selected", selected }
+        : { split, tier, kind: "failed", chosen: candidate, excluded: judged.excluded };
+}
+
+async function elect(
+    candidates: readonly Candidate[],
+    election: Election,
     data: SelectData,
 ): Promise<StepResult<SelectData>> {
-    const chosen = await choose(candidates, machineScope, settings, selection);
-    const comparison =
-        chosen.tier === "llm" ? { model: settings.model, effort: settings.effort } : null;
-    if (!chosen.ok) {
-        return result("not-evaluable", [chosen.error], { ...data, comparison }, chosen.tier);
+    let remaining = [...candidates];
+    const failed: Excluded[] = [];
+    let tier: StepTier = "code";
+    while (remaining.length > 0 && failed.length < MAX_CHOICES) {
+        const next = await round(remaining, election, [...data.excluded, ...failed]);
+        tier = next.tier === "llm" ? "llm" : tier;
+        if (next.kind !== "failed") {
+            return ended(next, { data, failed, tier, settings: election.settings });
+        }
+        failed.push(next.excluded);
+        remaining = remaining.filter((candidate) => candidate !== next.chosen);
     }
-    const { selected } = chosen;
-    const reason = `selected ${selected.source} → ${selected.id} for ${selected.stage}, from ${plural(candidates.length, "candidate")}`;
-    return result("advance", [reason], { ...data, selected, comparison }, chosen.tier);
+    const split = remaining.length > 0 ? splitByStage(remaining) : { kept: [], setAside: [] };
+    const excluded = [...data.excluded, ...failed];
+    const reasons = [choicesFailed(failed.length), ...waitReasons(excluded)];
+    return result(
+        "wait",
+        reasons,
+        outcomeData({ data, failed, tier, settings: election.settings }, split),
+        tier,
+    );
+}
+
+interface Outcome {
+    data: SelectData;
+    failed: readonly Excluded[];
+    tier: StepTier;
+    settings: SelectionConfig;
+}
+
+function outcomeData(
+    { data, failed, tier, settings }: Outcome,
+    { kept, setAside }: StageSplit<Candidate>,
+): SelectData {
+    return {
+        ...data,
+        candidates: kept.map(summary),
+        setAside: setAside.map(summary),
+        excluded: [...data.excluded, ...failed],
+        comparison: tier === "llm" ? { model: settings.model, effort: settings.effort } : null,
+    };
+}
+
+function ended(next: Exclude<Round, { kind: "failed" }>, outcome: Outcome): StepResult<SelectData> {
+    const data = outcomeData(outcome, next.split);
+    if (next.kind === "broken") {
+        const unreadable = next.unreadable ?? null;
+        return result("not-evaluable", [next.error], { ...data, unreadable }, outcome.tier);
+    }
+    const { selected } = next;
+    const reason = `selected ${selected.source} → ${selected.id} for ${selected.stage}, from ${plural(next.split.kept.length, "candidate")}`;
+    return result("advance", [reason], { ...data, selected }, outcome.tier);
+}
+
+function choicesFailed(count: number): string {
+    return count === 1
+        ? "1 choice failed its prerequisites"
+        : `${count} choices failed their prerequisites`;
 }

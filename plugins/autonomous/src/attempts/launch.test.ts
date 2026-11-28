@@ -111,6 +111,7 @@ function selectResult(overrides: Partial<SelectedUnit> = {}): StepResult<SelectD
             excluded: [],
             notEvaluated: [],
             comparison: null,
+            unreadable: null,
             readyToClose: [],
         },
     };
@@ -427,6 +428,56 @@ describe("launch: preconditions", () => {
     });
 });
 
+describe("launch: select's exclusions leave launch's own checks alone", () => {
+    afterEach(() => {
+        vi.restoreAllMocks();
+    });
+
+    it("a supplied task with no repository waits with the inference's reason, not as excluded", async () => {
+        const { ctx } = setup({ details: {} });
+
+        expect(await launchStep.run(ctx)).toMatchObject({
+            outcome: "wait",
+            reasons: ["no repository under the workspace root matches linear signals [none]"],
+            data: { excluded: null },
+        });
+    });
+
+    it("a supplied task with a retained attempt waits with the attempt's reason, not as excluded", async () => {
+        await writeRecord(state, record({ state: "retained" }));
+        const { ctx } = setup();
+
+        expect(await launchStep.run(ctx)).toMatchObject({
+            outcome: "wait",
+            reasons: [`attempt ${ATTEMPT} is retained`],
+            data: { excluded: null },
+        });
+    });
+
+    it("Attempt opened between select and launch: waits with the attempt's reason and tries no other task", async () => {
+        vi.spyOn(grillMeStage, "prerequisites").mockResolvedValue({ ok: true, context: {} });
+        await writeRecord(state, record());
+        const other = workTask("linear", "DOT-110", ["personal", "grill-me"]);
+        const { ctx, calls, workspace, sessions } = setup({
+            ...SELECTED_PATH,
+            tasks: [TASK, other],
+            details: { ...DETAILS, "DOT-110": { project: "Dotfiles" } },
+            results: [selectResult()],
+        });
+
+        expect(await launchStep.run(ctx)).toMatchObject({
+            outcome: "wait",
+            reasons: [`attempt ${ATTEMPT} is started`],
+            data: { task: { id: "DOT-109" }, workspace: null, attempt: null },
+        });
+        expect(calls.filter((call) => call.includes("DOT-110"))).toEqual([]);
+        expect(calls.filter((call) => /addLabel/.test(call))).toEqual([]);
+        expect(sessionCalls(sessions.calls)).toEqual([]);
+        expect(workspace.calls).toEqual([]);
+        expect(await readdir(join(state, "attempts", "linear", "DOT-109"))).toEqual(["test"]);
+    });
+});
+
 describe("launch: stage prerequisites", () => {
     const REASON = "skill grill-with-docs is not installed";
 
@@ -452,6 +503,20 @@ describe("launch: stage prerequisites", () => {
         expect(await readdir(state)).toEqual([]);
         expect(existsSync(promptPath(attemptDir(state, ATTEMPT)))).toBe(false);
         expect(calls.filter((call) => /addLabel/.test(call))).toEqual([]);
+        expect(sessionCalls(sessions.calls)).toEqual([]);
+        expect(workspace.calls).toEqual([]);
+    });
+
+    it("Prerequisites cannot be read: waits with the same reason, and writes nothing", async () => {
+        prerequisites({ ok: false, reason: REASON, unreadable: true });
+        const { ctx, workspace, sessions } = setup();
+
+        expect(await launchStep.run(ctx)).toMatchObject({
+            outcome: "wait",
+            reasons: [REASON],
+            data: { workspace: null, attempt: null },
+        });
+        expect(await readdir(state)).toEqual([]);
         expect(sessionCalls(sessions.calls)).toEqual([]);
         expect(workspace.calls).toEqual([]);
     });

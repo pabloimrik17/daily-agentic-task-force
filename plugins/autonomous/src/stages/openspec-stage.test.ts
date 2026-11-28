@@ -1,13 +1,22 @@
 // The variants of the shared pieces only the implementation stage uses; proposal.test.ts covers
 // the rest through proposal preparation.
 
-import { describe, expect, it } from "vitest";
+import { chmodSync, mkdirSync, mkdtempSync, writeFileSync } from "node:fs";
+import { rm } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+
+import { afterEach, beforeEach, describe, expect, it } from "vitest";
 
 import type { PullRequest, PullRequests } from "../pull-request/port.ts";
 import type { Result } from "../result.ts";
+import { workTask } from "../select/test-fixtures.ts";
+import { codeReviewStage } from "./code-review/stage.ts";
+import { implementStage } from "./implement/stage.ts";
 import {
     afkTransition,
     blockedSection,
+    changeCheck,
     type Check,
     commitsSection,
     constraintsSection,
@@ -18,8 +27,10 @@ import {
     type Paths,
     PULL_REQUEST_KEY,
 } from "./openspec-stage.ts";
+import { proposalStage } from "./proposal/stage.ts";
 import type { StageContext } from "./stage.ts";
 import { stageEnv } from "./test-fixtures.ts";
+import { verifyStage } from "./verify/stage.ts";
 
 const BRANCH = "feature/DOT-121-login-fix";
 
@@ -39,7 +50,11 @@ function pullRequestCheck(pullRequest: "required" | "optional"): Check {
 }
 
 function lookUp(found: PullRequest | null): Promise<Result<StageContext>> {
-    const find: PullRequests["find"] = () => Promise.resolve({ ok: true, value: found });
+    return lookUpAs({ ok: true, value: found });
+}
+
+function lookUpAs(found: Result<PullRequest | null>): Promise<Result<StageContext>> {
+    const find: PullRequests["find"] = () => Promise.resolve(found);
     const env = stageEnv({ branch: BRANCH });
     return pullRequestCheck("required")(
         {
@@ -53,6 +68,82 @@ function lookUp(found: PullRequest | null): Promise<Result<StageContext>> {
     );
 }
 
+describe("repository prerequisites of the OpenSpec stages", () => {
+    let repository: string;
+
+    beforeEach(() => {
+        repository = mkdtempSync(join(tmpdir(), "openspec-repository-"));
+    });
+
+    afterEach(async () => {
+        chmodSync(repository, 0o700);
+        await rm(repository, { recursive: true, force: true });
+    });
+
+    const OPENSPEC_STAGES = [proposalStage, implementStage, verifyStage, codeReviewStage];
+
+    it.each(OPENSPEC_STAGES.map((stage) => [stage.id, stage] as const))(
+        "OpenSpec stages: %s fails naming the repository and the missing OpenSpec root",
+        async (_, stage) => {
+            expect(await stage.repositoryPrerequisites?.(repository)).toEqual({
+                ok: false,
+                reason: `the repository ${repository} has no OpenSpec root: ${join(repository, "openspec")} is not a directory`,
+            });
+        },
+    );
+
+    it.each(OPENSPEC_STAGES.map((stage) => [stage.id, stage] as const))(
+        "%s fails, not as unreadable, when openspec is a file",
+        async (_, stage) => {
+            writeFileSync(join(repository, "openspec"), "x\n");
+
+            const held = await stage.repositoryPrerequisites?.(repository);
+
+            expect(held).toMatchObject({ ok: false });
+            expect(held).not.toHaveProperty("unreadable");
+        },
+    );
+
+    it.each(OPENSPEC_STAGES.map((stage) => [stage.id, stage] as const))(
+        "OpenSpec root cannot be read: %s fails as unreadable with the read error",
+        async (_, stage) => {
+            mkdirSync(join(repository, "openspec"));
+            chmodSync(repository, 0o000);
+
+            expect(await stage.repositoryPrerequisites?.(repository)).toEqual({
+                ok: false,
+                reason: expect.stringMatching(
+                    new RegExp(
+                        `^the OpenSpec root ${join(repository, "openspec")} of ${repository} cannot be read: .*EACCES`,
+                    ),
+                ) as string,
+                unreadable: true,
+            });
+        },
+    );
+
+    it("OpenSpec root cannot be read: the stage's prerequisites fail as unreadable too", async () => {
+        mkdirSync(join(repository, "openspec"));
+        chmodSync(repository, 0o000);
+        const task = workTask("linear", "DOT-1", ["personal", "AFK", "implement"]);
+
+        expect(await implementStage.prerequisites(stageEnv({ repository, task }))).toMatchObject({
+            ok: false,
+            reason: expect.stringContaining("cannot be read") as string,
+            unreadable: true,
+        });
+    });
+
+    it.each(OPENSPEC_STAGES.map((stage) => [stage.id, stage] as const))(
+        "%s holds once the repository has an OpenSpec root",
+        async (_, stage) => {
+            mkdirSync(join(repository, "openspec"));
+
+            expect(await stage.repositoryPrerequisites?.(repository)).toEqual({ ok: true });
+        },
+    );
+});
+
 describe("required pull request", () => {
     it("No pull request: the reason names the branch", async () => {
         expect(await lookUp(null)).toEqual({
@@ -61,10 +152,43 @@ describe("required pull request", () => {
         });
     });
 
+    it("Lookup fails: unreadable, naming the branch", async () => {
+        expect(await lookUpAs({ ok: false, error: "gh failed: HTTP 502" })).toEqual({
+            ok: false,
+            error: `cannot look up the open pull request of ${BRANCH}: gh failed: HTTP 502`,
+            unreadable: true,
+        });
+    });
+
     it("Pull request open: the context holds it", async () => {
         expect(await lookUp(PULL_REQUEST)).toEqual({
             ok: true,
             value: { [PULL_REQUEST_KEY]: JSON.stringify(PULL_REQUEST) },
+        });
+    });
+});
+
+describe("the change check", () => {
+    it("Default branch cannot be read: unreadable, naming the repository", async () => {
+        const defaultBranch: PullRequests["defaultBranch"] = () =>
+            Promise.resolve({ ok: false, error: "gh failed: HTTP 502" });
+        const env = stageEnv({ branch: BRANCH });
+
+        const found = await changeCheck(
+            {
+                ...env,
+                readers: {
+                    ...env.readers,
+                    pullRequests: { defaultBranch } as Partial<PullRequests> as PullRequests,
+                },
+            },
+            {},
+        );
+
+        expect(found).toEqual({
+            ok: false,
+            error: `cannot read the default branch of ${env.repository}: gh failed: HTTP 502`,
+            unreadable: true,
         });
     });
 });

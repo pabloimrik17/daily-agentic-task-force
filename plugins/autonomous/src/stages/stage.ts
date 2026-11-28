@@ -1,5 +1,6 @@
-// Spec stage-sessions, "Stage contract". `prerequisites` runs in `launch` before anything is
-// written, and what it reads reaches the synchronous `prompt` as `context`.
+// `prerequisites` runs in `launch` before anything is written; what it reads reaches `prompt` as
+// `context`. `repositoryPrerequisites` reads only the repository, so `select` can check it for
+// every candidate; `prerequisites` checks it too.
 
 import type { AttemptRecord } from "../attempts/record.ts";
 import type { ContextReader } from "../context/types.ts";
@@ -47,9 +48,28 @@ export interface StageEnv {
 
 export type StageContext = Readonly<Record<string, string>>;
 
+// `unreadable`: the check could not read what it needs, as opposed to reading it and finding the
+// prerequisite missing. `launch` waits either way.
 export type StagePrerequisites =
     | { ok: true; context: StageContext }
-    | { ok: false; reason: string };
+    | { ok: false; reason: string; unreadable?: true };
+
+export type ReadResult<T> =
+    | { ok: true; value: T }
+    | { ok: false; error: string; unreadable?: true };
+
+type ReadFailure = Extract<ReadResult<unknown>, { ok: false }>;
+
+export function notMet({ error, unreadable }: ReadFailure): StagePrerequisites {
+    return unreadable === true
+        ? { ok: false, reason: error, unreadable }
+        : { ok: false, reason: error };
+}
+
+// `unreadable`: as for `StagePrerequisites`. `select` excludes no task for it.
+export type RepositoryPrerequisites =
+    | { ok: true }
+    | { ok: false; reason: string; unreadable?: true };
 
 export interface StagePromptInput {
     attempt: AttemptRecord;
@@ -62,6 +82,7 @@ export interface Stage {
     id: StageId;
     emoji: string;
     prerequisites(env: StageEnv): Promise<StagePrerequisites>;
+    repositoryPrerequisites?(repository: string): Promise<RepositoryPrerequisites>;
     agentArgs(tool: SessionTool): string[]; // model and effort flags the stage wants
     prompt(input: StagePromptInput): string; // the whole prompt file
     completed(task: TrackerTask): boolean; // the tracker check; reconcile checks the marker

@@ -565,6 +565,7 @@ describe("launch: a grill-me unit", () => {
             readyToClose: [],
             notEvaluated: [],
             comparison: null,
+            unreadable: null,
         },
     };
 

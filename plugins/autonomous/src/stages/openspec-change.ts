@@ -2,7 +2,7 @@
 // file list from `gh` is capped, and git sees the same diff without the cap.
 
 import type { Exec } from "../exec.ts";
-import type { Result } from "../result.ts";
+import type { ReadResult } from "./stage.ts";
 
 export interface ChangeLookup {
     directory: string; // where git runs, passed as `git -C <directory>`
@@ -26,13 +26,17 @@ function changeNames(paths: string): string[] {
     return [...names].sort();
 }
 
-export async function findBranchChange(git: Exec, lookup: ChangeLookup): Promise<Result<string>> {
+export async function findBranchChange(
+    git: Exec,
+    lookup: ChangeLookup,
+): Promise<ReadResult<string>> {
     const { directory, base, ref } = lookup;
     const mergeBase = await git(["-C", directory, "merge-base", `origin/${base}`, ref]);
     if (!mergeBase.ok) {
         return {
             ok: false,
             error: `finding the merge base of ${ref} and origin/${base}: ${mergeBase.error}`,
+            unreadable: true,
         };
     }
     const added = await git([
@@ -51,6 +55,7 @@ export async function findBranchChange(git: Exec, lookup: ChangeLookup): Promise
         return {
             ok: false,
             error: `listing the files ${ref} adds under ${CHANGES_DIR}: ${added.error}`,
+            unreadable: true,
         };
     }
     const names = changeNames(added.stdout);

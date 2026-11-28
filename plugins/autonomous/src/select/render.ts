@@ -5,13 +5,18 @@ import type { Excluded, Exclusion, SelectData, SelectedUnit } from "./types.ts";
 // The exclusions in the order they are checked (design D3), as the report names them.
 const EXCLUSION_NAMES: Record<Exclusion, string> = {
     classification: "classification",
+    "open-attempt": "open attempt",
     taken: "taken",
     "triage-me": "triage-me",
     "labelled-this-run": "labelled this run",
     "unsupported-stage": "unsupported stage",
     blocked: "blocked",
     split: "split",
+    repository: "repository",
+    "repository-prerequisites": "repository prerequisites",
     "no-free-slot": "no free slot",
+    prerequisites: "prerequisites",
+    "unreadable-prerequisites": "unreadable prerequisites",
 };
 
 const EXCLUSIONS = Object.keys(EXCLUSION_NAMES) as Exclusion[];
@@ -45,15 +50,8 @@ export function renderSelect(result: StepResult<SelectData>): string {
     }
     lines.push(...renderCandidates("candidates", candidates));
     lines.push(...renderCandidates("set aside for a candidate at a more advanced stage", setAside));
-    if (excluded.length > 0) {
-        lines.push(`  excluded: ${plural(excluded.length, "task")}`);
-        for (const group of byReason(excluded)) {
-            lines.push(
-                `    ${group.name}: ${group.tasks.length}`,
-                ...group.tasks.map((t) => `      ${t.source} → ${t.id} → ${t.title}`),
-            );
-        }
-    }
+    lines.push(...renderStuck(excluded.filter((task) => task.stuck)));
+    lines.push(...renderExcluded(excluded.filter((task) => !task.stuck)));
     if (readyToClose.length > 0) {
         lines.push(
             `  ready to close: ${plural(readyToClose.length, "task")}`,
@@ -66,6 +64,32 @@ export function renderSelect(result: StepResult<SelectData>): string {
     }
     lines.push("  reasons:", ...result.reasons.map((r) => `    - ${r}`));
     return lines.join("\n");
+}
+
+function renderStuck(stuck: readonly Excluded[]): string[] {
+    if (stuck.length === 0) {
+        return [];
+    }
+    return [
+        `  stuck: ${plural(stuck.length, "task")}`,
+        ...stuck.flatMap((t) => [
+            `    ${t.source} → ${t.id} → ${t.title} (${t.scope ?? "no scope"}, ${EXCLUSION_NAMES[t.reason]})`,
+            ...(t.detail === null ? [] : [`      ${t.detail}`]),
+        ]),
+    ];
+}
+
+function renderExcluded(excluded: readonly Excluded[]): string[] {
+    if (excluded.length === 0) {
+        return [];
+    }
+    return [
+        `  excluded: ${plural(excluded.length, "task")}`,
+        ...byReason(excluded).flatMap((group) => [
+            `    ${group.name}: ${group.tasks.length}`,
+            ...group.tasks.map((t) => `      ${t.source} → ${t.id} → ${t.title}`),
+        ]),
+    ];
 }
 
 function renderCandidates(heading: string, list: SelectData["candidates"]): string[] {

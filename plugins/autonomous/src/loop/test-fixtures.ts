@@ -1,6 +1,8 @@
 import type { ReconciledAttempt, ReconcileData } from "../attempts/reconcile.ts";
+import type { Scope } from "../config.ts";
 import type { RunReport } from "../report.ts";
 import type { StepOutcome, StepResult } from "../runner.ts";
+import type { Excluded, SelectData } from "../select/types.ts";
 
 export const NOW = new Date("2026-11-14T09:00:00.000Z");
 
@@ -37,4 +39,41 @@ export function report(
     startedAt: Date = NOW,
 ): RunReport {
     return { schema: "autonomous.run.v2", startedAt: startedAt.toISOString(), steps, outcome };
+}
+
+export function stuckTask(id: string, overrides: Partial<Excluded> = {}): Excluded {
+    return {
+        source: "beads",
+        id,
+        title: `Task ${id}`,
+        reason: "repository",
+        detail: "no repository label names a directory of the workspace",
+        stuck: true,
+        scope: "personal",
+        ...overrides,
+    };
+}
+
+export function selected(
+    excluded: Excluded[],
+    machineScope: Scope | null = "personal",
+    unreadable: SelectData["unreadable"] = null,
+): StepResult<SelectData> {
+    return {
+        step: "select",
+        tier: "code",
+        outcome: "wait",
+        reasons: [],
+        data: {
+            machineScope,
+            selected: null,
+            candidates: [],
+            setAside: [],
+            excluded,
+            readyToClose: [],
+            notEvaluated: [],
+            comparison: null,
+            unreadable,
+        },
+    };
 }

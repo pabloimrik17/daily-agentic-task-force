@@ -9,6 +9,7 @@ import {
     checkAll,
     leftStage,
     openspecChecks,
+    openspecRepository,
     pluginSkillCheck,
 } from "../openspec-stage.ts";
 import { ADVERSARIAL_REVIEW_SKILL } from "../plugin-skill.ts";
@@ -35,6 +36,7 @@ export const verifyStage: Stage = {
     id: "verify",
     emoji: "🔍",
     prerequisites: checkAll(CHECKS),
+    repositoryPrerequisites: openspecRepository,
     agentArgs: opusHighArgs,
     prompt: verifyPrompt,
     completed: leftStage("verify"),

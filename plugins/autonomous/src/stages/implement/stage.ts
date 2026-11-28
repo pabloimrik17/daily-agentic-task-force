@@ -2,7 +2,14 @@
 // "Implementation completion". The checks run in order and stop at the first failure, so each
 // reason names the one thing missing; together they read everything the prompt needs.
 
-import { type Check, changeCheck, checkAll, leftStage, openspecChecks } from "../openspec-stage.ts";
+import {
+    type Check,
+    changeCheck,
+    checkAll,
+    leftStage,
+    openspecChecks,
+    openspecRepository,
+} from "../openspec-stage.ts";
 import { opusHighArgs, type Stage } from "../stage.ts";
 import { APPLY_WORKFLOW_KEY, implementPrompt, UPDATE_WORKFLOW_KEY } from "./prompt.ts";
 
@@ -20,6 +27,7 @@ export const implementStage: Stage = {
     id: "implement",
     emoji: "🛠️",
     prerequisites: checkAll(CHECKS),
+    repositoryPrerequisites: openspecRepository,
     agentArgs: opusHighArgs,
     prompt: implementPrompt,
     completed: leftStage("implement"),
