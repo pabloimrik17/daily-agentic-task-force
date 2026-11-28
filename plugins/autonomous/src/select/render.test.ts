@@ -1,19 +1,35 @@
-import { describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { selectStep } from "./step.ts";
 import {
     fakeChezmoi,
+    locatedReader,
     fakeReader,
     fakeSelection,
     selectContext,
     workTask,
+    holdPrerequisites,
+    selectWorkspace,
+    type SelectWorkspace,
 } from "./test-fixtures.ts";
+
+let workspace: SelectWorkspace;
+
+beforeEach(() => {
+    workspace = selectWorkspace();
+    holdPrerequisites();
+});
+
+afterEach(async () => {
+    vi.restoreAllMocks();
+    await workspace.remove();
+});
 import type { SelectData, SelectionAnswer } from "./types.ts";
 
 // Two candidates of either scope and one task excluded under each of three reasons.
 function readers(calls: string[]) {
     return [
-        fakeReader(
+        locatedReader(
             "beads",
             [
                 workTask("beads", "B-7", ["work", "grill-me"], { title: "Rotate the API keys" }),
@@ -21,7 +37,7 @@ function readers(calls: string[]) {
             ],
             calls,
         ),
-        fakeReader(
+        locatedReader(
             "linear",
             [
                 workTask("linear", "DOT-120", ["personal", "HITL", "grill-me"], {
@@ -43,7 +59,7 @@ async function renderWith(answer: SelectionAnswer): Promise<string> {
     const calls: string[] = [];
     const selection = fakeSelection(() => ({ ok: true, answer }));
     const result = await selectStep.run(
-        selectContext({ calls, readers: readers(calls), selection }),
+        selectContext({ workspace, calls, readers: readers(calls), selection }),
     );
     return selectStep.render(result);
 }
@@ -91,8 +107,9 @@ describe("renderSelect", () => {
         const calls: string[] = [];
         const result = await selectStep.run(
             selectContext({
+                workspace,
                 calls,
-                readers: [fakeReader("github", [workTask("github", "owner/repo#1")], calls)],
+                readers: [locatedReader("github", [workTask("github", "owner/repo#1")], calls)],
             }),
         );
         const lines = selectStep.render(result).split("\n");
@@ -107,9 +124,10 @@ describe("renderSelect", () => {
         const calls: string[] = [];
         const result = await selectStep.run(
             selectContext({
+                workspace,
                 calls,
                 readers: [
-                    fakeReader(
+                    locatedReader(
                         "linear",
                         [workTask("linear", "DOT-1", ["personal", "grill-me"])],
                         calls,
@@ -163,16 +181,17 @@ describe("renderSelect", () => {
         const calls: string[] = [];
         const result = await selectStep.run(
             selectContext({
+                workspace,
                 calls,
                 readers: [
-                    fakeReader(
+                    locatedReader(
                         "beads",
                         ["B-1", "B-2", "B-3"].map((id) =>
                             workTask("beads", id, ["personal", "AFK", "external-review"]),
                         ),
                         calls,
                     ),
-                    fakeReader(
+                    locatedReader(
                         "linear",
                         [workTask("linear", "DOT-4", ["personal", "grill-me", "taken"])],
                         calls,
@@ -203,9 +222,10 @@ describe("renderSelect", () => {
         const calls: string[] = [];
         const result = await selectStep.run(
             selectContext({
+                workspace,
                 calls,
                 readers: [
-                    fakeReader(
+                    locatedReader(
                         "linear",
                         [
                             workTask("linear", "DOT-8", ["personal", "AFK", "proposal"], {
@@ -247,6 +267,7 @@ describe("renderSelect", () => {
         const calls: string[] = [];
         const result = await selectStep.run(
             selectContext({
+                workspace,
                 calls,
                 chezmoi: fakeChezmoi("chezmoi CLI not found on PATH", calls),
                 readers: readers(calls),
@@ -278,7 +299,17 @@ describe("renderSelect: candidates set aside", () => {
         setAside: [
             { source: "beads", id: "G-1", title: "Think it", scope: "personal", stage: "grill-me" },
         ],
-        excluded: [{ source: "linear", id: "T-1", title: "Busy", reason: "taken" }],
+        excluded: [
+            {
+                source: "linear",
+                id: "T-1",
+                title: "Busy",
+                reason: "taken",
+                detail: null,
+                stuck: false,
+                scope: "personal",
+            },
+        ],
         readyToClose: [],
         notEvaluated: [],
         comparison: null,
@@ -322,9 +353,33 @@ describe("renderSelect: candidates set aside", () => {
             data: {
                 ...data,
                 excluded: [
-                    { source: "linear", id: "M-1", title: "Doubtful", reason: "triage-me" },
-                    { source: "linear", id: "T-1", title: "Busy", reason: "taken" },
-                    { source: "linear", id: "L-1", title: "Done now", reason: "labelled-this-run" },
+                    {
+                        source: "linear",
+                        id: "M-1",
+                        title: "Doubtful",
+                        reason: "triage-me",
+                        detail: null,
+                        stuck: false,
+                        scope: "personal",
+                    },
+                    {
+                        source: "linear",
+                        id: "T-1",
+                        title: "Busy",
+                        reason: "taken",
+                        detail: null,
+                        stuck: false,
+                        scope: "personal",
+                    },
+                    {
+                        source: "linear",
+                        id: "L-1",
+                        title: "Done now",
+                        reason: "labelled-this-run",
+                        detail: null,
+                        stuck: false,
+                        scope: "personal",
+                    },
                 ],
             },
         });
@@ -343,8 +398,24 @@ describe("renderSelect: candidates set aside", () => {
             data: {
                 ...data,
                 excluded: [
-                    { source: "linear", id: "N-1", title: "Full", reason: "no-free-slot" },
-                    { source: "linear", id: "T-1", title: "Busy", reason: "taken" },
+                    {
+                        source: "linear",
+                        id: "N-1",
+                        title: "Full",
+                        reason: "no-free-slot",
+                        detail: null,
+                        stuck: false,
+                        scope: "personal",
+                    },
+                    {
+                        source: "linear",
+                        id: "T-1",
+                        title: "Busy",
+                        reason: "taken",
+                        detail: null,
+                        stuck: false,
+                        scope: "personal",
+                    },
                 ],
             },
         });
@@ -352,3 +423,87 @@ describe("renderSelect: candidates set aside", () => {
         expect(text.indexOf("no free slot: 1")).toBeGreaterThan(text.indexOf("taken: 1"));
     });
 });
+
+describe("renderSelect: stuck tasks", () => {
+    it("Stuck task in the text report: Beads X-12 excluded as repository is listed under the stuck tasks with its signals", async () => {
+        const calls: string[] = [];
+        const result = await selectStep.run(
+            selectContext({
+                workspace,
+                calls,
+                readers: [
+                    fakeReader(
+                        "beads",
+                        [
+                            workTask("beads", "X-12", ["personal", "grill-me", "datf"], {
+                                title: "Sync the dotfiles",
+                            }),
+                            workTask("beads", "X-13", ["personal", "grill-me", "taken"]),
+                        ],
+                        calls,
+                    ),
+                ],
+            }),
+        );
+
+        expect(selectStep.render(result)).toBe(
+            [
+                "[select] wait (code)",
+                "  machine scope  personal",
+                "  stuck: 1 task",
+                "    beads → X-12 → Sync the dotfiles (personal, repository)",
+                "      no repository under the workspace root matches beads signals [datf]",
+                "  excluded: 1 task",
+                "    taken: 1",
+                "      beads → X-13 → Task X-13",
+                "  not evaluated: github: dependencies",
+                "  reasons:",
+                "    - 1 taken",
+                "    - 1 repository",
+            ].join("\n"),
+        );
+    });
+
+    it("names a retained attempt's id and state as the reason of a stuck task", () => {
+        const text = selectStep.render({
+            step: "select",
+            tier: "code",
+            outcome: "wait",
+            reasons: [],
+            data: {
+                ...EMPTY_DATA,
+                excluded: [
+                    {
+                        source: "github",
+                        id: "o/r#228",
+                        title: "Fix it",
+                        reason: "open-attempt",
+                        detail: "attempt github:o/r#228:proposal:1 is retained",
+                        stuck: true,
+                        scope: "work",
+                    },
+                ],
+            },
+        });
+
+        expect(text).toContain(
+            [
+                "  stuck: 1 task",
+                "    github → o/r#228 → Fix it (work, open attempt)",
+                "      attempt github:o/r#228:proposal:1 is retained",
+            ].join("\n"),
+        );
+        expect(text).not.toContain("excluded:");
+    });
+});
+
+const EMPTY_DATA: SelectData = {
+    machineScope: "personal",
+    selected: null,
+    candidates: [],
+    setAside: [],
+    excluded: [],
+    readyToClose: [],
+    notEvaluated: [],
+    comparison: null,
+};

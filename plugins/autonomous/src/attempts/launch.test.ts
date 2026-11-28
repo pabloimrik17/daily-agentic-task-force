@@ -427,6 +427,58 @@ describe("launch: preconditions", () => {
     });
 });
 
+// Design D5: launch passes a supplied or selected task through select's exclusions without the
+// attempt records and the repositories, so its own checks keep their reasons and order.
+describe("launch: select's exclusions leave launch's own checks alone", () => {
+    afterEach(() => {
+        vi.restoreAllMocks();
+    });
+
+    it("a supplied task with no repository waits with the inference's reason, not as excluded", async () => {
+        const { ctx } = setup({ details: {} });
+
+        expect(await launchStep.run(ctx)).toMatchObject({
+            outcome: "wait",
+            reasons: ["no repository under the workspace root matches linear signals [none]"],
+            data: { excluded: null },
+        });
+    });
+
+    it("a supplied task with a retained attempt waits with the attempt's reason, not as excluded", async () => {
+        await writeRecord(state, record({ state: "retained" }));
+        const { ctx } = setup();
+
+        expect(await launchStep.run(ctx)).toMatchObject({
+            outcome: "wait",
+            reasons: [`attempt ${ATTEMPT} is retained`],
+            data: { excluded: null },
+        });
+    });
+
+    it("Attempt opened between select and launch: waits with the attempt's reason and tries no other task", async () => {
+        vi.spyOn(grillMeStage, "prerequisites").mockResolvedValue({ ok: true, context: {} });
+        await writeRecord(state, record());
+        const other = workTask("linear", "DOT-110", ["personal", "grill-me"]);
+        const { ctx, calls, workspace, sessions } = setup({
+            ...SELECTED_PATH,
+            tasks: [TASK, other],
+            details: { ...DETAILS, "DOT-110": { project: "Dotfiles" } },
+            results: [selectResult()],
+        });
+
+        expect(await launchStep.run(ctx)).toMatchObject({
+            outcome: "wait",
+            reasons: [`attempt ${ATTEMPT} is started`],
+            data: { task: { id: "DOT-109" }, workspace: null, attempt: null },
+        });
+        expect(calls.filter((call) => call.includes("DOT-110"))).toEqual([]);
+        expect(calls.filter((call) => /addLabel/.test(call))).toEqual([]);
+        expect(sessionCalls(sessions.calls)).toEqual([]);
+        expect(workspace.calls).toEqual([]);
+        expect(await readdir(join(state, "attempts", "linear", "DOT-109"))).toEqual(["test"]);
+    });
+});
+
 describe("launch: stage prerequisites", () => {
     const REASON = "skill grill-with-docs is not installed";
 

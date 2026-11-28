@@ -1,21 +1,36 @@
 // Stage order in the step (spec work-selection, "Most advanced stage first").
 
-import { describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { selectStep } from "./step.ts";
 import {
     fakeChezmoi,
-    fakeReader,
+    locatedReader,
     fakeSelection,
     selectContext,
     workTask,
+    holdPrerequisites,
+    selectWorkspace,
+    type SelectWorkspace,
 } from "./test-fixtures.ts";
+
+let workspace: SelectWorkspace;
+
+beforeEach(() => {
+    workspace = selectWorkspace();
+    holdPrerequisites();
+});
+
+afterEach(async () => {
+    vi.restoreAllMocks();
+    await workspace.remove();
+});
 
 const GRILL = ["personal", "grill-me"];
 const PROPOSAL = ["personal", "AFK", "proposal"];
 
 function readers(calls: string[], tasks: ReturnType<typeof workTask>[]) {
-    return [fakeReader("linear", tasks, calls)];
+    return [locatedReader("linear", tasks, calls)];
 }
 
 describe("select: most advanced stage first", () => {
@@ -24,6 +39,7 @@ describe("select: most advanced stage first", () => {
         const selection = fakeSelection(() => ({ ok: false, error: "not expected" }));
         const result = await selectStep.run(
             selectContext({
+                workspace,
                 calls,
                 readers: readers(calls, [
                     workTask("linear", "G-1", GRILL),
@@ -48,6 +64,7 @@ describe("select: most advanced stage first", () => {
         const selection = fakeSelection(() => ({ ok: false, error: "not expected" }));
         const result = await selectStep.run(
             selectContext({
+                workspace,
                 calls,
                 readers: readers(calls, [
                     workTask("linear", "P-1", PROPOSAL),
@@ -70,6 +87,7 @@ describe("select: most advanced stage first", () => {
         }));
         const result = await selectStep.run(
             selectContext({
+                workspace,
                 calls,
                 readers: readers(calls, [
                     workTask("linear", "P-1", PROPOSAL),
@@ -92,6 +110,7 @@ describe("select: most advanced stage first", () => {
         const selection = fakeSelection(() => ({ ok: false, error: "not expected" }));
         const result = await selectStep.run(
             selectContext({
+                workspace,
                 calls,
                 chezmoi: fakeChezmoi({ machineType: "work" }, calls),
                 readers: readers(calls, [
@@ -118,6 +137,7 @@ describe("select: most advanced stage first", () => {
         }));
         const result = await selectStep.run(
             selectContext({
+                workspace,
                 calls,
                 readers: readers(calls, [
                     workTask("linear", "G-1", GRILL),
@@ -135,6 +155,7 @@ describe("select: most advanced stage first", () => {
         const calls: string[] = [];
         const result = await selectStep.run(
             selectContext({
+                workspace,
                 calls,
                 readers: readers(calls, [
                     workTask("linear", "G-1", GRILL),
@@ -170,6 +191,7 @@ describe("select: slots in a loop", () => {
         const calls: string[] = [];
         const result = await selectStep.run(
             selectContext({
+                workspace,
                 calls,
                 readers: readers(calls, [
                     workTask("linear", "G-1", GRILL),
@@ -189,6 +211,7 @@ describe("select: slots in a loop", () => {
         const calls: string[] = [];
         const result = await selectStep.run(
             selectContext({
+                workspace,
                 calls,
                 readers: readers(calls, [
                     workTask("linear", "G-1", GRILL),
@@ -208,6 +231,7 @@ describe("select: slots in a loop", () => {
         const calls: string[] = [];
         const result = await selectStep.run(
             selectContext({
+                workspace,
                 calls,
                 readers: readers(calls, [workTask("linear", "G-1", GRILL)]),
                 results: [capacity(true)],
@@ -222,6 +246,7 @@ describe("select: slots in a loop", () => {
         const calls: string[] = [];
         const result = await selectStep.run(
             selectContext({
+                workspace,
                 calls,
                 readers: readers(calls, [workTask("linear", "G-1", GRILL)]),
                 results: [{ ...capacity(true), outcome: "not-evaluable", data: null }],

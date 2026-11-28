@@ -18,7 +18,7 @@ import { STAGES } from "../stages/registry.ts";
 import { isStageId, type Stage, type StageContext, type StageId } from "../stages/stage.ts";
 import { groupFor, inferRepository, listRepositories } from "../workspace/infer.ts";
 import { exclusionName, renderLaunch } from "./launch-render.ts";
-import { type HoldingAttempt, holdingAttempt } from "./open-attempt.ts";
+import { holdingAttempt, holdingReason } from "./open-attempt.ts";
 import {
     ATTEMPT_SCHEMA,
     type AttemptId,
@@ -291,10 +291,6 @@ async function readRecords(state: string): Promise<Gate<AttemptRecord[]>> {
     } catch (error) {
         return broken(messageOf(error));
     }
-}
-
-function holdingReason({ id, state, pendingCleanup }: HoldingAttempt): string {
-    return `attempt ${id} is ${pendingCleanup ? `${state} with a pending cleanup` : state}`;
 }
 
 async function inferFor(

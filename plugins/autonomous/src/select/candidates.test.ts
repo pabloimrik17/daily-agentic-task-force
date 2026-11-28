@@ -1,13 +1,15 @@
-import { describe, expect, it, vi } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 
-import { taskKey } from "../attempts/record.ts";
+import { type AttemptRecord, taskKey } from "../attempts/record.ts";
+import { record as attemptRecord } from "../attempts/test-fixtures.ts";
 import type { Exec } from "../exec.ts";
 import { LABEL_TRIAGE } from "../label-triage/question-id.ts";
 import type { LabelTriageData } from "../label-triage/step.ts";
 import { config } from "../label-triage/test-fixtures.ts";
 import type { TriageRecord } from "../label-triage/write.ts";
 import type { StepResult } from "../runner.ts";
-import { labelledThisRun, selectCandidates } from "./candidates.ts";
+import { proposalStage } from "../stages/proposal/stage.ts";
+import { labelledThisRun, repositoryChecks, selectCandidates } from "./candidates.ts";
 import subIssues from "./readers/fixtures/github-subissues.json";
 import { githubWorkReader } from "./readers/github.ts";
 import { workTask } from "./test-fixtures.ts";
@@ -104,7 +106,17 @@ describe("selectCandidates", () => {
             ok: true,
             value: {
                 candidates: [],
-                excluded: [{ source: "linear", id: "TEST-1", title: task.title, reason: "taken" }],
+                excluded: [
+                    {
+                        source: "linear",
+                        id: "TEST-1",
+                        title: task.title,
+                        reason: "taken",
+                        detail: null,
+                        stuck: false,
+                        scope: "personal",
+                    },
+                ],
             },
         });
     });
@@ -118,7 +130,15 @@ describe("selectCandidates", () => {
             value: {
                 candidates: [],
                 excluded: [
-                    { source: "linear", id: "TEST-1", title: task.title, reason: "triage-me" },
+                    {
+                        source: "linear",
+                        id: "TEST-1",
+                        title: task.title,
+                        reason: "triage-me",
+                        detail: null,
+                        stuck: false,
+                        scope: "personal",
+                    },
                 ],
             },
         });
@@ -357,6 +377,9 @@ describe("selectCandidates", () => {
                         id: task.id,
                         title: task.title,
                         reason: "classification",
+                        detail: null,
+                        stuck: false,
+                        scope: null,
                     },
                 ],
                 readyToClose: [],
@@ -387,6 +410,9 @@ describe("selectCandidates", () => {
                         id: "owner/repo#1",
                         title: "Synthetic issue",
                         reason: "split",
+                        detail: null,
+                        stuck: false,
+                        scope: "personal",
                     },
                 ],
                 readyToClose: [],
@@ -404,7 +430,17 @@ describe("selectCandidates", () => {
             ok: true,
             value: {
                 candidates: [],
-                excluded: [{ source: "linear", id: "TEST-1", title: task.title, reason: "split" }],
+                excluded: [
+                    {
+                        source: "linear",
+                        id: "TEST-1",
+                        title: task.title,
+                        reason: "split",
+                        detail: null,
+                        stuck: false,
+                        scope: "personal",
+                    },
+                ],
                 readyToClose: [{ source: "linear", id: "TEST-1", title: task.title }],
             },
         });
@@ -549,7 +585,15 @@ describe("selectCandidates: no free slot", () => {
             value: {
                 candidates: [expect.objectContaining({ task: proposal, stage: "proposal" })],
                 excluded: [
-                    { source: "linear", id: "G-1", title: "Task G-1", reason: "no-free-slot" },
+                    {
+                        source: "linear",
+                        id: "G-1",
+                        title: "Task G-1",
+                        reason: "no-free-slot",
+                        detail: null,
+                        stuck: false,
+                        scope: "personal",
+                    },
                 ],
                 readyToClose: [],
             },
@@ -656,5 +700,207 @@ describe("labelledThisRun", () => {
         expect(labelledThisRun([triageResult([record({ status: "proposed" })])])).toEqual(
             new Set(),
         );
+    });
+});
+
+describe("selectCandidates: an open attempt", () => {
+    const retained = record228("retained");
+
+    function record228(state: AttemptRecord["state"]): AttemptRecord {
+        return attemptRecord({
+            id: "github:o/r#228:proposal:1",
+            task: { source: "github", id: "o/r#228", title: "Task o/r#228" },
+            stage: "proposal",
+            state,
+        });
+    }
+
+    const github228 = (labels: string[]) => workTask("github", "o/r#228", labels);
+
+    it("Retained attempt: excluded as open attempt with the attempt's id and retained, and stuck", async () => {
+        const task = github228(["personal", "AFK", "proposal"]);
+
+        expect(await evaluate([task], { records: [retained] })).toMatchObject({
+            ok: true,
+            value: {
+                candidates: [],
+                excluded: [
+                    {
+                        id: "o/r#228",
+                        reason: "open-attempt",
+                        detail: "attempt github:o/r#228:proposal:1 is retained",
+                        stuck: true,
+                        scope: "personal",
+                    },
+                ],
+            },
+        });
+    });
+
+    it("Running attempt that also carries taken: excluded as open attempt, not as taken, and not stuck", async () => {
+        const task = github228(["personal", "AFK", "proposal", "taken"]);
+
+        expect(await evaluate([task], { records: [record228("started")] })).toMatchObject({
+            ok: true,
+            value: {
+                excluded: [
+                    {
+                        reason: "open-attempt",
+                        detail: "attempt github:o/r#228:proposal:1 is started",
+                        stuck: false,
+                        scope: "personal",
+                    },
+                ],
+            },
+        });
+    });
+
+    it("Discarded attempt: not excluded as open attempt", async () => {
+        const task = github228(["personal", "AFK", "proposal"]);
+
+        expect(await evaluate([task], { records: [record228("discarded")] })).toMatchObject({
+            ok: true,
+            value: { candidates: [{ task: { id: "o/r#228" } }], excluded: [] },
+        });
+    });
+
+    it("checks no attempt when no records are given, as launch does", async () => {
+        const task = github228(["personal", "AFK", "proposal"]);
+
+        expect(await evaluate([task])).toMatchObject({ ok: true, value: { excluded: [] } });
+    });
+});
+
+describe("selectCandidates: the repository", () => {
+    const REPOSITORIES = ["/w/dotfiles", "/w/monolab"];
+    const workspace = () => repositoryChecks(REPOSITORIES);
+
+    afterEach(() => {
+        vi.restoreAllMocks();
+    });
+
+    it("No signal: excluded as repository with launch's reason, and stuck", async () => {
+        const task = workTask("beads", "B-1", ["personal", "grill-me"]);
+
+        expect(await evaluate([task], { workspace: workspace() })).toEqual({
+            ok: true,
+            value: {
+                candidates: [],
+                excluded: [
+                    {
+                        source: "beads",
+                        id: "B-1",
+                        title: "Task B-1",
+                        reason: "repository",
+                        detail: "no repository under the workspace root matches beads signals [none]",
+                        stuck: true,
+                        scope: "personal",
+                    },
+                ],
+                readyToClose: [],
+            },
+        });
+    });
+
+    it("Signal that names no directory: the reason lists the signal", async () => {
+        const task = workTask("beads", "B-1", ["personal", "grill-me", "datf"]);
+
+        expect(await evaluate([task], { workspace: workspace() })).toMatchObject({
+            ok: true,
+            value: {
+                excluded: [
+                    {
+                        reason: "repository",
+                        detail: "no repository under the workspace root matches beads signals [datf]",
+                    },
+                ],
+            },
+        });
+    });
+
+    it("Several repositories: the reason names both", async () => {
+        const task = workTask("beads", "B-1", ["personal", "grill-me", "dotfiles", "monolab"]);
+
+        expect(await evaluate([task], { workspace: workspace() })).toMatchObject({
+            ok: true,
+            value: {
+                excluded: [
+                    {
+                        reason: "repository",
+                        detail: "several repositories match: /w/dotfiles (dotfiles), /w/monolab (monolab)",
+                    },
+                ],
+            },
+        });
+    });
+
+    it("Blocked task without a repository: excluded as blocked, not as repository, and not stuck", async () => {
+        const task = workTask("beads", "B-1", ["personal", "grill-me"], { blockedBy: ["B-0"] });
+
+        expect(await evaluate([task], { workspace: workspace() })).toMatchObject({
+            ok: true,
+            value: { excluded: [{ reason: "blocked", detail: null, stuck: false }] },
+        });
+    });
+
+    it("infers a Linear task's repository from the project detail() reads", async () => {
+        const task = workTask("linear", "DOT-1", ["personal", "grill-me"]);
+        const detail = (listed: WorkTask) =>
+            Promise.resolve({ ok: true as const, value: { ...listed, project: "Dotfiles" } });
+
+        expect(await evaluate([task], { workspace: workspace(), detail })).toMatchObject({
+            ok: true,
+            value: { candidates: [{ task: { id: "DOT-1", project: "Dotfiles" } }], excluded: [] },
+        });
+    });
+
+    it("comes before no free slot", async () => {
+        const task = workTask("beads", "B-1", ["personal", "grill-me"]);
+
+        expect(
+            await evaluate([task], { workspace: workspace(), full: { grill: true, work: true } }),
+        ).toMatchObject({ ok: true, value: { excluded: [{ reason: "repository" }] } });
+    });
+
+    it("No free slot: the task is not stuck", async () => {
+        const task = workTask("beads", "B-1", ["personal", "grill-me", "dotfiles"]);
+
+        expect(
+            await evaluate([task], { workspace: workspace(), full: { grill: true, work: false } }),
+        ).toMatchObject({
+            ok: true,
+            value: { excluded: [{ reason: "no-free-slot", detail: null, stuck: false }] },
+        });
+    });
+
+    it("Repository without an OpenSpec root: two proposal tasks are excluded, the repository checked once", async () => {
+        const check = vi.spyOn(proposalStage, "repositoryPrerequisites");
+        const tasks = ["B-1", "B-2"].map((id) =>
+            workTask("beads", id, ["personal", "AFK", "proposal", "dotfiles"]),
+        );
+        const reason =
+            "the repository /w/dotfiles has no OpenSpec root: /w/dotfiles/openspec is not a directory";
+
+        expect(await evaluate(tasks, { workspace: workspace() })).toMatchObject({
+            ok: true,
+            value: {
+                candidates: [],
+                excluded: [
+                    { id: "B-1", reason: "repository-prerequisites", detail: reason, stuck: true },
+                    { id: "B-2", reason: "repository-prerequisites", detail: reason, stuck: true },
+                ],
+            },
+        });
+        expect(check).toHaveBeenCalledTimes(1);
+        expect(check).toHaveBeenCalledWith("/w/dotfiles");
+    });
+
+    it("Grill in the same repository: not excluded as repository prerequisites", async () => {
+        const task = workTask("beads", "B-1", ["personal", "grill-me", "dotfiles"]);
+
+        expect(await evaluate([task], { workspace: workspace() })).toMatchObject({
+            ok: true,
+            value: { candidates: [{ task: { id: "B-1" } }], excluded: [] },
+        });
     });
 });

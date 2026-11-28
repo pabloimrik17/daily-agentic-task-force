@@ -9,7 +9,7 @@ import { quotaGateStep } from "../quota-gate/step.ts";
 import { renderText, type RunReport } from "../report.ts";
 import type { StepOutcome } from "../runner.ts";
 import { type LoopIo, runLoop } from "./loop.ts";
-import { attempt, DEAD, NOW, reconciled, report } from "./test-fixtures.ts";
+import { attempt, DEAD, NOW, reconciled, report, selected, stuckTask } from "./test-fixtures.ts";
 
 const STATES: string[] = [];
 afterAll(() => {
@@ -248,6 +248,95 @@ describe("runLoop notices", () => {
         );
         await runLoop(h.io);
         expect(notices(dir)).toEqual(["loop stopped: received SIGTERM"]);
+    });
+});
+
+describe("runLoop stuck notices", () => {
+    const REASON = "no repository label names a directory of the workspace";
+    const stuckReport = (...tasks: Parameters<typeof selected>[0]) =>
+        Promise.resolve(report("wait", [selected(tasks)]));
+
+    it("tells a stuck task once, not in the iterations after", async () => {
+        const dir = state();
+        await runLoop(harness(dir, () => stuckReport(stuckTask("X-12")), 3).io);
+        expect(notices(dir)).toEqual([
+            `stuck beads:X-12: ${REASON}`,
+            "loop stopped: received SIGTERM",
+        ]);
+    });
+
+    it("tells the task again when its reason changes", async () => {
+        const dir = state();
+        const later = stuckTask("X-12", {
+            reason: "repository-prerequisites",
+            detail: "no OpenSpec root",
+        });
+        const h = harness(
+            dir,
+            (n) => (n === 1 ? stuckReport(stuckTask("X-12")) : stuckReport(later)),
+            3,
+        );
+        await runLoop(h.io);
+        expect(notices(dir)).toEqual([
+            `stuck beads:X-12: ${REASON}`,
+            "stuck beads:X-12: no OpenSpec root",
+            "loop stopped: received SIGTERM",
+        ]);
+    });
+
+    it("names five of 56 and counts the rest, once", async () => {
+        const dir = state();
+        const tasks = Array.from({ length: 56 }, (_, n) => stuckTask(`X-${n}`));
+        await runLoop(harness(dir, () => stuckReport(...tasks), 2).io);
+        expect(notices(dir)).toEqual([
+            ...[0, 1, 2, 3, 4].map((n) => `stuck beads:X-${n}: ${REASON}`),
+            "stuck +51 more: see loop.log",
+            "loop stopped: received SIGTERM",
+        ]);
+    });
+
+    it("records a task of another scope without a notice", async () => {
+        const dir = state();
+        await runLoop(harness(dir, () => stuckReport(stuckTask("W-1", { scope: "work" })), 2).io);
+        expect(notices(dir)).toEqual(["loop stopped: received SIGTERM"]);
+        expect(
+            read(dir, "loop.stuck")
+                .split("\n")
+                .filter(Boolean)
+                .map((line) => JSON.parse(line) as unknown),
+        ).toEqual([{ task: "beads:W-1", exclusion: "repository", detail: REASON }]);
+    });
+
+    it("tells the task again in a new loop", async () => {
+        const dir = state();
+        await runLoop(harness(dir, () => stuckReport(stuckTask("X-12")), 1).io);
+        await runLoop(harness(dir, () => stuckReport(stuckTask("X-12")), 1).io);
+        expect(notices(dir)).toEqual([
+            `stuck beads:X-12: ${REASON}`,
+            "loop stopped: received SIGTERM",
+        ]);
+    });
+
+    it("follows the other notices of the iteration", async () => {
+        const dir = state();
+        const finalised = attempt({
+            state: "completed",
+            action: "finalised",
+            stageNow: "proposal",
+        });
+        const h = harness(
+            dir,
+            () =>
+                Promise.resolve(
+                    report("advance", [reconciled([finalised]), selected([stuckTask("X-12")])]),
+                ),
+            1,
+        );
+        await runLoop(h.io);
+        expect(notices(dir).slice(0, 2)).toEqual([
+            "linear:DOT-98 grill-me → proposal",
+            `stuck beads:X-12: ${REASON}`,
+        ]);
     });
 });
 

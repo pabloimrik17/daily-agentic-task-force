@@ -479,6 +479,12 @@ A notice is one line, recorded only when:
   `triage-me +<n>: <task>, <task>`, naming how many and at most five of
   them, and ending with `…` when there are more. A task that already carried
   `triage-me` produces no notice;
+- an iteration excludes a stuck task of the machine scope that the loop has not
+  yet told with that reason: `stuck <source>:<id>: <reason>`. A task outside
+  the machine scope produces no notice, though the report still lists it as
+  stuck. A task and reason are told once per loop. At most five are recorded per
+  iteration, followed by `stuck +<n> more: see loop.log` when there are more;
+  `loop.log` has the full report;
 - the loop stops: `loop stopped: received SIGINT`,
   `loop stopped: received SIGTERM` or `loop stopped: runner error: <message>`.
 
@@ -488,6 +494,7 @@ A session that waits for the person produces no notice. For example:
 linear:DOT-98 grill-me → proposal
 retained linear:DOT-77:grill-me:1: <reason>
 triage-me +2: linear:DOT-130, beads:X-12
+stuck beads:X-12: <reason>
 ```
 
 `--notices <n>` prints the notices recorded after the first `n`, then
@@ -505,12 +512,13 @@ bun plugins/autonomous/src/run.ts --notices 0
 In the state directory (`$AUTONOMOUS_STATE`, else `$XDG_STATE_HOME/autonomous`,
 else `~/.local/state/autonomous`):
 
-| File           | Content                                                                                                  |
-| -------------- | -------------------------------------------------------------------------------------------------------- |
-| `loop.lock`    | The loop's pid and start time, held from start to end                                                    |
-| `loop.log`     | The report of every iteration with its start time, as text or, with `--json`, JSON; the only full report |
-| `loop.log.1`   | The log of the previous loop; a new loop renames the log to it, so the log is bounded to two loops       |
-| `loop.notices` | The notices of the current loop, one per line; emptied when a loop starts                                |
+| File           | Content                                                                                                                              |
+| -------------- | ------------------------------------------------------------------------------------------------------------------------------------ |
+| `loop.lock`    | The loop's pid and start time, held from start to end                                                                                |
+| `loop.log`     | The report of every iteration with its start time, as text or, with `--json`, JSON; the only full report                             |
+| `loop.log.1`   | The log of the previous loop; a new loop renames the log to it, so the log is bounded to two loops                                   |
+| `loop.notices` | The notices of the current loop, one per line; emptied when a loop starts                                                            |
+| `loop.stuck`   | The stuck tasks the loop has told, and the tasks excluded as prerequisites, one line per task and reason; emptied when a loop starts |
 
 ### Stopping it
 
@@ -2906,11 +2914,11 @@ questions to the [handoff](#the-handoff), with or without `--apply`.
 
 Its outcomes:
 
-| Outcome         | Exit | When                                                                                                                       |
-| --------------- | ---- | -------------------------------------------------------------------------------------------------------------------------- |
-| `advance`       | 0    | A work unit was selected                                                                                                   |
-| `wait`          | 2    | No task is a candidate. The reasons give the count of excluded tasks per exclusion                                         |
-| `not-evaluable` | 3    | The machine scope or a task could not be read, the LLM failed, or its answer was rejected. It never falls back to an order |
+| Outcome         | Exit | When                                                                                                                              |
+| --------------- | ---- | --------------------------------------------------------------------------------------------------------------------------------- |
+| `advance`       | 0    | A work unit was selected                                                                                                          |
+| `wait`          | 2    | No task is a candidate, or every chosen task failed its prerequisites. The reasons give the count of excluded tasks per exclusion |
+| `not-evaluable` | 3    | The machine scope or a task could not be read, the LLM failed, or its answer was rejected. It never falls back to an order        |
 
 In order, the step:
 
@@ -2929,16 +2937,22 @@ In order, the step:
    canceled issue never reaches selection, so its relations are not checked.
 3. Excludes tasks, each reported once, under the first reason that applies:
 
-    | Order | Exclusion         | When                                                                                                              |
-    | ----- | ----------------- | ----------------------------------------------------------------------------------------------------------------- |
-    | 1     | classification    | A scope, autonomy or stage group is missing or in conflict; autonomy is not missing while the stage is `grill-me` |
-    | 2     | taken             | The task carries `taken`                                                                                          |
-    | 3     | triage-me         | The task carries `triage-me`                                                                                      |
-    | 4     | labelled this run | `label-triage` applied a label to it in this run, or a write to it failed in this run                             |
-    | 5     | unsupported stage | Its next stage is not supported                                                                                   |
-    | 6     | blocked           | It has an open blocker                                                                                            |
-    | 7     | split             | It has an open child, or its next stage is `proposal` and it has any child, open or closed                        |
-    | 8     | no free slot      | Only in an iteration of the loop: the slot kind of its next stage is full                                         |
+    | Order | Exclusion                | When                                                                                                                                      |
+    | ----- | ------------------------ | ----------------------------------------------------------------------------------------------------------------------------------------- |
+    | 1     | classification           | A scope, autonomy or stage group is missing or in conflict; autonomy is not missing while the stage is `grill-me`                         |
+    | 2     | open attempt             | The task has an attempt, at any stage, that is open: `pending`, `created`, `started` or `retained`, or `completed` with a pending cleanup |
+    | 3     | taken                    | The task carries `taken`                                                                                                                  |
+    | 4     | triage-me                | The task carries `triage-me`                                                                                                              |
+    | 5     | labelled this run        | `label-triage` applied a label to it in this run, or a write to it failed in this run                                                     |
+    | 6     | unsupported stage        | Its next stage is not supported                                                                                                           |
+    | 7     | blocked                  | It has an open blocker                                                                                                                    |
+    | 8     | split                    | It has an open child, or its next stage is `proposal` and it has any child, open or closed                                                |
+    | 9     | repository               | Repository inference does not find exactly one repository                                                                                 |
+    | 10    | repository prerequisites | Its repository fails a repository prerequisite of its next stage                                                                          |
+    | 11    | no free slot             | Only in an iteration of the loop: the slot kind of its next stage is full                                                                 |
+
+    After the choice (step 5), a twelfth exclusion, **prerequisites**, applies
+    to the chosen task only.
 
     Classification counts present contract labels only: an alias or a
     structural rule does not rescue a task here. A task in `grill-me` without an
@@ -2955,7 +2969,25 @@ In order, the step:
     run's `label-triage` removed `triage-me` is not excluded for it. The
     selection report names the exclusion `triage-me`, after `taken`.
 
-    **No free slot** comes last, so a task that is blocked, split or otherwise
+    **Open attempt** comes before `taken` because a retained attempt keeps
+    `taken`: the more specific reason wins. The attempt records are read once
+    per run; a read that fails makes the step `not-evaluable`. The reason
+    carries the attempt's id and state.
+
+    **Repository** comes after split, so a blocked or split task keeps that
+    reason. Its reason is the one `launch` gives: the signals that matched
+    nothing, or the repositories that matched (see
+    [Sessions and workspaces](#sessions-and-workspaces)). The workspace root is
+    listed once per run, and a root that cannot be listed makes the step
+    `not-evaluable`.
+
+    **Repository prerequisites** are the checks of a stage that read only the
+    repository, never the task or its tracker. Today that is the OpenSpec root,
+    required by `proposal`, `implement`, `verify` and `code-review`; `grill-me`
+    has none. They are checked once per stage and repository in a run, and the
+    stage's prerequisites at `launch` include them.
+
+    **No free slot** comes after them, so a task that is blocked, split or otherwise
     excluded keeps that reason. It applies only in an iteration of the loop
     (`--loop`), and only to a candidate whose slot kind is full: a task in
     `grill-me` needs a free grill slot, any other stage a free work slot. A
@@ -2973,6 +3005,41 @@ In order, the step:
    and the report says it was the only one; when it is outside the machine
    scope, the report marks it as a machine-scope exception for that reason.
    With two or more, an LLM compares them.
+6. Checks the prerequisites of the chosen task's stage, as `launch` does. When
+   they fail, the task is excluded as **prerequisites** with the prerequisite's
+   reason, the most-advanced-stage rule is applied again to the candidates that
+   remain, and the choice is made again. So when the only `implement` task
+   fails, the `proposal` candidates set aside are compared. At most 4 chosen
+   tasks are checked in a run; when all 4 fail, the step is `wait`, its reasons
+   say that 4 choices failed their prerequisites and give the counts per
+   exclusion, and the tier is `llm`. A prerequisite that cannot be read makes
+   the step `not-evaluable`. With `--task`, selection does not run and
+   `launch` alone checks them.
+
+In an iteration of the loop, the step also remembers the tasks excluded as
+prerequisites earlier in the same loop (`loop.stuck`, see [Files](#files)). It
+checks their prerequisites before the comparison and excludes the ones that
+still fail, so the comparison is not given them and does not spend a choice on
+them every iteration. A task whose prerequisites now hold is a candidate again.
+Outside the loop nothing is remembered.
+
+### Stuck tasks
+
+A task is **stuck** when it is excluded as repository, repository
+prerequisites or prerequisites, or as open attempt with a `retained` attempt.
+No other exclusion makes a task stuck: a running attempt, a free slot that
+ends by itself, `taken` and the rest are not. The step writes nothing to any
+tracker because a task is stuck: no `triage-me`, no label.
+
+A person releases a stuck task by removing what excludes it:
+
+- **Repository:** give the task a repository label equal to the name of a
+  directory under `workspace.root` (for Linear, set the project to that name).
+- **Repository prerequisites:** add an OpenSpec root to the repository.
+- **Prerequisites:** fix what the reason names, the same reason `launch` would
+  wait with.
+- **Retained attempt:** discard it with `--apply --discard` (see
+  [Discard mode](#discard-mode)).
 
 The next stage of a task is the stage label it carries, `grill-me`, `proposal`,
 `implement`, `verify`, `code-review`, `qa`, `external-review`, `wrap-up` or
@@ -3043,7 +3110,10 @@ The text report shows:
 - the candidates compared;
 - the candidates set aside because a candidate at a more advanced stage
   exists, each with its source, id, title and stage;
-- the excluded tasks, grouped by reason, each with its source, id and title;
+- the excluded tasks that are not stuck, grouped by reason, each with its
+  source, id and title;
+- the stuck tasks, apart from the other excluded ones, each with its source,
+  id, title, scope, exclusion and reason;
 - the `ready to close` tasks: the tasks excluded as split that have no open
   child, as `ready to close: N task(s)` followed by one line per task with its
   source, id and title. Nothing is written for them;
@@ -3052,7 +3122,9 @@ The text report shows:
 
 With `--json`, the step's data carries the same information, with the ready
 to close tasks as `readyToClose`, `{ source, id, title }` each, plus the
-selection model and effort when the LLM was called.
+selection model and effort when the LLM was called. Every excluded task carries
+`detail`, the reason text of its exclusion (`null` when it has none), and
+`stuck`, whether it is a stuck task.
 
 ## The `reconcile` step
 

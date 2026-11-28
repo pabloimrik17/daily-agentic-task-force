@@ -35,13 +35,17 @@ export type StageName = StageLabel;
 
 export type Exclusion =
     | "classification"
+    | "open-attempt"
     | "taken"
     | "triage-me"
     | "labelled-this-run"
     | "unsupported-stage"
     | "blocked"
     | "split"
-    | "no-free-slot";
+    | "repository"
+    | "repository-prerequisites"
+    | "no-free-slot"
+    | "prerequisites"; // checked for the chosen task only, after the comparison
 
 type Autonomy = AutonomyLabel;
 
@@ -58,6 +62,9 @@ export interface Excluded {
     id: string;
     title: string;
     reason: Exclusion;
+    detail: string | null; // the reason text: launch's, or the open attempt's id and state
+    stuck: boolean; // only a person can remove the exclusion (isStuck)
+    scope: Scope | null; // null only when the task fails classification
 }
 
 export interface SelectionRequest {

@@ -22,3 +22,8 @@ export function holdingAttempt(
         ? null
         : { id: open.id, state: open.state, pendingCleanup: open.cleanup !== null };
 }
+
+// The reason `launch` waits with, and the detail of `select`'s open-attempt exclusion.
+export function holdingReason({ id, state, pendingCleanup }: HoldingAttempt): string {
+    return `attempt ${id} is ${pendingCleanup ? `${state} with a pending cleanup` : state}`;
+}

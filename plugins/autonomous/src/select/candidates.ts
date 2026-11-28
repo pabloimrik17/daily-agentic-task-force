@@ -1,6 +1,8 @@
-// Ordered exclusions (work-selection, design D3): the first check that
-// applies wins. Only tasks surviving the inexpensive checks need detail.
+// Ordered exclusions (work-selection, design D3; design D2 of exclude-stuck-tasks-from-selection):
+// the first check that applies wins. Only tasks surviving the inexpensive checks need detail.
 
+import { type HoldingAttempt, holdingAttempt, holdingReason } from "../attempts/open-attempt.ts";
+import type { AttemptRecord } from "../attempts/record.ts";
 import { type TaskKey, taskKey } from "../attempts/record.ts";
 import type { AutonomousConfig } from "../config.ts";
 import { TAKEN_LABEL, TRIAGE_LABEL } from "../label-contract/contract.ts";
@@ -9,16 +11,49 @@ import { LABEL_TRIAGE } from "../label-triage/question-id.ts";
 import type { LabelTriageData } from "../label-triage/step.ts";
 import type { TrackerResult } from "../label-triage/trackers/tracker.ts";
 import type { StepResult } from "../runner.ts";
-import type { StageId } from "../stages/stage.ts";
+import { STAGES } from "../stages/registry.ts";
+import { isStageId, type RepositoryPrerequisites, type StageId } from "../stages/stage.ts";
+import { inferRepository } from "../workspace/infer.ts";
+import { type ExclusionVerdict, excludedTask, scopeOf } from "./excluded.ts";
 import { isSupported, nextStage } from "./stage.ts";
-import type { Candidate, Excluded, Exclusion, SelectData, WorkTask } from "./types.ts";
+import type { Candidate, Excluded, Exclusion, SelectData, StageName, WorkTask } from "./types.ts";
 
+// `records` and `workspace` are given by the select step only: `launch` keeps its own checks for
+// them, with their own reasons and order (design D5).
 interface CandidateDeps {
     config: AutonomousConfig;
     labelledThisRun: ReadonlySet<TaskKey>;
     detail: (task: WorkTask) => Promise<TrackerResult<WorkTask>>;
     stage?: StageId; // supplied by `--stage`: the next stage's support is not checked
     full?: SlotsFull; // set only in a loop iteration; absent, no task is excluded for a slot
+    records?: readonly AttemptRecord[]; // absent, no task is excluded for an open attempt
+    workspace?: RepositoryChecks; // absent, no task is excluded for its repository
+}
+
+export interface RepositoryChecks {
+    repositories: readonly string[]; // listed once per run
+    prerequisites(stage: StageName, repository: string): Promise<RepositoryPrerequisites>;
+}
+
+const HOLDS: RepositoryPrerequisites = { ok: true };
+
+// The repository prerequisites of a stage, checked once per stage and repository (design D3).
+export function repositoryChecks(repositories: readonly string[]): RepositoryChecks {
+    const checked = new Map<string, Promise<RepositoryPrerequisites>>();
+    return {
+        repositories,
+        prerequisites(stage, repository) {
+            const key = JSON.stringify([stage, repository]);
+            const known = checked.get(key) ?? checkRepository(stage, repository);
+            checked.set(key, known);
+            return known;
+        },
+    };
+}
+
+function checkRepository(stage: StageName, repository: string): Promise<RepositoryPrerequisites> {
+    const found = isStageId(stage) ? STAGES.get(stage) : undefined;
+    return found?.repositoryPrerequisites?.(repository) ?? Promise.resolve(HOLDS);
 }
 
 export interface SlotsFull {
@@ -63,24 +98,40 @@ function isUnsupportedStage(task: WorkTask, deps: CandidateDeps): boolean {
     return deps.stage === undefined && (stage === null || !isSupported(stage));
 }
 
-function exclusionBeforeDetail(task: WorkTask, deps: CandidateDeps): Exclusion | null {
-    if (!isClassified(task, deps.config)) {
-        return "classification";
-    }
-    if (task.labels.includes(TAKEN_LABEL)) {
-        return "taken";
-    }
-    if (task.labels.includes(TRIAGE_LABEL)) {
-        return "triage-me";
-    }
-    if (deps.labelledThisRun.has(taskKey(task.source, task.id))) {
-        return "labelled-this-run";
-    }
-    if (isUnsupportedStage(task, deps)) {
-        return "unsupported-stage";
-    }
-    if (task.blockedBy !== null && task.blockedBy.length > 0) {
-        return "blocked";
+type Check = (task: WorkTask, deps: CandidateDeps) => ExclusionVerdict | null;
+
+const when =
+    (reason: Exclusion, applies: (task: WorkTask, deps: CandidateDeps) => boolean): Check =>
+    (task, deps) =>
+        applies(task, deps) ? { reason } : null;
+
+// A retained attempt keeps `taken`, so the open attempt comes first, or it would never be stuck.
+const openAttempt: Check = (task, { records }) => {
+    const attempt: HoldingAttempt | null =
+        records === undefined ? null : holdingAttempt(records, task);
+    return attempt === null
+        ? null
+        : { reason: "open-attempt", detail: holdingReason(attempt), attempt };
+};
+
+const BEFORE_DETAIL: readonly Check[] = [
+    when("classification", (task, { config }) => !isClassified(task, config)),
+    openAttempt,
+    when("taken", (task) => task.labels.includes(TAKEN_LABEL)),
+    when("triage-me", (task) => task.labels.includes(TRIAGE_LABEL)),
+    when("labelled-this-run", (task, deps) =>
+        deps.labelledThisRun.has(taskKey(task.source, task.id)),
+    ),
+    when("unsupported-stage", isUnsupportedStage),
+    when("blocked", (task) => task.blockedBy !== null && task.blockedBy.length > 0),
+];
+
+function exclusionBeforeDetail(task: WorkTask, deps: CandidateDeps): ExclusionVerdict | null {
+    for (const check of BEFORE_DETAIL) {
+        const found = check(task, deps);
+        if (found !== null) {
+            return found;
+        }
     }
     return null;
 }
@@ -108,11 +159,7 @@ function candidate(task: WorkTask): Candidate | null {
         : task.labels.includes("HITL")
           ? "HITL"
           : null;
-    return { task, scope: task.labels.includes("work") ? "work" : "personal", autonomy, stage };
-}
-
-function excluding(task: WorkTask, reason: Exclusion): Excluded {
-    return { source: task.source, id: task.id, title: task.title, reason };
+    return { task, scope: scopeOf(task), autonomy, stage };
 }
 
 // The slot kind of a stage (spec slot-limits): grill-me takes a grill slot, any other a work slot.
@@ -120,9 +167,25 @@ function hasNoFreeSlot({ stage }: Candidate, { full }: CandidateDeps): boolean {
     return full !== undefined && (stage === "grill-me" ? full.grill : full.work);
 }
 
-type Verdict = { found: Candidate } | { reason: Exclusion; readyToClose?: boolean };
+type Verdict = { found: Candidate } | (ExclusionVerdict & { readyToClose?: boolean });
 
-function afterDetail(task: WorkTask, deps: CandidateDeps): Verdict {
+// Repository after split (design D2): a Linear task's project is known only after detail().
+async function repositoryExclusion(
+    { task, stage }: Candidate,
+    workspace: RepositoryChecks | undefined,
+): Promise<ExclusionVerdict | null> {
+    if (workspace === undefined) {
+        return null;
+    }
+    const inferred = inferRepository(task, workspace.repositories);
+    if (!inferred.ok) {
+        return { reason: "repository", detail: inferred.reason };
+    }
+    const held = await workspace.prerequisites(stage, inferred.repository);
+    return held.ok ? null : { reason: "repository-prerequisites", detail: held.reason };
+}
+
+async function afterDetail(task: WorkTask, deps: CandidateDeps): Promise<Verdict> {
     if (isSplit(task)) {
         return { reason: "split", readyToClose: !hasOpenChild(task) };
     }
@@ -130,16 +193,20 @@ function afterDetail(task: WorkTask, deps: CandidateDeps): Verdict {
     if (found === null) {
         return { reason: "unsupported-stage" };
     }
+    const repository = await repositoryExclusion(found, deps.workspace);
+    if (repository !== null) {
+        return repository;
+    }
     return hasNoFreeSlot(found, deps) ? { reason: "no-free-slot" } : { found };
 }
 
 async function judge(task: WorkTask, deps: CandidateDeps): Promise<TrackerResult<Verdict>> {
-    const reason = exclusionBeforeDetail(task, deps);
-    if (reason !== null) {
-        return { ok: true, value: { reason } };
+    const excluded = exclusionBeforeDetail(task, deps);
+    if (excluded !== null) {
+        return { ok: true, value: excluded };
     }
     const detailed = await deps.detail(task);
-    return detailed.ok ? { ok: true, value: afterDetail(detailed.value, deps) } : detailed;
+    return detailed.ok ? { ok: true, value: await afterDetail(detailed.value, deps) } : detailed;
 }
 
 function file(selection: Selection, task: WorkTask, verdict: Verdict): void {
@@ -150,7 +217,7 @@ function file(selection: Selection, task: WorkTask, verdict: Verdict): void {
     if (verdict.readyToClose === true) {
         selection.readyToClose.push({ source: task.source, id: task.id, title: task.title });
     }
-    selection.excluded.push(excluding(task, verdict.reason));
+    selection.excluded.push(excludedTask(task, verdict));
 }
 
 export async function selectCandidates(

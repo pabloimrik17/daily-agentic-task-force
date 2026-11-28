@@ -5,8 +5,8 @@
 
 import { acquireLoopLock } from "../attempts/lock.ts";
 import { exitCodeFor, type RunReport } from "../report.ts";
-import { appendLog, appendNotices, startFiles } from "./files.ts";
-import { iterationNotices, stopNotice } from "./notices.ts";
+import { appendLog, appendNotices, appendStuck, readStuck, startFiles } from "./files.ts";
+import { iterationNotices, stopNotice, stuckNotices } from "./notices.ts";
 import type { Wait } from "./signals.ts";
 
 export interface LoopIo {
@@ -28,7 +28,11 @@ function messageOf(error: unknown): string {
 async function iteration(io: LoopIo): Promise<void> {
     const report = await io.iterate();
     await appendLog(io.state, io.json ? JSON.stringify(report) : `${io.render(report)}\n`);
-    await appendNotices(io.state, iterationNotices(report));
+    const stuck = stuckNotices(report, await readStuck(io.state));
+    await appendNotices(io.state, [...iterationNotices(report), ...stuck.notices]);
+    for (const entry of stuck.entries) {
+        await appendStuck(io.state, entry);
+    }
 }
 
 // A stop request ends the wait at once; during an iteration it is seen when the iteration ends.
