@@ -397,7 +397,8 @@ Before it starts the loop, the command asks the questions of the marked tasks
 (see [Questions before the loop starts](#questions-before-the-loop-starts)).
 Then it starts the loop as a background task, waits for its notices in the
 background and shows each one verbatim. Once the loop has started it shows
-nothing else and says nothing while no notice arrives.
+nothing else and says nothing while no notice arrives. A notice arrives for
+every iteration, whatever its outcome.
 
 From a shell:
 
@@ -470,34 +471,75 @@ questions of marked tasks wait for the next `/autonomous:loop --apply` or
 
 ### Notices
 
-A notice is one line, recorded only when:
-
-- an iteration finalises an attempt: `<source>:<task> <stage> → <stage now>`,
-  where the last part is the stage label the task now carries, or `closed`;
-- an iteration newly retains an attempt: `retained <attempt>: <reason>`;
-- an iteration adds `triage-me` to one or more tasks:
-  `triage-me +<n>: <task>, <task>`, naming how many and at most five of
-  them, and ending with `…` when there are more. A task that already carried
-  `triage-me` produces no notice;
-- an iteration excludes a stuck task of the machine scope that the loop has not
-  yet told with that reason: `stuck <source>:<id>: <reason>`. A task outside
-  the machine scope produces no notice, though the report still lists it as
-  stuck and `loop.stuck` records it. A task and reason are told once per loop. At most five are recorded per
-  iteration, followed by `stuck +<n> more: see loop.log` when there are more;
-  `loop.log` has the full report. The five are the ones a person can release
-  soonest: tasks stuck for a retained attempt, for prerequisites or for
-  unreadable prerequisites first, then for repository prerequisites, then for
-  repository;
-- the loop stops: `loop stopped: received SIGINT`,
-  `loop stopped: received SIGTERM` or `loop stopped: runner error: <message>`.
-
-A session that waits for the person produces no notice. For example:
+Every iteration records one summary line, whatever its outcome, and the
+detail lines of what it did, indented by two spaces. The loop records nothing
+between iterations. The summary line is:
 
 ```text
-linear:DOT-98 grill-me → proposal
-retained linear:DOT-77:grill-me:1: <reason>
-triage-me +2: linear:DOT-130, beads:X-12
-stuck beads:X-12: <reason>
+<time> <symbol> <what happened> · next <time>
+```
+
+The first time is when the iteration ended and the last is when the next one
+is due. What happened is one of:
+
+- a launch: `launched <emoji> <stage> <source>:<id>`, with the emoji the stage
+  declares;
+- nothing launched: `nothing to launch: <step>: <first reason>`, naming the step
+  that waited;
+- not evaluable: `not evaluable: <step>: <first reason>`, or
+  `not evaluable: <reason>` when the run lock is held by another process.
+
+When the selection found stuck tasks of the machine scope, the line carries
+`· <n> need you` before `next`, counting all of them, told or not. With none,
+or when selection did not run, it carries no count.
+
+After the summary line come the detail lines, in this order:
+
+- an iteration finalises an attempt: `✔ <source>:<task> <stage> → <stage now>`,
+  where the last part is the stage label the task now carries, or `closed`;
+- an iteration newly retains an attempt: `⚠ retained <attempt>: <reason>`;
+- an iteration adds `triage-me` to one or more tasks:
+  `⚠ triage-me +<n>: <task>, <task>`, naming how many and at most five of
+  them, and ending with `…` when there are more. A task that already carried
+  `triage-me` produces no line;
+- an iteration excludes a stuck task of the machine scope that the loop has not
+  yet told with that reason: `⚠ stuck <source>:<id>: <reason>`. A task outside
+  the machine scope produces no line, though the report still lists it as
+  stuck and `loop.stuck` records it. A task and reason are told once per loop.
+  At most five are recorded per iteration, followed by
+  `⚠ stuck +<n> more: see loop.log` when there are more; `loop.log` has the full
+  report. The five are the ones a person can release soonest: tasks stuck for
+  a retained attempt, for prerequisites or for unreadable prerequisites first,
+  then for repository prerequisites, then for repository.
+
+A session that waits for the person produces no line. The summary line and the
+detail lines of an iteration are recorded in one write, the summary line first.
+
+When the loop stops it records one line, with no next time:
+`<time> ■ loop stopped: received SIGINT`, `<time> ■ loop stopped: received SIGTERM`
+or `<time> ■ loop stopped: runner error: <message>`.
+
+| Symbol | Line                          |
+| ------ | ----------------------------- |
+| `▶`    | A launch                      |
+| `⏸`    | Nothing to launch             |
+| `✖`    | Not evaluable                 |
+| `✔`    | An attempt finalised          |
+| `⚠`    | Something that needs a person |
+| `■`    | The loop stopped              |
+
+Every time is the hour and minute in the user's locale and time zone, in the
+locale's short format. The locale is the first of `LC_ALL`, `LC_TIME` and
+`LANG` that is set and valid, because the runtime ignores them; the zone is the
+process's. Lines carry no colour and no other terminal control sequence. For
+example, with locale `es-ES`:
+
+```text
+10:40 ▶ launched 📝 proposal beads:X-12 · 1 need you · next 10:50
+  ✔ linear:DOT-98 grill-me → proposal
+  ⚠ stuck beads:X-7: repository prerequisites
+10:50 ⏸ nothing to launch: capacity: every slot is full · next 11:00
+11:02 ■ loop stopped: received SIGTERM
 ```
 
 `--notices <n>` prints the notices recorded after the first `n`, then
@@ -555,7 +597,7 @@ open attempts keep their slots until the next `/autonomous:run` or loop.
 
 Do not repeat the command while the loop is stopping. After
 `loop stopping: …` nothing more is needed: the loop ends when its iteration
-does, and `loop stopped: received SIGTERM` in its notices confirms it. A second
+does, and `<time> ■ loop stopped: received SIGTERM` in its notices confirms it. A second
 signal kills the process and can cut a launch.
 
 Underneath, the command sends SIGTERM to the pid in `loop.lock`; SIGINT does the

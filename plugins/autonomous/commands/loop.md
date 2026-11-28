@@ -1,5 +1,5 @@
 ---
-description: Run the autonomous loop's iterations at a fixed interval under the slot limits and show only its notices, or with no --apply run one dry iteration and report it; with --apply, first ask the questions of the tasks marked triage-me
+description: Run the autonomous loop's iterations at a fixed interval under the slot limits and show its notices, one summary line per iteration, or with no --apply run one dry iteration and report it; with --apply, first ask the questions of the tasks marked triage-me
 argument-hint: "[--apply] [--force] [--json] [--grills <n>] [--parallel <n>] [--interval <minutes>]"
 allowed-tools: Bash(bun:*)
 ---
@@ -93,10 +93,12 @@ command.
     ```
 
 4. When that command ends, show its notice lines verbatim in a code block, not
-   the `next: <m>` line, then start `--notices <m>` in the background with the
+   the `next: <m>` line. A notice arrives for every iteration: one summary line,
+   with its detail lines indented under it. Keep every line's indentation and
+   change nothing in it. Then start `--notices <m>` in the background with the
    `<m>` it printed. Repeat.
 
-5. Stop after a line that starts with `loop stopped:` or after exit code 2.
+5. Stop after a stop line, `<time> ■ loop stopped: <reason>`, or after exit code 2.
 
 ## Rules
 

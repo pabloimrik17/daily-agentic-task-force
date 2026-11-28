@@ -10,6 +10,7 @@ import { renderText, type RunReport } from "../report.ts";
 import type { StepOutcome } from "../runner.ts";
 import { type LoopIo, runLoop } from "./loop.ts";
 import { attempt, DEAD, NOW, reconciled, report, selected, stuckTask } from "./test-fixtures.ts";
+import type { FormatTime } from "./time.ts";
 
 const STATES: string[] = [];
 afterAll(() => {
@@ -25,6 +26,14 @@ function state(): string {
 }
 
 const INTERVAL_MS = 600_000;
+
+// The times read the same on every machine: UTC, hours and minutes.
+const formatTime: FormatTime = (date) => date.toISOString().slice(11, 16);
+
+// The summary line of an iteration that ended at 09:00 with the 10-minute interval, and the stop line.
+const summary = (what = "⏸ nothing to launch") => `09:00 ${what} · next 09:10`;
+const SELECT = "⏸ nothing to launch: select";
+const stopLine = (reason = "received SIGTERM") => `09:00 ■ loop stopped: ${reason}`;
 
 // Each iteration starts a minute after the one before; the loop stops in the wait
 // after `iterations` iterations, unless `iterate` stops or throws first.
@@ -56,6 +65,7 @@ function harness(
         iterate: () => iterate(++count, controller),
         render: (done) => `autonomous run — started ${done.startedAt}\noutcome: ${done.outcome}`,
         intervalMs: () => INTERVAL_MS,
+        formatTime,
         stderr: (text) => err.push(text),
         ...overrides,
     };
@@ -86,7 +96,7 @@ describe("runLoop", () => {
         const h = harness(dir, outcomes("advance"), 1);
         expect(await runLoop(h.io)).toBe(0);
         expect(h.iterations()).toBe(1);
-        expect(notices(dir)).toEqual(["loop stopped: received SIGTERM"]);
+        expect(notices(dir)).toEqual([summary(), stopLine()]);
         expect(existsSync(join(dir, "loop.lock"))).toBe(false);
     });
 
@@ -104,7 +114,7 @@ describe("runLoop", () => {
         expect(h.iterations()).toBe(1);
         expect(h.waits).toEqual([]);
         expect(read(dir, "loop.log")).toContain("outcome: advance");
-        expect(notices(dir)).toEqual(["loop stopped: received SIGINT"]);
+        expect(notices(dir)).toEqual([summary(), stopLine("received SIGINT")]);
     });
 
     it("stops with code 1 on a thrown error, after the stop notice", async () => {
@@ -117,7 +127,7 @@ describe("runLoop", () => {
         expect(await runLoop(h.io)).toBe(1);
         expect(h.iterations()).toBe(2);
         expect(h.err).toEqual(["autonomous loop failed: boom"]);
-        expect(notices(dir)).toEqual(["loop stopped: runner error: boom"]);
+        expect(notices(dir)).toEqual([summary(), stopLine("runner error: boom")]);
         expect(existsSync(join(dir, "loop.lock"))).toBe(false);
     });
 
@@ -203,12 +213,12 @@ describe("runLoop log", () => {
 describe("runLoop notices", () => {
     it("empties the previous loop's notices when it starts", async () => {
         const dir = state();
-        writeFileSync(join(dir, "loop.notices"), "loop stopped: received SIGINT\n");
+        writeFileSync(join(dir, "loop.notices"), "09:00 ■ loop stopped: received SIGINT\n");
         await runLoop(harness(dir, outcomes("advance"), 1).io);
-        expect(notices(dir)).toEqual(["loop stopped: received SIGTERM"]);
+        expect(notices(dir)).toEqual([summary(), stopLine()]);
     });
 
-    it("records the notices of each iteration, then the stop notice", async () => {
+    it("records the lines of each iteration, then the stop line", async () => {
         const dir = state();
         const finalised = attempt({
             state: "completed",
@@ -230,13 +240,16 @@ describe("runLoop notices", () => {
         );
         await runLoop(h.io);
         expect(notices(dir)).toEqual([
-            "retained linear:DOT-77:grill-me:1: session exited; stage grill-me check does not hold",
-            "linear:DOT-98 grill-me → proposal",
-            "loop stopped: received SIGTERM",
+            summary(),
+            "  ⚠ retained linear:DOT-77:grill-me:1: session exited; stage grill-me check does not hold",
+            summary(),
+            "  ✔ linear:DOT-98 grill-me → proposal",
+            summary(),
+            stopLine(),
         ]);
     });
 
-    it("records nothing for an iteration with nothing to tell", async () => {
+    it("records the summary line alone for an iteration with nothing else to tell", async () => {
         const dir = state();
         const waiting = attempt({
             session: { state: "open", status: "waiting", busy: false, needsHuman: true },
@@ -247,12 +260,120 @@ describe("runLoop notices", () => {
             2,
         );
         await runLoop(h.io);
-        expect(notices(dir)).toEqual(["loop stopped: received SIGTERM"]);
+        expect(notices(dir)).toEqual([summary(), summary(), stopLine()]);
+    });
+});
+
+// Moves the clock by each wait, as the loop's own waits would.
+function ticking(h: ReturnType<typeof harness>, clock: { now: Date }): void {
+    const wait = h.io.wait;
+    h.io.now = () => clock.now;
+    h.io.wait = (ms, signal) => {
+        clock.now = new Date(clock.now.getTime() + ms);
+        return wait(ms, signal);
+    };
+}
+
+describe("runLoop stop line", () => {
+    it("carries the time of the stop and the symbol, for a stop request", async () => {
+        const dir = state();
+        const h = harness(dir, outcomes("advance"), 1);
+        ticking(h, { now: NOW });
+        await runLoop(h.io);
+        expect(notices(dir)).toEqual([summary(), "09:10 ■ loop stopped: received SIGTERM"]);
+    });
+
+    it("carries the time of the failure, for a runner error", async () => {
+        const dir = state();
+        const h = harness(
+            dir,
+            (n) => (n === 2 ? Promise.reject(new Error("boom")) : outcomes("advance")(n)),
+            9,
+        );
+        ticking(h, { now: NOW });
+        expect(await runLoop(h.io)).toBe(1);
+        expect(notices(dir)).toEqual([summary(), "09:10 ■ loop stopped: runner error: boom"]);
+    });
+
+    it("has no next time", async () => {
+        const dir = state();
+        await runLoop(harness(dir, outcomes("advance"), 1).io);
+        expect(notices(dir).at(-1)).not.toContain("next");
+    });
+});
+
+describe("runLoop lines of an iteration", () => {
+    const REASON_LINE =
+        "  ⚠ stuck beads:X-12: no repository label names a directory of the workspace";
+
+    it("records the summary line and its detail lines together, in order", async () => {
+        const dir = state();
+        const finalised = attempt({
+            state: "completed",
+            action: "finalised",
+            stageNow: "proposal",
+        });
+        const h = harness(
+            dir,
+            () =>
+                Promise.resolve(
+                    report("advance", [reconciled([finalised]), selected([stuckTask("X-12")])]),
+                ),
+            1,
+        );
+        let before = "";
+        const wait = h.io.wait;
+        h.io.wait = (ms, signal) => {
+            before = read(dir, "loop.notices");
+            return wait(ms, signal);
+        };
+        await runLoop(h.io);
+        expect(before.split("\n").filter(Boolean)).toEqual([
+            summary("⏸ nothing to launch: select · 1 need you"),
+            "  ✔ linear:DOT-98 grill-me → proposal",
+            REASON_LINE,
+        ]);
+    });
+
+    it("tells nothing between iterations: one summary line each, the details, then the stop line", async () => {
+        const dir = state();
+        const clock = { now: NOW };
+        const h = harness(dir, outcomes("wait", "advance", "not-evaluable", "wait"), 4);
+        ticking(h, clock);
+        await runLoop(h.io);
+        expect(notices(dir)).toEqual([
+            "09:00 ⏸ nothing to launch · next 09:10",
+            "09:10 ⏸ nothing to launch · next 09:20",
+            "09:20 ✖ not evaluable · next 09:30",
+            "09:30 ⏸ nothing to launch · next 09:40",
+            "09:40 ■ loop stopped: received SIGTERM",
+        ]);
+    });
+
+    it("takes the next time from the end of the iteration plus a 5-minute interval", async () => {
+        const dir = state();
+        const h = harness(dir, outcomes("wait"), 2, { intervalMs: () => 300_000 });
+        await runLoop(h.io);
+        expect(h.waits).toEqual([300_000, 300_000]);
+        expect(notices(dir)[0]).toBe("09:00 ⏸ nothing to launch · next 09:05");
+    });
+
+    it("reads the interval once an iteration: the next time is the interval it then waits", async () => {
+        const dir = state();
+        let reads = 0;
+        const h = harness(dir, outcomes("wait"), 2, { intervalMs: () => ++reads * 60_000 });
+        await runLoop(h.io);
+        expect(h.waits).toEqual([60_000, 120_000]);
+        expect(notices(dir).slice(0, 2)).toEqual([
+            "09:00 ⏸ nothing to launch · next 09:01",
+            "09:00 ⏸ nothing to launch · next 09:02",
+        ]);
     });
 });
 
 describe("runLoop stuck notices", () => {
     const REASON = "no repository label names a directory of the workspace";
+    const NEED_YOU = `${SELECT} · 1 need you`;
     const stuckReport = (...tasks: Parameters<typeof selected>[0]) =>
         Promise.resolve(report("wait", [selected(tasks)]));
 
@@ -260,8 +381,11 @@ describe("runLoop stuck notices", () => {
         const dir = state();
         await runLoop(harness(dir, () => stuckReport(stuckTask("X-12")), 3).io);
         expect(notices(dir)).toEqual([
-            `stuck beads:X-12: ${REASON}`,
-            "loop stopped: received SIGTERM",
+            summary(NEED_YOU),
+            `  ⚠ stuck beads:X-12: ${REASON}`,
+            summary(NEED_YOU),
+            summary(NEED_YOU),
+            stopLine(),
         ]);
     });
 
@@ -278,9 +402,12 @@ describe("runLoop stuck notices", () => {
         );
         await runLoop(h.io);
         expect(notices(dir)).toEqual([
-            `stuck beads:X-12: ${REASON}`,
-            "stuck beads:X-12: no OpenSpec root",
-            "loop stopped: received SIGTERM",
+            summary(NEED_YOU),
+            `  ⚠ stuck beads:X-12: ${REASON}`,
+            summary(NEED_YOU),
+            "  ⚠ stuck beads:X-12: no OpenSpec root",
+            summary(NEED_YOU),
+            stopLine(),
         ]);
     });
 
@@ -289,16 +416,18 @@ describe("runLoop stuck notices", () => {
         const tasks = Array.from({ length: 56 }, (_, n) => stuckTask(`X-${n}`));
         await runLoop(harness(dir, () => stuckReport(...tasks), 2).io);
         expect(notices(dir)).toEqual([
-            ...[0, 1, 2, 3, 4].map((n) => `stuck beads:X-${n}: ${REASON}`),
-            "stuck +51 more: see loop.log",
-            "loop stopped: received SIGTERM",
+            summary(`${SELECT} · 56 need you`),
+            ...[0, 1, 2, 3, 4].map((n) => `  ⚠ stuck beads:X-${n}: ${REASON}`),
+            "  ⚠ stuck +51 more: see loop.log",
+            summary(`${SELECT} · 56 need you`),
+            stopLine(),
         ]);
     });
 
-    it("records a task of another scope without a notice", async () => {
+    it("records a task of another scope without a detail line or a count", async () => {
         const dir = state();
         await runLoop(harness(dir, () => stuckReport(stuckTask("W-1", { scope: "work" })), 2).io);
-        expect(notices(dir)).toEqual(["loop stopped: received SIGTERM"]);
+        expect(notices(dir)).toEqual([summary(SELECT), summary(SELECT), stopLine()]);
         expect(
             read(dir, "loop.stuck")
                 .split("\n")
@@ -307,12 +436,12 @@ describe("runLoop stuck notices", () => {
         ).toEqual([{ task: "beads:W-1", exclusion: "repository", detail: REASON, scope: "work" }]);
     });
 
-    it("remembers a task whose prerequisites could not be read, with no notice", async () => {
+    it("remembers a task whose prerequisites could not be read, with no detail line", async () => {
         const dir = state();
         const unreadable = { source: "linear" as const, id: "DOT-1", reason: "cannot read" };
         const iteration = report("not-evaluable", [selected([], "personal", unreadable)]);
         await runLoop(harness(dir, () => Promise.resolve(iteration), 2).io);
-        expect(notices(dir)).toEqual(["loop stopped: received SIGTERM"]);
+        expect(notices(dir)).toEqual([summary(SELECT), summary(SELECT), stopLine()]);
         expect(read(dir, "loop.stuck").trim().split("\n")).toEqual([
             JSON.stringify({
                 task: "linear:DOT-1",
@@ -327,12 +456,13 @@ describe("runLoop stuck notices", () => {
         await runLoop(harness(dir, () => stuckReport(stuckTask("X-12")), 1).io);
         await runLoop(harness(dir, () => stuckReport(stuckTask("X-12")), 1).io);
         expect(notices(dir)).toEqual([
-            `stuck beads:X-12: ${REASON}`,
-            "loop stopped: received SIGTERM",
+            summary(NEED_YOU),
+            `  ⚠ stuck beads:X-12: ${REASON}`,
+            stopLine(),
         ]);
     });
 
-    it("follows the other notices of the iteration", async () => {
+    it("follows the other detail lines of the iteration", async () => {
         const dir = state();
         const finalised = attempt({
             state: "completed",
@@ -348,9 +478,9 @@ describe("runLoop stuck notices", () => {
             1,
         );
         await runLoop(h.io);
-        expect(notices(dir).slice(0, 2)).toEqual([
-            "linear:DOT-98 grill-me → proposal",
-            `stuck beads:X-12: ${REASON}`,
+        expect(notices(dir).slice(1, 3)).toEqual([
+            "  ✔ linear:DOT-98 grill-me → proposal",
+            `  ⚠ stuck beads:X-12: ${REASON}`,
         ]);
     });
 });

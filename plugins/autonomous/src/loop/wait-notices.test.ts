@@ -71,18 +71,41 @@ describe("waitForNotices with a live loop", () => {
         expect(h.waits).toEqual([]);
     });
 
+    it("counts every line in next: summary and detail lines alike", async () => {
+        const dir = state();
+        loopLock(dir, process.pid);
+        for (const line of [
+            "09:00 ▶ launched 🔍 grill-me linear:DOT-98 · next 09:10",
+            "  ✔ linear:DOT-97 grill-me → proposal",
+            "  ⚠ triage-me +2: linear:DOT-1, linear:DOT-2",
+            "09:10 ⏸ nothing to launch: capacity · next 09:20",
+        ]) {
+            notice(dir, line);
+        }
+        const h = harness(dir);
+        expect(await waitForNotices(1, h.io)).toBe(0);
+        expect(h.out).toEqual([
+            [
+                "  ✔ linear:DOT-97 grill-me → proposal",
+                "  ⚠ triage-me +2: linear:DOT-1, linear:DOT-2",
+                "09:10 ⏸ nothing to launch: capacity · next 09:20",
+                "next: 4",
+            ].join("\n"),
+        ]);
+    });
+
     it("waits while the loop is alive, then prints the first notice and next: 1", async () => {
         const dir = state();
         loopLock(dir, process.pid);
         writeFileSync(join(dir, "loop.notices"), "");
         const h = harness(dir, (n) => {
             if (n === 3) {
-                notice(dir, "linear:DOT-98 grill-me → proposal");
+                notice(dir, "  ✔ linear:DOT-98 grill-me → proposal");
             }
         });
         expect(await waitForNotices(0, h.io)).toBe(0);
         expect(h.waits).toEqual([NOTICES_POLL_MS, NOTICES_POLL_MS, NOTICES_POLL_MS]);
-        expect(h.out).toEqual(["linear:DOT-98 grill-me → proposal\nnext: 1"]);
+        expect(h.out).toEqual(["  ✔ linear:DOT-98 grill-me → proposal\nnext: 1"]);
     });
 
     it("says the loop is not running, with code 2, as soon as its process is gone", async () => {
@@ -100,7 +123,7 @@ describe("waitForNotices with a live loop", () => {
     it("ignores an earlier loop's notices until the new loop empties the file", async () => {
         const dir = state();
         const startedAt = new Date(Date.now() - 60_000);
-        notice(dir, "loop stopped: received SIGTERM");
+        notice(dir, "09:10 ■ loop stopped: received SIGTERM");
         const before = new Date(startedAt.getTime() - 60_000);
         utimesSync(join(dir, "loop.notices"), before, before);
         loopLock(dir, process.pid, startedAt);
@@ -109,12 +132,12 @@ describe("waitForNotices with a live loop", () => {
                 writeFileSync(join(dir, "loop.notices"), "");
             }
             if (n === 3) {
-                notice(dir, "linear:DOT-98 grill-me → proposal");
+                notice(dir, "  ✔ linear:DOT-98 grill-me → proposal");
             }
         });
         expect(await waitForNotices(0, h.io)).toBe(0);
         expect(h.waits).toHaveLength(3);
-        expect(h.out).toEqual(["linear:DOT-98 grill-me → proposal\nnext: 1"]);
+        expect(h.out).toEqual(["  ✔ linear:DOT-98 grill-me → proposal\nnext: 1"]);
     });
 });
 
@@ -127,12 +150,12 @@ describe("waitForNotices before a loop is alive", () => {
                 writeFileSync(join(dir, "loop.notices"), "");
             }
             if (n === 4) {
-                notice(dir, "retained linear:DOT-77:grill-me:1: session exited");
+                notice(dir, "  ⚠ retained linear:DOT-77:grill-me:1: session exited");
             }
         });
         expect(await waitForNotices(0, h.io)).toBe(0);
         expect(h.waits).toHaveLength(4);
-        expect(h.out).toEqual(["retained linear:DOT-77:grill-me:1: session exited\nnext: 1"]);
+        expect(h.out).toEqual(["  ⚠ retained linear:DOT-77:grill-me:1: session exited\nnext: 1"]);
     });
 
     it("says the loop is not running, with code 2, when none appears within the grace", async () => {
@@ -152,12 +175,12 @@ describe("waitForNotices before a loop is alive", () => {
 
     it("prints the unread stop notice of a loop that stopped, after the grace", async () => {
         const dir = state();
-        notice(dir, "linear:DOT-98 grill-me → proposal");
-        notice(dir, "loop stopped: received SIGINT");
+        notice(dir, "  ✔ linear:DOT-98 grill-me → proposal");
+        notice(dir, "09:10 ■ loop stopped: received SIGINT");
         const h = harness(dir);
         expect(await waitForNotices(1, h.io)).toBe(0);
         expect(h.waits).toEqual(GRACE);
-        expect(h.out).toEqual(["loop stopped: received SIGINT\nnext: 2"]);
+        expect(h.out).toEqual(["09:10 ■ loop stopped: received SIGINT\nnext: 2"]);
     });
 
     it("takes the grace period it is given", async () => {

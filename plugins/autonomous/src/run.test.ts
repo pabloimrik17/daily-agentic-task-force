@@ -65,6 +65,7 @@ import {
     session,
     weekly,
 } from "./quota-gate/test-fixtures.ts";
+import { localeFromEnv, timeFormatter } from "./loop/time.ts";
 import { main, type MainDeps } from "./run.ts";
 import type {
     AnswerContext,
@@ -2606,6 +2607,11 @@ describe("main --loop", () => {
 
     const read = (state: string, name: string) => readFileSync(join(state, name), "utf8");
 
+    // The loop formats in the machine's zone, and the locale of the runtime when the test's
+    // environment sets none, so the expectation is formatted the same way from NOW.
+    const clock = (minutes: number) =>
+        timeFormatter(localeFromEnv({}))(new Date(NOW.getTime() + minutes * 60_000));
+
     it("logs an iteration where every kind is full and prints nothing", async () => {
         const log: string[] = [];
         const stateDir = state();
@@ -2632,7 +2638,10 @@ describe("main --loop", () => {
         expect(entries).toHaveLength(2);
         expect(entries[0]).toContain("outcome: wait");
         expect(entries[0]).toContain("every kind of slot is full: grill slots 0/0, work slots 0/0");
-        expect(read(stateDir, "loop.notices")).toBe("loop stopped: received SIGTERM\n");
+        const summary = `${clock(0)} ⏸ nothing to launch: capacity: every kind of slot is full: grill slots 0/0, work slots 0/0 · next ${clock(10)}`;
+        expect(read(stateDir, "loop.notices")).toBe(
+            `${[summary, summary, `${clock(0)} ■ loop stopped: received SIGTERM`].join("\n")}\n`,
+        );
         expect(existsSync(join(stateDir, "loop.lock"))).toBe(false);
     });
 
@@ -2754,7 +2763,9 @@ describe("main --loop", () => {
         const { d, err } = deps([broken], { env: { AUTONOMOUS_STATE: stateDir } });
         expect(await main(["--loop", "--apply"], d)).toBe(1);
         expect(err).toEqual(["autonomous loop failed: boom"]);
-        expect(read(stateDir, "loop.notices")).toBe("loop stopped: runner error: boom\n");
+        expect(read(stateDir, "loop.notices")).toBe(
+            `${clock(0)} ■ loop stopped: runner error: boom\n`,
+        );
         expect(existsSync(join(stateDir, "loop.lock"))).toBe(false);
         expect(existsSync(join(stateDir, "run.lock"))).toBe(false);
     });
@@ -2813,10 +2824,10 @@ describe("main --notices", () => {
         const stateDir = state();
         const startedAt = "2026-01-01T00:00:00.000Z";
         writeFileSync(join(stateDir, "loop.lock"), JSON.stringify({ pid: process.pid, startedAt }));
-        writeFileSync(join(stateDir, "loop.notices"), "linear:DOT-98 grill-me → proposal\n");
+        writeFileSync(join(stateDir, "loop.notices"), "  ✔ linear:DOT-98 grill-me → proposal\n");
         const { d, out, waits } = polled(stateDir);
         expect(await main(["--notices", "0"], d)).toBe(0);
-        expect(out).toEqual(["linear:DOT-98 grill-me → proposal\nnext: 1"]);
+        expect(out).toEqual(["  ✔ linear:DOT-98 grill-me → proposal\nnext: 1"]);
         expect(waits).toEqual([]);
     });
 

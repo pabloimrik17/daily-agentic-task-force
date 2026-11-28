@@ -43,7 +43,9 @@ The outcome is read from the run report: `launch` advanced with an attempt → `
 
 ### D5. Times through `Intl.DateTimeFormat` with the process defaults
 
-`new Intl.DateTimeFormat(locale, { timeStyle: "short" })` with no `timeZone` formats in the process's local zone. `locale` is `undefined` (the runtime default) unless that default ignores the user's settings: task 2.1 verifies under Bun that `LC_ALL`, `LC_TIME` and `LANG` are honoured, and if they are not, the formatter derives the locale from those variables in that order, falling back to the runtime default. The formatter is injected through `LoopIo`, so tests fix the locale and the zone. The date is not shown: a loop's notices are read as they arrive, and the log carries full timestamps.
+`new Intl.DateTimeFormat(locale, { timeStyle: "short" })` with no `timeZone` formats in the process's local zone. `locale` is `undefined` (the runtime default) unless that default ignores the user's settings: task 2.1 verifies under Bun that `LC_ALL`, `LC_TIME` and `LANG` are honoured, and if they are not, the formatter derives the locale from those variables in that order, falling back to the runtime default. The formatter is injected through `LoopIo`, so tests fix the locale and the zone.
+
+Result of task 2.1 (Bun 1.4.5, macOS, 2026-11-28): the fallback is needed. `Intl.DateTimeFormat(undefined, { timeStyle: "short" })` resolved to `en-US` with `LANG=es_ES.UTF-8`, with `LANG=en_US.UTF-8` and with `LC_ALL=es_ES.UTF-8`, so Bun ignores the three variables; Node on the same machine resolved `es-ES`. The time zone is right: `Europe/Madrid` by default, and `TZ` is honoured. The formatter therefore derives the locale from `LC_ALL`, `LC_TIME` and `LANG` and leaves the zone to the runtime. The date is not shown: a loop's notices are read as they arrive, and the log carries full timestamps.
 
 The `next` time is the moment the summary is built plus `io.intervalMs()`, the same value the loop then waits.
 

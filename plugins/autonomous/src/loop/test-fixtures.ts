@@ -1,4 +1,6 @@
+import type { LaunchData } from "../attempts/launch.ts";
 import type { ReconciledAttempt, ReconcileData } from "../attempts/reconcile.ts";
+import type { AttemptId } from "../attempts/record.ts";
 import type { Scope } from "../config.ts";
 import type { RunReport } from "../report.ts";
 import type { StepOutcome, StepResult } from "../runner.ts";
@@ -31,6 +33,21 @@ export function reconciled(attempts: ReconciledAttempt[]): StepResult<ReconcileD
         reasons: [],
         data: { attempts, retained: [], cleanups: [], needsHuman: [], errors: [] },
     };
+}
+
+export function launched(stage: NonNullable<LaunchData["stage"]>, id: string): StepResult {
+    const task = { source: "beads" as const, id, title: `Task ${id}` };
+    const attempt = {
+        id: `beads:${id}:${stage}:1` as AttemptId,
+        state: "started" as const,
+        session: null,
+    };
+    const data: Partial<LaunchData> = { task, stage, attempt };
+    return { step: "launch", tier: "code", outcome: "advance", reasons: ["launched"], data };
+}
+
+export function stopStep(step: string, outcome: StepOutcome, reasons: string[]): StepResult {
+    return { step, tier: "code", outcome, reasons, data: null };
 }
 
 export function report(

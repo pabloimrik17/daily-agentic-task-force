@@ -31,7 +31,7 @@ const stop = stopOnSignals();
 await startFiles(state);
 process.stdout.write("ready\\n");
 await sleep(60_000, stop);
-await appendNotices(state, [stopNotice(String(stop.reason))]);
+await appendNotices(state, [stopNotice("10:30", String(stop.reason))]);
 await lock.release();
 `;
 
@@ -75,7 +75,7 @@ describe("--stop-loop against a real loop process", () => {
 
         expect(stdout).toBe("loop stopped\n");
         expect(readFileSync(join(state, "loop.notices"), "utf8")).toMatch(
-            /loop stopped: received SIGTERM\n$/,
+            /10:30 ■ loop stopped: received SIGTERM\n$/,
         );
         expect(existsSync(join(state, "loop.lock"))).toBe(false);
     }, 30_000);

@@ -4,10 +4,19 @@ import type { Source } from "../config.ts";
 import { LABEL_TRIAGE } from "../label-triage/question-id.ts";
 import type { LabelTriageData } from "../label-triage/step.ts";
 import type { MarkRecord } from "../label-triage/write.ts";
+import type { RunReport } from "../report.ts";
 import type { StepResult } from "../runner.ts";
 import { type StuckEntry, UNREAD_ONCE } from "./files.ts";
 import { iterationNotices, stopNotice, stuckNotices } from "./notices.ts";
-import { attempt, reconciled, report, selected, stuckTask } from "./test-fixtures.ts";
+import {
+    attempt,
+    launched,
+    reconciled,
+    report,
+    selected,
+    stopStep,
+    stuckTask,
+} from "./test-fixtures.ts";
 
 function mark(
     source: Source,
@@ -38,33 +47,40 @@ function triage(marked: MarkRecord[], markedRead = marked.length): StepResult<La
     };
 }
 
+const TIMES = { ended: "10:40", next: "10:50" };
+
+const details = (iteration: RunReport, stuck: readonly string[] = []) =>
+    iterationNotices(iteration, stuck, TIMES).slice(1);
+
+const summary = (iteration: RunReport) => iterationNotices(iteration, [], TIMES)[0];
+
 const finalised = attempt({ state: "completed", action: "finalised", stageNow: "proposal" });
 
 describe("iterationNotices", () => {
     it("names the task, the stage it completed and the label it now carries", () => {
-        expect(iterationNotices(report("advance", [reconciled([finalised])]))).toEqual([
-            "linear:DOT-98 grill-me → proposal",
+        expect(details(report("advance", [reconciled([finalised])]))).toEqual([
+            "  ✔ linear:DOT-98 grill-me → proposal",
         ]);
     });
 
     it("says closed for a finalised attempt whose task is closed", () => {
         const closed = { ...finalised, stageNow: "closed" as const };
-        expect(iterationNotices(report("advance", [reconciled([closed])]))).toEqual([
-            "linear:DOT-98 grill-me → closed",
+        expect(details(report("advance", [reconciled([closed])]))).toEqual([
+            "  ✔ linear:DOT-98 grill-me → closed",
         ]);
     });
 
     it("tells a finalised attempt whose cleanup is still pending", () => {
         const pending = { ...finalised, action: "cleanup-pending" as const };
-        expect(iterationNotices(report("advance", [reconciled([pending])]))).toEqual([
-            "linear:DOT-98 grill-me → proposal",
+        expect(details(report("advance", [reconciled([pending])]))).toEqual([
+            "  ✔ linear:DOT-98 grill-me → proposal",
         ]);
     });
 
     it("says so when the task carries no single stage label", () => {
         const unlabelled = { ...finalised, stageNow: null };
-        expect(iterationNotices(report("advance", [reconciled([unlabelled])]))).toEqual([
-            "linear:DOT-98 grill-me → no single stage label",
+        expect(details(report("advance", [reconciled([unlabelled])]))).toEqual([
+            "  ✔ linear:DOT-98 grill-me → no single stage label",
         ]);
     });
 
@@ -75,8 +91,8 @@ describe("iterationNotices", () => {
             action: "retained",
             detail: "session exited; stage grill-me check does not hold",
         });
-        expect(iterationNotices(report("advance", [reconciled([retained])]))).toEqual([
-            "retained linear:DOT-77:grill-me:1: session exited; stage grill-me check does not hold",
+        expect(details(report("advance", [reconciled([retained])]))).toEqual([
+            "  ⚠ retained linear:DOT-77:grill-me:1: session exited; stage grill-me check does not hold",
         ]);
     });
 
@@ -87,31 +103,21 @@ describe("iterationNotices", () => {
             action: "ambiguous",
             detail: "2 sessions share /w/x: a, b",
         });
-        expect(iterationNotices(report("advance", [reconciled([ambiguous])]))).toEqual([
-            "retained linear:DOT-98:grill-me:1: 2 sessions share /w/x: a, b",
+        expect(details(report("advance", [reconciled([ambiguous])]))).toEqual([
+            "  ⚠ retained linear:DOT-98:grill-me:1: 2 sessions share /w/x: a, b",
         ]);
     });
 
     it("tells a retained attempt once, not in the iterations after", () => {
         const still = attempt({ before: "retained", state: "retained", action: "none" });
-        expect(iterationNotices(report("advance", [reconciled([still])]))).toEqual([]);
+        expect(details(report("advance", [reconciled([still])]))).toEqual([]);
     });
 
     it("records nothing for a session waiting for the person", () => {
         const waiting = attempt({
             session: { state: "open", status: "waiting", busy: false, needsHuman: true },
         });
-        expect(iterationNotices(report("advance", [reconciled([waiting])]))).toEqual([]);
-    });
-
-    it("records nothing for an iteration that only launches", () => {
-        const launch = { step: "launch", tier: "code" as const, outcome: "advance" as const };
-        const steps = [reconciled([]), { ...launch, reasons: ["launched"], data: null }];
-        expect(iterationNotices(report("advance", steps))).toEqual([]);
-    });
-
-    it("records nothing when no step ran", () => {
-        expect(iterationNotices(report("not-evaluable"))).toEqual([]);
+        expect(details(report("advance", [reconciled([waiting])]))).toEqual([]);
     });
 
     it("keeps the attempts' order", () => {
@@ -121,37 +127,187 @@ describe("iterationNotices", () => {
             action: "retained",
             detail: "gone",
         });
-        expect(iterationNotices(report("advance", [reconciled([finalised, retained])]))).toEqual([
-            "linear:DOT-98 grill-me → proposal",
-            "retained linear:DOT-99:grill-me:2: gone",
+        expect(details(report("advance", [reconciled([finalised, retained])]))).toEqual([
+            "  ✔ linear:DOT-98 grill-me → proposal",
+            "  ⚠ retained linear:DOT-99:grill-me:2: gone",
         ]);
+    });
+});
+
+describe("iterationNotices summary line", () => {
+    it("names the stage with its emoji and the task of a launch (launch)", () => {
+        const steps = [reconciled([]), launched("proposal", "X-12")];
+        expect(summary(report("advance", steps))).toBe(
+            "10:40 ▶ launched 📝 proposal beads:X-12 · next 10:50",
+        );
+    });
+
+    it("leaves out the emoji and its space for a stage that declares none", () => {
+        const steps = [launched("ready-to-merge", "X-12")];
+        expect(summary(report("advance", steps))).toBe(
+            "10:40 ▶ launched ready-to-merge beads:X-12 · next 10:50",
+        );
+    });
+
+    it("names the step that waited and its first reason (slots full)", () => {
+        const steps = [
+            reconciled([]),
+            stopStep("capacity", "wait", ["every slot kind is full", "second reason"]),
+        ];
+        expect(summary(report("wait", steps))).toBe(
+            "10:40 ⏸ nothing to launch: capacity: every slot kind is full · next 10:50",
+        );
+    });
+
+    it("names the step and the first reason of an iteration that is not evaluable", () => {
+        const steps = [stopStep("select", "not-evaluable", ["cannot read tasks"])];
+        expect(summary(report("not-evaluable", steps))).toBe(
+            "10:40 ✖ not evaluable: select: cannot read tasks · next 10:50",
+        );
+    });
+
+    it("names the reason of the run lock when no step ran (not evaluable)", () => {
+        const locked = { ...report("not-evaluable"), lock: { error: "run lock held by pid 42" } };
+        expect(summary(locked)).toBe("10:40 ✖ not evaluable: run lock held by pid 42 · next 10:50");
+    });
+
+    it("names only the step when it gave no reason, without a trailing colon", () => {
+        const steps = [stopStep("quota", "wait", [])];
+        expect(summary(report("wait", steps))).toBe(
+            "10:40 ⏸ nothing to launch: quota · next 10:50",
+        );
+    });
+
+    it("takes the first step that did not advance", () => {
+        const steps = [
+            stopStep("reconcile", "advance", []),
+            stopStep("quota", "wait", ["quota spent"]),
+            stopStep("select", "not-evaluable", ["late"]),
+        ];
+        expect(summary(report("wait", steps))).toContain("quota: quota spent");
+    });
+
+    it("uses the next time it is given (interval changed)", () => {
+        const steps = [launched("proposal", "X-12")];
+        const line = iterationNotices(report("advance", steps), [], {
+            ended: "10:40",
+            next: "10:45",
+        })[0];
+        expect(line).toMatch(/ · next 10:45$/);
+    });
+
+    it("names the launch step when it advanced without an attempt", () => {
+        const { data, ...step } = launched("proposal", "X-12");
+        const dry = { ...step, data: { ...(data as object), attempt: null } };
+        expect(summary(report("advance", [reconciled([]), dry]))).toBe(
+            "10:40 ⏸ nothing to launch: launch: launched · next 10:50",
+        );
+    });
+
+    it("says nothing was launched for a report whose steps all advanced and none launched", () => {
+        expect(summary(report("advance", [reconciled([])]))).toBe(
+            "10:40 ⏸ nothing to launch · next 10:50",
+        );
+    });
+});
+
+describe("iterationNotices stuck count in the summary line", () => {
+    const stuckThree = [1, 2, 3].map((n) => stuckTask(`X-${n}`));
+
+    it("counts every stuck task of the machine scope, told or not (three stuck tasks already told)", () => {
+        const steps = [selected(stuckThree), launched("proposal", "X-12")];
+        const iteration = report("advance", steps);
+        expect(summary(iteration)).toBe(
+            "10:40 ▶ launched 📝 proposal beads:X-12 · 3 need you · next 10:50",
+        );
+        expect(details(iteration)).toEqual([]);
+    });
+
+    it("carries the count before the next time on a waiting iteration", () => {
+        const steps = [selected(stuckThree)];
+        expect(summary(report("wait", steps))).toBe(
+            "10:40 ⏸ nothing to launch: select · 3 need you · next 10:50",
+        );
+    });
+
+    it("leaves out stuck tasks of another scope and tasks that are not stuck", () => {
+        const tasks = [
+            stuckTask("W-1", { scope: "work" }),
+            stuckTask("B-1", { reason: "blocked", stuck: false }),
+            stuckTask("N-1", { scope: null }),
+            stuckTask("X-1"),
+        ];
+        expect(summary(report("wait", [selected(tasks)]))).toContain(" · 1 need you · ");
+    });
+
+    it("carries no count with none stuck", () => {
+        const steps = [selected([stuckTask("B-1", { reason: "blocked", stuck: false })])];
+        expect(summary(report("wait", steps))).not.toContain("need you");
+    });
+
+    it("carries no count when selection did not run (quota gate)", () => {
+        const steps = [stopStep("quota", "wait", ["quota spent"])];
+        expect(summary(report("wait", steps))).not.toContain("need you");
+    });
+});
+
+describe("notice symbols", () => {
+    it("starts both lines with the warning symbol for a retained attempt and a stuck task (one symbol per kind)", () => {
+        const retained = attempt({ state: "retained", action: "retained", detail: "gone" });
+        const told = stuckNotices(report("wait", [selected([stuckTask("X-12")])]), []);
+        const lines = details(report("advance", [reconciled([retained])]), told.notices);
+        expect(lines).toHaveLength(2);
+        expect(lines.every((line) => line.startsWith("  ⚠ "))).toBe(true);
+    });
+
+    it("holds no escape character in any line (no control sequences)", () => {
+        const retained = attempt({
+            id: "linear:DOT-77:grill-me:1",
+            state: "retained",
+            action: "retained",
+            detail: "gone",
+        });
+        const tasks = Array.from({ length: 7 }, (_, n) => stuckTask(`X-${n}`));
+        const steps = [
+            reconciled([finalised, retained]),
+            triage(["a", "b"].map((id) => mark("beads", id))),
+            selected(tasks),
+            launched("proposal", "X-12"),
+        ];
+        const iteration = report("advance", steps);
+        const lines = [
+            ...iterationNotices(iteration, stuckNotices(iteration, []).notices, TIMES),
+            stopNotice("11:02", "received SIGINT"),
+        ];
+        expect(lines.length).toBeGreaterThan(8);
+        expect(lines.some((line) => [...line].some((c) => c.codePointAt(0) === 27))).toBe(false);
     });
 });
 
 describe("iterationNotices of newly marked tasks", () => {
     it("names the count and the tasks newly marked (tasks newly marked)", () => {
         const marked = [mark("linear", "DOT-130"), mark("beads", "X-12")];
-        expect(iterationNotices(report("advance", [triage(marked)]))).toEqual([
-            "triage-me +2: linear:DOT-130, beads:X-12",
+        expect(details(report("advance", [triage(marked)]))).toEqual([
+            "  ⚠ triage-me +2: linear:DOT-130, beads:X-12",
         ]);
     });
 
     it("names five tasks and ends with an ellipsis when more were marked (many tasks newly marked)", () => {
         const marked = ["a", "b", "c", "d", "e", "f", "g", "h"].map((id) => mark("beads", id));
-        expect(iterationNotices(report("advance", [triage(marked)]))).toEqual([
-            "triage-me +8: beads:a, beads:b, beads:c, beads:d, beads:e, …",
+        expect(details(report("advance", [triage(marked)]))).toEqual([
+            "  ⚠ triage-me +8: beads:a, beads:b, beads:c, beads:d, beads:e, …",
         ]);
     });
 
     it("names all five tasks without an ellipsis when exactly five were marked", () => {
         const marked = ["a", "b", "c", "d", "e"].map((id) => mark("beads", id));
-        expect(iterationNotices(report("advance", [triage(marked)]))).toEqual([
-            "triage-me +5: beads:a, beads:b, beads:c, beads:d, beads:e",
+        expect(details(report("advance", [triage(marked)]))).toEqual([
+            "  ⚠ triage-me +5: beads:a, beads:b, beads:c, beads:d, beads:e",
         ]);
     });
 
     it("tells nothing for tasks marked in an earlier iteration (marked in an earlier iteration)", () => {
-        expect(iterationNotices(report("advance", [triage([], 2)]))).toEqual([]);
+        expect(details(report("advance", [triage([], 2)]))).toEqual([]);
     });
 
     it("counts only the marks that were applied", () => {
@@ -160,31 +316,27 @@ describe("iterationNotices of newly marked tasks", () => {
             mark("linear", "DOT-131", "proposed"),
             mark("beads", "X-12", "failed"),
         ];
-        expect(iterationNotices(report("advance", [triage(marked)]))).toEqual([
-            "triage-me +1: linear:DOT-130",
+        expect(details(report("advance", [triage(marked)]))).toEqual([
+            "  ⚠ triage-me +1: linear:DOT-130",
         ]);
     });
 
     it("tells nothing when every mark was only proposed or failed", () => {
         const marked = [mark("linear", "DOT-131", "proposed"), mark("beads", "X-12", "failed")];
-        expect(iterationNotices(report("advance", [triage(marked)]))).toEqual([]);
+        expect(details(report("advance", [triage(marked)]))).toEqual([]);
     });
 
-    it("tells nothing for an iteration that launches and marks nothing (iteration with nothing to tell)", () => {
-        const launch = { step: "launch", tier: "code" as const, outcome: "advance" as const };
-        const steps = [
-            reconciled([]),
-            triage([]),
-            { ...launch, reasons: ["launched"], data: null },
-        ];
-        expect(iterationNotices(report("advance", steps))).toEqual([]);
+    it("records no detail line for an iteration that launches and tells nothing (nothing beyond the summary)", () => {
+        const steps = [reconciled([]), triage([]), launched("proposal", "X-12")];
+        expect(iterationNotices(report("advance", steps), [], TIMES)).toHaveLength(1);
     });
 
-    it("follows the attempts' notices", () => {
+    it("follows the attempts' notices, and the stuck lines come last", () => {
         const steps = [reconciled([finalised]), triage([mark("linear", "DOT-130")])];
-        expect(iterationNotices(report("advance", steps))).toEqual([
-            "linear:DOT-98 grill-me → proposal",
-            "triage-me +1: linear:DOT-130",
+        expect(details(report("advance", steps), ["  ⚠ stuck beads:X-12: why"])).toEqual([
+            "  ✔ linear:DOT-98 grill-me → proposal",
+            "  ⚠ triage-me +1: linear:DOT-130",
+            "  ⚠ stuck beads:X-12: why",
         ]);
     });
 });
@@ -203,7 +355,7 @@ function entry(
 describe("stuckNotices", () => {
     it("names a stuck task of the machine scope the first time, with its reason", () => {
         const told = stuckNotices(report("wait", [selected([stuckTask("X-12")])]), []);
-        expect(told.notices).toEqual([`stuck beads:X-12: ${REPOSITORY}`]);
+        expect(told.notices).toEqual([`  ⚠ stuck beads:X-12: ${REPOSITORY}`]);
         expect(told.entries).toEqual([entry("beads:X-12")]);
     });
 
@@ -220,7 +372,7 @@ describe("stuckNotices", () => {
             detail: "no OpenSpec root in /w/x",
         });
         const told = stuckNotices(report("wait", [selected([now])]), [entry("beads:X-12")]);
-        expect(told.notices).toEqual(["stuck beads:X-12: no OpenSpec root in /w/x"]);
+        expect(told.notices).toEqual(["  ⚠ stuck beads:X-12: no OpenSpec root in /w/x"]);
         expect(told.entries).toEqual([
             entry("beads:X-12", "repository-prerequisites", "no OpenSpec root in /w/x"),
         ]);
@@ -229,15 +381,15 @@ describe("stuckNotices", () => {
     it("tells a changed detail of the same exclusion again", () => {
         const now = stuckTask("X-12", { detail: "2 repository labels: a, b" });
         const told = stuckNotices(report("wait", [selected([now])]), [entry("beads:X-12")]);
-        expect(told.notices).toEqual(["stuck beads:X-12: 2 repository labels: a, b"]);
+        expect(told.notices).toEqual(["  ⚠ stuck beads:X-12: 2 repository labels: a, b"]);
     });
 
     it("names five tasks and counts the rest and the log when more are new", () => {
         const tasks = Array.from({ length: 56 }, (_, n) => stuckTask(`X-${n}`));
         const told = stuckNotices(report("wait", [selected(tasks)]), []);
         expect(told.notices).toEqual([
-            ...[0, 1, 2, 3, 4].map((n) => `stuck beads:X-${n}: ${REPOSITORY}`),
-            "stuck +51 more: see loop.log",
+            ...[0, 1, 2, 3, 4].map((n) => `  ⚠ stuck beads:X-${n}: ${REPOSITORY}`),
+            "  ⚠ stuck +51 more: see loop.log",
         ]);
         expect(told.entries).toHaveLength(56);
     });
@@ -261,7 +413,7 @@ describe("stuckNotices", () => {
 
         const now = stuckTask("X-12");
         const second = stuckNotices(report("wait", [selected([now])]), first.entries);
-        expect(second.notices).toEqual([`stuck beads:X-12: ${REPOSITORY}`]);
+        expect(second.notices).toEqual([`  ⚠ stuck beads:X-12: ${REPOSITORY}`]);
         expect(second.entries).toEqual([entry("beads:X-12")]);
 
         const third = stuckNotices(report("wait", [selected([now])]), [
@@ -274,7 +426,7 @@ describe("stuckNotices", () => {
     it("does not let a task of another scope take one of the five", () => {
         const tasks = [stuckTask("W-1", { scope: "work" }), stuckTask("X-1")];
         expect(stuckNotices(report("wait", [selected(tasks)]), []).notices).toEqual([
-            `stuck beads:X-1: ${REPOSITORY}`,
+            `  ⚠ stuck beads:X-1: ${REPOSITORY}`,
         ]);
     });
 
@@ -283,7 +435,7 @@ describe("stuckNotices", () => {
             report("wait", [selected([stuckTask("X-12", { detail: null })])]),
             [],
         );
-        expect(told.notices).toEqual(["stuck beads:X-12: repository"]);
+        expect(told.notices).toEqual(["  ⚠ stuck beads:X-12: repository"]);
     });
 
     it("ignores an excluded task that is not stuck", () => {
@@ -304,12 +456,12 @@ describe("stuckNotices", () => {
         ];
         const told = stuckNotices(report("wait", [selected(tasks)]), []);
         expect(told.notices).toEqual([
-            "stuck beads:A-1: attempt a is retained",
-            "stuck beads:P-1: lacks a skill",
-            "stuck beads:U-1: cannot read",
-            "stuck beads:O-1: no OpenSpec root",
-            `stuck beads:R-0: ${REPOSITORY}`,
-            "stuck +2 more: see loop.log",
+            "  ⚠ stuck beads:A-1: attempt a is retained",
+            "  ⚠ stuck beads:P-1: lacks a skill",
+            "  ⚠ stuck beads:U-1: cannot read",
+            "  ⚠ stuck beads:O-1: no OpenSpec root",
+            `  ⚠ stuck beads:R-0: ${REPOSITORY}`,
+            "  ⚠ stuck +2 more: see loop.log",
         ]);
         expect(told.entries.map(({ task }) => task)).toEqual(tasks.map(({ id }) => `beads:${id}`));
     });
@@ -329,7 +481,7 @@ describe("stuckNotices", () => {
             detail: "cannot read",
         });
         expect(stuckNotices(report("wait", [selected([now])]), [memory]).notices).toEqual([
-            "stuck beads:X-12: cannot read",
+            "  ⚠ stuck beads:X-12: cannot read",
         ]);
     });
 
@@ -339,7 +491,9 @@ describe("stuckNotices", () => {
 });
 
 describe("stopNotice", () => {
-    it("names the reason", () => {
-        expect(stopNotice("received SIGINT")).toBe("loop stopped: received SIGINT");
+    it("names the time, the symbol and the reason", () => {
+        expect(stopNotice("11:02", "received SIGINT")).toBe(
+            "11:02 ■ loop stopped: received SIGINT",
+        );
     });
 });

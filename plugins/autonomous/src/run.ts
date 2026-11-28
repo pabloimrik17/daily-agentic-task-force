@@ -50,6 +50,7 @@ import { intervalMs } from "./loop/interval.ts";
 import { runLoop } from "./loop/loop.ts";
 import { sleep, stopOnSignals, type Wait } from "./loop/signals.ts";
 import { stopLoop } from "./loop/stop.ts";
+import { localeFromEnv, timeFormatter } from "./loop/time.ts";
 import { waitForNotices } from "./loop/wait-notices.ts";
 import { runPersist } from "./persist/persist.ts";
 import { runPublish } from "./publish/publish.ts";
@@ -264,6 +265,7 @@ function runLoopMode(args: RunArgs, steps: readonly Step[], deps: MainDeps): Pro
         iterate: () => pipelineReport(iterationArgs, steps, deps),
         render: (report) => renderText(report, steps),
         intervalMs: () => intervalMs(args, loadConfig(deps.env)),
+        formatTime: timeFormatter(localeFromEnv(deps.env)),
         stderr: deps.stderr,
     });
 }
