@@ -22,7 +22,13 @@ import { findWorkflow, missingWorkflow } from "./openspec-workflows.ts";
 import { loadPluginSkill, type PluginSkillOptions } from "./plugin-skill.ts";
 import { renderPrompt } from "./prompt.ts";
 import { HANDOFF_SKILL, loadSkills, SKILLS_PLUGIN } from "./skills.ts";
-import type { StageContext, StageEnv, StagePrerequisites, StagePromptInput } from "./stage.ts";
+import type {
+    RepositoryPrerequisites,
+    StageContext,
+    StageEnv,
+    StagePrerequisites,
+    StagePromptInput,
+} from "./stage.ts";
 
 export { HANDOFF_SKILL } from "./skills.ts";
 export const CONTEXT_KEY = "context";
@@ -409,12 +415,21 @@ async function isDirectory(path: string): Promise<boolean> {
     }
 }
 
-// Only looked at: OpenSpec is initialised by a human, never by a run.
-const openspecRoot: Check = async ({ repository }) => {
+// The repository prerequisites of every OpenSpec stage. Only looked at: OpenSpec is initialised
+// by a human, never by a run.
+export async function openspecRepository(repository: string): Promise<RepositoryPrerequisites> {
     const root = join(repository, "openspec");
     return (await isDirectory(root))
-        ? NOTHING
-        : failed(`the repository ${repository} has no OpenSpec root: ${root} is not a directory`);
+        ? { ok: true }
+        : {
+              ok: false,
+              reason: `the repository ${repository} has no OpenSpec root: ${root} is not a directory`,
+          };
+}
+
+const openspecRoot: Check = async ({ repository }) => {
+    const held = await openspecRepository(repository);
+    return held.ok ? NOTHING : failed(held.reason);
 };
 
 const workflowCheck =

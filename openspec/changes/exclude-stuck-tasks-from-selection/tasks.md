@@ -2,12 +2,12 @@
 
 ## 1. Baseline
 
-- [ ] 1.1 Verify the starting point: `bun run test` and `bun run typecheck` pass before any code change.
+- [x] 1.1 Verify the starting point: `bun run test` and `bun run typecheck` pass before any code change.
 
 ## 2. Shared pieces out of `launch`
 
-- [ ] 2.1 Move the `StageEnv` builder and the open-attempt lookup out of `attempts/launch.ts` into a module both steps import, returning the open attempt's id and state as data and leaving `launch`'s wait reasons unchanged. Verify that `launch.test.ts` passes without edits to its expectations.
-- [ ] 2.2 Add `repositoryPrerequisites` to the stage contract (design D3), move the OpenSpec-root check of the OpenSpec stages into it and keep `prerequisites` calling it. Verify with `openspec-stage.test.ts` and `stages.test.ts`: one test per scenario of the stage-sessions delta "Repository prerequisites of a stage", and the existing no-OpenSpec-root wait of `launch.test.ts` still passes.
+- [x] 2.1 Move the `StageEnv` builder and the open-attempt lookup out of `attempts/launch.ts` into a module both steps import, returning the open attempt's id and state as data and leaving `launch`'s wait reasons unchanged. Verify that `launch.test.ts` passes without edits to its expectations.
+- [x] 2.2 Add `repositoryPrerequisites` to the stage contract (design D3), move the OpenSpec-root check of the OpenSpec stages into it and keep `prerequisites` calling it. Verify with `openspec-stage.test.ts` and `stages.test.ts`: one test per scenario of the stage-sessions delta "Repository prerequisites of a stage", and the existing no-OpenSpec-root wait of `launch.test.ts` still passes.
 
 ## 3. Exclusions before the comparison
 
@@ -28,7 +28,7 @@
 
 ## 6. Notices
 
-- [ ] 6.1 Add `loop.stuck` to `loop/files.ts`, reset by `startFiles`, with read and append helpers. Verify with a new `files.test.ts` case: a new loop starts with it empty.
+- [x] 6.1 Add `loop.stuck` to `loop/files.ts`, reset by `startFiles`, with read and append helpers. Verify with a new `files.test.ts` case: a new loop starts with it empty.
 - [ ] 6.2 Emit the stuck notices in `loop/notices.ts` for the machine scope, once per task and reason, five per iteration plus the count line (design D7), and record what was told from `loop/loop.ts`. Verify with `notices.test.ts` and `loop.test.ts`: one test per scenario of "Stuck task notices", and the existing scenarios of "Notices" still pass.
 
 ## 7. Docs

@@ -10,6 +10,7 @@ import {
     checkAll,
     leftStage,
     openspecChecks,
+    openspecRepository,
     pluginSkillCheck,
 } from "../openspec-stage.ts";
 import { ADVERSARIAL_REVIEW_SKILL, REVIEW_TEAM_SKILL } from "../plugin-skill.ts";
@@ -48,6 +49,7 @@ export const codeReviewStage: Stage = {
     id: "code-review",
     emoji: "🧐",
     prerequisites: checkAll(CHECKS),
+    repositoryPrerequisites: openspecRepository,
     agentArgs: opusHighArgs,
     prompt: codeReviewPrompt,
     completed: leftStage("code-review"),

@@ -1,5 +1,5 @@
-// The two files of a loop in the state directory (design D7): the iteration log and
-// the notices. Both belong to the current loop, which resets them when it starts.
+// The files of a loop in the state directory (design D7): the iteration log, the
+// notices and the stuck tasks. All belong to the current loop, which resets them when it starts.
 
 import { appendFile, mkdir, readFile, rename, stat, writeFile } from "node:fs/promises";
 import { join } from "node:path";
@@ -10,6 +10,10 @@ function logPath(state: string): string {
 
 function noticesPath(state: string): string {
     return join(state, "loop.notices");
+}
+
+function stuckPath(state: string): string {
+    return join(state, "loop.stuck");
 }
 
 function isMissing(error: unknown): boolean {
@@ -25,6 +29,7 @@ export async function startFiles(state: string): Promise<void> {
         }
     });
     await writeFile(noticesPath(state), "");
+    await writeFile(stuckPath(state), "");
 }
 
 export function appendLog(state: string, entry: string): Promise<void> {
@@ -46,6 +51,28 @@ export async function readNotices(state: string, since: Date | null = null): Pro
         }
         const text = await readFile(file, "utf8");
         return text.split("\n").filter((line) => line !== "");
+    } catch (error) {
+        if (isMissing(error)) {
+            return [];
+        }
+        throw error;
+    }
+}
+
+// A task that cannot launch, one JSON object per line; `task` is `<source>:<id>`.
+export type StuckEntry = { task: string; exclusion: string; detail: string };
+
+export function appendStuck(state: string, entry: StuckEntry): Promise<void> {
+    return appendFile(stuckPath(state), `${JSON.stringify(entry)}\n`);
+}
+
+export async function readStuck(state: string): Promise<StuckEntry[]> {
+    try {
+        const text = await readFile(stuckPath(state), "utf8");
+        return text
+            .split("\n")
+            .filter((line) => line.trim() !== "")
+            .map((line) => JSON.parse(line) as StuckEntry);
     } catch (error) {
         if (isMissing(error)) {
             return [];

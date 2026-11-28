@@ -1,5 +1,7 @@
-// Spec stage-sessions, "Stage contract". `prerequisites` runs in `launch` before anything is
-// written, and what it reads reaches the synchronous `prompt` as `context`.
+// Spec stage-sessions, "Stage contract" and "Repository prerequisites of a stage". `prerequisites`
+// runs in `launch` before anything is written, and what it reads reaches the synchronous `prompt`
+// as `context`. `repositoryPrerequisites` reads only the repository, so `select` can check it
+// for every candidate; `prerequisites` checks it too.
 
 import type { AttemptRecord } from "../attempts/record.ts";
 import type { ContextReader } from "../context/types.ts";
@@ -51,6 +53,8 @@ export type StagePrerequisites =
     | { ok: true; context: StageContext }
     | { ok: false; reason: string };
 
+export type RepositoryPrerequisites = { ok: true } | { ok: false; reason: string };
+
 export interface StagePromptInput {
     attempt: AttemptRecord;
     task: WorkTask;
@@ -62,6 +66,7 @@ export interface Stage {
     id: StageId;
     emoji: string;
     prerequisites(env: StageEnv): Promise<StagePrerequisites>;
+    repositoryPrerequisites?(repository: string): Promise<RepositoryPrerequisites>; // absent: none
     agentArgs(tool: SessionTool): string[]; // model and effort flags the stage wants
     prompt(input: StagePromptInput): string; // the whole prompt file
     completed(task: TrackerTask): boolean; // the tracker check; reconcile checks the marker

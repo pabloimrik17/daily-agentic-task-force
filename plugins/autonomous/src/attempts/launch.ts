@@ -15,23 +15,18 @@ import type { SessionManager } from "../sessions/manager.ts";
 import { type Naming, nameSession } from "../sessions/naming.ts";
 import type { StageLabel } from "../label-contract/contract.ts";
 import { STAGES } from "../stages/registry.ts";
-import {
-    isStageId,
-    type Stage,
-    type StageContext,
-    type StageEnv,
-    type StageId,
-} from "../stages/stage.ts";
-import { branchFor, groupFor, inferRepository, listRepositories } from "../workspace/infer.ts";
+import { isStageId, type Stage, type StageContext, type StageId } from "../stages/stage.ts";
+import { groupFor, inferRepository, listRepositories } from "../workspace/infer.ts";
 import { exclusionName, renderLaunch } from "./launch-render.ts";
+import { type HoldingAttempt, holdingAttempt } from "./open-attempt.ts";
 import {
     ATTEMPT_SCHEMA,
     type AttemptId,
     type AttemptRecord,
     type AttemptState,
     attemptId,
-    holdsTask,
 } from "./record.ts";
+import { branchOf, stageEnv } from "./stage-env.ts";
 import {
     attemptDir,
     listRecords,
@@ -189,18 +184,6 @@ async function plan(
     return pass({ ...checked.value, branch, group, naming, sessions });
 }
 
-// One branch per task: the first attempt derives it from the title, every
-// later attempt, at any stage, reuses the latest record's.
-function branchOf(records: readonly AttemptRecord[], task: WorkTask): string {
-    const latest = records
-        .filter((record) => record.task.source === task.source && record.task.id === task.id)
-        .reduce<AttemptRecord | null>(
-            (best, record) => (best === null || record.attempt > best.attempt ? record : best),
-            null,
-        );
-    return latest?.workspace.branch ?? branchFor(task);
-}
-
 function titleOf(naming: Naming): LaunchData["title"] {
     return { value: naming.title, source: naming.source, error: naming.error };
 }
@@ -280,7 +263,7 @@ async function preconditions(
     if (!records.ok) {
         return records;
     }
-    const env = stageEnv(ctx, config, task, repository.value.path, records.value);
+    const env = stageEnv(ctx.io, config, task, repository.value.path, records.value);
     const ready = await stage.prerequisites(env);
     if (!ready.ok) {
         return wait(ready.reason);
@@ -289,9 +272,9 @@ async function preconditions(
     if (task.labels.includes(TAKEN)) {
         return wait(`${task.source}:${task.id} carries taken`);
     }
-    const open = openAttempt(records.value, task);
+    const open = holdingAttempt(records.value, task);
     if (open !== null) {
-        return wait(open);
+        return wait(holdingReason(open));
     }
     return pass({
         task,
@@ -302,29 +285,6 @@ async function preconditions(
     });
 }
 
-function stageEnv(
-    ctx: RunContext,
-    config: AutonomousConfig,
-    task: WorkTask,
-    repository: string,
-    records: readonly AttemptRecord[],
-): StageEnv {
-    const { io } = ctx;
-    return {
-        tool: config.sessions.tool,
-        home: io.home,
-        task,
-        repository,
-        branch: branchOf(records, task),
-        readers: {
-            context: io.context(config)[task.source],
-            pullRequests: io.pullRequests(repository),
-            openspec: io.openspec,
-            git: io.git,
-        },
-    };
-}
-
 async function readRecords(state: string): Promise<Gate<AttemptRecord[]>> {
     try {
         return pass(await listRecords(state));
@@ -333,16 +293,8 @@ async function readRecords(state: string): Promise<Gate<AttemptRecord[]>> {
     }
 }
 
-function openAttempt(records: readonly AttemptRecord[], task: WorkTask): string | null {
-    const open = records.find(
-        (record) =>
-            record.task.source === task.source && record.task.id === task.id && holdsTask(record),
-    );
-    if (open === undefined) {
-        return null;
-    }
-    const state = open.cleanup === null ? open.state : `${open.state} with a pending cleanup`;
-    return `attempt ${open.id} is ${state}`;
+function holdingReason({ id, state, pendingCleanup }: HoldingAttempt): string {
+    return `attempt ${id} is ${pendingCleanup ? `${state} with a pending cleanup` : state}`;
 }
 
 async function inferFor(
