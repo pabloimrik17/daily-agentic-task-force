@@ -493,7 +493,8 @@ When the selection found stuck tasks of the machine scope, the line carries
 `· <n> need you` before `next`, counting all of them, told or not. With none,
 or when selection did not run, it carries no count.
 
-After the summary line come the detail lines, in this order:
+After the summary line come the detail lines: the lines of the attempts, attempt
+by attempt, then the `triage-me` line, then the stuck tasks:
 
 - an iteration finalises an attempt: `✔ <source>:<task> <stage> → <stage now>`,
   where the last part is the stage label the task now carries, or `closed`;
@@ -530,7 +531,8 @@ or `<time> ■ loop stopped: runner error: <message>`.
 
 Every time is the hour and minute in the user's locale and time zone, in the
 locale's short format. The locale is the first of `LC_ALL`, `LC_TIME` and
-`LANG` that is set and valid, because the runtime ignores them; the zone is the
+`LANG` that is set and valid, because the runtime ignores them; `C` and `POSIX`
+are skipped, and with none the runtime's default is used. The zone is the
 process's. Lines carry no colour and no other terminal control sequence. For
 example, with locale `es-ES`:
 
@@ -538,7 +540,7 @@ example, with locale `es-ES`:
 10:40 ▶ launched 📝 proposal beads:X-12 · 1 need you · next 10:50
   ✔ linear:DOT-98 grill-me → proposal
   ⚠ stuck beads:X-7: repository prerequisites
-10:50 ⏸ nothing to launch: capacity: every slot is full · next 11:00
+10:50 ⏸ nothing to launch: capacity: every kind of slot is full: grill slots 1/1, work slots 2/2 · next 11:00
 11:02 ■ loop stopped: received SIGTERM
 ```
 
