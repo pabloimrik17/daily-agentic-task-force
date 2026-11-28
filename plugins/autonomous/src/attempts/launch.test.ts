@@ -111,6 +111,7 @@ function selectResult(overrides: Partial<SelectedUnit> = {}): StepResult<SelectD
             excluded: [],
             notEvaluated: [],
             comparison: null,
+            unreadable: null,
             readyToClose: [],
         },
     };

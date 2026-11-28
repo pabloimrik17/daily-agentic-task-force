@@ -57,6 +57,7 @@ export function stuckTask(id: string, overrides: Partial<Excluded> = {}): Exclud
 export function selected(
     excluded: Excluded[],
     machineScope: Scope | null = "personal",
+    unreadable: SelectData["unreadable"] = null,
 ): StepResult<SelectData> {
     return {
         step: "select",
@@ -72,6 +73,7 @@ export function selected(
             readyToClose: [],
             notEvaluated: [],
             comparison: null,
+            unreadable,
         },
     };
 }

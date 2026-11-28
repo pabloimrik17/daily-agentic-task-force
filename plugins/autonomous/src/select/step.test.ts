@@ -8,7 +8,7 @@ import { record } from "../attempts/test-fixtures.ts";
 import type { AutonomousConfig } from "../config.ts";
 import type { LabelTriageData } from "../label-triage/step.ts";
 import { config } from "../label-triage/test-fixtures.ts";
-import { appendStuck } from "../loop/files.ts";
+import { appendStuck, UNREAD_ONCE } from "../loop/files.ts";
 import { exitCodeFor } from "../report.ts";
 import type { StepResult } from "../runner.ts";
 import { grillMeStage } from "../stages/grill-me/stage.ts";
@@ -50,6 +50,7 @@ const EMPTY: SelectData = {
     readyToClose: [],
     notEvaluated: [],
     comparison: null,
+    unreadable: null,
 };
 
 const GITHUB_NOTE = ["github: dependencies"];
@@ -478,6 +479,7 @@ describe("select: JSON data", () => {
             readyToClose: [],
             notEvaluated: GITHUB_NOTE,
             comparison: null,
+            unreadable: null,
         });
     });
 
@@ -581,6 +583,8 @@ const prerequisitesUnreadable = (ids: readonly string[]) =>
                     : { ok: true, context: {} },
             ),
         );
+
+const UNREAD_DOT_120 = { source: "linear", id: "DOT-120", reason: UNREADABLE };
 
 const prerequisitesExcluded = (source: "beads" | "linear", id: string) => ({
     source,
@@ -869,6 +873,7 @@ describe("select: the chosen task's prerequisites", () => {
         expect(result.reasons).toEqual([UNREADABLE]);
         expect(result.data.excluded).toEqual([]);
         expect(result.data.selected).toBeNull();
+        expect(result.data.unreadable).toEqual(UNREAD_DOT_120);
         expect(selection.requests).toHaveLength(1);
     });
 });
@@ -938,6 +943,7 @@ describe("select: prerequisites that failed earlier in the loop", () => {
         expect(result.outcome).toBe("not-evaluable");
         expect(result.reasons).toEqual([UNREADABLE]);
         expect(result.data.excluded).toEqual([]);
+        expect(result.data.unreadable).toEqual(UNREAD_DOT_120);
         expect(selection.requests).toEqual([]);
     });
 
@@ -954,6 +960,92 @@ describe("select: prerequisites that failed earlier in the loop", () => {
         );
 
         expect(selection.requests[0]?.candidates.map((c) => c.task.id)).toEqual(["B-7", "DOT-120"]);
+    });
+});
+
+describe("select: prerequisites that could not be read earlier in the loop", () => {
+    const remember = (exclusion: string) =>
+        appendStuck(workspace.state, { task: "linear:DOT-120", exclusion, detail: UNREADABLE });
+    const looping = (calls: string[], selection = pickDot120()) =>
+        selectContext({
+            workspace,
+            calls,
+            readers: twoCandidates(calls),
+            selection,
+            args: { loop: true },
+        });
+    const setAside = {
+        source: "linear",
+        id: "DOT-120",
+        title: "Task DOT-120",
+        reason: "unreadable-prerequisites",
+        detail: UNREADABLE,
+        stuck: true,
+        scope: "personal",
+    };
+
+    it("Unreadable again: excluded before the comparison, and another task is selected", async () => {
+        await remember(UNREAD_ONCE);
+        prerequisitesUnreadable(["DOT-120"]);
+        const selection = pickDot120();
+        const result = await selectStep.run(looping([], selection));
+
+        expect(result.outcome).toBe("advance");
+        expect(selection.requests).toEqual([]);
+        expect(result.data.excluded).toEqual([setAside]);
+        expect(result.data.selected).toMatchObject({ id: "B-7" });
+        expect(result.data.unreadable).toBeNull();
+    });
+
+    it("Still unreadable in a later iteration: stays excluded", async () => {
+        await remember("unreadable-prerequisites");
+        prerequisitesUnreadable(["DOT-120"]);
+        const result = await selectStep.run(looping([]));
+
+        expect(result.data.excluded).toEqual([setAside]);
+    });
+
+    it("Readable again: the task is a candidate", async () => {
+        await remember(UNREAD_ONCE);
+        const result = await selectStep.run(looping([]));
+
+        expect(result.data.excluded).toEqual([]);
+        expect(result.data.selected).toMatchObject({ id: "DOT-120" });
+    });
+
+    it("Read and found failing: excluded as prerequisites", async () => {
+        await remember(UNREAD_ONCE);
+        prerequisitesFailing(grillMeStage, ["DOT-120"]);
+        const result = await selectStep.run(looping([]));
+
+        expect(result.data.excluded).toEqual([prerequisitesExcluded("linear", "DOT-120")]);
+    });
+
+    it("Another task unreadable for the first time: not evaluable, and the remembered one stays excluded", async () => {
+        await remember(UNREAD_ONCE);
+        prerequisitesUnreadable(["DOT-120", "B-7"]);
+        const result = await selectStep.run(looping([]));
+
+        expect(result.outcome).toBe("not-evaluable");
+        expect(result.data.excluded).toEqual([setAside]);
+        expect(result.data.unreadable).toEqual({ source: "beads", id: "B-7", reason: UNREADABLE });
+    });
+
+    it("Manual run: not evaluable, as nothing is remembered outside the loop", async () => {
+        await remember(UNREAD_ONCE);
+        prerequisitesUnreadable(["DOT-120"]);
+        const calls: string[] = [];
+        const result = await selectStep.run(
+            selectContext({
+                workspace,
+                calls,
+                readers: twoCandidates(calls),
+                selection: pickDot120(),
+            }),
+        );
+
+        expect(result.outcome).toBe("not-evaluable");
+        expect(result.data.excluded).toEqual([]);
     });
 });
 

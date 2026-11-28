@@ -46,3 +46,14 @@
 - [x] 9.2 In `select`, a chosen or remembered task whose prerequisites fail as unreadable makes the step `not-evaluable` with the reason and excludes nothing. Verify with `step.test.ts` and `run.test.ts`: the scenarios "Prerequisites cannot be read" and "Cannot be read now".
 - [x] 9.3 README: say that a prerequisite that cannot be read makes `select` not evaluable instead of excluding the task. Verify with `bun run lint:markdownlint`.
 - [x] 9.4 The checks of 8.1 pass again.
+
+## 10. A task whose prerequisites cannot be read again (design D9)
+
+- [x] 10.1 Name, in the select data, the task whose unreadable prerequisites made the step not evaluable, and have the loop record it in `loop.stuck` as a memory entry with no notice. Verify with `step.test.ts`, `notices.test.ts` and `loop.test.ts`: the scenarios "First time" and "Remembered without a notice".
+- [x] 10.2 In a loop iteration, check a remembered task's prerequisites before the comparison and exclude it as unreadable prerequisites, a stuck exclusion, when they cannot be read again. Verify with `step.test.ts`: one test per scenario of "Prerequisites that could not be read earlier in the loop".
+- [x] 10.3 README and glossary: the new exclusion, when it applies and how the task comes back. Verify with `bun run lint:markdownlint`.
+
+## 11. Which stuck tasks are named (design D7)
+
+- [x] 11.1 Order the stuck notices before the cut of five: retained attempt, prerequisites and unreadable prerequisites, then repository prerequisites, then repository. Verify with `notices.test.ts`: the scenario "Most actionable first", and that `loop.stuck` records every task.
+- [x] 11.2 The checks of 8.1 pass again.

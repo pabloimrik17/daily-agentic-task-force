@@ -21,10 +21,9 @@ import { choose } from "./compare.ts";
 import { readMachineScope } from "./machine-scope.ts";
 import {
     dropRemembered,
-    failingPrerequisites,
+    judgePrerequisites,
     type PrerequisiteEnv,
-    prerequisitesExcluded,
-    rememberedFailures,
+    rememberedTasks,
 } from "./prerequisites.ts";
 import { byReason, renderSelect } from "./render.ts";
 import { type StageSplit, splitByStage } from "./stage.ts";
@@ -34,6 +33,7 @@ import type {
     SelectData,
     SelectedUnit,
     SelectionExec,
+    Unreadable,
     WorkReader,
     WorkTask,
 } from "./types.ts";
@@ -54,6 +54,7 @@ const EMPTY: SelectData = {
     readyToClose: [],
     notEvaluated: [],
     comparison: null,
+    unreadable: null,
 };
 
 function result(
@@ -142,20 +143,17 @@ function waitReasons(excluded: readonly Excluded[]): string[] {
 
 type Tasks = Extract<Awaited<ReturnType<typeof readTasks>>, { ok: true }>["value"];
 
-interface Read extends PrerequisiteEnv {
-    remembered: ReadonlySet<string>;
-}
-
 const messageOf = (error: unknown) => (error instanceof Error ? error.message : String(error));
 
 // `loop.stuck` is read only in a loop iteration: it belongs to the running loop (design D6).
-async function readChecks(ctx: RunContext, config: AutonomousConfig): Promise<Result<Read>> {
+async function readChecks(
+    ctx: RunContext,
+    config: AutonomousConfig,
+): Promise<Result<PrerequisiteEnv>> {
     try {
         const records = await listRecords(ctx.io.state);
         const repositories = await listRepositories(config.workspace.root);
-        const remembered = ctx.args.loop
-            ? rememberedFailures(await readStuck(ctx.io.state))
-            : new Set<string>();
+        const remembered = rememberedTasks(ctx.args.loop ? await readStuck(ctx.io.state) : []);
         return { ok: true, value: { io: ctx.io, config, records, repositories, remembered } };
     } catch (error) {
         return { ok: false, error: messageOf(error) };
@@ -184,9 +182,10 @@ async function selectAmong(
     if (!found.ok) {
         return result("not-evaluable", [found.error], known);
     }
-    const kept = await dropRemembered(read.value, found.value.candidates, read.value.remembered);
+    const kept = await dropRemembered(read.value, found.value.candidates);
     if (!kept.ok) {
-        return result("not-evaluable", [kept.error], known);
+        const { unreadable } = kept;
+        return result("not-evaluable", [unreadable.reason], { ...known, unreadable });
     }
     const excluded = [...found.value.excluded, ...kept.value.excluded];
     const data = { ...known, excluded, readyToClose: found.value.readyToClose };
@@ -205,8 +204,8 @@ interface Election {
 
 type Round = { split: StageSplit<Candidate>; tier: StepTier } & (
     | { kind: "selected"; selected: SelectedUnit }
-    | { kind: "failed"; chosen: Candidate; reason: string }
-    | { kind: "broken"; error: string }
+    | { kind: "failed"; chosen: Candidate; excluded: Excluded }
+    | { kind: "broken"; error: string; unreadable?: Unreadable }
 );
 
 async function round(remaining: readonly Candidate[], election: Election): Promise<Round> {
@@ -220,13 +219,14 @@ async function round(remaining: readonly Candidate[], election: Election): Promi
     const candidate = split.kept.find(
         ({ task }) => task.source === selected.source && task.id === selected.id,
     )!; // validateSelection accepts only a candidate
-    const failing = await failingPrerequisites(env, candidate);
-    if (!failing.ok) {
-        return { split, tier, kind: "broken", error: failing.error };
+    const judged = await judgePrerequisites(env, candidate);
+    if (judged.kind === "unreadable") {
+        const { unreadable } = judged;
+        return { split, tier, kind: "broken", error: unreadable.reason, unreadable };
     }
-    return failing.value === null
+    return judged.kind === "hold"
         ? { split, tier, kind: "selected", selected }
-        : { split, tier, kind: "failed", chosen: candidate, reason: failing.value };
+        : { split, tier, kind: "failed", chosen: candidate, excluded: judged.excluded };
 }
 
 async function elect(
@@ -243,7 +243,7 @@ async function elect(
         if (next.kind !== "failed") {
             return ended(next, { data, failed, tier, settings: election.settings });
         }
-        failed.push(prerequisitesExcluded(next.chosen, next.reason));
+        failed.push(next.excluded);
         remaining = remaining.filter((candidate) => candidate !== next.chosen);
     }
     const split = remaining.length > 0 ? splitByStage(remaining) : { kept: [], setAside: [] };
@@ -280,7 +280,8 @@ function outcomeData(
 function ended(next: Exclude<Round, { kind: "failed" }>, outcome: Outcome): StepResult<SelectData> {
     const data = outcomeData(outcome, next.split);
     if (next.kind === "broken") {
-        return result("not-evaluable", [next.error], data, outcome.tier);
+        const unreadable = next.unreadable ?? null;
+        return result("not-evaluable", [next.error], { ...data, unreadable }, outcome.tier);
     }
     const { selected } = next;
     const reason = `selected ${selected.source} → ${selected.id} for ${selected.stage}, from ${plural(next.split.kept.length, "candidate")}`;

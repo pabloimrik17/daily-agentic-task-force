@@ -236,7 +236,8 @@ candidates; it never chooses anything else.
 **Stuck task**:
 A task that is never a candidate because no session could be launched for it,
 for a reason that only a person can remove: no repository can be inferred for
-it, its stage's prerequisites fail, or one of its attempts is retained. A task
+it, its stage's prerequisites fail or cannot be read twice in a loop, or one of
+its attempts is retained. A task
 that waits for something that ends by itself, such as a free slot, is not
 stuck.
 _Avoid_: blocked, unlaunchable

@@ -484,7 +484,10 @@ A notice is one line, recorded only when:
   the machine scope produces no notice, though the report still lists it as
   stuck and `loop.stuck` records it. A task and reason are told once per loop. At most five are recorded per
   iteration, followed by `stuck +<n> more: see loop.log` when there are more;
-  `loop.log` has the full report;
+  `loop.log` has the full report. The five are the ones a person can release
+  soonest: tasks stuck for a retained attempt, for prerequisites or for
+  unreadable prerequisites first, then for repository prerequisites, then for
+  repository;
 - the loop stops: `loop stopped: received SIGINT`,
   `loop stopped: received SIGTERM` or `loop stopped: runner error: <message>`.
 
@@ -512,13 +515,13 @@ bun plugins/autonomous/src/run.ts --notices 0
 In the state directory (`$AUTONOMOUS_STATE`, else `$XDG_STATE_HOME/autonomous`,
 else `~/.local/state/autonomous`):
 
-| File           | Content                                                                                                                                                        |
-| -------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `loop.lock`    | The loop's pid and start time, held from start to end                                                                                                          |
-| `loop.log`     | The report of every iteration with its start time, as text or, with `--json`, JSON; the only full report                                                       |
-| `loop.log.1`   | The log of the previous loop; a new loop renames the log to it, so the log is bounded to two loops                                                             |
-| `loop.notices` | The notices of the current loop, one per line; emptied when a loop starts                                                                                      |
-| `loop.stuck`   | Every stuck task the loop has met, of any scope, one line per task with its exclusion and reason; only machine-scope ones are told; emptied when a loop starts |
+| File           | Content                                                                                                                                                                                                                                            |
+| -------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `loop.lock`    | The loop's pid and start time, held from start to end                                                                                                                                                                                              |
+| `loop.log`     | The report of every iteration with its start time, as text or, with `--json`, JSON; the only full report                                                                                                                                           |
+| `loop.log.1`   | The log of the previous loop; a new loop renames the log to it, so the log is bounded to two loops                                                                                                                                                 |
+| `loop.notices` | The notices of the current loop, one per line; emptied when a loop starts                                                                                                                                                                          |
+| `loop.stuck`   | Every stuck task the loop has met, of any scope, one line per task with its exclusion and reason, and the tasks whose prerequisites could not be read once (`unreadable-once`); only stuck machine-scope ones are told; emptied when a loop starts |
 
 ### Stopping it
 
@@ -2952,7 +2955,8 @@ In order, the step:
     | 11    | no free slot             | Only in an iteration of the loop: the slot kind of its next stage is full                                                                 |
 
     After the choice (step 5), a twelfth exclusion, **prerequisites**, applies
-    to the chosen task only.
+    to the chosen task only. A thirteenth, **unreadable prerequisites**, applies
+    only in an iteration of the loop (see step 6).
 
     Classification counts present contract labels only: an alias or a
     structural rule does not rescue a task here. A task in `grill-me` without an
@@ -3016,7 +3020,8 @@ In order, the step:
    plugin registry, `openspec --version`, the task's context, a pull request or
    git read) is not a failed one: it makes the step `not-evaluable` with its
    reason instead of excluding the task, since it is a problem of the machine,
-   not of the task. With `--task`, selection does not run and `launch` alone
+   not of the task. The step's data names the task and the reason as
+   `unreadable`. With `--task`, selection does not run and `launch` alone
    checks them.
 
 In an iteration of the loop, the step also remembers the tasks excluded as
@@ -3025,12 +3030,22 @@ checks their prerequisites before the comparison and excludes the ones that
 still fail, so the comparison is not given them and does not spend a choice on
 them every iteration. A task whose prerequisites now hold is a candidate again,
 and one whose prerequisites now cannot be read makes the step `not-evaluable`.
+
+The loop also remembers the task whose unreadable prerequisites made an
+iteration `not-evaluable`. The next iterations check that task before the
+comparison too. When its prerequisites cannot be read again, it is excluded as
+**unreadable prerequisites** with the read error, and the selection goes on with
+the other candidates, so one task whose read always fails cannot hold the loop.
+The task is checked again in every iteration and is a candidate as soon as its
+prerequisites are read and hold. While a read of the whole machine fails, this
+sets one more task aside per iteration; they all come back when the read works.
 Outside the loop nothing is remembered.
 
 ### Stuck tasks
 
 A task is **stuck** when it is excluded as repository, repository
-prerequisites or prerequisites, or as open attempt with a `retained` attempt.
+prerequisites, prerequisites or unreadable prerequisites, or as open attempt
+with a `retained` attempt.
 No other exclusion makes a task stuck: a running attempt, a free slot that
 ends by itself, `taken` and the rest are not. The step writes nothing to any
 tracker because a task is stuck: no `triage-me`, no label.
@@ -3042,6 +3057,8 @@ A person releases a stuck task by removing what excludes it:
 - **Repository prerequisites:** add an OpenSpec root to the repository.
 - **Prerequisites:** fix what the reason names, the same reason `launch` would
   wait with.
+- **Unreadable prerequisites:** fix the read the reason names (a tracker, `gh`,
+  git, a file). The task comes back by itself in the next iteration.
 - **Retained attempt:** discard it with `--apply --discard` (see
   [Discard mode](#discard-mode)).
 
@@ -3128,7 +3145,9 @@ With `--json`, the step's data carries the same information, with the ready
 to close tasks as `readyToClose`, `{ source, id, title }` each, plus the
 selection model and effort when the LLM was called. Every excluded task carries
 `detail`, the reason text of its exclusion (`null` when it has none), and
-`stuck`, whether it is a stuck task.
+`stuck`, whether it is a stuck task. `unreadable` is the task whose prerequisites
+could not be read, `{ source, id, reason }`, when that made the step
+`not-evaluable`, and `null` otherwise.
 
 ## The `reconcile` step
 

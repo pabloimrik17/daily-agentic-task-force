@@ -2,7 +2,12 @@ import type { HoldingAttempt } from "../attempts/open-attempt.ts";
 import type { Scope } from "../config.ts";
 import type { Excluded, Exclusion, WorkTask } from "./types.ts";
 
-const STUCK: readonly Exclusion[] = ["repository", "repository-prerequisites", "prerequisites"];
+const STUCK: readonly Exclusion[] = [
+    "repository",
+    "repository-prerequisites",
+    "prerequisites",
+    "unreadable-prerequisites",
+];
 
 // Spec work-selection, "Stuck tasks": a retained attempt waits for a person, a running one does not.
 export function isStuck(reason: Exclusion, attempt: HoldingAttempt | null): boolean {

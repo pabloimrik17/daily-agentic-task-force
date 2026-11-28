@@ -313,6 +313,7 @@ describe("renderSelect: candidates set aside", () => {
         readyToClose: [],
         notEvaluated: [],
         comparison: null,
+        unreadable: null,
     };
 
     it("lists a set-aside candidate with its stage, apart from the excluded tasks", () => {
@@ -506,4 +507,5 @@ const EMPTY_DATA: SelectData = {
     readyToClose: [],
     notEvaluated: [],
     comparison: null,
+    unreadable: null,
 };

@@ -35,3 +35,26 @@ Beside the notices that "Notices" lists, an iteration SHALL record one notice pe
 
 - **WHEN** the loop is stopped and started again, and `beads:X-12` is still stuck for the same reason
 - **THEN** the first iteration of the new loop records its notice again
+
+### Requirement: Order of the stuck task notices
+
+The stuck task notices of an iteration SHALL be ordered before the first five are taken: tasks stuck for a retained attempt, for prerequisites or for unreadable prerequisites, then for repository prerequisites, then for repository. Inside each group the order SHALL be the order of the report.
+
+#### Scenario: Most actionable first
+
+- **WHEN** an iteration finds, new and of the machine scope, six tasks stuck as repository and then one stuck as prerequisites
+- **THEN** the first notice names the task stuck as prerequisites, four name tasks stuck as repository, and one says that 2 more are stuck
+
+### Requirement: Unreadable prerequisites are remembered
+
+When an iteration's selection is `not-evaluable` and names a task whose prerequisites could not be read, the loop SHALL remember that task and reason for the rest of the loop and SHALL record no notice for it. A new loop SHALL start with nothing remembered.
+
+#### Scenario: Remembered without a notice
+
+- **WHEN** an iteration's selection is `not-evaluable` because the prerequisites of `linear:DOT-1` cannot be read
+- **THEN** no notice is recorded for it, and the next iteration's selection is given that the task was named
+
+#### Scenario: Told when set aside
+
+- **WHEN** the next iteration excludes `linear:DOT-1` as unreadable prerequisites and the task is of the machine scope
+- **THEN** one notice says `stuck linear:DOT-1:` followed by the read error

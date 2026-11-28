@@ -5,7 +5,7 @@ import { LABEL_TRIAGE } from "../label-triage/question-id.ts";
 import type { LabelTriageData } from "../label-triage/step.ts";
 import type { MarkRecord } from "../label-triage/write.ts";
 import type { StepResult } from "../runner.ts";
-import type { StuckEntry } from "./files.ts";
+import { type StuckEntry, UNREAD_ONCE } from "./files.ts";
 import { iterationNotices, stopNotice, stuckNotices } from "./notices.ts";
 import { attempt, reconciled, report, selected, stuckTask } from "./test-fixtures.ts";
 
@@ -270,6 +270,45 @@ describe("stuckNotices", () => {
             notices: [],
             entries: [],
         });
+    });
+
+    it("names retained attempts and failed prerequisites first, then repository prerequisites, then no repository", () => {
+        const tasks = [
+            ...[0, 1, 2].map((n) => stuckTask(`R-${n}`)),
+            stuckTask("O-1", { reason: "repository-prerequisites", detail: "no OpenSpec root" }),
+            stuckTask("A-1", { reason: "open-attempt", detail: "attempt a is retained" }),
+            stuckTask("P-1", { reason: "prerequisites", detail: "lacks a skill" }),
+            stuckTask("U-1", { reason: "unreadable-prerequisites", detail: "cannot read" }),
+        ];
+        const told = stuckNotices(report("wait", [selected(tasks)]), []);
+        expect(told.notices).toEqual([
+            "stuck beads:A-1: attempt a is retained",
+            "stuck beads:P-1: lacks a skill",
+            "stuck beads:U-1: cannot read",
+            "stuck beads:O-1: no OpenSpec root",
+            `stuck beads:R-0: ${REPOSITORY}`,
+            "stuck +2 more: see loop.log",
+        ]);
+        expect(told.entries.map(({ task }) => task)).toEqual(tasks.map(({ id }) => `beads:${id}`));
+    });
+
+    it("remembers the task whose prerequisites could not be read, without telling it", () => {
+        const unreadable = { source: "linear" as const, id: "DOT-1", reason: "cannot read" };
+        const iteration = report("not-evaluable", [selected([], "personal", unreadable)]);
+        const memory = { task: "linear:DOT-1", exclusion: UNREAD_ONCE, detail: "cannot read" };
+        expect(stuckNotices(iteration, [])).toEqual({ notices: [], entries: [memory] });
+        expect(stuckNotices(iteration, [memory])).toEqual({ notices: [], entries: [] });
+    });
+
+    it("tells a task excluded as unreadable prerequisites although it was remembered", () => {
+        const memory = { task: "beads:X-12", exclusion: UNREAD_ONCE, detail: "cannot read" };
+        const now = stuckTask("X-12", {
+            reason: "unreadable-prerequisites",
+            detail: "cannot read",
+        });
+        expect(stuckNotices(report("wait", [selected([now])]), [memory]).notices).toEqual([
+            "stuck beads:X-12: cannot read",
+        ]);
     });
 
     it("tells nothing when the iteration has no select data", () => {

@@ -60,6 +60,10 @@ export async function readNotices(state: string, since: Date | null = null): Pro
 // A damaged line is skipped, so at worst a notice is told again or a prerequisite is checked again.
 export type StuckEntry = { task: string; exclusion: string; detail: string };
 
+// The exclusion of an entry that is only a memory: the task's prerequisites could not be read
+// once, and no task was excluded for it.
+export const UNREAD_ONCE = "unreadable-once";
+
 export function appendStuck(state: string, entry: StuckEntry): Promise<void> {
     return appendFile(stuckPath(state), `${JSON.stringify(entry)}\n`);
 }

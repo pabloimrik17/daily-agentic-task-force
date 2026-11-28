@@ -6,8 +6,8 @@ import type { ReconciledAttempt, ReconcileData } from "../attempts/reconcile.ts"
 import { LABEL_TRIAGE } from "../label-triage/question-id.ts";
 import type { LabelTriageData } from "../label-triage/step.ts";
 import type { RunReport } from "../report.ts";
-import type { Excluded, SelectData } from "../select/types.ts";
-import type { StuckEntry } from "./files.ts";
+import type { Excluded, Exclusion, SelectData } from "../select/types.ts";
+import { type StuckEntry, UNREAD_ONCE } from "./files.ts";
 
 const MARKS_NAMED = 5;
 
@@ -63,7 +63,7 @@ function entryOf({ source, id, reason, detail }: Excluded): StuckEntry {
 
 export interface StuckTold {
     notices: string[];
-    entries: StuckEntry[]; // every new stuck task of the iteration, of any scope
+    entries: StuckEntry[]; // every new stuck task of the iteration, of any scope, and its memory
 }
 
 function unrecorded(excluded: Excluded[], recorded: readonly StuckEntry[]): Excluded[] {
@@ -74,6 +74,30 @@ function unrecorded(excluded: Excluded[], recorded: readonly StuckEntry[]): Excl
         known.push(entry);
         return isNew;
     });
+}
+
+// Only five are named, so the tasks a person can release soonest come first: a retained attempt
+// or failing prerequisites, then a repository that lacks something, then no repository at all.
+const NAMED_AFTER: Partial<Record<Exclusion, number>> = {
+    "repository-prerequisites": 1,
+    repository: 2,
+};
+
+function byUrgency(stuck: Excluded[]): Excluded[] {
+    const rank = ({ reason }: Excluded) => NAMED_AFTER[reason] ?? 0;
+    return stuck.toSorted((a, b) => rank(a) - rank(b));
+}
+
+// The task whose prerequisites made the iteration not evaluable, remembered and never told:
+// select excludes it when they cannot be read again (design D9).
+function unreadOnce(data: SelectData | undefined, recorded: readonly StuckEntry[]): StuckEntry[] {
+    const unreadable = data?.unreadable ?? null;
+    if (unreadable === null) {
+        return [];
+    }
+    const { source, id, reason } = unreadable;
+    const entry = { task: `${source}:${id}`, exclusion: UNREAD_ONCE, detail: reason };
+    return recorded.some((other) => sameEntry(other, entry)) ? [] : [entry];
 }
 
 function stuckLines(told: StuckEntry[]): string[] {
@@ -94,7 +118,10 @@ export function stuckNotices(report: RunReport, recorded: readonly StuckEntry[])
         recorded,
     );
     const ofMachine = fresh.filter(({ scope }) => scope !== null && scope === data?.machineScope);
-    return { notices: stuckLines(ofMachine.map(entryOf)), entries: fresh.map(entryOf) };
+    return {
+        notices: stuckLines(byUrgency(ofMachine).map(entryOf)),
+        entries: [...fresh.map(entryOf), ...unreadOnce(data, recorded)],
+    };
 }
 
 export function stopNotice(reason: string): string {

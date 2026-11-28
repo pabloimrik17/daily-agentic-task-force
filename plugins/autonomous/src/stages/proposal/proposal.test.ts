@@ -342,6 +342,7 @@ describe("launch: a proposal unit", () => {
             readyToClose: [],
             notEvaluated: [],
             comparison: null,
+            unreadable: null,
         },
     };
 

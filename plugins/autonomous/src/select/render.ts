@@ -16,6 +16,7 @@ const EXCLUSION_NAMES: Record<Exclusion, string> = {
     "repository-prerequisites": "repository prerequisites",
     "no-free-slot": "no free slot",
     prerequisites: "prerequisites",
+    "unreadable-prerequisites": "unreadable prerequisites",
 };
 
 const EXCLUSIONS = Object.keys(EXCLUSION_NAMES) as Exclusion[];

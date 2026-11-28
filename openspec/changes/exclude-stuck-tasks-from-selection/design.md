@@ -56,7 +56,7 @@ After `choose`, `select` builds the same `StageEnv` as `launch` (the builder mov
 
 ### D6. Remembering failed prerequisites within a loop
 
-A task excluded as prerequisites is not known to fail until it is chosen, so without memory the comparison would pick it first on every iteration and spend a re-election each time. The loop keeps `loop.stuck` in the state directory: one line per stuck task the loop has met, of any scope, with its exclusion and reason, whether or not it was told. `select` in a loop iteration receives the task keys recorded there with a prerequisites reason and checks those tasks' prerequisites before the comparison (a handful of reads), excluding the ones that still fail. A task whose prerequisites now hold becomes a candidate again. Outside the loop nothing is remembered.
+A task excluded as prerequisites is not known to fail until it is chosen, so without memory the comparison would pick it first on every iteration and spend a re-election each time. The loop keeps `loop.stuck` in the state directory: one line per stuck task the loop has met, of any scope, with its exclusion and reason, whether or not it was told. `select` in a loop iteration receives the task keys recorded there with a prerequisites reason and checks those tasks' prerequisites before the comparison (a handful of reads), excluding the ones that still fail. A task whose prerequisites now hold becomes a candidate again. Outside the loop nothing is remembered. Under D9 the same file also remembers a task whose prerequisites could not be read.
 
 ### D7. Stuck notices: machine scope, once per task and reason, five per iteration
 
@@ -69,9 +69,29 @@ Two limits come from the measurement in Context; the person confirmed both on 20
 
 Alternative rejected: one notice per reason with a count. It hides which tasks, which is the thing the person needs.
 
+**Which five.** Found in review: the five were the first in the order of the excluded list, where tasks with no repository come first and the tasks that failed their prerequisites last. With 57 `personal` tasks without a repository, a task the person could release in a minute was never named, and because it was recorded it was not named later either. The notices are now ordered before the cut: a retained attempt, failed prerequisites and unreadable prerequisites (D9) first, then repository prerequisites, then no repository. The order inside each group stays the order of the excluded list. `loop.stuck` records every task whatever the order. The person decided this on 2026-11-28.
+
 ### D8. A prerequisite that cannot be read is not a failed one
 
-Found in verification: the stages reported a read error (the plugin registry, `openspec --version`, the task's context, the pull request or git lookups) as an ordinary failed prerequisite, so a problem of the whole machine marked every chosen task stuck, told a notice for each and spent up to 4 comparisons per iteration. A failed `StagePrerequisites` gains an optional `unreadable: true`, set by the checks whose read failed; a check that read and found something missing (a skill not installed, a workflow absent, no pull request, no OpenSpec root) stays a plain failure. `launch` ignores the flag and waits with the reason, as before. `select` makes the step `not-evaluable` with the reason, for the chosen task and for a task remembered under D6, and excludes nothing for it. The person decided this on 2026-11-28, over narrowing the spec to a check that throws.
+Found in verification: the stages reported a read error (the plugin registry, `openspec --version`, the task's context, the pull request or git lookups) as an ordinary failed prerequisite, so a problem of the whole machine marked every chosen task stuck, told a notice for each and spent up to 4 comparisons per iteration. A failed `StagePrerequisites` gains an optional `unreadable: true`, set by the checks whose read failed; a check that read and found something missing (a skill not installed, a workflow absent, no pull request, no OpenSpec root) stays a plain failure. `launch` ignores the flag and waits with the reason, as before. `select` makes the step `not-evaluable` with the reason, for the chosen task and for a task remembered under D6, and excludes nothing for it. The person decided this on 2026-11-28, over narrowing the spec to a check that throws. D9 limits it to the first time in a loop.
+
+### D9. A task whose prerequisites cannot be read again is set aside
+
+Found in review: some of the reads D8 marks unreadable belong to one task, not to the machine: the task's context, the pull request lookup of its branch, the git reads of its change. When one of them fails every time for one task, the comparison chooses that task on every iteration and the step is `not-evaluable` every time, so the loop launches nothing: the stall this change exists to remove, at one comparison per iteration.
+
+D8 stays for the first time. When `select` is `not-evaluable` because a task's prerequisites cannot be read, its data names that task (`unreadable`), and the loop records it in `loop.stuck` as a memory entry (exclusion `unreadable-once`), with no notice. In a later iteration of the same loop, `select` checks that task's prerequisites before the comparison, as for D6:
+
+- they hold: the task is a candidate;
+- they fail: it is excluded as prerequisites;
+- they cannot be read again: it is excluded as **unreadable prerequisites**, a new exclusion that makes the task stuck, with the read error as its reason. The selection goes on with the other candidates.
+
+A task excluded this way is checked again in every iteration, so it comes back by itself when the read works. The same rule applies to a chosen task that is remembered. Outside the loop nothing is remembered and D8 applies unchanged.
+
+The person asked for "a read that failed in consecutive iterations". The memory is not cleared when a read works in between, because `loop.stuck` is append-only: a task whose read failed once, then worked, then fails again is set aside at that second failure, without a `not-evaluable` iteration first. In the case that matters, a read that fails every time, the two are the same.
+
+Alternatives rejected: treating the per-task reads as failed prerequisites again brings back D8's problem whenever `gh` or the tracker is down. Telling per-task reads from machine-wide ones by their reason text is fragile: a network failure names the task in the text too.
+
+The cost: while a machine-wide read fails for hours, each iteration sets one more task aside and tells it once, with one comparison per iteration, where D8 alone would report `not-evaluable` every time. The tasks come back by themselves when the read works again, and the first notice already names the cause.
 
 ## Risks / Trade-offs
 
@@ -80,6 +100,8 @@ Found in verification: the stages reported a read error (the plugin registry, `o
 - [Up to 4 comparisons in one run lengthen an iteration] → bounded by the count and by the existing per-call limit; D6 keeps it to the first iteration that meets a failing task.
 - [The machine-scope limit hides a `work` task selected as an exception that is stuck] → it is still excluded and listed in the report; only the notice is skipped.
 - [`loop.stuck` grows] → it is bounded by the number of stuck tasks and reset on every loop start.
+- [A machine-wide read failure sets aside one task per iteration under D9] → each is told once with the cause, is checked again every iteration and returns when the read works.
+- [The order of D7 hides a task with no repository behind five others] → the count line says how many are not named and the log lists them all.
 
 ## Migration Plan
 

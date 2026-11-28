@@ -122,9 +122,48 @@ In an iteration of the loop, a task that an earlier iteration of the same loop e
 - **WHEN** `/autonomous:run` runs after a loop excluded a task as prerequisites
 - **THEN** the task reaches the comparison unless another exclusion applies
 
+### Requirement: Prerequisites that could not be read earlier in the loop
+
+A step that is `not-evaluable` for a task's unreadable prerequisites SHALL name the task and the reason in its data. In an iteration of the loop, a task so named earlier in the same loop SHALL have its prerequisites checked before the comparison. When they cannot be read again, the task SHALL be excluded as **unreadable prerequisites** with the read error. Outside an iteration nothing SHALL be remembered.
+
+#### Scenario: First time
+
+- **WHEN** the chosen task's prerequisites fail as unreadable and no earlier iteration named the task
+- **THEN** the step is `not-evaluable`, nothing is excluded, and the step's data names the task and the reason
+
+#### Scenario: Unreadable again
+
+- **WHEN** the previous iteration was `not-evaluable` for a task's unreadable prerequisites and they cannot be read now
+- **THEN** the task is excluded as unreadable prerequisites before the comparison, and another candidate is selected
+
+#### Scenario: Still unreadable later
+
+- **WHEN** an earlier iteration excluded a task as unreadable prerequisites and they still cannot be read
+- **THEN** the task is excluded as unreadable prerequisites again
+
+#### Scenario: Readable again
+
+- **WHEN** an earlier iteration named a task for unreadable prerequisites and they now hold
+- **THEN** the task is a candidate
+
+#### Scenario: Read and found failing
+
+- **WHEN** an earlier iteration named a task for unreadable prerequisites and they are now read and fail
+- **THEN** the task is excluded as prerequisites
+
+#### Scenario: Another task for the first time
+
+- **WHEN** one task is excluded as unreadable prerequisites and the task then chosen fails as unreadable for the first time
+- **THEN** the step is `not-evaluable`, the first task stays excluded, and the data names the second
+
+#### Scenario: Manual run
+
+- **WHEN** `/autonomous:run` runs after a loop named a task for unreadable prerequisites, and they cannot be read
+- **THEN** the step is `not-evaluable` and the task is not excluded
+
 ### Requirement: Stuck tasks
 
-An excluded task SHALL be a **stuck task** when its exclusion is repository, repository prerequisites or prerequisites, or open attempt with a retained attempt. No other exclusion SHALL make a task stuck. The step SHALL NOT write to any tracker because a task is stuck.
+An excluded task SHALL be a **stuck task** when its exclusion is repository, repository prerequisites, prerequisites or unreadable prerequisites, or open attempt with a retained attempt. No other exclusion SHALL make a task stuck. The step SHALL NOT write to any tracker because a task is stuck.
 
 #### Scenario: Retained attempt
 

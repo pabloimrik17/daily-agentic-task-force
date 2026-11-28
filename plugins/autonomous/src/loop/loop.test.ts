@@ -307,6 +307,21 @@ describe("runLoop stuck notices", () => {
         ).toEqual([{ task: "beads:W-1", exclusion: "repository", detail: REASON }]);
     });
 
+    it("remembers a task whose prerequisites could not be read, with no notice", async () => {
+        const dir = state();
+        const unreadable = { source: "linear" as const, id: "DOT-1", reason: "cannot read" };
+        const iteration = report("not-evaluable", [selected([], "personal", unreadable)]);
+        await runLoop(harness(dir, () => Promise.resolve(iteration), 2).io);
+        expect(notices(dir)).toEqual(["loop stopped: received SIGTERM"]);
+        expect(read(dir, "loop.stuck").trim().split("\n")).toEqual([
+            JSON.stringify({
+                task: "linear:DOT-1",
+                exclusion: "unreadable-once",
+                detail: "cannot read",
+            }),
+        ]);
+    });
+
     it("tells the task again in a new loop", async () => {
         const dir = state();
         await runLoop(harness(dir, () => stuckReport(stuckTask("X-12")), 1).io);
