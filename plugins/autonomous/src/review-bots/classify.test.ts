@@ -58,6 +58,14 @@ describe("A review bot with no check run waits, then is not reviewing", () => {
         });
     });
 
+    it("Wait starting after the clock: Greptile has the whole wait left, never more", () => {
+        const readyAt = minutesAfter(NOW.toISOString(), 1).toISOString();
+        expect(stateOf("greptile", withoutGreptile, prState({ readyAt }), NOW)).toEqual({
+            kind: "waiting",
+            minutesLeft: 30,
+        });
+    });
+
     it("Wait run out: 31 minutes after a head commit later than the ready mark, Greptile is not reviewing for 30 minutes", () => {
         const readyAt = minutesAfter(COMMITTED_AT, -60).toISOString();
         const now = minutesAfter(COMMITTED_AT, 31);

@@ -61,8 +61,9 @@ function waitStart(state: PullRequestState): number {
 
 function stateWithoutRun(state: PullRequestState, waitMinutes: number, now: Date): BotState {
     const left = waitStart(state) + waitMinutes * MINUTE_MS - now.getTime();
+    // A wait that starts after the clock has the whole wait left, never more.
     return left > 0
-        ? { kind: "waiting", minutesLeft: Math.ceil(left / MINUTE_MS) }
+        ? { kind: "waiting", minutesLeft: Math.min(waitMinutes, Math.ceil(left / MINUTE_MS)) }
         : { kind: "not-reviewing", reason: `no check run in ${waitMinutes} minutes` };
 }
 
