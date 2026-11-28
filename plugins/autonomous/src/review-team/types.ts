@@ -2,6 +2,8 @@
 // D4 and D10 to D12). Reviewers write a `ReviewerFile`; `collect` stamps the
 // id, the reviewer, the engine and the severity, and writes the `Report`.
 
+import type { ExternalReviewConfig } from "../review-bots/types.ts";
+
 export const FINDING_SCHEMA = "autonomous.finding.v1";
 export const REPORT_SCHEMA = "autonomous.review-report.v1";
 export const PLAN_SCHEMA = "autonomous.review-plan.v1";
@@ -124,6 +126,7 @@ export interface ReviewConfig {
     tiers: { S: TierThreshold; M: TierThreshold };
     team: Record<Tier, TeamRow[]>;
     security: { pathPatterns: string[]; linePatterns: string[]; model?: string; effort?: string };
+    external: ExternalReviewConfig;
 }
 
 export interface Subject {

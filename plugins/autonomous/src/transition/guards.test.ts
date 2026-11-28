@@ -1,4 +1,4 @@
-import { rmSync } from "node:fs";
+import { rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 
 import { afterEach, describe, expect, it } from "vitest";
@@ -7,7 +7,16 @@ import type { TaskRef } from "../attempts/record.ts";
 import { writeRecord } from "../attempts/state.ts";
 import { record, tempState } from "../attempts/test-fixtures.ts";
 import { guardsOnLeaving } from "./guards.ts";
-import { BRANCH, CHANGE, stateWithWorkspace, type Work, workTools } from "./test-fixtures.ts";
+import { run } from "../review-bots/test-fixtures.ts";
+import {
+    BRANCH,
+    CHANGE,
+    type Reviewed,
+    stateInReview,
+    stateWithWorkspace,
+    type Work,
+    workTools,
+} from "./test-fixtures.ts";
 
 const TASK: TaskRef = { source: "linear", id: "DOT-121" };
 
@@ -204,5 +213,129 @@ describe("guards: Leaving code-review needs the work finished", () => {
 
         expect(await leaving({}, calls, "code-review")).toEqual([]);
         expect(calls).toHaveLength(7);
+    });
+});
+
+describe("guards: Leaving external-review needs a quiet round", () => {
+    async function rounding(reviewed: Reviewed = {}, work: Work = {}, calls: string[] = []) {
+        const made = await stateInReview(TASK, {
+            stage: "external-review",
+            attempt: 2,
+            quiet: true,
+            ...reviewed,
+        });
+        kept.push(made.state, made.workspace);
+        const reasons = await guardsOnLeaving(
+            "external-review",
+            TASK,
+            made.state,
+            workTools(work, calls),
+        );
+        return { ...made, reasons };
+    }
+
+    const notQuiet = (attempt: string, dir: string) =>
+        `external-review attempt ${attempt} has a publish receipt at ${join(dir, "published.json")} ` +
+        "that is not a quiet round's, so the external review is not over; leave the task to its next round, or discard the attempt";
+
+    it("Round not quiet: the publish receipt is named", async () => {
+        const { reasons, attempt, dir } = await rounding({ quiet: false });
+
+        expect(reasons).toEqual([notQuiet(attempt, dir)]);
+    });
+
+    it("Check running: the check that has not ended is named", async () => {
+        const { reasons } = await rounding(
+            {},
+            { checkRuns: [run("audit", { status: "in_progress", conclusion: null })] },
+        );
+
+        expect(reasons).toEqual(["the check audit has not ended on 0ddba11"]);
+    });
+
+    it("Quiet and green: a current quiet receipt, finished work and passed checks pass", async () => {
+        const calls: string[] = [];
+        const { reasons } = await rounding(
+            {},
+            { checkRuns: [run("main"), run("CodeRabbit", { status: "in_progress" })] },
+            calls,
+        );
+
+        expect(reasons).toEqual([]);
+        expect(calls.slice(-3)).toEqual([
+            `pr find ${BRANCH}`,
+            "pr state 7",
+            "pr checkRuns 0ddba11",
+        ]);
+    });
+
+    it("a failed check is named with its conclusion", async () => {
+        const { reasons } = await rounding(
+            {},
+            { checkRuns: [run("main", { conclusion: "timed_out" })] },
+        );
+
+        expect(reasons).toEqual(["the check main concluded timed_out on 0ddba11"]);
+    });
+
+    it("no publish receipt, and a record changed after publishing, are named as for a code review", async () => {
+        const missing = await rounding({ published: null });
+        const changed = await rounding({ findings: "{}\n" });
+
+        expect(missing.reasons).toEqual([
+            `external-review attempt ${missing.attempt} has no publish receipt at ${join(missing.dir, "published.json")}, ` +
+                `so its record is not published; publish it with --apply --publish ${missing.attempt}, or discard the attempt`,
+        ]);
+        expect(changed.reasons).toEqual([
+            `external-review attempt ${changed.attempt} has a findings.json that differs from the one published, ` +
+                `so its record is not published; publish it with --apply --publish ${changed.attempt}, or discard the attempt`,
+        ]);
+    });
+
+    it("every reason that holds comes back: the work, the receipt and the checks", async () => {
+        const { reasons, attempt, dir } = await rounding(
+            { quiet: false },
+            {
+                ahead: 1,
+                checkRuns: [
+                    run("main", { conclusion: "failure" }),
+                    run("audit", { status: "queued", conclusion: null }),
+                ],
+            },
+        );
+
+        expect(reasons).toEqual([
+            `the branch ${BRANCH} has 1 commit origin/${BRANCH} lacks`,
+            notQuiet(attempt, dir),
+            "the check main concluded failure on 0ddba11",
+            "the check audit has not ended on 0ddba11",
+        ]);
+    });
+
+    it("a publish receipt that cannot be read and check runs that cannot be read are reasons", async () => {
+        const made = await stateInReview(TASK, { stage: "external-review", quiet: true });
+        kept.push(made.state, made.workspace);
+        writeFileSync(join(made.dir, "published.json"), "not json");
+
+        const reasons = await guardsOnLeaving(
+            "external-review",
+            TASK,
+            made.state,
+            workTools({ checkRunsError: "HTTP 500" }),
+        );
+
+        expect(reasons).toHaveLength(2);
+        expect(reasons[0]).toContain("is not valid JSON");
+        expect(reasons[1]).toBe("cannot read the check runs of pull request #7: HTTP 500");
+    });
+
+    it("a task with no open attempt of the stage is checked for its work and its checks only", async () => {
+        const { reasons } = await (async () => {
+            const { state, workspace } = await stateWithWorkspace(TASK);
+            kept.push(state, workspace);
+            return { reasons: await guardsOnLeaving("external-review", TASK, state, workTools()) };
+        })();
+
+        expect(reasons).toEqual([]);
     });
 });

@@ -1,0 +1,52 @@
+{
+    "data": {
+        "repository": {
+            "pullRequest": {
+                "reviews": {
+                    "pageInfo": {
+                        "hasNextPage": false,
+                        "endCursor": "Y3Vyc29yOnYyOpHODemo"
+                    },
+                    "nodes": [
+                        {
+                            "id": "PRR_demo1",
+                            "author": {
+                                "login": "pullfrog"
+                            },
+                            "state": "COMMENTED",
+                            "commit": {
+                                "oid": "c2338a22165151255d29a376636e2af04196e085"
+                            },
+                            "body": "> [!IMPORTANT]\n> Reusing a named `--dir` lets `collect` report a previous run's reviewer files as this run's. That silently skips the required-reviewer error the spec asks for. Two smaller issues are inline.\n\n**Approach:** Sound. A deterministic CLI decides the subject, tier, team, availability, sev…",
+                            "url": "https://github.com/demo/repo/pull/42#pullrequestreview-1"
+                        },
+                        {
+                            "id": "PRR_demo2",
+                            "author": {
+                                "login": "greptile-apps"
+                            },
+                            "state": "COMMENTED",
+                            "commit": {
+                                "oid": "c2338a22165151255d29a376636e2af04196e085"
+                            },
+                            "body": "",
+                            "url": "https://github.com/demo/repo/pull/42#pullrequestreview-2"
+                        },
+                        {
+                            "id": "PRR_demo3",
+                            "author": {
+                                "login": "coderabbitai"
+                            },
+                            "state": "CHANGES_REQUESTED",
+                            "commit": {
+                                "oid": "c2338a22165151255d29a376636e2af04196e085"
+                            },
+                            "body": "<!-- coderabbit-ai-generated:v1 -->\n\n**Actionable comments posted: 15**\n\n---",
+                            "url": "https://github.com/demo/repo/pull/42#pullrequestreview-3"
+                        }
+                    ]
+                }
+            }
+        }
+    }
+}

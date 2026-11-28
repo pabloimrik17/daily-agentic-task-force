@@ -23,7 +23,9 @@ import type { TrackerLabel, Trackers } from "../label-triage/trackers/tracker.ts
 import { READ_BACK_DELAYS_MS } from "../read-back.ts";
 import { exitCodeFor } from "../report.ts";
 import type { AnswerContext, AnswerRecord } from "../runner.ts";
+import { run as checkRun } from "../review-bots/test-fixtures.ts";
 import { transitionHandler } from "./answer.ts";
+import { applyTransition } from "./apply.ts";
 import type { GuardTools } from "./guards.ts";
 import {
     renderTransitionJson,
@@ -39,12 +41,14 @@ import {
     CHANGE,
     FINDINGS,
     NO_TOOLS,
+    PULL_REQUEST,
     type Reviewed,
     stateInReview,
     stateWithWorkspace,
     type Work,
     workTools,
 } from "./test-fixtures.ts";
+import { transitionRow } from "./table.ts";
 import { readTransitioned, TRANSITIONED_SCHEMA } from "./transitioned.ts";
 import { digestOf } from "../publish/receipt.ts";
 
@@ -61,6 +65,7 @@ const CONTRACT = [
     "verify",
     "code-review",
     "external-review",
+    "wrap-up",
     "taken",
 ];
 
@@ -318,9 +323,9 @@ describe("transition mode: Transition mode", () => {
         expect(calls).toEqual(["linear:readTask:DOT-110"]);
     });
 
-    it("Task not in grill-me: in none of grill-me, proposal, implement, verify and code-review, no handoff and exit 3", async () => {
+    it("Task not in grill-me: in none of grill-me, proposal, implement, verify, code-review and external-review, no handoff and exit 3", async () => {
         const calls: string[] = [];
-        const given = linear(calls, ["personal", "AFK", "external-review"]);
+        const given = linear(calls, ["personal", "AFK", "wrap-up"]);
 
         const report = await runTransition(
             { source: "linear", id: "DOT-110" },
@@ -334,10 +339,10 @@ describe("transition mode: Transition mode", () => {
             source: "linear",
             id: "DOT-110",
             title: "Grill-me stage",
-            labels: ["personal", "AFK", "external-review"],
+            labels: ["personal", "AFK", "wrap-up"],
         });
         expect(report.reasons).toEqual([
-            "linear DOT-110 is in none of grill-me, proposal, implement, verify and code-review (labels [personal, AFK, external-review])",
+            "linear DOT-110 is in none of grill-me, proposal, implement, verify, code-review and external-review (labels [personal, AFK, wrap-up])",
         ]);
         expect(report).not.toHaveProperty("handoff");
         expect(exitCodeFor(report.outcome)).toBe(3);
@@ -541,9 +546,9 @@ describe("transition mode: Transition mode", () => {
         expect(calls).toEqual(["linear:readTask:DOT-110"]);
     });
 
-    it("--from verify on a task already in external-review: in none of the stages, nothing written", async () => {
+    it("--from verify on a task already in wrap-up: in none of the stages, nothing written", async () => {
         const calls: string[] = [];
-        const given = linear(calls, ["personal", "AFK", "external-review"]);
+        const given = linear(calls, ["personal", "AFK", "wrap-up"]);
 
         const report = await runTransition(
             { source: "linear", id: "DOT-110" },
@@ -554,7 +559,7 @@ describe("transition mode: Transition mode", () => {
 
         expect(report.outcome).toBe("not-evaluable");
         expect(report.reasons).toEqual([
-            "linear DOT-110 is in none of grill-me, proposal, implement, verify and code-review (labels [personal, AFK, external-review])",
+            "linear DOT-110 is in none of grill-me, proposal, implement, verify, code-review and external-review (labels [personal, AFK, wrap-up])",
         ]);
         expect(calls).toEqual(["linear:readTask:DOT-110"]);
     });
@@ -936,7 +941,7 @@ describe("transition mode: Transition report", () => {
     });
 
     it("the text of a task in neither stage lists the reason and no handoff", async () => {
-        const given = linear([], ["personal", "AFK", "external-review"]);
+        const given = linear([], ["personal", "AFK", "wrap-up"]);
         const report = await runTransition(
             { source: "linear", id: "DOT-110" },
             modeDeps(given),
@@ -947,9 +952,9 @@ describe("transition mode: Transition report", () => {
             [
                 "autonomous transition — started 2026-11-01T09:00:00.000Z",
                 "outcome: not-evaluable",
-                'task: linear DOT-110 → "Grill-me stage" → labels [personal, AFK, external-review]',
+                'task: linear DOT-110 → "Grill-me stage" → labels [personal, AFK, wrap-up]',
                 "reasons:",
-                "  - linear DOT-110 is in none of grill-me, proposal, implement, verify and code-review (labels [personal, AFK, external-review])",
+                "  - linear DOT-110 is in none of grill-me, proposal, implement, verify, code-review and external-review (labels [personal, AFK, wrap-up])",
             ].join("\n"),
         );
     });
@@ -1094,7 +1099,7 @@ describe("transition answers: Transition answers", () => {
         );
 
         const detail =
-            "invalid for the transition: expected one of AFK, HITL, implement, verify, code-review, external-review";
+            "invalid for the transition: expected one of AFK, HITL, implement, verify, code-review, external-review, wrap-up";
         expect(records).toEqual([
             {
                 id: "transition:linear:DOT-110",
@@ -2076,11 +2081,11 @@ describe("transition receipt: The transition waits for the persistence receipt",
     it("a task in none of the stages is reported as such, whatever its attempts hold", async () => {
         const state = await stateWith({});
 
-        const result = await report(linear([], ["personal", "AFK", "external-review"]), state);
-        const skipped = await answered(linear([], ["work", "AFK", "external-review"]), state);
+        const result = await report(linear([], ["personal", "AFK", "wrap-up"]), state);
+        const skipped = await answered(linear([], ["work", "AFK", "wrap-up"]), state);
 
         expect(result.reasons).toEqual([
-            "linear DOT-110 is in none of grill-me, proposal, implement, verify and code-review (labels [personal, AFK, external-review])",
+            "linear DOT-110 is in none of grill-me, proposal, implement, verify, code-review and external-review (labels [personal, AFK, wrap-up])",
         ]);
         expect(skipped.status).toBe("skipped");
     });
@@ -2832,6 +2837,43 @@ describe("transition mode: code-review", () => {
         expect(calls).toEqual(["linear:readTask:DOT-110"]);
     });
 
+    it("HITL task in code-review with failed checks: refused naming each, no question and exit 3", async () => {
+        const calls: string[] = [];
+        const given = linear(calls, ["personal", "HITL", "code-review"]);
+        const failing = [
+            checkRun("main", { conclusion: "failure" }),
+            checkRun("lint", { conclusion: "timed_out" }),
+        ];
+        const { state, tools } = await reviewing("linear", "DOT-110", {}, { checkRuns: failing });
+
+        const report = await runTransition(REF, modeDeps(given, config(), state, tools), STARTED);
+
+        expect(report).toMatchObject({
+            outcome: "not-evaluable",
+            applied: false,
+            reasons: [
+                "the check main concluded failure on 0ddba11",
+                "the check lint concluded timed_out on 0ddba11",
+            ],
+        });
+        expect(report).not.toHaveProperty("handoff");
+        expect(exitCodeFor(report.outcome)).toBe(3);
+        expect(writes(calls)).toEqual([]);
+    });
+
+    it("HITL task in code-review with a running check: the approval question, exit 0", async () => {
+        const calls: string[] = [];
+        const given = linear(calls, ["personal", "HITL", "code-review"]);
+        const running = [checkRun("main", { status: "in_progress", conclusion: null })];
+        const { state, tools } = await reviewing("linear", "DOT-110", {}, { checkRuns: running });
+
+        const report = await runTransition(REF, modeDeps(given, config(), state, tools), STARTED);
+
+        expect(report).toMatchObject({ outcome: "advance", applied: false, reasons: [] });
+        expect(report.handoff?.questions).toHaveLength(1);
+        expect(exitCodeFor(report.outcome)).toBe(0);
+    });
+
     it("external-review not bootstrapped: nothing is written, the reason names --bootstrap-labels and exit 3", async () => {
         const calls: string[] = [];
         const given = linear(calls, ["personal", "AFK", "code-review"], {
@@ -3227,5 +3269,501 @@ describe("transition receipt: The transition waits for the publish receipt", () 
         );
 
         expect(report).toMatchObject({ outcome: "advance", applied: true });
+    });
+});
+
+// A task in external-review whose open attempt published a quiet round, as the stage leaves it.
+function rounding(source: Source, id: string, reviewed: Reviewed = {}, work: Work = {}) {
+    return reviewing(
+        source,
+        id,
+        { stage: "external-review", attempt: 2, quiet: true, ...reviewed },
+        work,
+    );
+}
+
+const APPROVE = "transition:linear:DOT-110";
+
+describe("transition mode: external-review", () => {
+    it("AFK task in external-review: wrap-up replaces external-review, applied, no handoff and exit 0", async () => {
+        const calls: string[] = [];
+        const given = linear(calls, ["personal", "AFK", "external-review"]);
+        const { state, tools } = await rounding("linear", "DOT-110");
+
+        const report = await runTransition(REF, modeDeps(given, config(), state, tools), STARTED);
+
+        expect(report).toMatchObject({ outcome: "advance", applied: true, reasons: [] });
+        expect(report.task?.labels).toEqual(["personal", "AFK", "wrap-up"]);
+        expect(report).not.toHaveProperty("handoff");
+        expect(exitCodeFor(report.outcome)).toBe(0);
+        expect(writes(calls)).toEqual([
+            "linear:addLabel:DOT-110:wrap-up",
+            "linear:removeLabel:DOT-110:external-review",
+        ]);
+    });
+
+    it("HITL task in external-review: the approval question, nothing written and exit 0", async () => {
+        const calls: string[] = [];
+        const given = linear(calls, ["personal", "HITL", "external-review"]);
+        const { state, tools } = await rounding("linear", "DOT-110");
+
+        const report = await runTransition(REF, modeDeps(given, config(), state, tools), STARTED);
+
+        expect(report).toMatchObject({ outcome: "advance", applied: false, reasons: [] });
+        expect(report.handoff?.questions.map(({ id, options }) => ({ id, options }))).toEqual([
+            {
+                id: APPROVE,
+                options: [
+                    { label: "Approve", value: "wrap-up", description: "Move the task to wrap-up" },
+                    {
+                        label: "Later",
+                        value: null,
+                        description: "Leave the task in external-review",
+                    },
+                ],
+            },
+        ]);
+        expect(exitCodeFor(report.outcome)).toBe(0);
+        expect(calls).toEqual(["linear:readTask:DOT-110"]);
+    });
+
+    it("wrap-up not bootstrapped: nothing is written, the reason names --bootstrap-labels and exit 3", async () => {
+        const calls: string[] = [];
+        const given = linear(calls, ["personal", "AFK", "external-review"], {
+            labels: LINEAR_LABELS.filter((label) => label.name !== "wrap-up"),
+        });
+        const { state, tools } = await rounding("linear", "DOT-110");
+
+        const report = await runTransition(REF, modeDeps(given, config(), state, tools), STARTED);
+
+        expect(report).toMatchObject({
+            outcome: "not-evaluable",
+            applied: false,
+            reasons: ["wrap-up is missing on linear; run --bootstrap-labels"],
+        });
+        expect(exitCodeFor(report.outcome)).toBe(3);
+        expect(writes(calls)).toEqual([]);
+    });
+
+    it("--from external-review names the stage the task is in: the transition is applied", async () => {
+        const given = linear([], ["personal", "AFK", "external-review"]);
+        const { state, tools } = await rounding("linear", "DOT-110");
+
+        const report = await runTransition(
+            REF,
+            modeDeps(given, config(), state, tools),
+            STARTED,
+            "external-review",
+        );
+
+        expect(report).toMatchObject({ outcome: "advance", applied: true });
+    });
+});
+
+describe("transition mode: Approval question for external-review", () => {
+    it("External review ready: the question says so and Approve carries wrap-up", async () => {
+        const given = trackers([], {
+            linear: [task("linear", "DOT-110", ["personal", "HITL", "external-review"])],
+        });
+        const { state, tools } = await rounding("linear", "DOT-110");
+
+        const report = await runTransition(REF, modeDeps(given, config(), state, tools), STARTED);
+        const question = report.handoff?.questions[0];
+
+        expect(question?.question.split("\n")[0]).toBe(
+            'linear DOT-110 "Task DOT-110": the external review is ready. Approve it to move the task to wrap-up?',
+        );
+        expect(question?.options[0]).toEqual({
+            label: "Approve",
+            value: "wrap-up",
+            description: "Move the task to wrap-up",
+        });
+    });
+});
+
+describe("transition answers: external-review", () => {
+    it("External review approved: personal, HITL, external-review + wrap-up → personal, HITL, wrap-up", async () => {
+        const calls: string[] = [];
+        const given = linear(calls, ["personal", "HITL", "external-review"]);
+        const { state, tools } = await rounding("linear", "DOT-110");
+
+        const [record] = await transitionHandler(state, tools).answer(
+            [answer(APPROVE, "wrap-up")],
+            context(given),
+        );
+
+        expect(record).toEqual({
+            id: APPROVE,
+            labels: ["wrap-up"],
+            status: "applied",
+            detail: "added wrap-up, removed external-review on linear DOT-110, read back",
+        });
+        expect(await labelsOf(given, "linear", "DOT-110")).toEqual(["personal", "HITL", "wrap-up"]);
+    });
+
+    it("an answer other than wrap-up for a task in external-review is skipped and nothing is written", async () => {
+        const calls: string[] = [];
+        const given = linear(calls, ["personal", "HITL", "external-review"]);
+
+        const record = await transition(given, APPROVE, "external-review");
+
+        expect(record.status).toBe("skipped");
+        expect(writes(calls)).toEqual([]);
+    });
+
+    it("Round not quiet: the answer wrap-up is rejected, naming the receipt, and the task keeps external-review", async () => {
+        const calls: string[] = [];
+        const given = linear(calls, ["personal", "HITL", "external-review"]);
+        const { state, tools, attempt, dir } = await rounding("linear", "DOT-110", {
+            quiet: false,
+        });
+
+        const [record] = await transitionHandler(state, tools).answer(
+            [answer(APPROVE, "wrap-up")],
+            context(given),
+        );
+
+        expect(record).toMatchObject({
+            status: "rejected",
+            detail:
+                `external-review is not finished: external-review attempt ${attempt} has a publish receipt at ${join(dir, "published.json")} ` +
+                "that is not a quiet round's, so the external review is not over; leave the task to its next round, or discard the attempt",
+        });
+        expect(writes(calls)).toEqual([]);
+        expect(await labelsOf(given, "linear", "DOT-110")).toEqual([
+            "personal",
+            "HITL",
+            "external-review",
+        ]);
+    });
+});
+
+describe("transition: A transition replaces the stage, external-review", () => {
+    it("External review done: personal, HITL, external-review → personal, HITL, wrap-up, and only external-review was removed", async () => {
+        const calls: string[] = [];
+        const given = linear(calls, ["personal", "HITL", "external-review"]);
+        const { state, tools } = await rounding("linear", "DOT-110");
+
+        await transitionHandler(state, tools).answer([answer(APPROVE, "wrap-up")], context(given));
+
+        expect(writes(calls)).toEqual([
+            "linear:addLabel:DOT-110:wrap-up",
+            "linear:removeLabel:DOT-110:external-review",
+        ]);
+        expect(await labelsOf(given, "linear", "DOT-110")).toEqual(["personal", "HITL", "wrap-up"]);
+    });
+});
+
+describe("transition: The autonomy decides whether leaving external-review needs an answer", () => {
+    it("AFK task: applied with no question, work, AFK, external-review → work, AFK, wrap-up", async () => {
+        const given = linear([], ["work", "AFK", "external-review"]);
+        const { state, tools } = await rounding("linear", "DOT-110");
+
+        const report = await runTransition(REF, modeDeps(given, config(), state, tools), STARTED);
+
+        expect(report.applied).toBe(true);
+        expect(report).not.toHaveProperty("handoff");
+        expect(await labelsOf(given, "linear", "DOT-110")).toEqual(["work", "AFK", "wrap-up"]);
+    });
+
+    it("HITL task not approved: Later sends no answer, so the task keeps external-review and nothing is written", async () => {
+        const calls: string[] = [];
+        const given = linear(calls, ["HITL", "external-review"]);
+        const { state, tools } = await rounding("linear", "DOT-110");
+
+        const report = await runTransition(REF, modeDeps(given, config(), state, tools), STARTED);
+        const later = report.handoff?.questions[0]?.options.find(
+            (option) => option.label === "Later",
+        );
+
+        expect(later?.value).toBeNull();
+        expect(writes(calls)).toEqual([]);
+        expect(await labelsOf(given, "linear", "DOT-110")).toEqual(["HITL", "external-review"]);
+    });
+
+    it("Autonomy missing: personal and external-review only, nothing is written and the reason names the missing autonomy", async () => {
+        const calls: string[] = [];
+        const given = linear(calls, ["personal", "external-review"]);
+
+        const report = await runTransition(REF, modeDeps(given), STARTED);
+
+        expect(report.reasons).toEqual([
+            "linear DOT-110 in external-review has no autonomy: expected one of AFK, HITL",
+        ]);
+        expect(writes(calls)).toEqual([]);
+    });
+});
+
+describe("transition receipt: The transition waits for the persistence receipt, external-review", () => {
+    it("External review summary not persisted: nothing is written, the report names the attempt and the receipt, exit 3", async () => {
+        const calls: string[] = [];
+        const given = linear(calls, ["personal", "AFK", "external-review"]);
+        const { state, tools, attempt, dir } = await rounding("linear", "DOT-110", {
+            persisted: false,
+        });
+
+        const report = await runTransition(REF, modeDeps(given, config(), state, tools), STARTED);
+
+        expect(attempt).toBe("linear:DOT-110:external-review:2");
+        expect(report).toMatchObject({
+            outcome: "not-evaluable",
+            applied: false,
+            reasons: [
+                `external-review attempt ${attempt} has no persistence receipt at ${receiptPath(dir)}; ` +
+                    `persist its stage summary with --apply --persist ${attempt}, or discard the attempt`,
+            ],
+        });
+        expect(exitCodeFor(report.outcome)).toBe(3);
+        expect(calls).toEqual(["linear:readTask:DOT-110"]);
+    });
+});
+
+describe("transition guards: Leaving external-review needs a quiet round", () => {
+    it("Check running: the report names audit, nothing is written, exit 3", async () => {
+        const calls: string[] = [];
+        const given = linear(calls, ["personal", "AFK", "external-review"]);
+        const running = [checkRun("audit", { status: "in_progress", conclusion: null })];
+        const { state, tools } = await rounding("linear", "DOT-110", {}, { checkRuns: running });
+
+        const report = await runTransition(REF, modeDeps(given, config(), state, tools), STARTED);
+
+        expect(report).toMatchObject({
+            outcome: "not-evaluable",
+            applied: false,
+            reasons: ["the check audit has not ended on 0ddba11"],
+        });
+        expect(exitCodeFor(report.outcome)).toBe(3);
+        expect(writes(calls)).toEqual([]);
+    });
+
+    it("Quiet and green: a current, quiet receipt, a persisted summary, finished work and passed checks", async () => {
+        const given = linear([], ["personal", "AFK", "external-review"]);
+        const { state, tools } = await rounding(
+            "linear",
+            "DOT-110",
+            {},
+            { checkRuns: [checkRun("main"), checkRun("CodeRabbit")] },
+        );
+
+        const report = await runTransition(REF, modeDeps(given, config(), state, tools), STARTED);
+
+        expect(report).toMatchObject({ outcome: "advance", applied: true, reasons: [] });
+    });
+});
+
+describe("transition: The transition into external-review marks the pull request ready", () => {
+    const failing = [checkRun("main", { conclusion: "failure" })];
+
+    it("Code review approved: a draft is marked ready for review before any label is written", async () => {
+        const calls: string[] = [];
+        const given = linear(calls, ["personal", "HITL", "code-review"]);
+        const prCalls: string[] = [];
+        const { state } = await reviewing("linear", "DOT-110");
+
+        const [record] = await transitionHandler(state, workTools({ draft: true }, prCalls)).answer(
+            [answer(APPROVE, "external-review")],
+            context(given),
+        );
+
+        expect(record?.status).toBe("applied");
+        expect(prCalls.filter((call) => call.startsWith("pr "))).toEqual([
+            `pr find ${BRANCH}`,
+            `pr state ${PULL_REQUEST}`,
+            "pr checkRuns 0ddba11",
+            `pr ready ${PULL_REQUEST}`,
+        ]);
+        expect(await labelsOf(given, "linear", "DOT-110")).toEqual([
+            "personal",
+            "HITL",
+            "external-review",
+        ]);
+    });
+
+    it("Marking fails: the task keeps code-review, the report names the failure, exit 3", async () => {
+        const calls: string[] = [];
+        const given = linear(calls, ["personal", "AFK", "code-review"]);
+        const { state, tools } = await reviewing(
+            "linear",
+            "DOT-110",
+            {},
+            { draft: true, readyError: "gh pr ready: HTTP 502" },
+        );
+
+        const report = await runTransition(REF, modeDeps(given, config(), state, tools), STARTED);
+
+        expect(report).toMatchObject({
+            outcome: "not-evaluable",
+            applied: false,
+            reasons: [
+                `marking pull request #${PULL_REQUEST} ready for review: gh pr ready: HTTP 502`,
+            ],
+        });
+        expect(exitCodeFor(report.outcome)).toBe(3);
+        expect(writes(calls)).toEqual([]);
+        expect(await labelsOf(given, "linear", "DOT-110")).toEqual([
+            "personal",
+            "AFK",
+            "code-review",
+        ]);
+    });
+
+    it("Already ready: a pull request that is not a draft is unchanged and the transition is applied", async () => {
+        const prCalls: string[] = [];
+        const given = linear([], ["personal", "AFK", "code-review"]);
+        const { state } = await reviewing("linear", "DOT-110");
+
+        const report = await runTransition(
+            REF,
+            modeDeps(given, config(), state, workTools({}, prCalls)),
+            STARTED,
+        );
+
+        expect(report).toMatchObject({ outcome: "advance", applied: true, reasons: [] });
+        expect(prCalls).not.toContain(`pr ready ${PULL_REQUEST}`);
+    });
+
+    // The code review's own guards need its workspace, so only the apply step can meet a task
+    // with none.
+    it("No workspace on this machine: the labels are written, and the report says the pull request was not marked", async () => {
+        const calls: string[] = [];
+        const given = linear(calls, ["personal", "AFK", "code-review"]);
+
+        const settled = await applyTransition({
+            tracker: given.linear,
+            ref: REF,
+            row: transitionRow("code-review"),
+            before: ["personal", "AFK", "code-review"],
+            state: NO_STATE,
+            tools: NO_TOOLS,
+        });
+
+        const unmarked =
+            "the pull request was not marked ready for review: there is no workspace to check: the task has no attempt";
+        expect(settled).toEqual({
+            status: "applied",
+            detail: `added external-review, removed code-review on linear DOT-110, read back; ${unmarked}`,
+            notes: [unmarked],
+        });
+        expect(writes(calls)).toEqual([
+            "linear:addLabel:DOT-110:external-review",
+            "linear:removeLabel:DOT-110:code-review",
+        ]);
+    });
+
+    it("a branch with no open pull request is not marked, and nothing is written", async () => {
+        const calls: string[] = [];
+        const given = linear(calls, ["personal", "AFK", "code-review"]);
+        const { state, tools } = await reviewing("linear", "DOT-110", {}, { pullRequest: false });
+
+        const report = await runTransition(REF, modeDeps(given, config(), state, tools), STARTED);
+
+        expect(report.reasons).toEqual([`the branch ${BRANCH} has no open pull request`]);
+        expect(writes(calls)).toEqual([]);
+    });
+
+    it("a leaving transition that is not into external-review reads no pull request", async () => {
+        const prCalls: string[] = [];
+        const given = linear([], ["personal", "AFK", "verify"]);
+        const { state } = await guarded("linear", "DOT-110");
+
+        const report = await runTransition(
+            REF,
+            modeDeps(given, config(), state, workTools({}, prCalls)),
+            STARTED,
+        );
+
+        expect(report.applied).toBe(true);
+        expect(prCalls.filter((call) => call.startsWith("pr "))).toEqual([]);
+    });
+
+    describe("Entering external-review needs no failed check", () => {
+        it("Failed check: the report names main, the pull request stays a draft, nothing is written, exit 3", async () => {
+            const calls: string[] = [];
+            const prCalls: string[] = [];
+            const given = linear(calls, ["personal", "AFK", "code-review"]);
+            const { state } = await reviewing("linear", "DOT-110");
+            const tools = workTools({ draft: true, checkRuns: failing }, prCalls);
+
+            const report = await runTransition(
+                REF,
+                modeDeps(given, config(), state, tools),
+                STARTED,
+            );
+
+            expect(report).toMatchObject({
+                outcome: "not-evaluable",
+                applied: false,
+                reasons: ["the check main concluded failure on 0ddba11"],
+            });
+            expect(exitCodeFor(report.outcome)).toBe(3);
+            expect(prCalls).not.toContain(`pr ready ${PULL_REQUEST}`);
+            expect(writes(calls)).toEqual([]);
+        });
+
+        it("Check still running: main in progress and no check failed, the transition is applied", async () => {
+            const given = linear([], ["personal", "AFK", "code-review"]);
+            const running = [checkRun("main", { status: "in_progress", conclusion: null })];
+            const { state, tools } = await reviewing(
+                "linear",
+                "DOT-110",
+                {},
+                { checkRuns: running },
+            );
+
+            const report = await runTransition(
+                REF,
+                modeDeps(given, config(), state, tools),
+                STARTED,
+            );
+
+            expect(report).toMatchObject({ outcome: "advance", applied: true });
+        });
+
+        it("a review bot's failed check run is not a check of the pull request", async () => {
+            const given = linear([], ["personal", "AFK", "code-review"]);
+            const bot = [checkRun("CodeRabbit", { conclusion: "failure" })];
+            const { state, tools } = await reviewing("linear", "DOT-110", {}, { checkRuns: bot });
+
+            const report = await runTransition(
+                REF,
+                modeDeps(given, config(), state, tools),
+                STARTED,
+            );
+
+            expect(report).toMatchObject({ outcome: "advance", applied: true });
+        });
+    });
+});
+
+describe("code-review-stage: The code review leaves the pull request a draft", () => {
+    it("Before the transition: a code review whose transition only asks leaves its pull request a draft", async () => {
+        const prCalls: string[] = [];
+        const given = linear([], ["personal", "HITL", "code-review"]);
+        const { state } = await reviewing("linear", "DOT-110");
+
+        const report = await runTransition(
+            REF,
+            modeDeps(given, config(), state, workTools({ draft: true }, prCalls)),
+            STARTED,
+        );
+
+        expect(report.handoff?.questions).toHaveLength(1);
+        expect(prCalls).not.toContain(`pr ready ${PULL_REQUEST}`);
+    });
+
+    it("Code review complete: on the machine holding the workspace, the task carries external-review and its pull request is ready", async () => {
+        const prCalls: string[] = [];
+        const given = linear([], ["personal", "AFK", "code-review"]);
+        const { state } = await reviewing("linear", "DOT-110");
+
+        const report = await runTransition(
+            REF,
+            modeDeps(given, config(), state, workTools({ draft: true }, prCalls)),
+            STARTED,
+        );
+
+        expect(report).toMatchObject({ outcome: "advance", applied: true, reasons: [] });
+        expect(report.task?.labels).toEqual(["personal", "AFK", "external-review"]);
+        expect(prCalls).toContain(`pr ready ${PULL_REQUEST}`);
     });
 });

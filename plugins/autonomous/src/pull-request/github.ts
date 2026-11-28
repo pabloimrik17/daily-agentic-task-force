@@ -14,6 +14,7 @@ import {
     string,
 } from "../validate.ts";
 import {
+    type CheckRun,
     type DiffSide,
     EMPTY_COMMIT_SUBJECT,
     type NewThread,
@@ -21,6 +22,8 @@ import {
     type PullRequest,
     type PullRequests,
     type PullRequestsFactory,
+    type PullRequestState,
+    type Review,
     type ReviewThread,
     type ThreadAnchor,
     type ThreadComment,
@@ -279,6 +282,10 @@ function nullableNumber(parent: Json, key: string, path: string): number | null 
     return parent[key] === null ? null : number(parent, key, path);
 }
 
+function nullableString(parent: Json, key: string, path: string): string | null {
+    return parent[key] === null ? null : string(parent, key, path);
+}
+
 function pullRequestOf(data: Json): Json {
     const repository = object(data.repository, "output.data.repository");
     return object(repository.pullRequest, "output.data.repository.pullRequest");
@@ -533,6 +540,156 @@ async function postReview(
     return posted.ok ? posted : discardReview(gh, pending.value, posted.error);
 }
 
+// What the wait and the quiet round of external review read (design D2 of add-external-review-stage).
+// A review's id is its GraphQL node id, which is what `dismissPullRequestReview` takes; the REST
+// dismissal wants the numeric id instead, and the two are not interchangeable.
+
+const STATE_QUERY = `query PullRequestState(${PULL_REQUEST_VARIABLES}) {
+  ${onPullRequest(`isDraft
+    commits(last: 1) { nodes { commit { oid committedDate } } }
+    timelineItems(last: 1, itemTypes: [READY_FOR_REVIEW_EVENT]) {
+      nodes { ... on ReadyForReviewEvent { createdAt } }
+    }`)}
+}`;
+
+const REVIEWS_QUERY = `query Reviews(${PULL_REQUEST_VARIABLES}, $after: String) {
+  ${onPullRequest(`reviews(first: 100, after: $after) {
+    pageInfo { hasNextPage endCursor }
+    nodes { id author { login } state commit { oid } body url }
+  }`)}
+}`;
+
+const DISMISS_MUTATION = `mutation DismissPullRequestReview($review: ID!, $message: String!) {
+  dismissPullRequestReview(input: { pullRequestReviewId: $review, message: $message }) { pullRequestReview { id } }
+}`;
+
+function readState(data: Json): PullRequestState {
+    const path = "output.data.repository.pullRequest";
+    const pullRequest = pullRequestOf(data);
+    const commits = object(pullRequest.commits, `${path}.commits`);
+    const [node] = array(commits.nodes, `${path}.commits.nodes`);
+    const headPath = `${path}.commits.nodes[0].commit`;
+    const head = object(object(node, `${path}.commits.nodes[0]`).commit, headPath);
+    const events = object(pullRequest.timelineItems, `${path}.timelineItems`);
+    const [ready] = array(events.nodes, `${path}.timelineItems.nodes`);
+    const readyPath = `${path}.timelineItems.nodes[0]`;
+    return {
+        draft: boolean(pullRequest, "isDraft", path),
+        head: {
+            sha: string(head, "oid", headPath),
+            committedAt: string(head, "committedDate", headPath),
+        },
+        readyAt:
+            ready === undefined ? null : string(object(ready, readyPath), "createdAt", readyPath),
+    };
+}
+
+function readReview(value: unknown, path: string): Review {
+    const json = object(value, path);
+    const author = json.author === null ? null : object(json.author, `${path}.author`);
+    const commit = json.commit === null ? null : object(json.commit, `${path}.commit`);
+    return {
+        id: string(json, "id", path),
+        author: author === null ? "" : string(author, "login", `${path}.author`),
+        state: string(json, "state", path),
+        commit: commit === null ? null : string(commit, "oid", `${path}.commit`),
+        body: string(json, "body", path),
+        url: string(json, "url", path),
+    };
+}
+
+function readReviewPage(data: Json): Page<Review> {
+    const path = "output.data.repository.pullRequest.reviews";
+    return readPage(pullRequestOf(data).reviews, path, readReview);
+}
+
+function listReviews(gh: Exec, pullNumber: number): Promise<Result<Review[]>> {
+    const label = `gh api graphql reviews ${pullNumber}`;
+    const variables = pullRequestVariables(pullNumber);
+    return collect(
+        (after) =>
+            graphql(gh, label, REVIEWS_QUERY, [...variables, ...cursor(after)], readReviewPage),
+        null,
+    );
+}
+
+// The listing is wrapped in { total_count, check_runs } and held to 100 a page, so a page is
+// known to be the last one from the count alone, with no cursor.
+const CHECK_RUNS_PER_PAGE = 100;
+
+function readCheckRun(value: unknown, path: string): CheckRun {
+    const json = object(value, path);
+    const app = json.app === null ? null : object(json.app, `${path}.app`);
+    const output = object(json.output, `${path}.output`);
+    return {
+        name: string(json, "name", path),
+        app: app === null ? "" : string(app, "slug", `${path}.app`),
+        status: string(json, "status", path),
+        conclusion: nullableString(json, "conclusion", path),
+        title: nullableString(output, "title", `${path}.output`),
+        summary: nullableString(output, "summary", `${path}.output`),
+        url: string(json, "html_url", path),
+        startedAt: nullableString(json, "started_at", path),
+        completedAt: nullableString(json, "completed_at", path),
+    };
+}
+
+function readCheckRunPage(page: number): (json: unknown) => Page<CheckRun> {
+    return (json) => {
+        const listing = object(json, "output");
+        const total = number(listing, "total_count", "output");
+        const runs = array(listing.check_runs, "output.check_runs").map((run, index) =>
+            readCheckRun(run, `output.check_runs[${index}]`),
+        );
+        const more = runs.length > 0 && page * CHECK_RUNS_PER_PAGE < total;
+        return { nodes: runs, next: more ? String(page + 1) : null };
+    };
+}
+
+function listCheckRuns(gh: Exec, sha: string): Promise<Result<CheckRun[]>> {
+    const label = `gh api commits/${sha}/check-runs`;
+    return collect(async (after) => {
+        const page = after === null ? 1 : Number(after);
+        const endpoint = `repos/{owner}/{repo}/commits/${sha}/check-runs`;
+        const out = await run(gh, label, [
+            "api",
+            `${endpoint}?per_page=${CHECK_RUNS_PER_PAGE}&page=${page}`,
+        ]);
+        return out.ok ? parseJson(label, out.value, readCheckRunPage(page)) : out;
+    }, null);
+}
+
+type ExternalReviewMethods = Pick<
+    PullRequests,
+    "state" | "ready" | "checkRuns" | "reviews" | "dismiss"
+>;
+
+function externalReview(gh: Exec): ExternalReviewMethods {
+    return {
+        state: (pullNumber) =>
+            graphql(
+                gh,
+                `gh api graphql state ${pullNumber}`,
+                STATE_QUERY,
+                pullRequestVariables(pullNumber),
+                readState,
+            ),
+        ready: (pullNumber) =>
+            runVoid(gh, `gh pr ready ${pullNumber}`, ["pr", "ready", String(pullNumber)]),
+        checkRuns: (sha) => listCheckRuns(gh, sha),
+        reviews: (pullNumber) => listReviews(gh, pullNumber),
+        // The review is named by its node id alone, so the pull request number is not sent.
+        dismiss: (_pullNumber, review, message) =>
+            graphql(
+                gh,
+                `gh api graphql dismissPullRequestReview ${review}`,
+                DISMISS_MUTATION,
+                [...text("review", review), ...text("message", message)],
+                ignoreData,
+            ),
+    };
+}
+
 type ReviewThreadMethods = Pick<
     PullRequests,
     "threads" | "pendingReview" | "review" | "reply" | "resolve" | "unresolve"
@@ -645,6 +802,7 @@ export function gitHubPullRequests(execs: GitHubExecs, directory: string): PullR
             return out.ok ? parseJson(label, out.value, readCommentBodies) : out;
         },
         ...reviewThreads(gh),
+        ...externalReview(gh),
     };
 }
 

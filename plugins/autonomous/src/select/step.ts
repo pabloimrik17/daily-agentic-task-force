@@ -23,6 +23,7 @@ import type {
     WorkReader,
     WorkTask,
 } from "./types.ts";
+import { reviewBotsCheck } from "./wait.ts";
 
 const SELECT = "select";
 
@@ -74,6 +75,13 @@ export const selectStep: Step<SelectData> = {
             labelledThisRun: labelledThisRun(ctx.results),
             detail: read.value.detail,
             ...slots(ctx),
+            wait: reviewBotsCheck({
+                config: config.review.external,
+                state: ctx.io.state,
+                pullRequests: ctx.io.pullRequests,
+                apply: ctx.args.apply,
+                now: ctx.now,
+            }),
         });
         if (!found.ok) {
             return result("not-evaluable", [found.error], known);

@@ -140,6 +140,11 @@ function fakePullRequests(script: Partial<PullRequests>, calls: string[]): PullR
         reply: unexpected("reply"),
         resolve: unexpected("resolve"),
         unresolve: unexpected("unresolve"),
+        state: unexpected("state"),
+        ready: unexpected("ready"),
+        checkRuns: unexpected("checkRuns"),
+        reviews: unexpected("reviews"),
+        dismiss: unexpected("dismiss"),
     };
 }
 

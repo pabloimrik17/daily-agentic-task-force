@@ -138,6 +138,11 @@ function fakePort(script: PortScript = {}): FakePort {
         reply: refuse("reply"),
         resolve: refuse("resolve"),
         unresolve: refuse("unresolve"),
+        state: refuse("state"),
+        ready: refuse("ready"),
+        checkRuns: refuse("checkRuns"),
+        reviews: refuse("reviews"),
+        dismiss: refuse("dismiss"),
     };
     return { port, directories: [], calls, comments: () => stored };
 }

@@ -8,6 +8,8 @@ import type { Tracker, TrackerResult } from "../label-triage/trackers/tracker.ts
 import { labelCheckFor, missingLabelDetail, READ_BACK_MISMATCH } from "../label-triage/write.ts";
 import { READ_BACK_TRIES, readUntil, type Wait } from "../read-back.ts";
 import type { AnswerStatus } from "../runner.ts";
+import type { GuardTools } from "./guards.ts";
+import { markReady } from "./ready.ts";
 import type { TransitionRow } from "./table.ts";
 
 export interface Applying {
@@ -18,9 +20,12 @@ export interface Applying {
     // Only the transition out of grill-me sets one.
     autonomy?: AutonomyLabel;
     wait?: Wait;
+    state: string; // where the attempts are read, to find the pull request to mark ready
+    tools: GuardTools;
 }
 
-export type Settlement = { status: AnswerStatus; detail: string };
+// `notes`: what an applied transition left undone, such as a pull request it did not mark ready.
+export type Settlement = { status: AnswerStatus; detail: string; notes?: string[] };
 
 interface Moving {
     tracker: Tracker;
@@ -31,6 +36,9 @@ interface Moving {
     added: string[];
     removed: string[];
     wait?: Wait;
+    state: string;
+    tools: GuardTools;
+    notes: string[];
 }
 
 type Phase = (moving: Moving) => Promise<string | null>;
@@ -41,19 +49,22 @@ export const list = (labels: readonly string[]) => `[${labels.join(", ")}]`;
 
 export async function applyTransition(applying: Applying): Promise<Settlement> {
     const moving = plan(applying);
-    const phases: Phase[] = [checkLabels, addPhase, removePhase];
+    const phases: Phase[] = [checkLabels, markPhase, addPhase, removePhase];
     for (const phase of phases) {
         const failure = await phase(moving);
         if (failure !== null) {
             return { status: "failed", detail: failure };
         }
     }
-    return { status: "applied", detail: appliedDetail(moving) };
+    const { notes } = moving;
+    const applied: Settlement = { status: "applied", detail: appliedDetail(moving) };
+    return notes.length === 0 ? applied : { ...applied, notes };
 }
 
 // The stage left goes last, so a removal cut short always leaves the task in it and
 // a second try completes it.
-function plan({ tracker, ref, row, before, autonomy, wait }: Applying): Moving {
+function plan(applying: Applying): Moving {
+    const { tracker, ref, row, before, autonomy, wait, state, tools } = applying;
     const adds = autonomy === undefined ? [row.to] : [autonomy, row.to];
     const added = adds.filter((label) => !before.includes(label));
     const replaced =
@@ -69,6 +80,9 @@ function plan({ tracker, ref, row, before, autonomy, wait }: Applying): Moving {
         added,
         removed: [...replaced, row.from],
         wait,
+        state,
+        tools,
+        notes: [],
     };
 }
 
@@ -80,6 +94,23 @@ async function checkLabels({ tracker, ref, adds }: Moving): Promise<string | nul
     }
     const absent = adds.find((label) => !check.value(label, ref.id));
     return absent === undefined ? null : missingLabelDetail(absent, ref.source);
+}
+
+// Design D13: the check guard and the marking run after the label listing and before any label
+// write, so a failure of either applies nothing and running the transition again repeats them.
+async function markPhase(moving: Moving): Promise<string | null> {
+    const { row, state, ref, tools, notes } = moving;
+    if (row.to !== "external-review") {
+        return null;
+    }
+    const marked = await markReady(state, ref, tools);
+    if (!marked.ok) {
+        return marked.error;
+    }
+    if (marked.value !== null) {
+        notes.push(marked.value);
+    }
+    return null;
 }
 
 // Labels are added before any is removed, so a failure here leaves the stage in place.
@@ -156,10 +187,10 @@ function sameLabels(labels: readonly string[], expected: ReadonlySet<string>): b
     return found.size === expected.size && [...expected].every((label) => found.has(label));
 }
 
-function appliedDetail({ ref, added, removed }: Moving): string {
+function appliedDetail({ ref, added, removed, notes }: Moving): string {
     const parts = [
         ...(added.length === 0 ? [] : [`added ${added.join(", ")}`]),
         `removed ${removed.join(", ")}`,
     ];
-    return `${parts.join(", ")} on ${ref.source} ${ref.id}, read back`;
+    return [`${parts.join(", ")} on ${ref.source} ${ref.id}, read back`, ...notes].join("; ");
 }

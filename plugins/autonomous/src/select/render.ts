@@ -1,5 +1,7 @@
 import { plural } from "../label-triage/render.ts";
 import type { StepResult } from "../runner.ts";
+import type { BotStatus } from "../review-bots/classify.ts";
+import { botStateText } from "../review-bots/render.ts";
 import type { Excluded, Exclusion, SelectData, SelectedUnit } from "./types.ts";
 
 // The exclusions in the order they are checked (design D3), as the report names them.
@@ -11,6 +13,7 @@ const EXCLUSION_NAMES: Record<Exclusion, string> = {
     "unsupported-stage": "unsupported stage",
     blocked: "blocked",
     split: "split",
+    "waiting-for-review-bots": "waiting for review bots",
     "no-free-slot": "no free slot",
 };
 
@@ -50,7 +53,7 @@ export function renderSelect(result: StepResult<SelectData>): string {
         for (const group of byReason(excluded)) {
             lines.push(
                 `    ${group.name}: ${group.tasks.length}`,
-                ...group.tasks.map((t) => `      ${t.source} → ${t.id} → ${t.title}`),
+                ...group.tasks.map((t) => `      ${t.source} → ${t.id} → ${t.title}${waitLine(t)}`),
             );
         }
     }
@@ -66,6 +69,29 @@ export function renderSelect(result: StepResult<SelectData>): string {
     }
     lines.push("  reasons:", ...result.reasons.map((r) => `    - ${r}`));
     return lines.join("\n");
+}
+
+// The settled check's reasons name the bots still reviewing or waiting, with the minutes left, and
+// the checks still running; the bots that are done are added here (spec review-bots, "The wait is
+// reported").
+function waitLine({ wait }: Excluded): string {
+    if (wait === undefined) {
+        return "";
+    }
+    const parts = [
+        ...(wait.draft === "marked-ready" ? ["marked ready for review"] : []),
+        ...wait.reasons,
+        ...wait.bots.flatMap(doneBot),
+    ];
+    const { pullRequest } = wait;
+    const named = pullRequest === null ? "" : `pull request #${pullRequest.number}: `;
+    return ` → ${named}${parts.join("; ")}`;
+}
+
+function doneBot({ bot, state }: BotStatus): string[] {
+    return state.kind === "reported" || state.kind === "not-reviewing"
+        ? [`${bot}: ${botStateText(state)}`]
+        : [];
 }
 
 function renderCandidates(heading: string, list: SelectData["candidates"]): string[] {

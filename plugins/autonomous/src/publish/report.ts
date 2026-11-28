@@ -27,6 +27,12 @@ interface PublishedReview {
     url: string;
 }
 
+// A review bot's request for changes a quiet round dismissed.
+interface DismissedReview {
+    bot: string; // the bot's id in review.external.bots
+    url: string;
+}
+
 interface PublishWalkthrough {
     outcome: "saved" | "unchanged" | "none";
     reason: string | null;
@@ -47,6 +53,7 @@ export interface PublishReport {
     };
     matches: ThreadPost[]; // the exact matches this run continued
     reviews: PublishedReview[]; // one per round whose new threads the run posted
+    dismissed: DismissedReview[]; // only a quiet round of external review dismisses
     walkthrough: PublishWalkthrough | null; // null when the run stopped before it
     // What the operator should know although the run went through.
     notes: string[];
@@ -66,6 +73,7 @@ export function blankPublish(attempt: AttemptId, startedAt: Date): PublishReport
         threads: { opened: [], answered: [], resolved: [], unresolved: [] },
         matches: [],
         reviews: [],
+        dismissed: [],
         walkthrough: null,
         notes: [],
         reasons: [],
@@ -112,6 +120,10 @@ export function renderPublishText(report: PublishReport): string {
         ...section(
             "reviews",
             report.reviews.map(({ round, url }) => `round ${round}: ${url}`),
+        ),
+        ...section(
+            "reviews dismissed",
+            report.dismissed.map(({ bot, url }) => `${bot}: ${url}`),
         ),
         `walkthrough: ${walkthroughLine(report.walkthrough)}`,
         `receipt: ${report.receipt ?? "none"}`,

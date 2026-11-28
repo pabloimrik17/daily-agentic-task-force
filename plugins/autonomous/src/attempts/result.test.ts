@@ -63,6 +63,21 @@ it("counts an outcome other than completed as absent", async () => {
     });
 });
 
+it("accepts the outcome round-ended only where the caller allows it", async () => {
+    await writeFile(file, marker({ outcome: "round-ended" }));
+    expect(await readMarker(file, ID)).toEqual({
+        ok: false,
+        reason: 'result marker outcome is "round-ended", expected "completed"',
+    });
+    const read = await readMarker(file, ID, ["completed", "round-ended"]);
+    expect(read.ok && read.marker.outcome).toBe("round-ended");
+    await writeFile(file, marker({ outcome: "failed" }));
+    expect(await readMarker(file, ID, ["completed", "round-ended"])).toEqual({
+        ok: false,
+        reason: 'result marker outcome is "failed", expected "completed" or "round-ended"',
+    });
+});
+
 it("counts malformed JSON as absent", async () => {
     await writeFile(file, "{ nope");
     const read = await readMarker(file, ID);

@@ -1,15 +1,21 @@
 import { existsSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { mkdir } from "node:fs/promises";
 
+import { join } from "node:path";
+
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import type { ConfigLoad } from "../config.ts";
 import { task, trackers, triageContext } from "../label-triage/test-fixtures.ts";
 import type { Trackers } from "../label-triage/trackers/tracker.ts";
+import { digestOf, FINDINGS_FILE, writePublishReceipt } from "../publish/receipt.ts";
 import { NOW } from "../quota-gate/test-fixtures.ts";
 import type { RunContext } from "../runner.ts";
 import { mapStatus } from "../sessions/aoe.ts";
 import type { Observed, SessionManager } from "../sessions/manager.ts";
+import { STAGES } from "../stages/registry.ts";
+import type { Stage } from "../stages/stage.ts";
+import { testStage } from "../stages/test.ts";
 import type { AttemptId, AttemptRecord } from "./record.ts";
 import { reconcileStep } from "./reconcile.ts";
 import { RESULT_SCHEMA } from "./result.ts";
@@ -19,6 +25,7 @@ import {
     readRecord,
     recordPath,
     logbookReceiptPath,
+    receiptPath,
     resultPath,
     writeJsonAtomic,
     writeRecord,
@@ -100,11 +107,11 @@ async function given(...records: AttemptRecord[]): Promise<void> {
     }
 }
 
-async function marker(id: AttemptId = ID, attempt = id): Promise<void> {
+async function marker(id: AttemptId = ID, attempt = id, outcome = "completed"): Promise<void> {
     await writeJsonAtomic(resultPath(attemptDir(state, id)), {
         schema: RESULT_SCHEMA,
         attempt,
-        outcome: "completed",
+        outcome,
         summary: "Wrote the marker.",
         artifacts: [],
         finishedAt: "2026-09-23T11:59:00.000Z",
@@ -399,6 +406,143 @@ describe("reconcile: completion needs two proofs", () => {
         expect(result.reasons).toEqual([`${ID}: DOT-109 not found`]);
         expect(calls).toEqual([`observe ${SESSION}`, "linear:readTask:DOT-109"]);
         expect((await stored()).state).toBe("started");
+    });
+});
+
+describe("reconcile: an ended round completes its attempt", () => {
+    const ROUND: AttemptId = "linear:DOT-121:external-review:1";
+    const FINDINGS = '{"findings":[]}';
+
+    // A stage that declares the check of an ended round: reconcile reads the registry, which holds
+    // no such stage until the external review stage registers one.
+    const roundStage: Stage = {
+        ...testStage,
+        id: "external-review",
+        completed: () => false,
+        roundEnded: ({ labels }) => labels.includes("external-review"),
+    };
+    let registered: Stage | undefined;
+
+    beforeEach(() => {
+        registered = STAGES.get("external-review");
+        (STAGES as Map<string, Stage>).set("external-review", roundStage);
+    });
+
+    afterEach(() => {
+        const stages = STAGES as Map<string, Stage>;
+        if (registered === undefined) {
+            stages.delete("external-review");
+        } else {
+            stages.set("external-review", registered);
+        }
+    });
+
+    interface Receipts {
+        persisted?: boolean;
+        published?: boolean;
+        digest?: string; // the digest the publish receipt names
+    }
+
+    async function ended(receipts: Receipts, labels = ["taken", "external-review"]) {
+        await given(
+            record({
+                id: ROUND,
+                stage: "external-review",
+                task: { source: "linear", id: "DOT-121", title: "External review" },
+            }),
+        );
+        await marker(ROUND, ROUND, "round-ended");
+        const dir = attemptDir(state, ROUND);
+        writeFileSync(join(dir, FINDINGS_FILE), FINDINGS);
+        if (receipts.persisted ?? true) {
+            await writeJsonAtomic(receiptPath(dir), { schema: "x" });
+        }
+        if (receipts.published ?? true) {
+            await writePublishReceipt(dir, {
+                schema: "autonomous.published.v1",
+                attempt: ROUND,
+                pullRequest: { number: 7, url: "https://example.test/pull/7" },
+                findingsDigest: receipts.digest ?? digestOf(FINDINGS),
+                walkthroughDigest: null,
+                publishedAt: AT,
+            });
+        }
+        return trackers([], { linear: [task("linear", "DOT-121", labels)] });
+    }
+
+    const run = (fakes: Trackers, status = "idle") =>
+        reconcileStep.run(
+            context({
+                sessions: fakeSessions({
+                    observe: () => ok(seen(status)),
+                    capture: () => ok("pane"),
+                    remove: () => ok(undefined),
+                }),
+                trackers: fakes,
+            }),
+        );
+
+    it("Round ended: finalises the attempt, frees the slot and keeps external-review", async () => {
+        const fakes = await ended({});
+        const result = await run(fakes);
+        expect(result.data.attempts[0]).toMatchObject({
+            marker: { ok: true },
+            state: "completed",
+            action: "finalised",
+            stageNow: "external-review",
+        });
+        expect((await stored(ROUND)).taken.removed).toBe(AT);
+        const after = await fakes.linear.readTask("DOT-121");
+        expect(after.ok && after.value.labels).toEqual(["external-review"]);
+    });
+
+    it("Round ended without a publish receipt: is not completed and is retained when its session ends", async () => {
+        const open = await ended({ published: false });
+        const waiting = await run(open);
+        expect(waiting.data.attempts[0]).toMatchObject({
+            marker: { ok: true },
+            action: "observed",
+        });
+        expect((await stored(ROUND)).state).toBe("started");
+        const stopped = await run(open, "stopped");
+        expect(stopped.data.attempts[0]).toMatchObject({ state: "retained", action: "retained" });
+        expect((await stored(ROUND)).retained?.reason).toBe(
+            "session stopped; round ended without a publish receipt (published.json)",
+        );
+    });
+
+    it("Round ended without a persistence receipt: is not completed", async () => {
+        const result = await run(await ended({ persisted: false }));
+        expect(result.data.attempts[0]).toMatchObject({ state: "started", action: "observed" });
+    });
+
+    it("Round ended with a findings record that differs from the published one: is not completed", async () => {
+        const fakes = await ended({ digest: digestOf("another record") });
+        const result = await run(fakes, "stopped");
+        expect(result.data.attempts[0]?.state).toBe("retained");
+        expect((await stored(ROUND)).retained?.reason).toBe(
+            `session stopped; round ended with a ${FINDINGS_FILE} that differs from the one published`,
+        );
+    });
+
+    it("Round ended after the task left the stage: is not completed", async () => {
+        const result = await run(await ended({}, ["taken", "wrap-up"]));
+        expect(result.data.attempts[0]).toMatchObject({ state: "started", action: "observed" });
+    });
+
+    it("Round ended in a stage that has no rounds: counts the marker as absent and reports it", async () => {
+        const verify = record({ id: "linear:DOT-109:verify:1", stage: "verify" });
+        await given(verify);
+        await marker(verify.id, verify.id, "round-ended");
+        const result = await run(trackers([], { linear: [task("linear", "DOT-109", ["verify"])] }));
+        expect(result.data.attempts[0]).toMatchObject({
+            state: "started",
+            marker: {
+                ok: false,
+                reason: 'result marker outcome is "round-ended", expected "completed"',
+            },
+            action: "observed",
+        });
     });
 });
 

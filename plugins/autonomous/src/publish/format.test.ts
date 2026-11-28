@@ -177,6 +177,26 @@ describe("Hidden markers", () => {
     });
 });
 
+describe("A reply may mention its review bot (format)", () => {
+    it("starts with the mention in a paragraph of its own, the status line still starting a line", () => {
+        expect(stateReply(ATTEMPT, CRITICAL, published(CRITICAL), "@coderabbitai")).toBe(
+            [
+                "@coderabbitai",
+                "",
+                "Status: fixed in abc1234",
+                `<!-- autonomous:resolution v1 attempt=${ATTEMPT} finding=f3 state=fixed -->`,
+            ].join("\n"),
+        );
+    });
+
+    it("holds no mention without one", () => {
+        expect(stateReply(ATTEMPT, CRITICAL, published(CRITICAL), null)).toBe(
+            stateReply(ATTEMPT, CRITICAL, published(CRITICAL)),
+        );
+        expect(stateReply(ATTEMPT, CRITICAL, published(CRITICAL))).not.toContain("@");
+    });
+});
+
 describe("titles for the exact-match backstop", () => {
     it("reads the title of a stage's first comment, and nothing from another comment", () => {
         expect(titleOf(first(CRITICAL))).toBe(

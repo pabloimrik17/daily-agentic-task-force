@@ -1451,12 +1451,12 @@ describe("main --transition", () => {
     });
 
     it("Task not in grill-me: exits 3 with the reason and no handoff", async () => {
-        const { d, out, calls } = transitionDeps(["personal", "AFK", "external-review"]);
+        const { d, out, calls } = transitionDeps(["personal", "AFK", "wrap-up"]);
         expect(await main(transitionArgs("--json"), d)).toBe(3);
         const report = documentOf(out);
         expect(report.outcome).toBe("not-evaluable");
         expect(report.reasons).toEqual([
-            "beads B-1 is in none of grill-me, proposal, implement, verify and code-review (labels [personal, AFK, external-review])",
+            "beads B-1 is in none of grill-me, proposal, implement, verify, code-review and external-review (labels [personal, AFK, wrap-up])",
         ]);
         expect(report).not.toHaveProperty("handoff");
         expect(calls).toEqual(["beads:readTask:B-1"]);
@@ -1798,6 +1798,16 @@ function fakePullRequests(log: string[]): PullRequests {
         reply: () => ok("reply", undefined),
         resolve: () => ok("resolve", undefined),
         unresolve: () => ok("unresolve", undefined),
+        state: () =>
+            ok("state", {
+                draft: false,
+                head: { sha: "0ddba11", committedAt: "2026-11-25T09:00:00Z" },
+                readyAt: null,
+            }),
+        ready: () => ok("ready", undefined),
+        checkRuns: () => ok("checkRuns", []),
+        reviews: () => ok("reviews", []),
+        dismiss: () => ok("dismiss", undefined),
     };
 }
 
@@ -1988,8 +1998,8 @@ describe("main --publish", () => {
     const PR_URL = "https://github.com/o/r/pull/7";
     const BRANCH = "feature/DOT-109-stage-session-manager";
 
-    function threadedPullRequest(log: string[]): PullRequests {
-        const threads: ReviewThread[] = [];
+    function threadedPullRequest(log: string[], seeded: readonly ReviewThread[]): PullRequests {
+        const threads: ReviewThread[] = structuredClone([...seeded]);
         const done = <T>(name: string, value: T) => {
             log.push(name);
             return Promise.resolve({ ok: true as const, value });
@@ -2031,6 +2041,18 @@ describe("main --publish", () => {
                 }
                 return done("resolve", undefined);
             },
+            reply: (id, body) => {
+                const found = threads.find((item) => item.id === id);
+                const at = found?.comments.length ?? 0;
+                found?.comments.push({
+                    id: `${id}-c${at}`,
+                    body,
+                    url: "",
+                    author: "me",
+                    createdAt: "",
+                });
+                return done("reply", undefined);
+            },
         };
     }
 
@@ -2055,8 +2077,9 @@ describe("main --publish", () => {
     }
 
     interface PublishSetup {
-        stage?: "code-review" | "verify";
+        stage?: "code-review" | "external-review" | "verify";
         record?: string | null;
+        threads?: ReviewThread[]; // already on the pull request
         ahead?: number;
         env?: Record<string, string>;
     }
@@ -2079,7 +2102,7 @@ describe("main --publish", () => {
         const log: string[] = [];
         const result = deps([fakeStep("advance")], {
             env: { AUTONOMOUS_CONFIG: configPath, AUTONOMOUS_STATE: stateDir, ...options.env },
-            pullRequests: () => threadedPullRequest(log),
+            pullRequests: () => threadedPullRequest(log, options.threads ?? []),
             git: workspaceGit(options.ahead ?? 0),
             plannotatorIn: () => () =>
                 Promise.resolve({ ok: false, error: "plannotator CLI not found on PATH" }),
@@ -2097,6 +2120,54 @@ describe("main --publish", () => {
         expect(out[0]).toContain("autonomous publish");
         expect(out[0]).not.toContain("[fake]");
         expect(posted(log)).toEqual(["review", "resolve"]);
+        expect(existsSync(join(attempt, PUBLISH_RECEIPT_FILE))).toBe(true);
+    });
+
+    const EXTERNAL = "linear:DOT-121:external-review:1";
+
+    // A CodeRabbit thread, its first comment the bot's as GraphQL names it.
+    const botThread: ReviewThread = {
+        id: "B1",
+        path: "src/retry.ts",
+        subjectType: "LINE",
+        line: 12,
+        startLine: null,
+        side: "RIGHT",
+        resolved: false,
+        outdated: false,
+        comments: [
+            {
+                id: "B1-c0",
+                body: "The loop never stops.",
+                url: `${PR_URL}#B1`,
+                author: "coderabbitai",
+                createdAt: "",
+            },
+        ],
+    };
+
+    it("External review attempt published: runs no step, posts and reads back the replies, writes the receipt and exits 0", async () => {
+        const entry = finding({ reporters: [{ reviewer: "coderabbit", ids: [] }], thread: "B1" });
+        const { d, out, log, attempt } = await publishDeps({
+            stage: "external-review",
+            record: recordText([entry], { attempt: EXTERNAL }),
+            threads: [botThread],
+        });
+        expect(await main(["--apply", "--publish", EXTERNAL], d)).toBe(0);
+        expect(out[0]).toContain("autonomous publish");
+        expect(out[0]).not.toContain("[fake]");
+        expect(posted(log)).toEqual(["reply"]);
+        expect(existsSync(join(attempt, PUBLISH_RECEIPT_FILE))).toBe(true);
+    });
+
+    it("External review attempt: publish mode does not refuse it for its stage", async () => {
+        const { d, out, attempt } = await publishDeps({
+            stage: "external-review",
+            record: recordText([], { attempt: EXTERNAL }),
+        });
+        expect(await main(["--apply", "--publish", EXTERNAL, "--json"], d)).toBe(0);
+        const report = JSON.parse(out[0] as string) as { reasons: string[] };
+        expect(report.reasons).toEqual([]);
         expect(existsSync(join(attempt, PUBLISH_RECEIPT_FILE))).toBe(true);
     });
 

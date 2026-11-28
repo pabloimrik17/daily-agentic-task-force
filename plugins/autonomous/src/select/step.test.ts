@@ -1,15 +1,21 @@
-import { describe, expect, it } from "vitest";
+import { rmSync } from "node:fs";
+
+import { afterEach, describe, expect, it } from "vitest";
 
 import type { AutonomousConfig } from "../config.ts";
 import type { LabelTriageData } from "../label-triage/step.ts";
 import { config } from "../label-triage/test-fixtures.ts";
 import { exitCodeFor } from "../report.ts";
+import { ALL_PASSED } from "../review-bots/test-fixtures.ts";
 import type { StepResult } from "../runner.ts";
+import { stateWithWorkspace } from "../transition/test-fixtures.ts";
 import { selectStep } from "./step.ts";
 import {
     fakeChezmoi,
+    fakePullRequests,
     fakeReader,
     fakeSelection,
+    type PullRequestFacts,
     selectContext,
     workTask,
 } from "./test-fixtures.ts";
@@ -220,7 +226,7 @@ describe("select: outcome", () => {
                     fakeReader(
                         "beads",
                         ["B-1", "B-2", "B-3"].map((id) =>
-                            workTask("beads", id, ["personal", "AFK", "external-review"]),
+                            workTask("beads", id, ["personal", "AFK", "qa"]),
                         ),
                         calls,
                     ),
@@ -346,6 +352,114 @@ describe("select: outcome", () => {
             "linear:list",
             "beads:detail:B-7",
             "linear:detail:DOT-120",
+        ]);
+    });
+});
+
+describe("select: waiting for review bots", () => {
+    const kept: string[] = [];
+
+    afterEach(() => {
+        for (const directory of kept.splice(0)) {
+            rmSync(directory, { recursive: true, force: true });
+        }
+    });
+
+    // DOT-7 in external-review, whose workspace this machine holds, beside `others`.
+    async function runWith(
+        calls: string[],
+        facts: PullRequestFacts,
+        apply: boolean,
+        others: ReturnType<typeof workTask>[] = [],
+    ) {
+        const { state, workspace } = await stateWithWorkspace({ source: "linear", id: "DOT-7" });
+        kept.push(state, workspace);
+        const tasks = [
+            workTask("linear", "DOT-7", ["personal", "AFK", "external-review"]),
+            ...others,
+        ];
+        return selectStep.run(
+            selectContext({
+                calls,
+                readers: [fakeReader("linear", tasks, calls)],
+                pullRequests: fakePullRequests(calls, facts),
+                state,
+                args: { apply },
+            }),
+        );
+    }
+
+    const waitingThirty = ["coderabbit", "greptile", "pullfrog"].map((bot) => ({
+        bot,
+        state: { kind: "waiting", minutesLeft: 30 },
+    }));
+
+    it("Task left in external-review by an earlier version: marks the draft ready with --apply, reports it and waits", async () => {
+        const calls: string[] = [];
+        const result = await runWith(calls, { draft: true }, true);
+
+        expect(calls.filter((call) => call.startsWith("pr ready"))).toEqual(["pr ready 12"]);
+        expect(result.outcome).toBe("wait");
+        expect(result.reasons).toEqual(["1 waiting for review bots"]);
+        expect(result.data.excluded).toEqual([
+            {
+                source: "linear",
+                id: "DOT-7",
+                title: "Task DOT-7",
+                reason: "waiting-for-review-bots",
+                wait: {
+                    pullRequest: { number: 12, url: "https://example.test/pull/12" },
+                    draft: "marked-ready",
+                    bots: waitingThirty,
+                    running: [],
+                    reasons: [
+                        "coderabbit is waiting, 30 minutes left",
+                        "greptile is waiting, 30 minutes left",
+                        "pullfrog is waiting, 30 minutes left",
+                    ],
+                },
+            },
+        ]);
+    });
+
+    it("Without apply: leaves the draft and names it in the report", async () => {
+        const calls: string[] = [];
+        const result = await runWith(calls, { draft: true }, false);
+
+        expect(calls.filter((call) => call.startsWith("pr ready"))).toEqual([]);
+        expect(result.data.excluded[0]?.wait).toMatchObject({
+            draft: "left-draft",
+            reasons: expect.arrayContaining(["the pull request is a draft"]) as unknown,
+        });
+        expect(selectStep.render(result)).toContain(
+            "pull request #12: the pull request is a draft",
+        );
+    });
+
+    it("keeps the draft task waiting with the error when marking it ready fails", async () => {
+        const calls: string[] = [];
+        const facts = { draft: true, readyError: "gh: forbidden", checkRuns: ALL_PASSED };
+        const result = await runWith(calls, facts, true);
+
+        expect(result.data.excluded[0]?.wait).toMatchObject({
+            draft: "left-draft",
+            reasons: [
+                "cannot mark pull request #12 ready: gh: forbidden",
+                "the pull request is a draft",
+            ],
+        });
+    });
+
+    it("Waiting task does not hold the others back: selects the implement candidate", async () => {
+        const calls: string[] = [];
+        const implement = workTask("linear", "DOT-9", ["personal", "AFK", "implement"]);
+        const result = await runWith(calls, {}, false, [implement]);
+
+        expect(result.outcome).toBe("advance");
+        expect(result.data.selected).toMatchObject({ id: "DOT-9", stage: "implement" });
+        expect(result.data.setAside).toEqual([]);
+        expect(result.data.excluded.map((task) => task.reason)).toEqual([
+            "waiting-for-review-bots",
         ]);
     });
 });

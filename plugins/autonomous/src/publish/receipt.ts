@@ -1,5 +1,5 @@
-// The publish receipt (spec finding-threads; design D13): `published.json` in a code review
-// attempt's directory names the digest of the `findings.json` bytes publish mode published, so the
+// The publish receipt (spec finding-threads; design D13): `published.json` in a code review or
+// external review attempt's directory names the digest of the `findings.json` bytes publish mode published, so the
 // transition can tell a record that was published from one a human round changed afterwards.
 
 import { createHash } from "node:crypto";
@@ -24,6 +24,23 @@ export interface PublishReceipt {
     // sha256 hex of the JSON array [walkthrough.json, walkthrough.patch] as saved; null when none
     walkthroughDigest: string | null;
     publishedAt: string; // ISO 8601
+    quiet?: true; // an external review's quiet round, its resolutions and dismissals read back
+}
+
+// Spec finding-threads, "The receipt records a quiet round": a receipt without the mark, as every
+// one written before external review, is not a quiet round's.
+export function isQuietReceipt(receipt: PublishReceipt): boolean {
+    return receipt.quiet === true;
+}
+
+function quietMark(root: Json): { quiet?: true } {
+    if (!("quiet" in root)) {
+        return {};
+    }
+    if (root.quiet !== true) {
+        throw new ParseError("$.quiet must be true when present");
+    }
+    return { quiet: true };
 }
 
 export function digestOf(bytes: string | Uint8Array): string {
@@ -36,7 +53,15 @@ function parseReceipt(input: unknown): PublishReceipt {
     const root = object(input, "$");
     rejectUnknownKeys(
         root,
-        ["schema", "attempt", "pullRequest", "findingsDigest", "walkthroughDigest", "publishedAt"],
+        [
+            "schema",
+            "attempt",
+            "pullRequest",
+            "findingsDigest",
+            "walkthroughDigest",
+            "publishedAt",
+            "quiet",
+        ],
         "$",
     );
     if (root.schema !== PUBLISH_RECEIPT_SCHEMA) {
@@ -55,6 +80,7 @@ function parseReceipt(input: unknown): PublishReceipt {
         walkthroughDigest:
             root.walkthroughDigest === null ? null : string(root, "walkthroughDigest", "$"),
         publishedAt: string(root, "publishedAt", "$"),
+        ...quietMark(root),
     };
 }
 

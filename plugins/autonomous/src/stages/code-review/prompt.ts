@@ -8,9 +8,13 @@ import type { AutonomyLabel } from "../../label-contract/contract.ts";
 import { FINDINGS_FILE } from "../../publish/receipt.ts";
 import {
     ACCEPTED_FIXES,
+    AS_IT_IS,
+    ARTIFACTS,
+    artifactsStep,
     afkReviewSection,
     afkTransition,
     type Blocked,
+    blockedPublishStep,
     blockedSection,
     CHANGE_KEY,
     checksStep,
@@ -21,6 +25,8 @@ import {
     constraintsSection,
     contextSection,
     contextValue,
+    DOUBTS,
+    doubtsStep,
     fixCommitsSection,
     HUMAN_FOLLOWS,
     hitlReviewSection,
@@ -34,6 +40,7 @@ import {
     PROPOSED_FOLLOW_UPS,
     promptAutonomy,
     promptPaths,
+    REVIEW_SUBJECT,
     REVIEW_TITLE,
     requiredPullRequest,
     resumeReview,
@@ -145,9 +152,8 @@ const AFK: Autonomy = {
         "This holds inside the review team's and the adversarial review's skills too: where they would ask, answer yourself.",
     ),
     unclaimed: UNCLAIMED.AFK,
-    artifacts:
-        "is deferred to a proposed follow-up task, with that as its reason: never edit the artifacts or the definition to fix it.",
-    doubt: "A doubt neither settles is published: give it the destination `publish`, and publish mode posts it as an open `question (blocking)` thread.",
+    artifacts: ARTIFACTS.AFK("The code review"),
+    doubt: DOUBTS.AFK,
     followUps: `${NO_FOLLOW_UPS} Record each with its proposed title, and publish mode keeps its thread open.`,
     human: [`- Whether a human follows the review: ${HUMAN_FOLLOWS.AFK}`],
     walkthrough: afkWalkthrough,
@@ -164,9 +170,8 @@ const HITL: Autonomy = {
         "- The transition question comes only after the human rounds, once the human has no more feedback, because it asks them to approve the code review as it stands.",
     ]),
     unclaimed: UNCLAIMED.HITL,
-    artifacts:
-        "goes to the human: ask them what to do with it, and record their answer as its reason. The code review still changes neither the artifacts nor the definition.",
-    doubt: "Ask the human each doubt neither settles: give it the destination `ask`, record their answer as its reason, and its publication is `asked`.",
+    artifacts: ARTIFACTS.HITL("The code review"),
+    doubt: DOUBTS.HITL,
     followUps: `${CONFIRMED_FOLLOW_UPS} Record a created one with its URL, and publish mode resolves its thread; record one only proposed with its proposed title, and its thread stays open.`,
     human: [
         `- Whether a human follows the review: ${HUMAN_FOLLOWS.HITL}`,
@@ -192,10 +197,10 @@ function codeReviewSection(work: Work, autonomy: Autonomy): Section {
             "",
             `1. ${resumeReview(`the branch's commits since the verification (\`git log\`), the uncommitted changes (\`git status\`), and the finding threads listed in the section "${THREADS_TITLE}"`, autonomy.unclaimed)} When this round finds again what an earlier attempt published, fixed or not, link its record entry to that thread: never open a second thread for it.`,
             `2. Run one round of the adversarial review, as the section "${REVIEW_TITLE}" sets it up.`,
-            `3. Never change the change's artifacts, under \`openspec/changes/${change}/\`, or the task's definition, its description above. A finding whose fix would contradict or change either, including one located in the change's own artifacts, ${autonomy.artifacts} Any other finding located in the change's artifacts, one whose fix lies in the code, is an ordinary finding.`,
-            `4. Settle each doubt in the finding triage against the task's definition and the change's proposal first: when either answers it, as a non-goal of the definition answers whether a behaviour is intended, give it the destination \`settled\`, with that answer as its reason. ${autonomy.doubt} A doubt is neither refuted nor fixed.`,
+            `3. ${artifactsStep(change, autonomy.artifacts)}`,
+            `4. ${doubtsStep(autonomy.doubt)}`,
             "5. Stay within the code review: running what the task delivers as its end user would is QA's. Pass a finding that belongs to QA on to it, whatever its severity, and never fix it here: publish mode posts it as an open thread addressed to QA. Every other finding is the code review's own.",
-            "6. Review the branch as it is: never merge or rebase the base branch into it, and never resolve a conflict with it. When the pull request conflicts with its base, name the conflict in the stage summary and the logbook entry.",
+            `6. ${AS_IT_IS}`,
             `7. ${checksStep(autonomy.onFailure)}`,
         ],
     };
@@ -221,7 +226,7 @@ function reviewSection(input: StagePromptInput, work: Work, autonomy: Autonomy):
         lines: [
             "Review the code through one round of the adversarial review below, as its orchestrator: run no second report after the fixes, even when every fix passes its fix check. These are its parameters:",
             "",
-            "- Subject: the pull request's diff from its merge base: the commits of this workspace's branch, from its merge base with the pull request's base to `HEAD`.",
+            REVIEW_SUBJECT,
             `- References: the task's definition, its description above, and the change's proposal, \`openspec/changes/${change}/proposal.md\`. Use them in the finding triage and the refutation, and keep them from the reviewers: give the review team's reviewers nothing but their briefs.`,
             `- The report's procedure: the review team, by its skill below. Plan it with \`--dir ${reviewDir}\` and no \`--tier\`: the team runs at the tier it measures, never raised. Its step 5, the summary in the chat, is replaced by the finding triage: once \`collect\` has written \`${reviewDir}/report.json\`, triage its findings and doubts, each with the reviewers that reported it.`,
             "- Severity scale: the review team's `CRITICAL`, `WARNING` and `SUGGESTION`. The floor is `CRITICAL`.",
@@ -241,6 +246,74 @@ function reviewSection(input: StagePromptInput, work: Work, autonomy: Autonomy):
     };
 }
 
+// The lines of the record's shape a stage writes for itself; the rest is the same for every stage
+// that publishes (src/publish/record.ts).
+export interface RecordParts {
+    review: readonly string[]; // the `review` field
+    round: string; // the `round` field
+    reporters: readonly string[]; // an example reporter and what `reviewer` may name
+    thread: string; // the `thread` field
+    after: readonly string[]; // from the end of `entries` to the closing brace
+}
+
+export function recordJson(attempt: string, parts: RecordParts): string[] {
+    return [
+        "```jsonc",
+        "{",
+        '  "schema": "autonomous.findings.v1",',
+        `  "attempt": "${attempt}",`,
+        ...parts.review,
+        '  "entries": [',
+        "    {",
+        '      "id": "f1",                   // unique in the record; letters, digits, ".", "_" and "-" only',
+        parts.round,
+        '      "kind": "finding" | "doubt",',
+        '      "reporters": [                // at least one',
+        ...parts.reporters,
+        "      ],",
+        '      "title": "one line",',
+        '      "statement": "one to three lines",',
+        '      "location": { "scope": "line", "file": "src/a.ts", "startLine": 40, "endLine": 42, "side": "new" | "old" }',
+        '                | { "scope": "file", "file": "src/a.ts" }',
+        '                | { "scope": "change" },',
+        '      "severity": "CRITICAL" | "WARNING" | "SUGGESTION",   // findings only; absent for a doubt',
+        '      "label": "issue" | "suggestion",                     // findings only; absent for a doubt',
+        '      "destination": "fix" | "pass-on" | "defer" | "dismiss"      // a finding',
+        '                   | "settled" | "ask" | "publish",               // a doubt',
+        '      "reason": "why this destination",',
+        '      "refutation": { "outcome": "survived" | "refuted" | "not-refuted", "reproduction": "test/x.test.ts \\"name\\"" | null },',
+        "                                    // findings only; absent for a doubt",
+        '      "publication": { "state": "fixed", "commit": "abc1234" }',
+        '                   | { "state": "deferred", "followUp": "https://linear.app/..." }',
+        '                   | { "state": "deferred", "proposedTitle": "..." }',
+        '                   | { "state": "passed-on", "stage": "qa" }',
+        '                   | { "state": "blocked", "reason": "..." }',
+        '                   | { "state": "asked" }',
+        '                   | { "state": "none" },',
+        parts.thread,
+        "    }",
+        ...parts.after,
+        "}",
+        "```",
+    ];
+}
+
+const CODE_REVIEW_RECORD: RecordParts = {
+    review: [
+        "  \"review\": {                       // the review team's run of this stage's round, from its report",
+        '    "tier": "S" | "M" | "L",        // the tier it ran at',
+        '    "skipped": [{ "reviewer": "coderabbit", "reason": "..." }]   // each reviewer skipped, with its reason',
+        "  },",
+    ],
+    round: "      \"round\": 1,                   // 1 = this stage's round; 2, 3, ... = a human's rounds (HITL only)",
+    reporters: [
+        '        { "reviewer": "code-review", "ids": ["code-review-3"], "engine": "Claude Code 2.1.330" }',
+        '                                    // reviewer: a review team reviewer id, "verification" or "human"; engine optional',
+    ],
+    thread: '      "thread": "PRRT_kwDO..." | null   // the node id of the listed thread this entry continues',
+    after: ["  ]"],
+};
+
 // The record exactly as publish mode validates it (src/publish/record.ts).
 function recordSection({ attempt, findings }: Work): Section {
     return {
@@ -248,47 +321,7 @@ function recordSection({ attempt, findings }: Work): Section {
         lines: [
             `Write the record to \`${findings}\` as one JSON document, in exactly this shape. Publish mode validates the whole record before it posts anything, and refuses a record that breaks it, naming each field at fault.`,
             "",
-            "```jsonc",
-            "{",
-            '  "schema": "autonomous.findings.v1",',
-            `  "attempt": "${attempt}",`,
-            "  \"review\": {                       // the review team's run of this stage's round, from its report",
-            '    "tier": "S" | "M" | "L",        // the tier it ran at',
-            '    "skipped": [{ "reviewer": "coderabbit", "reason": "..." }]   // each reviewer skipped, with its reason',
-            "  },",
-            '  "entries": [',
-            "    {",
-            '      "id": "f1",                   // unique in the record; letters, digits, ".", "_" and "-" only',
-            "      \"round\": 1,                   // 1 = this stage's round; 2, 3, ... = a human's rounds (HITL only)",
-            '      "kind": "finding" | "doubt",',
-            '      "reporters": [                // at least one',
-            '        { "reviewer": "code-review", "ids": ["code-review-3"], "engine": "Claude Code 2.1.330" }',
-            '                                    // reviewer: a review team reviewer id, "verification" or "human"; engine optional',
-            "      ],",
-            '      "title": "one line",',
-            '      "statement": "one to three lines",',
-            '      "location": { "scope": "line", "file": "src/a.ts", "startLine": 40, "endLine": 42, "side": "new" | "old" }',
-            '                | { "scope": "file", "file": "src/a.ts" }',
-            '                | { "scope": "change" },',
-            '      "severity": "CRITICAL" | "WARNING" | "SUGGESTION",   // findings only; absent for a doubt',
-            '      "label": "issue" | "suggestion",                     // findings only; absent for a doubt',
-            '      "destination": "fix" | "pass-on" | "defer" | "dismiss"      // a finding',
-            '                   | "settled" | "ask" | "publish",               // a doubt',
-            '      "reason": "why this destination",',
-            '      "refutation": { "outcome": "survived" | "refuted" | "not-refuted", "reproduction": "test/x.test.ts \\"name\\"" | null },',
-            "                                    // findings only; absent for a doubt",
-            '      "publication": { "state": "fixed", "commit": "abc1234" }',
-            '                   | { "state": "deferred", "followUp": "https://linear.app/..." }',
-            '                   | { "state": "deferred", "proposedTitle": "..." }',
-            '                   | { "state": "passed-on", "stage": "qa" }',
-            '                   | { "state": "blocked", "reason": "..." }',
-            '                   | { "state": "asked" }',
-            '                   | { "state": "none" },',
-            '      "thread": "PRRT_kwDO..." | null   // the node id of the listed thread this entry continues',
-            "    }",
-            "  ]",
-            "}",
-            "```",
+            ...recordJson(attempt, CODE_REVIEW_RECORD),
             "",
             "- `entries`: one per finding and per doubt of every round, after the finding triage merged and split them. Once publish mode has posted an entry, keep it and its id: add the entries of a later round, and update an entry's destination, refutation and publication as they change.",
             "- `reporters`: the reviewers a finding comes from, each with the ids the review team's report gave its findings and the engine the report names; `verification` for a finding the verification passed on, and `human` for a comment of the human, each with the ids it has, or `[]`.",
@@ -338,10 +371,7 @@ function blocked(attempt: string): Blocked {
             "the code review",
             "a fix rejected by two fix checks, a check that cannot be made to pass, a fix that needs a human, or a publish mode that fails",
         ),
-        steps: [
-            ACCEPTED_FIXES,
-            `Unless publish mode is what failed, record each finding you could not fix as \`blocked\`, with its reason, and run \`/autonomous:run --apply --publish ${attempt}\` once, so the pull request shows where the review stopped. Do not run it again if it fails: name its error in the stage summary.`,
-        ],
+        steps: [ACCEPTED_FIXES, blockedPublishStep(attempt)],
         blocks: "the code review",
         pullRequest: "always",
     };

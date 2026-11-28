@@ -6,6 +6,7 @@ import type { ContextReader } from "../context/types.ts";
 import type { Exec } from "../exec.ts";
 import type { TrackerTask } from "../label-triage/trackers/tracker.ts";
 import type { PullRequests } from "../pull-request/port.ts";
+import type { ExternalReviewConfig } from "../review-bots/types.ts";
 import type { WorkTask } from "../select/types.ts";
 import type { SessionTool } from "../sessions/manager.ts";
 
@@ -43,6 +44,10 @@ export interface StageEnv {
     repository: string; // absolute path
     branch: string; // the workspace branch the attempt will use
     readers: StageReaders;
+    // What the external review's prerequisites read besides the readers (design D5 of
+    // add-external-review-stage): `review.external` and the run's clock. Launch always gives it;
+    // optional so that a stage reading neither is tested without it.
+    externalReview?: { config: ExternalReviewConfig; now: Date };
 }
 
 export type StageContext = Readonly<Record<string, string>>;
@@ -65,6 +70,9 @@ export interface Stage {
     agentArgs(tool: SessionTool): string[]; // model and effort flags the stage wants
     prompt(input: StagePromptInput): string; // the whole prompt file
     completed(task: TrackerTask): boolean; // the tracker check; reconcile checks the marker
+    // The tracker check of an attempt whose marker reports `round-ended`; a stage without it never
+    // accepts that outcome.
+    roundEnded?(task: TrackerTask): boolean;
 }
 
 // The model and effort of grill-me and the OpenSpec stages; DOT-119 replaces the fixed model. No

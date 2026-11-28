@@ -388,7 +388,12 @@ async function runAnswers(args: RunArgs, steps: readonly Step[], deps: MainDeps)
     }
     const { config } = load;
     const ctx = { config, trackers: deps.trackers(config) };
-    const tools = { git: deps.git, openspecIn: deps.openspecIn, pullRequests: deps.pullRequests };
+    const tools = {
+        git: deps.git,
+        openspecIn: deps.openspecIn,
+        pullRequests: deps.pullRequests,
+        bots: config.review.external.bots,
+    };
     const handlers = [
         ...answeringSteps(steps),
         transitionHandler(resolveStateDir(deps.env), tools),
@@ -416,6 +421,7 @@ async function runTransitionMode(ref: TaskRef, args: RunArgs, deps: MainDeps): P
         git: deps.git,
         openspecIn: deps.openspecIn,
         pullRequests: deps.pullRequests,
+        bots: config.review.external.bots,
     };
     const report = await runTransition(ref, transitionDeps, startedAt, args.from);
     deps.stdout(args.json ? renderTransitionJson(report) : renderTransitionText(report));

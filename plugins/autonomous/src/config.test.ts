@@ -24,6 +24,21 @@ const REVIEW = {
         L: [{ reviewer: "walkthrough" }, { reviewer: "tests-lens" }],
     },
     security: { pathPatterns: ["auth"], linePatterns: ["\\beval\\s*\\("] },
+    external: {
+        waitMinutes: 30,
+        answerWaitMinutes: 10,
+        rounds: 3,
+        bots: [
+            { id: "coderabbit", login: "coderabbitai[bot]", check: "CodeRabbit", mention: null },
+            {
+                id: "greptile",
+                login: "greptile-apps[bot]",
+                check: "Greptile Review",
+                mention: null,
+            },
+            { id: "pullfrog", login: "pullfrog[bot]", check: "pullfrog", mention: "@pullfrog" },
+        ],
+    },
 };
 
 const valid = () => ({
@@ -69,6 +84,7 @@ const ALL_DEFAULTED = [
     "review.tiers",
     "review.team",
     "review.security",
+    "review.external",
 ];
 const MISMATCH = "configuration does not match autonomous.config.v1: ";
 
@@ -367,6 +383,7 @@ describe("optional blocks", () => {
                     ]) as string[],
                     linePatterns: expect.arrayContaining(["\\beval\\s*\\("]) as string[],
                 },
+                external: REVIEW.external,
             },
         });
     });
@@ -434,6 +451,7 @@ describe("the review block", () => {
             "review.tiers",
             "review.team",
             "review.security",
+            "review.external",
         ]);
         expect(result.ok && result.value.review.tiers.S).toEqual({ maxLines: 150, maxFiles: 5 });
         expect(result.ok && result.value.review.team.M.map((row) => row.reviewer)).toEqual([
@@ -452,6 +470,7 @@ describe("the review block", () => {
         expect(result.ok && result.defaulted.filter((key) => key.startsWith("review."))).toEqual([
             "review.tiers",
             "review.security",
+            "review.external",
         ]);
     });
 
@@ -485,6 +504,108 @@ describe("the review block", () => {
             ok: false,
             error: `${MISMATCH}$.review must be an object`,
         });
+    });
+});
+
+describe("review bot settings", () => {
+    const rejected = (external: unknown): string => {
+        const result = parseConfig({ ...valid(), review: { ...REVIEW, external } });
+        if (result.ok) {
+            throw new Error("accepted");
+        }
+        return result.error.replace(MISMATCH, "");
+    };
+    const coderabbit = REVIEW.external.bots[0];
+    const withBots = (bots: unknown[]) => ({ ...REVIEW.external, bots });
+
+    it("Block omitted: the three shipped bots are expected and the defaulted keys are listed", () => {
+        const result = parseConfig(withoutOptional());
+        const external = result.ok && result.value.review.external;
+        expect(external).toEqual(REVIEW.external);
+        expect(external && external.bots.map((bot) => bot.id)).toEqual([
+            "coderabbit",
+            "greptile",
+            "pullfrog",
+        ]);
+        expect(result.ok && result.defaulted).toContain("review.external");
+    });
+
+    it("Block omitted from a review block that sets the other keys", () => {
+        const { external: _external, ...others } = REVIEW;
+        const result = parseConfig({ ...valid(), review: others });
+        expect(result.ok && result.value.review.external.rounds).toBe(3);
+        expect(result.ok && result.defaulted).toEqual(["review.external"]);
+    });
+
+    it("One bot configured: only that bot is expected, and the other keys take their default", () => {
+        const external = { bots: [coderabbit] };
+        const result = parseConfig({ ...valid(), review: { ...REVIEW, external } });
+        expect(result.ok && result.value.review.external).toEqual({
+            waitMinutes: 30,
+            answerWaitMinutes: 10,
+            rounds: 3,
+            bots: [coderabbit],
+        });
+        expect(result.ok && result.defaulted).toEqual([
+            "review.external.waitMinutes",
+            "review.external.answerWaitMinutes",
+            "review.external.rounds",
+        ]);
+    });
+
+    it("Invalid values: a negative waitMinutes is rejected with its path", () => {
+        expect(rejected({ ...REVIEW.external, waitMinutes: -1 })).toBe(
+            "$.review.external.waitMinutes must be an integer >= 0",
+        );
+    });
+
+    it("Invalid values: a rounds below 1 is rejected with its path", () => {
+        expect(rejected({ ...REVIEW.external, rounds: 0 })).toBe(
+            "$.review.external.rounds must be an integer >= 1",
+        );
+    });
+
+    it("Invalid values: an unknown key under review.external is rejected with its path", () => {
+        expect(rejected({ ...REVIEW.external, wait: 5 })).toBe(
+            "$.review.external.wait is not a recognised field",
+        );
+    });
+
+    it("Invalid values: a bad bot names the path of its key", () => {
+        expect(rejected(withBots([{ ...coderabbit, login: "" }]))).toBe(
+            "$.review.external.bots[0].login must not be empty",
+        );
+        expect(rejected(withBots([{ ...coderabbit, mention: 3 }]))).toBe(
+            "$.review.external.bots[0].mention must be a string or null",
+        );
+        expect(rejected(withBots([{ ...coderabbit, nick: "cr" }]))).toBe(
+            "$.review.external.bots[0].nick is not a recognised field",
+        );
+    });
+
+    it("Invalid values: a bot that is not an object, and a bots list that is not an array", () => {
+        expect(rejected(withBots(["coderabbit"]))).toBe(
+            "$.review.external.bots[0] must be an object",
+        );
+        expect(rejected({ ...REVIEW.external, bots: {} })).toBe(
+            "$.review.external.bots must be an array",
+        );
+    });
+
+    it("Duplicate id: the configuration is rejected with the path of the second entry", () => {
+        const greptile = { id: "greptile", login: "g[bot]", check: "G", mention: "@greptile" };
+        expect(rejected(withBots([greptile, coderabbit, { ...greptile, check: "G2" }]))).toBe(
+            "$.review.external.bots[2].id repeats greptile (already at $.review.external.bots[0])",
+        );
+    });
+
+    it("keeps a mention string", () => {
+        const bot = { ...coderabbit, mention: "@coderabbitai" };
+        const result = parseConfig({
+            ...valid(),
+            review: { ...REVIEW, external: withBots([bot]) },
+        });
+        expect(result.ok && result.value.review.external.bots).toEqual([bot]);
     });
 });
 

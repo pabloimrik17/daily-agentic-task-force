@@ -1,5 +1,6 @@
-// Spec autonomous-run, "Leaving implement/verify/code-review needs the work finished"; designs D6,
-// D13. Every reason that holds comes back, so one run tells the human all there is to finish.
+// Spec autonomous-run, "Leaving implement/verify/code-review needs the work finished" and "Leaving
+// external-review needs a quiet round"; designs D6, D13, and D14 of add-external-review-stage.
+// Every reason that holds comes back, so one run tells the human all there is to finish.
 
 import { access } from "node:fs/promises";
 
@@ -12,15 +13,32 @@ import {
 import { listRecords } from "../attempts/state.ts";
 import type { Exec } from "../exec.ts";
 import { plural } from "../label-triage/render.ts";
-import type { PullRequestsFactory } from "../pull-request/port.ts";
+import type {
+    CheckRun,
+    PullRequests,
+    PullRequestsFactory,
+    PullRequestState,
+} from "../pull-request/port.ts";
 import type { Result } from "../result.ts";
+import { type PullRequestChecks, pullRequestChecks } from "../review-bots/classify.ts";
+import type { ReviewBot } from "../review-bots/types.ts";
 import { findBranchChange } from "../stages/openspec-change.ts";
+import { unpublishedReasons } from "./receipt.ts";
 import { type TransitionStage, transitionRow } from "./table.ts";
 
 export interface GuardTools {
     git: Exec; // run with `-C <directory>`
     openspecIn: (directory: string) => Exec; // `openspec` takes its root from its working directory
     pullRequests: PullRequestsFactory;
+    bots: readonly ReviewBot[]; // their check runs are not checks of the pull request
+}
+
+// The task's open pull request and the checks of its head commit.
+export interface CheckedPullRequest {
+    number: number;
+    pullRequests: PullRequests;
+    state: PullRequestState;
+    checks: PullRequestChecks;
 }
 
 interface TaskCount {
@@ -37,15 +55,23 @@ export async function guardsOnLeaving(
     state: string,
     tools: GuardTools,
 ): Promise<string[]> {
-    return transitionRow(from).guarded ? workGuards(ref, state, tools) : [];
-}
-
-async function workGuards(ref: TaskRef, state: string, tools: GuardTools): Promise<string[]> {
+    if (!transitionRow(from).guarded) {
+        return [];
+    }
     const found = await workspaceOf(state, ref);
     if (!found.ok) {
         return [found.error];
     }
-    const { path, branch } = found.value;
+    const work = await workGuards(found.value, tools);
+    return from === "external-review"
+        ? [...work, ...(await roundGuards(found.value, ref, state, tools))]
+        : work;
+}
+
+async function workGuards(
+    { path, branch }: AttemptWorkspace,
+    tools: GuardTools,
+): Promise<string[]> {
     // Pruned, so a deleted remote branch cannot pass the unpushed check through a stale ref.
     const fetched = await tools.git(["-C", path, "fetch", "--prune", "origin"]);
     const reasons = [
@@ -57,9 +83,67 @@ async function workGuards(ref: TaskRef, state: string, tools: GuardTools): Promi
     return reasons.filter((reason) => reason !== null);
 }
 
+// D14: the open attempt's publish receipt is current and a quiet round's, and every check of the
+// head commit has ended without failing.
+async function roundGuards(
+    workspace: AttemptWorkspace,
+    ref: TaskRef,
+    state: string,
+    tools: GuardTools,
+): Promise<string[]> {
+    const unpublished = await unpublishedReasons(state, ref, "external-review", true);
+    const read = await readChecks(workspace, tools);
+    const sha = read.ok ? read.value.state.head.sha : "";
+    const checks = read.ok
+        ? [
+              ...read.value.checks.failed.map((run) => failedCheck(run, sha)),
+              ...read.value.checks.running.map(
+                  (run) => `the check ${run.name} has not ended on ${sha}`,
+              ),
+          ]
+        : [read.error];
+    return [...(unpublished.ok ? unpublished.value : [unpublished.error]), ...checks];
+}
+
+export const failedCheck = (run: CheckRun, sha: string) =>
+    `the check ${run.name} concluded ${run.conclusion} on ${sha}`;
+
+// A review bot's check run is not a check of the pull request (spec review-bots, "The checks of a
+// pull request").
+export async function readChecks(
+    { path, branch }: AttemptWorkspace,
+    tools: GuardTools,
+): Promise<Result<CheckedPullRequest>> {
+    const pullRequests = tools.pullRequests(path);
+    const found = await pullRequests.find(branch);
+    if (!found.ok) {
+        return { ok: false, error: `finding the pull request of ${branch}: ${found.error}` };
+    }
+    if (found.value === null) {
+        return { ok: false, error: `the branch ${branch} has no open pull request` };
+    }
+    const { number } = found.value;
+    const state = await pullRequests.state(number);
+    if (!state.ok) {
+        return {
+            ok: false,
+            error: `cannot read the state of pull request #${number}: ${state.error}`,
+        };
+    }
+    const runs = await pullRequests.checkRuns(state.value.head.sha);
+    if (!runs.ok) {
+        return {
+            ok: false,
+            error: `cannot read the check runs of pull request #${number}: ${runs.error}`,
+        };
+    }
+    const checks = pullRequestChecks(runs.value, tools.bots);
+    return { ok: true, value: { number, pullRequests, state: state.value, checks } };
+}
+
 // Every stage of a task shares one workspace, so the latest record of any stage holds it. The
 // latest is by creation time: `attempt` counts per stage.
-async function workspaceOf(state: string, ref: TaskRef): Promise<Result<AttemptWorkspace>> {
+export async function workspaceOf(state: string, ref: TaskRef): Promise<Result<AttemptWorkspace>> {
     let records: AttemptRecord[];
     try {
         records = await listRecords(state);

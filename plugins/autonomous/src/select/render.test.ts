@@ -1,14 +1,21 @@
-import { describe, expect, it } from "vitest";
+import { rmSync } from "node:fs";
+
+import { afterEach, describe, expect, it } from "vitest";
+
+import { buildReport, renderJson } from "../report.ts";
+import { run } from "../review-bots/test-fixtures.ts";
+import { stateWithWorkspace } from "../transition/test-fixtures.ts";
 
 import { selectStep } from "./step.ts";
 import {
     fakeChezmoi,
+    fakePullRequests,
     fakeReader,
     fakeSelection,
     selectContext,
     workTask,
 } from "./test-fixtures.ts";
-import type { SelectData, SelectionAnswer } from "./types.ts";
+import type { ReviewBotsWait, SelectData, SelectionAnswer } from "./types.ts";
 
 // Two candidates of either scope and one task excluded under each of three reasons.
 function readers(calls: string[]) {
@@ -30,7 +37,7 @@ function readers(calls: string[]) {
                 workTask("linear", "DOT-4", ["personal", "grill-me", "taken"], {
                     title: "Being worked on",
                 }),
-                workTask("linear", "DOT-5", ["personal", "AFK", "external-review"], {
+                workTask("linear", "DOT-5", ["personal", "AFK", "qa"], {
                     title: "Build the feature",
                 }),
             ],
@@ -168,7 +175,7 @@ describe("renderSelect", () => {
                     fakeReader(
                         "beads",
                         ["B-1", "B-2", "B-3"].map((id) =>
-                            workTask("beads", id, ["personal", "AFK", "external-review"]),
+                            workTask("beads", id, ["personal", "AFK", "qa"]),
                         ),
                         calls,
                     ),
@@ -350,5 +357,139 @@ describe("renderSelect: candidates set aside", () => {
         });
 
         expect(text.indexOf("no free slot: 1")).toBeGreaterThan(text.indexOf("taken: 1"));
+    });
+});
+
+describe("renderSelect: waiting for review bots", () => {
+    const kept: string[] = [];
+
+    afterEach(() => {
+        for (const directory of kept.splice(0)) {
+            rmSync(directory, { recursive: true, force: true });
+        }
+    });
+
+    // Greptile has no check run 18 minutes after the head commit, and main is running.
+    async function waiting() {
+        const calls: string[] = [];
+        const { state, workspace } = await stateWithWorkspace({ source: "linear", id: "DOT-7" });
+        kept.push(state, workspace);
+        const checkRuns = [
+            run("CodeRabbit"),
+            run("pullfrog", { conclusion: "cancelled", title: "Review was cancelled" }),
+            run("main", { status: "in_progress", conclusion: null, completedAt: null }),
+        ];
+        return selectStep.run(
+            selectContext({
+                calls,
+                readers: [
+                    fakeReader(
+                        "linear",
+                        [workTask("linear", "DOT-7", ["personal", "AFK", "external-review"])],
+                        calls,
+                    ),
+                ],
+                pullRequests: fakePullRequests(calls, { checkRuns }),
+                state,
+            }),
+        );
+    }
+
+    it("Waiting task in the text report: names the pull request, each bot's state with the minutes left, and main", async () => {
+        expect(selectStep.render(await waiting())).toBe(
+            [
+                "[select] wait (code)",
+                "  machine scope  personal",
+                "  excluded: 1 task",
+                "    waiting for review bots: 1",
+                "      linear → DOT-7 → Task DOT-7 → pull request #12: checks still running: main; greptile is waiting, 12 minutes left; coderabbit: reported; pullfrog: not reviewing: Review was cancelled",
+                "  not evaluated: github: dependencies",
+                "  reasons:",
+                "    - 1 waiting for review bots",
+            ].join("\n"),
+        );
+    });
+
+    it("holds the same wait in the JSON report", async () => {
+        const result = await waiting();
+        const report = JSON.parse(
+            renderJson(
+                buildReport(
+                    new Date(0),
+                    { results: [result], questions: [], outcome: "wait" },
+                    { apply: false, noHandoff: false },
+                ),
+            ),
+        ) as { steps: { data: SelectData }[] };
+
+        expect(report.steps[0]?.data.excluded[0]?.wait).toEqual({
+            pullRequest: { number: 12, url: "https://example.test/pull/12" },
+            draft: null,
+            bots: [
+                { bot: "coderabbit", state: { kind: "reported" } },
+                { bot: "greptile", state: { kind: "waiting", minutesLeft: 12 } },
+                {
+                    bot: "pullfrog",
+                    state: { kind: "not-reviewing", reason: "Review was cancelled" },
+                },
+            ],
+            running: ["main"],
+            reasons: ["checks still running: main", "greptile is waiting, 12 minutes left"],
+        });
+    });
+
+    function renderWaiting(title: string, wait: ReviewBotsWait): string {
+        return selectStep.render({
+            step: "select",
+            tier: "code",
+            outcome: "wait",
+            reasons: [],
+            data: {
+                machineScope: null,
+                selected: null,
+                candidates: [],
+                setAside: [],
+                readyToClose: [],
+                notEvaluated: [],
+                comparison: null,
+                excluded: [
+                    {
+                        source: "linear",
+                        id: "DOT-7",
+                        title,
+                        reason: "waiting-for-review-bots",
+                        wait,
+                    },
+                ],
+            },
+        });
+    }
+
+    it("names the reason a pull request cannot be read, with no pull request to name", () => {
+        const text = renderWaiting("Away", {
+            pullRequest: null,
+            draft: null,
+            bots: [],
+            running: [],
+            reasons: ["there is no workspace to check: the task has no attempt"],
+        });
+
+        expect(text).toContain(
+            "      linear → DOT-7 → Away → there is no workspace to check: the task has no attempt",
+        );
+    });
+
+    it("says a draft was marked ready", () => {
+        const text = renderWaiting("Draft", {
+            pullRequest: { number: 12, url: "https://example.test/pull/12" },
+            draft: "marked-ready",
+            bots: [],
+            running: [],
+            reasons: [],
+        });
+
+        expect(text).toContain(
+            "      linear → DOT-7 → Draft → pull request #12: marked ready for review",
+        );
     });
 });

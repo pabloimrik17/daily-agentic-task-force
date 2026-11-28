@@ -77,6 +77,39 @@ export interface PullRequests {
     reply(thread: string, body: string): Promise<Result<void>>;
     resolve(thread: string): Promise<Result<void>>;
     unresolve(thread: string): Promise<Result<void>>;
+    state(number: number): Promise<Result<PullRequestState>>;
+    ready(number: number): Promise<Result<void>>; // marks a draft ready for review
+    checkRuns(sha: string): Promise<Result<CheckRun[]>>; // every check run of the commit, every page
+    reviews(number: number): Promise<Result<Review[]>>; // oldest first
+    dismiss(number: number, review: string, message: string): Promise<Result<void>>; // the node id names the review; the number is not sent
+}
+
+// What the wait and the quiet round of external review read (design D2 of add-external-review-stage).
+export interface PullRequestState {
+    draft: boolean;
+    head: { sha: string; committedAt: string }; // the head commit's id and committer time, ISO 8601
+    readyAt: string | null; // the last ReadyForReviewEvent; null when it never had one
+}
+
+export interface CheckRun {
+    name: string;
+    app: string; // the app's slug; empty when the run has none
+    status: string; // queued, in_progress or completed
+    conclusion: string | null; // null until completed
+    title: string | null;
+    summary: string | null;
+    url: string;
+    startedAt: string | null; // ISO 8601
+    completedAt: string | null;
+}
+
+export interface Review {
+    id: string; // the GraphQL node id, which is what `dismiss` takes (not the REST number)
+    author: string; // login as the API gives it; compare with a review bot's through review-bots/identify.ts
+    state: string; // APPROVED, CHANGES_REQUESTED, COMMENTED, DISMISSED or PENDING
+    commit: string | null; // the commit it was left on
+    body: string;
+    url: string;
 }
 
 export type PullRequestsFactory = (directory: string) => PullRequests;

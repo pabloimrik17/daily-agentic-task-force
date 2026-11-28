@@ -12,7 +12,14 @@ import type { ContextReader } from "../context/types.ts";
 import { type Exec, toExecResult } from "../exec.ts";
 import type { AutonomyLabel } from "../label-contract/contract.ts";
 import { config, trackers } from "../label-triage/test-fixtures.ts";
-import type { PullRequest, PullRequests, ReviewThread } from "../pull-request/port.ts";
+import type {
+    CheckRun,
+    PullRequest,
+    PullRequests,
+    PullRequestState,
+    Review,
+    ReviewThread,
+} from "../pull-request/port.ts";
 import type { Result } from "../result.ts";
 import type { RunContext } from "../runner.ts";
 import { fakeReader, selectContext, workTask } from "../select/test-fixtures.ts";
@@ -184,13 +191,28 @@ export function installHandoff(home: string, body: string): string {
     return home;
 }
 
+// What external review reads of a pull request; by default it is not a draft, has no check run
+// and no review.
+interface ExternalFacts {
+    state?: Result<PullRequestState>;
+    checkRuns?: Result<CheckRun[]>;
+    reviews?: Result<Review[]>;
+}
+
+const READY_STATE: PullRequestState = {
+    draft: false,
+    head: { sha: "0ddba11", committedAt: "2026-01-01T00:00:00Z" },
+    readyAt: null,
+};
+
 // Readers that log each call to `calls`; git runs for real, the others answer as told: no
-// context, `pullRequest` for the branch, `main` as the default branch, and `threads` for the pull
-// request's review threads.
+// context, `pullRequest` for the branch, `main` as the default branch, `threads` for the pull
+// request's review threads, and `external` for what external review reads.
 export function loggingReaders(
     calls: string[],
     pullRequest: PullRequest | null,
     threads: Result<ReviewThread[]> = { ok: true, value: [] },
+    external: ExternalFacts = {},
 ): StageEnv["readers"] {
     const context: ContextReader = {
         source: "linear",
@@ -211,6 +233,26 @@ export function loggingReaders(
         threads: (number) => {
             calls.push(`threads:${number}`);
             return Promise.resolve(threads);
+        },
+        state: (number) => {
+            calls.push(`state:${number}`);
+            return Promise.resolve(external.state ?? { ok: true, value: READY_STATE });
+        },
+        ready: (number) => {
+            calls.push(`ready:${number}`);
+            return Promise.resolve({ ok: true, value: undefined });
+        },
+        checkRuns: (sha) => {
+            calls.push(`checkRuns:${sha}`);
+            return Promise.resolve(external.checkRuns ?? { ok: true, value: [] });
+        },
+        reviews: (number) => {
+            calls.push(`reviews:${number}`);
+            return Promise.resolve(external.reviews ?? { ok: true, value: [] });
+        },
+        dismiss: (number, review) => {
+            calls.push(`dismiss:${number}:${review}`);
+            return Promise.resolve({ ok: true, value: undefined });
         },
     };
     return {

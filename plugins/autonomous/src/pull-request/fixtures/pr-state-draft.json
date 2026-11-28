@@ -1,0 +1,22 @@
+{
+    "data": {
+        "repository": {
+            "pullRequest": {
+                "isDraft": true,
+                "commits": {
+                    "nodes": [
+                        {
+                            "commit": {
+                                "oid": "e735b02a539cb4a7da064829c1f932c29a93b29f",
+                                "committedDate": "2026-11-27T09:19:56Z"
+                            }
+                        }
+                    ]
+                },
+                "timelineItems": {
+                    "nodes": []
+                }
+            }
+        }
+    }
+}

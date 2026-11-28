@@ -1,10 +1,15 @@
 // Stage order in the step (spec work-selection, "Most advanced stage first").
 
-import { describe, expect, it } from "vitest";
+import { rmSync } from "node:fs";
 
+import { afterEach, describe, expect, it } from "vitest";
+
+import { ALL_PASSED } from "../review-bots/test-fixtures.ts";
+import { stateWithWorkspace } from "../transition/test-fixtures.ts";
 import { selectStep } from "./step.ts";
 import {
     fakeChezmoi,
+    fakePullRequests,
     fakeReader,
     fakeSelection,
     selectContext,
@@ -17,6 +22,14 @@ const PROPOSAL = ["personal", "AFK", "proposal"];
 function readers(calls: string[], tasks: ReturnType<typeof workTask>[]) {
     return [fakeReader("linear", tasks, calls)];
 }
+
+const kept: string[] = [];
+
+afterEach(() => {
+    for (const directory of kept.splice(0)) {
+        rmSync(directory, { recursive: true, force: true });
+    }
+});
 
 describe("select: most advanced stage first", () => {
     it("selects the only proposal candidate by code and sets the grill-me ones aside", async () => {
@@ -60,6 +73,27 @@ describe("select: most advanced stage first", () => {
         expect(result.outcome).toBe("advance");
         expect(result.data.selected).toMatchObject({ id: "I-1", stage: "implement" });
         expect(result.data.setAside.map((c) => c.id)).toEqual(["P-1"]);
+    });
+
+    it("External review before code review: selects the external-review candidate and sets the code-review one aside", async () => {
+        const calls: string[] = [];
+        // E-1's pull request is settled, so it is not waiting for its review bots.
+        const { state, workspace } = await stateWithWorkspace({ source: "linear", id: "E-1" });
+        kept.push(state, workspace);
+        const result = await selectStep.run(
+            selectContext({
+                calls,
+                readers: readers(calls, [
+                    workTask("linear", "C-1", ["personal", "AFK", "code-review"]),
+                    workTask("linear", "E-1", ["personal", "HITL", "external-review"]),
+                ]),
+                pullRequests: fakePullRequests(calls, { checkRuns: ALL_PASSED }),
+                state,
+            }),
+        );
+
+        expect(result.data.selected).toMatchObject({ id: "E-1", stage: "external-review" });
+        expect(result.data.setAside.map((c) => c.id)).toEqual(["C-1"]);
     });
 
     it("gives the LLM the two proposal candidates only", async () => {

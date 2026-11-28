@@ -11,7 +11,15 @@ import type { TrackerResult } from "../label-triage/trackers/tracker.ts";
 import type { StepResult } from "../runner.ts";
 import type { StageId } from "../stages/stage.ts";
 import { isSupported, nextStage } from "./stage.ts";
-import type { Candidate, Excluded, Exclusion, SelectData, WorkTask } from "./types.ts";
+import type {
+    Candidate,
+    Excluded,
+    Exclusion,
+    ReviewBotsWait,
+    SelectData,
+    WorkTask,
+} from "./types.ts";
+import type { ReviewBotsCheck } from "./wait.ts";
 
 interface CandidateDeps {
     config: AutonomousConfig;
@@ -19,6 +27,7 @@ interface CandidateDeps {
     detail: (task: WorkTask) => Promise<TrackerResult<WorkTask>>;
     stage?: StageId; // supplied by `--stage`: the next stage's support is not checked
     full?: SlotsFull; // set only in a loop iteration; absent, no task is excluded for a slot
+    wait?: ReviewBotsCheck; // set only by the select step: launch, and so a supplied task, never waits
 }
 
 export interface SlotsFull {
@@ -111,8 +120,9 @@ function candidate(task: WorkTask): Candidate | null {
     return { task, scope: task.labels.includes("work") ? "work" : "personal", autonomy, stage };
 }
 
-function excluding(task: WorkTask, reason: Exclusion): Excluded {
-    return { source: task.source, id: task.id, title: task.title, reason };
+function excluding(task: WorkTask, reason: Exclusion, wait?: ReviewBotsWait): Excluded {
+    const excluded: Excluded = { source: task.source, id: task.id, title: task.title, reason };
+    return wait === undefined ? excluded : { ...excluded, wait };
 }
 
 // The slot kind of a stage (spec slot-limits): grill-me takes a grill slot, any other a work slot.
@@ -120,15 +130,29 @@ function hasNoFreeSlot({ stage }: Candidate, { full }: CandidateDeps): boolean {
     return full !== undefined && (stage === "grill-me" ? full.grill : full.work);
 }
 
-type Verdict = { found: Candidate } | { reason: Exclusion; readyToClose?: boolean };
+type Verdict =
+    | { found: Candidate }
+    | { reason: Exclusion; readyToClose?: boolean; wait?: ReviewBotsWait };
 
-function afterDetail(task: WorkTask, deps: CandidateDeps): Verdict {
+// Design D5: after split, so only a task that would otherwise be a candidate pays the GitHub reads.
+async function reviewBotsWait(
+    { task, stage }: Candidate,
+    { wait }: CandidateDeps,
+): Promise<ReviewBotsWait | null> {
+    return stage === "external-review" && wait !== undefined ? wait(task) : null;
+}
+
+async function afterDetail(task: WorkTask, deps: CandidateDeps): Promise<Verdict> {
     if (isSplit(task)) {
         return { reason: "split", readyToClose: !hasOpenChild(task) };
     }
     const found = candidate(task);
     if (found === null) {
         return { reason: "unsupported-stage" };
+    }
+    const wait = await reviewBotsWait(found, deps);
+    if (wait !== null) {
+        return { reason: "waiting-for-review-bots", wait };
     }
     return hasNoFreeSlot(found, deps) ? { reason: "no-free-slot" } : { found };
 }
@@ -139,7 +163,7 @@ async function judge(task: WorkTask, deps: CandidateDeps): Promise<TrackerResult
         return { ok: true, value: { reason } };
     }
     const detailed = await deps.detail(task);
-    return detailed.ok ? { ok: true, value: afterDetail(detailed.value, deps) } : detailed;
+    return detailed.ok ? { ok: true, value: await afterDetail(detailed.value, deps) } : detailed;
 }
 
 function file(selection: Selection, task: WorkTask, verdict: Verdict): void {
@@ -150,7 +174,7 @@ function file(selection: Selection, task: WorkTask, verdict: Verdict): void {
     if (verdict.readyToClose === true) {
         selection.readyToClose.push({ source: task.source, id: task.id, title: task.title });
     }
-    selection.excluded.push(excluding(task, verdict.reason));
+    selection.excluded.push(excluding(task, verdict.reason, verdict.wait));
 }
 
 export async function selectCandidates(

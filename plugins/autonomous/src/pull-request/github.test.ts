@@ -3,7 +3,11 @@ import type { Exec, ExecResult } from "../exec.ts";
 import { threadMarker } from "../publish/markers.ts";
 import type { Result } from "../result.ts";
 import { gitHubPullRequests, hookedTimeoutMs } from "./github.ts";
+import checkRunsFixture from "./fixtures/check-runs.json";
 import comments from "./fixtures/pr-view-comments.json";
+import draftState from "./fixtures/pr-state-draft.json";
+import readyState from "./fixtures/pr-state-ready.json";
+import reviewsFixture from "./fixtures/reviews.json";
 import emptyList from "./fixtures/pr-list-empty.json";
 import list from "./fixtures/pr-list.json";
 import repoView from "./fixtures/repo-view.json";
@@ -574,4 +578,257 @@ it("deletes nothing when the pending review cannot be created", async () => {
         "gh api graphql addPullRequestReview 42: gh failed: gh: one pending review",
     );
     expect(gh).toHaveBeenCalledTimes(2);
+});
+
+// What the wait and the quiet round of external review read (design D2 of add-external-review-stage).
+
+const ok = (value: unknown): ExecResult => ({ ok: true, stdout: JSON.stringify(value) });
+
+it("reads a ready pull request: not a draft, its head commit and its last ready time", async () => {
+    const { gh, port } = scripted(ok(readyState));
+    expect(await port.state(42)).toEqual({
+        ok: true,
+        value: {
+            draft: false,
+            head: {
+                sha: "ae801318e07587f58ed3ab73392d79a4a80281b5",
+                committedAt: "2026-11-20T18:35:41Z",
+            },
+            readyAt: "2026-11-20T18:04:11Z",
+        },
+    });
+    const call = graphqlCall(gh, 0);
+    expect(call.variables).toEqual(PR_42);
+    expect(call.query).toMatchInlineSnapshot(`
+      "query PullRequestState($owner: String!, $name: String!, $number: Int!) {
+        repository(owner: $owner, name: $name) { pullRequest(number: $number) { isDraft
+          commits(last: 1) { nodes { commit { oid committedDate } } }
+          timelineItems(last: 1, itemTypes: [READY_FOR_REVIEW_EVENT]) {
+            nodes { ... on ReadyForReviewEvent { createdAt } }
+          } } }
+      }"
+    `);
+});
+
+it("reads a draft pull request that never was marked ready", async () => {
+    const { port } = scripted(ok(draftState));
+    expect(await port.state(42)).toEqual({
+        ok: true,
+        value: {
+            draft: true,
+            head: {
+                sha: "e735b02a539cb4a7da064829c1f932c29a93b29f",
+                committedAt: "2026-11-27T09:19:56Z",
+            },
+            readyAt: null,
+        },
+    });
+});
+
+it("names the state read in an unparseable response", async () => {
+    const noCommit = data({
+        repository: {
+            pullRequest: { isDraft: false, commits: { nodes: [] }, timelineItems: { nodes: [] } },
+        },
+    });
+    expect(errorOf(await scripted(noCommit).port.state(42))).toBe(
+        "gh api graphql state 42: unparseable output: output.data.repository.pullRequest.commits.nodes[0] must be an object",
+    );
+});
+
+it("marks a draft ready with gh pr ready", async () => {
+    const { execs, port } = setup();
+    expect(await port.ready(7)).toEqual({ ok: true, value: undefined });
+    expect(execs.gh).toHaveBeenCalledWith(["pr", "ready", "7"]);
+    expect(errorOf(await failing("gh failed: not a draft").ready(7))).toBe(
+        "gh pr ready 7: gh failed: not a draft",
+    );
+});
+
+const SHA = "0b804a417c28fbb153cd1c8ef5cbf8e66dd6941f";
+
+function checkRunsEndpoint(page: number): string[] {
+    return ["api", `repos/{owner}/{repo}/commits/${SHA}/check-runs?per_page=100&page=${page}`];
+}
+
+it("lists the check runs of a commit with their app, status, output and times", async () => {
+    const { gh, port } = scripted(ok(checkRunsFixture));
+    const result = await port.checkRuns(SHA);
+    if (!result.ok) throw new Error(result.error);
+    const [limited, finished, cancelled, plain] = result.value;
+    expect(limited).toEqual({
+        name: "CodeRabbit",
+        app: "coderabbitai",
+        status: "completed",
+        conclusion: "neutral",
+        title: "Review rate limited",
+        summary: "Result: Rate limited - Review rate limited",
+        url: "https://github.com/demo/repo/runs/1001",
+        startedAt: "2026-11-25T20:36:27Z",
+        completedAt: "2026-11-25T20:36:27Z",
+    });
+    expect(finished).toMatchObject({ app: "greptile-apps", conclusion: "success" });
+    expect(cancelled).toMatchObject({ app: "pullfrog", conclusion: "cancelled" });
+    // A run with no output reads as null title and summary.
+    expect(plain).toMatchObject({ name: "audit", title: null, summary: null });
+    // A run without an app reads as an empty slug, one not started has no times: derived, since
+    // none of the recorded runs lacks them.
+    const [first = {}] = checkRunsFixture.check_runs;
+    const queued = scripted(
+        ok({
+            total_count: 1,
+            check_runs: [
+                {
+                    ...first,
+                    status: "queued",
+                    conclusion: null,
+                    started_at: null,
+                    completed_at: null,
+                    app: null,
+                },
+            ],
+        }),
+    );
+    expect(await queued.port.checkRuns(SHA)).toMatchObject({
+        ok: true,
+        value: [{ app: "", status: "queued", startedAt: null, completedAt: null }],
+    });
+    expect(gh).toHaveBeenCalledTimes(1);
+    expect(gh).toHaveBeenCalledWith(checkRunsEndpoint(1));
+});
+
+it("follows every page of the check runs, 100 to a page, until the count is reached", async () => {
+    const [first = {}] = checkRunsFixture.check_runs;
+    const full = Array.from({ length: 100 }, (_, index) => ({ ...first, name: `check ${index}` }));
+    const { gh, port } = scripted(
+        ok({ total_count: 101, check_runs: full }),
+        ok({ total_count: 101, check_runs: [{ ...first, name: "check 100" }] }),
+    );
+    const result = await port.checkRuns(SHA);
+    if (!result.ok) throw new Error(result.error);
+    expect(result.value).toHaveLength(101);
+    expect(result.value.at(-1)?.name).toBe("check 100");
+    expect(gh).toHaveBeenCalledTimes(2);
+    expect(gh).toHaveBeenNthCalledWith(1, checkRunsEndpoint(1));
+    expect(gh).toHaveBeenNthCalledWith(2, checkRunsEndpoint(2));
+});
+
+it("stops listing check runs at an empty page, whatever the count says", async () => {
+    const { gh, port } = scripted(ok({ total_count: 500, check_runs: [] }));
+    expect(await port.checkRuns(SHA)).toEqual({ ok: true, value: [] });
+    expect(gh).toHaveBeenCalledTimes(1);
+});
+
+it("names the check-run listing in a failure and in an unparseable page", async () => {
+    expect(errorOf(await failing("gh failed: boom").checkRuns(SHA))).toBe(
+        `gh api commits/${SHA}/check-runs: gh failed: boom`,
+    );
+    const noCount = scripted(ok({ check_runs: [] }));
+    expect(errorOf(await noCount.port.checkRuns(SHA))).toContain(
+        `gh api commits/${SHA}/check-runs: unparseable output: output.total_count must be a finite number`,
+    );
+});
+
+it("lists the reviews oldest first with their author, state and commit", async () => {
+    const { gh, port } = scripted(ok(reviewsFixture));
+    const result = await port.reviews(42);
+    if (!result.ok) throw new Error(result.error);
+    expect(result.value.map(({ id, author, state }) => [id, author, state])).toEqual([
+        ["PRR_demo1", "pullfrog", "COMMENTED"],
+        ["PRR_demo2", "greptile-apps", "COMMENTED"],
+        ["PRR_demo3", "coderabbitai", "CHANGES_REQUESTED"],
+    ]);
+    expect(result.value[2]).toEqual({
+        id: "PRR_demo3",
+        author: "coderabbitai",
+        state: "CHANGES_REQUESTED",
+        commit: "c2338a22165151255d29a376636e2af04196e085",
+        body: "<!-- coderabbit-ai-generated:v1 -->\n\n**Actionable comments posted: 15**\n\n---",
+        url: "https://github.com/demo/repo/pull/42#pullrequestreview-3",
+    });
+    // A bot that posts no body reads as "".
+    expect(result.value[1]).toMatchObject({ author: "greptile-apps", body: "" });
+    // A deleted author reads as "", a review whose commit is gone as null: derived, since the
+    // recorded reviews all have both.
+    const [review = {}] = reviewsFixture.data.repository.pullRequest.reviews.nodes;
+    const gone = scripted(
+        data({
+            repository: {
+                pullRequest: {
+                    reviews: {
+                        pageInfo: { hasNextPage: false, endCursor: null },
+                        nodes: [{ ...review, author: null, commit: null, state: "DISMISSED" }],
+                    },
+                },
+            },
+        }),
+    );
+    expect(await gone.port.reviews(42)).toMatchObject({
+        ok: true,
+        value: [{ author: "", commit: null, state: "DISMISSED" }],
+    });
+    const call = graphqlCall(gh, 0);
+    expect(call.variables).toEqual(PR_42);
+    expect(call.query).toMatchInlineSnapshot(`
+      "query Reviews($owner: String!, $name: String!, $number: Int!, $after: String) {
+        repository(owner: $owner, name: $name) { pullRequest(number: $number) { reviews(first: 100, after: $after) {
+          pageInfo { hasNextPage endCursor }
+          nodes { id author { login } state commit { oid } body url }
+        } } }
+      }"
+    `);
+});
+
+it("follows the pages of reviews", async () => {
+    const [first, second] = reviewsFixture.data.repository.pullRequest.reviews.nodes;
+    const page = (nodes: unknown[], next: string | null) =>
+        data({
+            repository: {
+                pullRequest: {
+                    reviews: { pageInfo: { hasNextPage: next !== null, endCursor: next }, nodes },
+                },
+            },
+        });
+    const { gh, port } = scripted(page([first], "R1"), page([second], null));
+    const result = await port.reviews(42);
+    if (!result.ok) throw new Error(result.error);
+    expect(result.value.map((review) => review.id)).toEqual([first?.id, second?.id]);
+    expect(graphqlCall(gh, 1).variables).toEqual([...PR_42, "-f", "after=R1"]);
+});
+
+it("dismisses a review by its node id, with the message", async () => {
+    const { gh, port } = scripted(
+        data({ dismissPullRequestReview: { pullRequestReview: { id: "PRR_1" } } }),
+    );
+    expect(await port.dismiss(42, "PRR_1", "12")).toEqual({ ok: true, value: undefined });
+    const call = graphqlCall(gh, 0);
+    expect(call.variables).toEqual(["-f", "review=PRR_1", "-f", "message=12"]);
+    expect(call.query).toMatchInlineSnapshot(`
+      "mutation DismissPullRequestReview($review: ID!, $message: String!) {
+        dismissPullRequestReview(input: { pullRequestReviewId: $review, message: $message }) { pullRequestReview { id } }
+      }"
+    `);
+});
+
+it("names the failed external review call in every error", async () => {
+    const port = failing("gh failed: boom");
+    expect(errorOf(await port.state(42))).toBe("gh api graphql state 42: gh failed: boom");
+    expect(errorOf(await port.reviews(42))).toBe("gh api graphql reviews 42: gh failed: boom");
+    expect(errorOf(await port.dismiss(42, "PRR_1", "m"))).toBe(
+        "gh api graphql dismissPullRequestReview PRR_1: gh failed: boom",
+    );
+});
+
+it("reports a GraphQL error in a 200 response to a dismissal with its label", async () => {
+    const { port } = scripted({
+        ok: true,
+        stdout: JSON.stringify({
+            data: { dismissPullRequestReview: null },
+            errors: [{ message: "Can not dismiss a pending review" }],
+        }),
+    });
+    expect(await port.dismiss(42, "PRR_1", "m")).toEqual({
+        ok: false,
+        error: "gh api graphql dismissPullRequestReview PRR_1: Can not dismiss a pending review",
+    });
 });

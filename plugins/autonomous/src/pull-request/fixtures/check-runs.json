@@ -1,0 +1,65 @@
+{
+    "total_count": 4,
+    "check_runs": [
+        {
+            "name": "CodeRabbit",
+            "status": "completed",
+            "conclusion": "neutral",
+            "html_url": "https://github.com/demo/repo/runs/1001",
+            "started_at": "2026-11-25T20:36:27Z",
+            "completed_at": "2026-11-25T20:36:27Z",
+            "output": {
+                "title": "Review rate limited",
+                "summary": "Result: Rate limited - Review rate limited"
+            },
+            "app": {
+                "slug": "coderabbitai"
+            }
+        },
+        {
+            "name": "Greptile Review",
+            "status": "completed",
+            "conclusion": "success",
+            "html_url": "https://github.com/demo/repo/runs/1002",
+            "started_at": "2026-11-25T20:36:18Z",
+            "completed_at": "2026-11-25T20:38:27Z",
+            "output": {
+                "title": "Base review",
+                "summary": "Greptile has reviewed the Pull Request.\n\n79 files reviewed, 0 comments added."
+            },
+            "app": {
+                "slug": "greptile-apps"
+            }
+        },
+        {
+            "name": "pullfrog",
+            "status": "completed",
+            "conclusion": "cancelled",
+            "html_url": "https://github.com/demo/repo/runs/1003",
+            "started_at": "2026-11-25T20:36:16Z",
+            "completed_at": "2026-11-25T20:36:32Z",
+            "output": {
+                "title": "Pullfrog run cancelled",
+                "summary": "The Pullfrog run was cancelled before it finished."
+            },
+            "app": {
+                "slug": "pullfrog"
+            }
+        },
+        {
+            "name": "audit",
+            "status": "completed",
+            "conclusion": "success",
+            "html_url": "https://github.com/demo/repo/runs/1004",
+            "started_at": "2026-11-25T20:36:19Z",
+            "completed_at": "2026-11-25T20:36:39Z",
+            "output": {
+                "title": null,
+                "summary": null
+            },
+            "app": {
+                "slug": "github-actions"
+            }
+        }
+    ]
+}
