@@ -648,6 +648,15 @@ describe("A contested answer is judged once more", () => {
             "If it survives, fix it in this round.",
         );
     });
+
+    it("Contested past the round limit: a surviving finding is blocked, never fixed", () => {
+        const steps = section(prompt(LIMIT), "External review");
+
+        expect(steps).toContain(
+            "If it survives, fix nothing: record it as `blocked`, with the reason that the round limit is reached, as step 6 says.",
+        );
+        expect(steps).not.toContain("fix it in this round");
+    });
 });
 
 describe("The external review never changes the proposal or the definition", () => {
@@ -730,7 +739,18 @@ describe("The quiet round ends the stage", () => {
         );
         expect(section(text, "External review")).not.toContain("Fix each surviving finding");
         expect(section(text, "External review")).toContain(
-            "A quiet report, or a round that fixed nothing and has no thread to answer because every finding it triaged came from a review body and was refuted, ends as the quiet round",
+            "A quiet report with nothing to push, or a round that fixed nothing and has no thread to answer and nothing to push because every finding it triaged came from a review body and was refuted, ends as the quiet round",
+        );
+    });
+
+    it("Quiet report with commits an earlier attempt left: pushes them and ends as a round that acted", () => {
+        const text = prompt({ ...QUIET, attempt: 2 });
+
+        expect(section(text, "External review")).toContain(
+            "or pushes commits an earlier attempt left unpushed has acted, and ends without a transition: a quiet report with such commits pushes them and ends so, since the push makes the bots answer.",
+        );
+        expect(section(text, "Closing")).toContain(
+            "a quiet report with commits an earlier attempt left unpushed pushes them, and so ends as a round that acted (`round-ended`, no transition), not as the quiet round.",
         );
     });
 });

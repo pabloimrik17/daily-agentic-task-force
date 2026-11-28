@@ -212,6 +212,40 @@ describe("Failed checks, human reviewers and passed-on threads are reported", ()
         expect(result.human).toEqual([]);
         expect(result.quiet).toBe(false);
     });
+
+    describe("a passed-on thread the external review answered", () => {
+        const marker = renderMarker({
+            kind: "finding",
+            attempt: "linear:DOT-7:code-review:1",
+            finding: "f2",
+            for: "external-review",
+        });
+        const statement = comment("someone", `issue: the retry is unbounded\n${marker}`);
+        const reply = comment("someone", externalReply(1, "f2", "none"));
+
+        it("is accounted for as answered, not passed on, and the report is quiet", () => {
+            const answered = thread([statement, reply]);
+            const result = report([answered]);
+            expect(result.passedOn).toEqual([]);
+            expect(result.accounted).toEqual([
+                {
+                    reporter: "human",
+                    thread: { id: answered.id, url: statement.url },
+                    location: "`src/a.ts`, line 12, new side",
+                    reason: "answered",
+                },
+            ]);
+            expect(result.quiet).toBe(true);
+        });
+
+        it("is passed on again when a comment follows the reply", () => {
+            const contested = thread([statement, reply, comment("someone", "Still unbounded.")]);
+            const result = report([contested]);
+            expect(result.passedOn.map(({ thread: { id } }) => id)).toEqual([contested.id]);
+            expect(result.accounted).toEqual([]);
+            expect(result.quiet).toBe(false);
+        });
+    });
 });
 
 describe("Severity comes from the reporter's own mark", () => {

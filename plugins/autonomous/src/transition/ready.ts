@@ -3,7 +3,32 @@
 
 import type { TaskRef } from "../attempts/record.ts";
 import type { Result } from "../result.ts";
-import { failedCheck, type GuardTools, readChecks, workspaceOf } from "./guards.ts";
+import {
+    type CheckedPullRequest,
+    failedCheck,
+    type GuardTools,
+    readChecks,
+    workspaceOf,
+} from "./guards.ts";
+
+const failedOf = ({ state, checks }: CheckedPullRequest) =>
+    checks.failed.map((run) => failedCheck(run, state.head.sha));
+
+// What stops a task entering external-review before it is asked: the checks of its pull request
+// that failed, each named, or why they could not be read. A task with no workspace on this machine
+// refuses nothing here, as in markReady; the guards on leaving the stage speak for it.
+export async function failedChecksOnEntry(
+    state: string,
+    ref: TaskRef,
+    tools: GuardTools,
+): Promise<string[]> {
+    const found = await workspaceOf(state, ref);
+    if (!found.ok) {
+        return [];
+    }
+    const read = await readChecks(found.value, tools);
+    return read.ok ? failedOf(read.value) : [read.error];
+}
 
 // Null once the pull request is ready, or the reason it was left as it is: this machine holds no
 // workspace of the task, and the wait's repair marks it where one does (design D5). A failed check
@@ -25,9 +50,9 @@ export async function markReady(
     if (!read.ok) {
         return read;
     }
-    const { number, pullRequests, state: pullRequest, checks } = read.value;
-    if (checks.failed.length > 0) {
-        const failed = checks.failed.map((run) => failedCheck(run, pullRequest.head.sha));
+    const { number, pullRequests, state: pullRequest } = read.value;
+    const failed = failedOf(read.value);
+    if (failed.length > 0) {
         return { ok: false, error: failed.join("; ") };
     }
     if (!pullRequest.draft) {

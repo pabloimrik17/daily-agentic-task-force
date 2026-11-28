@@ -164,12 +164,19 @@ const FIXES: Record<Shape, string> = {
     limit: `Fix nothing: run the finding triage and the refutation only. If no finding survives, record each with its outcome, so publish mode answers its thread, and close the round. If one survives, record it as \`blocked\`, with the reason that the round limit is reached, and follow the section "${BLOCKED_TITLE}": nothing is pushed, and publish mode answers it so.`,
 };
 
+// What becomes of a contested finding the second refutation does not refute: past the limit nothing is fixed.
+const CONTESTED_SURVIVES: Record<Shape, string> = {
+    round: "fix it in this round.",
+    quiet: "fix it in this round.",
+    limit: "fix nothing: record it as `blocked`, with the reason that the round limit is reached, as step 6 says.",
+};
+
 const CODE_REVIEW_DECISIONS = `In the finding triage, compare each reported finding with the code review's decisions: the threads listed in the section "${THREADS_TITLE}" and the code review's stage summary among the comments above. Dismiss a finding that repeats a decision found there, with no refutation: its reason cites the decision, with the URL of its thread when it has one. A finding whose comment brings evidence that decision did not weigh, such as a call path or a case its refutation did not consider, is an ordinary finding: send it to the refutation.`;
 
 const ANSWERED_BY_PUBLISH =
     "Link each finding the report lists with a thread to that thread in its record entry's `thread`: publish mode answers it there at the closing, with its outcome and reason. Never reply in, resolve or dismiss anything on the pull request yourself, by any means.";
 
-const CLOSE_AS = `Close the round as the section "Closing" says. A round that fixed a finding, or links an entry to a thread, has acted, and ends without a transition. A quiet report, or a round that fixed nothing and has no thread to answer because every finding it triaged came from a review body and was refuted, ends as the quiet round, with the transition.`;
+const CLOSE_AS = `Close the round as the section "Closing" says. A round that fixed a finding, links an entry to a thread, or pushes commits an earlier attempt left unpushed has acted, and ends without a transition: a quiet report with such commits pushes them and ends so, since the push makes the bots answer. A quiet report with nothing to push, or a round that fixed nothing and has no thread to answer and nothing to push because every finding it triaged came from a review body and was refuted, ends as the quiet round, with the transition.`;
 
 function externalReviewSection(work: Work, autonomy: Autonomy): Section {
     const { change, pullRequest, shape } = work;
@@ -182,7 +189,7 @@ function externalReviewSection(work: Work, autonomy: Autonomy): Section {
             `1. ${resumeReview("the commits the remote branch lacks (`git log @{upstream}..HEAD`) and the uncommitted changes (`git status`)", autonomy.unclaimed)} Commits the remote branch lacks are part of this round's single push: keep them, and push them with the round's fixes.`,
             `2. Run one round of the adversarial review, as the section "${REVIEW_TITLE}" sets it up, on the findings listed in the section "${REPORT_TITLE}".`,
             `3. ${CODE_REVIEW_DECISIONS}`,
-            `4. A finding listed as contested is a reviewer's answer to an earlier external review reply. Send it to a fresh refutation, by teammates other than those of its first. If it survives, fix it in this round. If it is refuted again, ${autonomy.contested} Never contest it a third time.`,
+            `4. A finding listed as contested is a reviewer's answer to an earlier external review reply. Send it to a fresh refutation, by teammates other than those of its first. If it survives, ${CONTESTED_SURVIVES[shape]} If it is refuted again, ${autonomy.contested} Never contest it a third time.`,
             `5. ${autonomy.humanFindings}`,
             `6. ${FIXES[shape]}`,
             `7. ${artifactsStep(change, autonomy.artifacts)}`,
@@ -304,7 +311,7 @@ const COMMITS = fixCommitsSection(
 );
 
 function pushStep(onFailure: string): string {
-    return `Run every check the repository defines, locally: its tests, linters and type checks, and whatever its contributor instructions or scripts name. Fix what fails, commit the fix by the rules of the commits section, and run them again until they all pass; then confirm that nothing is left uncommitted. Only then push every commit the remote branch lacks, this round's and any an earlier attempt left, in a single push. The quiet round has nothing to push. If a check cannot be made to pass, or the push fails, ${onFailure}.`;
+    return `Run every check the repository defines, locally: its tests, linters and type checks, and whatever its contributor instructions or scripts name. Fix what fails, commit the fix by the rules of the commits section, and run them again until they all pass; then confirm that nothing is left uncommitted. Only then push every commit the remote branch lacks, this round's and any an earlier attempt left, in a single push. The quiet round has nothing to push; a quiet report with commits an earlier attempt left unpushed pushes them, and so ends as a round that acted (\`round-ended\`, no transition), not as the quiet round. If a check cannot be made to pass, or the push fails, ${onFailure}.`;
 }
 
 function publishStep(attempt: string, onFailure: string): string {

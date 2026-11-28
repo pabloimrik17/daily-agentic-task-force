@@ -149,20 +149,39 @@ function sortThread(
     };
 }
 
-function passedOn(thread: ReviewThread, first: ThreadComment): PassedOnThread[] {
+function answeredByExternalReview(thread: ReviewThread): boolean {
+    const last = thread.comments.at(-1);
+    return last !== undefined && externalReviewReply(last.body) !== null;
+}
+
+// An open thread addressed to external review. One whose last comment is the external review's own
+// reply is accounted for as answered (design D7); a later comment passes it on again.
+function sortPassedOn(
+    thread: ReviewThread,
+    first: ThreadComment,
+    bots: readonly ReviewBot[],
+    result: SortedThreads,
+): void {
     const marker = threadMarker(first.body);
     if (marker?.for !== STAGE || thread.resolved) {
-        return [];
+        return;
     }
-    return [
-        {
-            thread: linkOf(thread),
-            location: locationOf(thread),
-            attempt: marker.attempt,
-            finding: marker.finding,
-            statement: first.body,
-        },
-    ];
+    const location = locationOf(thread);
+    if (answeredByExternalReview(thread)) {
+        const reporter = botOf(first.author, bots)?.id ?? "human";
+        result.sorted.push({
+            kind: "accounted",
+            thread: { reporter, thread: linkOf(thread), location, reason: "answered" },
+        });
+        return;
+    }
+    result.passedOn.push({
+        thread: linkOf(thread),
+        location,
+        attempt: marker.attempt,
+        finding: marker.finding,
+        statement: first.body,
+    });
 }
 
 interface SortedThreads {
@@ -178,7 +197,7 @@ function sortThreads(threads: readonly ReviewThread[], bots: readonly ReviewBot[
             continue;
         }
         if (parseMarkers(first.body).length > 0) {
-            result.passedOn.push(...passedOn(thread, first));
+            sortPassedOn(thread, first, bots, result);
         } else {
             result.sorted.push(sortThread(thread, first, bots));
         }

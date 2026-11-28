@@ -14,6 +14,7 @@ import type { HandoffOption, HandoffQuestion } from "../runner.ts";
 import { applyTransition, list } from "./apply.ts";
 import { type GuardTools, guardsOnLeaving } from "./guards.ts";
 import { awaitedDetails } from "./receipt.ts";
+import { failedChecksOnEntry } from "./ready.ts";
 import {
     AUTONOMY_OPTIONS,
     rowOf,
@@ -168,6 +169,17 @@ function asking(
     return { ...report, outcome: "advance", task, handoff: buildHandoff([question]) };
 }
 
+// Unfinished work, and for a task about to enter external-review a failed check of its pull request
+// (spec autonomous-run, "Entering external-review needs no failed check"); a running check refuses
+// nothing.
+async function refusals(row: TransitionRow, ref: TaskRef, deps: TransitionDeps): Promise<string[]> {
+    const unfinished = await guardsOnLeaving(row.from, ref, deps.state, deps);
+    if (unfinished.length > 0 || row.to !== "external-review") {
+        return unfinished;
+    }
+    return failedChecksOnEntry(deps.state, ref, deps);
+}
+
 async function leaveStage(
     report: TransitionReport,
     { ref, row, task }: { ref: TaskRef; row: TransitionRow; task: TransitionTask },
@@ -178,7 +190,7 @@ async function leaveStage(
         return { ...report, reasons: [autonomy.error] };
     }
     // Unfinished work is refused before the human is asked to approve it, and before a write.
-    const unfinished = await guardsOnLeaving(row.from, ref, deps.state, deps);
+    const unfinished = await refusals(row, ref, deps);
     if (unfinished.length > 0) {
         return { ...report, reasons: unfinished };
     }

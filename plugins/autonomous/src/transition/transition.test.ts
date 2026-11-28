@@ -2837,6 +2837,43 @@ describe("transition mode: code-review", () => {
         expect(calls).toEqual(["linear:readTask:DOT-110"]);
     });
 
+    it("HITL task in code-review with failed checks: refused naming each, no question and exit 3", async () => {
+        const calls: string[] = [];
+        const given = linear(calls, ["personal", "HITL", "code-review"]);
+        const failing = [
+            checkRun("main", { conclusion: "failure" }),
+            checkRun("lint", { conclusion: "timed_out" }),
+        ];
+        const { state, tools } = await reviewing("linear", "DOT-110", {}, { checkRuns: failing });
+
+        const report = await runTransition(REF, modeDeps(given, config(), state, tools), STARTED);
+
+        expect(report).toMatchObject({
+            outcome: "not-evaluable",
+            applied: false,
+            reasons: [
+                "the check main concluded failure on 0ddba11",
+                "the check lint concluded timed_out on 0ddba11",
+            ],
+        });
+        expect(report).not.toHaveProperty("handoff");
+        expect(exitCodeFor(report.outcome)).toBe(3);
+        expect(writes(calls)).toEqual([]);
+    });
+
+    it("HITL task in code-review with a running check: the approval question, exit 0", async () => {
+        const calls: string[] = [];
+        const given = linear(calls, ["personal", "HITL", "code-review"]);
+        const running = [checkRun("main", { status: "in_progress", conclusion: null })];
+        const { state, tools } = await reviewing("linear", "DOT-110", {}, { checkRuns: running });
+
+        const report = await runTransition(REF, modeDeps(given, config(), state, tools), STARTED);
+
+        expect(report).toMatchObject({ outcome: "advance", applied: false, reasons: [] });
+        expect(report.handoff?.questions).toHaveLength(1);
+        expect(exitCodeFor(report.outcome)).toBe(0);
+    });
+
     it("external-review not bootstrapped: nothing is written, the reason names --bootstrap-labels and exit 3", async () => {
         const calls: string[] = [];
         const given = linear(calls, ["personal", "AFK", "code-review"], {
