@@ -294,7 +294,7 @@ function recordSection({ attempt, findings }: Work): Section {
             "- `thread`: the node id the report lists for the finding's thread; `null` for a failed check and for a finding taken from a review body.",
             "- `quiet`: `true` only in the quiet round, whose record sends no surviving finding to fix. Publish mode refuses it otherwise.",
             "",
-            "Publish mode answers each entry linked to a thread with a reply in that thread, holding its outcome and its reason, and resolves none of a review bot's or a human reviewer's threads, except in the quiet round, which resolves the threads an external review answered and nobody contested.",
+            "Publish mode answers each entry linked to a thread with a reply in that thread, holding its outcome and its reason, and resolves none of a review bot's or a human reviewer's threads, except in the quiet round, which resolves the threads an external review answered and nobody contested, and still leaves open a thread answered as blocked or asked and a human reviewer's thread whose finding was not fixed.",
         ],
     };
 }
