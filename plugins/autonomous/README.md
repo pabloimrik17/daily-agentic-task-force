@@ -482,7 +482,7 @@ A notice is one line, recorded only when:
 - an iteration excludes a stuck task of the machine scope that the loop has not
   yet told with that reason: `stuck <source>:<id>: <reason>`. A task outside
   the machine scope produces no notice, though the report still lists it as
-  stuck. A task and reason are told once per loop. At most five are recorded per
+  stuck and `loop.stuck` records it. A task and reason are told once per loop. At most five are recorded per
   iteration, followed by `stuck +<n> more: see loop.log` when there are more;
   `loop.log` has the full report;
 - the loop stops: `loop stopped: received SIGINT`,
@@ -512,13 +512,13 @@ bun plugins/autonomous/src/run.ts --notices 0
 In the state directory (`$AUTONOMOUS_STATE`, else `$XDG_STATE_HOME/autonomous`,
 else `~/.local/state/autonomous`):
 
-| File           | Content                                                                                                                              |
-| -------------- | ------------------------------------------------------------------------------------------------------------------------------------ |
-| `loop.lock`    | The loop's pid and start time, held from start to end                                                                                |
-| `loop.log`     | The report of every iteration with its start time, as text or, with `--json`, JSON; the only full report                             |
-| `loop.log.1`   | The log of the previous loop; a new loop renames the log to it, so the log is bounded to two loops                                   |
-| `loop.notices` | The notices of the current loop, one per line; emptied when a loop starts                                                            |
-| `loop.stuck`   | The stuck tasks the loop has told, and the tasks excluded as prerequisites, one line per task and reason; emptied when a loop starts |
+| File           | Content                                                                                                                                                        |
+| -------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `loop.lock`    | The loop's pid and start time, held from start to end                                                                                                          |
+| `loop.log`     | The report of every iteration with its start time, as text or, with `--json`, JSON; the only full report                                                       |
+| `loop.log.1`   | The log of the previous loop; a new loop renames the log to it, so the log is bounded to two loops                                                             |
+| `loop.notices` | The notices of the current loop, one per line; emptied when a loop starts                                                                                      |
+| `loop.stuck`   | Every stuck task the loop has met, of any scope, one line per task with its exclusion and reason; only machine-scope ones are told; emptied when a loop starts |
 
 ### Stopping it
 
@@ -3110,10 +3110,10 @@ The text report shows:
 - the candidates compared;
 - the candidates set aside because a candidate at a more advanced stage
   exists, each with its source, id, title and stage;
+- the stuck tasks, before the other excluded ones, each with its source, id,
+  title, scope, exclusion and reason;
 - the excluded tasks that are not stuck, grouped by reason, each with its
   source, id and title;
-- the stuck tasks, apart from the other excluded ones, each with its source,
-  id, title, scope, exclusion and reason;
 - the `ready to close` tasks: the tasks excluded as split that have no open
   child, as `ready to close: N task(s)` followed by one line per task with its
   source, id and title. Nothing is written for them;

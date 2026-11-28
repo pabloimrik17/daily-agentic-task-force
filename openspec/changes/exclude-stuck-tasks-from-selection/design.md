@@ -56,11 +56,11 @@ After `choose`, `select` builds the same `StageEnv` as `launch` (the builder mov
 
 ### D6. Remembering failed prerequisites within a loop
 
-A task excluded as prerequisites is not known to fail until it is chosen, so without memory the comparison would pick it first on every iteration and spend a re-election each time. The loop keeps `loop.stuck` in the state directory: one line per `task key + reason` already told. `select` in a loop iteration receives the task keys recorded there with a prerequisites reason and checks those tasks' prerequisites before the comparison (a handful of reads), excluding the ones that still fail. A task whose prerequisites now hold becomes a candidate again. Outside the loop nothing is remembered.
+A task excluded as prerequisites is not known to fail until it is chosen, so without memory the comparison would pick it first on every iteration and spend a re-election each time. The loop keeps `loop.stuck` in the state directory: one line per stuck task the loop has met, of any scope, with its exclusion and reason, whether or not it was told. `select` in a loop iteration receives the task keys recorded there with a prerequisites reason and checks those tasks' prerequisites before the comparison (a handful of reads), excluding the ones that still fail. A task whose prerequisites now hold becomes a candidate again. Outside the loop nothing is remembered.
 
 ### D7. Stuck notices: machine scope, once per task and reason, five per iteration
 
-`notices.ts` reads the select data and emits `stuck <source>:<id>: <detail>` for stuck tasks of the machine scope whose `task key + exclusion + detail` is not in `loop.stuck`, then appends them there. `startFiles` resets `loop.stuck` with the other loop files, so a new loop tells everything again.
+`notices.ts` reads the select data and records every stuck task whose `task key + exclusion + detail` is not in `loop.stuck`, of any scope, then emits `stuck <source>:<id>: <detail>` only for those of the machine scope. `startFiles` resets `loop.stuck` with the other loop files, so a new loop tells everything again.
 
 Two limits come from the measurement in Context; the person confirmed both on 2026-11-28:
 

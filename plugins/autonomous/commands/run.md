@@ -56,11 +56,12 @@ task that is complete.
 1. Run exactly this, once, with the Bash tool's `timeout` set to `600000`
    (10 minutes, the maximum) and never in the background: a judgement batch
    alone may take 300 s, and the `select` step's comparison is a second call
-   that may take another 300 s, and up to three more when chosen tasks fail their prerequisites, after reading every tracker again. A run that
+   that may take another 300 s, after reading every tracker again. A run that
    needs more than one batch, as the shipped `cap` 25 and `batch` 20 allow when
-   many tasks are left to judge, or that judges a batch and then compares
-   candidates, can exceed the command's timeout; the user should start such a
-   run from a shell, like the first `--apply` (see Rules).
+   many tasks are left to judge, that judges a batch and then compares
+   candidates, or whose chosen tasks fail their prerequisites (up to 4
+   comparisons of up to 300 s each), can exceed the command's timeout; the user
+   should start such a run from a shell, like the first `--apply` (see Rules).
 
     ```bash
     bun "${CLAUDE_PLUGIN_ROOT}/src/run.ts" $ARGUMENTS

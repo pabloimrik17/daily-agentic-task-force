@@ -60,10 +60,29 @@ export async function readNotices(state: string, since: Date | null = null): Pro
 }
 
 // A task that cannot launch, one JSON object per line; `task` is `<source>:<id>`.
+// A damaged line is skipped, so at worst a notice is told again or a prerequisite is checked again.
 export type StuckEntry = { task: string; exclusion: string; detail: string };
 
 export function appendStuck(state: string, entry: StuckEntry): Promise<void> {
     return appendFile(stuckPath(state), `${JSON.stringify(entry)}\n`);
+}
+
+function isStuckEntry(value: unknown): value is StuckEntry {
+    const entry = value as Record<string, unknown> | null;
+    return (
+        typeof entry?.task === "string" &&
+        typeof entry.exclusion === "string" &&
+        typeof entry.detail === "string"
+    );
+}
+
+function parseStuck(line: string): StuckEntry[] {
+    try {
+        const entry: unknown = JSON.parse(line);
+        return isStuckEntry(entry) ? [entry] : [];
+    } catch {
+        return [];
+    }
 }
 
 export async function readStuck(state: string): Promise<StuckEntry[]> {
@@ -72,7 +91,7 @@ export async function readStuck(state: string): Promise<StuckEntry[]> {
         return text
             .split("\n")
             .filter((line) => line.trim() !== "")
-            .map((line) => JSON.parse(line) as StuckEntry);
+            .flatMap(parseStuck);
     } catch (error) {
         if (isMissing(error)) {
             return [];
