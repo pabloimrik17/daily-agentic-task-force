@@ -483,7 +483,7 @@ A task for which repository inference does not find exactly one repository SHALL
 
 ### Requirement: A task whose repository fails a stage's repository prerequisites is excluded
 
-A task whose inferred repository fails a repository prerequisite of the task's next stage SHALL be excluded as **repository prerequisites**, after repository and before no free slot, with the prerequisite's reason. The check SHALL be made once per stage and repository in a run.
+A task whose inferred repository fails a repository prerequisite of the task's next stage SHALL be excluded as **repository prerequisites**, after repository and before no free slot, with the prerequisite's reason. The check SHALL be made once per stage and repository in a run. A repository prerequisite that cannot be read SHALL make the step `not-evaluable` with the read error, and SHALL exclude no task.
 
 #### Scenario: Repository without an OpenSpec root
 
@@ -494,6 +494,11 @@ A task whose inferred repository fails a repository prerequisite of the task's n
 
 - **WHEN** a task in `grill-me` belongs to a repository that has no OpenSpec root
 - **THEN** it is not excluded as repository prerequisites
+
+#### Scenario: OpenSpec root cannot be read
+
+- **WHEN** the OpenSpec root of a task's repository cannot be read for a reason other than its absence
+- **THEN** the step is `not-evaluable` with the read error and the task is not excluded
 
 ### Requirement: The chosen task's prerequisites are checked
 

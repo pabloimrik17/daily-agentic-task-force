@@ -53,12 +53,15 @@ export function iterationNotices(report: RunReport): string[] {
     ];
 }
 
-// A changed exclusion or reason is a new entry, so it is told again.
+// A changed exclusion, reason or scope is a new entry, so it is told again.
 const sameEntry = (a: StuckEntry, b: StuckEntry) =>
-    a.task === b.task && a.exclusion === b.exclusion && a.detail === b.detail;
+    a.task === b.task &&
+    a.exclusion === b.exclusion &&
+    a.detail === b.detail &&
+    (a.scope ?? null) === (b.scope ?? null);
 
-function entryOf({ source, id, reason, detail }: Excluded): StuckEntry {
-    return { task: `${source}:${id}`, exclusion: reason, detail: detail ?? reason };
+function entryOf({ source, id, reason, detail, scope }: Excluded): StuckEntry {
+    return { task: `${source}:${id}`, exclusion: reason, detail: detail ?? reason, scope };
 }
 
 export interface StuckTold {

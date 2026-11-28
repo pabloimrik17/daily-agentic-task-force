@@ -2989,7 +2989,9 @@ In order, the step:
     repository, never the task or its tracker. Today that is the OpenSpec root,
     required by `proposal`, `implement`, `verify` and `code-review`; `grill-me`
     has none. They are checked once per stage and repository in a run, and the
-    stage's prerequisites at `launch` include them.
+    stage's prerequisites at `launch` include them. An OpenSpec root that
+    cannot be read, for a reason other than its absence, makes the step
+    `not-evaluable` with the read error and excludes no task.
 
     **No free slot** comes after them, so a task that is blocked, split or otherwise
     excluded keeps that reason. It applies only in an iteration of the loop

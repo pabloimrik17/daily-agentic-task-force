@@ -169,34 +169,43 @@ function hasNoFreeSlot({ stage }: Candidate, { full }: CandidateDeps): boolean {
 type Verdict = { found: Candidate } | (ExclusionVerdict & { readyToClose?: boolean });
 
 // Repository after split (design D2): a Linear task's project is known only after detail().
+// A prerequisite that cannot be read is an error, not an exclusion (design D8).
 async function repositoryExclusion(
     { task, stage }: Candidate,
     workspace: RepositoryChecks | undefined,
-): Promise<ExclusionVerdict | null> {
+): Promise<TrackerResult<ExclusionVerdict | null>> {
     if (workspace === undefined) {
-        return null;
+        return { ok: true, value: null };
     }
     const inferred = inferRepository(task, workspace.repositories);
     if (!inferred.ok) {
-        return { reason: "repository", detail: inferred.reason };
+        return { ok: true, value: { reason: "repository", detail: inferred.reason } };
     }
     const held = await workspace.prerequisites(stage, inferred.repository);
-    return held.ok ? null : { reason: "repository-prerequisites", detail: held.reason };
+    if (held.ok) {
+        return { ok: true, value: null };
+    }
+    return held.unreadable === true
+        ? { ok: false, error: held.reason }
+        : { ok: true, value: { reason: "repository-prerequisites", detail: held.reason } };
 }
 
-async function afterDetail(task: WorkTask, deps: CandidateDeps): Promise<Verdict> {
+async function afterDetail(task: WorkTask, deps: CandidateDeps): Promise<TrackerResult<Verdict>> {
     if (isSplit(task)) {
-        return { reason: "split", readyToClose: !hasOpenChild(task) };
+        return { ok: true, value: { reason: "split", readyToClose: !hasOpenChild(task) } };
     }
     const found = candidate(task);
     if (found === null) {
-        return { reason: "unsupported-stage" };
+        return { ok: true, value: { reason: "unsupported-stage" } };
     }
     const repository = await repositoryExclusion(found, deps.workspace);
-    if (repository !== null) {
+    if (!repository.ok) {
         return repository;
     }
-    return hasNoFreeSlot(found, deps) ? { reason: "no-free-slot" } : { found };
+    if (repository.value !== null) {
+        return { ok: true, value: repository.value };
+    }
+    return { ok: true, value: hasNoFreeSlot(found, deps) ? { reason: "no-free-slot" } : { found } };
 }
 
 async function judge(task: WorkTask, deps: CandidateDeps): Promise<TrackerResult<Verdict>> {
@@ -205,7 +214,7 @@ async function judge(task: WorkTask, deps: CandidateDeps): Promise<TrackerResult
         return { ok: true, value: excluded };
     }
     const detailed = await deps.detail(task);
-    return detailed.ok ? { ok: true, value: await afterDetail(detailed.value, deps) } : detailed;
+    return detailed.ok ? afterDetail(detailed.value, deps) : detailed;
 }
 
 function file(selection: Selection, task: WorkTask, verdict: Verdict): void {

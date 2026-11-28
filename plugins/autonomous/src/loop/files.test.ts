@@ -4,7 +4,7 @@ import { join } from "node:path";
 
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 
-import { appendStuck, readStuck, startFiles } from "./files.ts";
+import { appendStuck, readStuck, startFiles, type StuckEntry } from "./files.ts";
 
 describe("loop.stuck", () => {
     let state = "";
@@ -37,6 +37,21 @@ describe("loop.stuck", () => {
         await appendStuck(state, second);
 
         expect(await readStuck(state)).toEqual([first, second]);
+    });
+
+    it("round-trips a scope and still reads a line without one", async () => {
+        await startFiles(state);
+        const scoped: StuckEntry = {
+            task: "linear:DOT-1",
+            exclusion: "repository",
+            detail: "a",
+            scope: "work",
+        };
+        const unscoped = { task: "beads:bd-2", exclusion: "repository", detail: "b" };
+        await appendStuck(state, scoped);
+        await appendFile(join(state, "loop.stuck"), `${JSON.stringify(unscoped)}\n`);
+
+        expect(await readStuck(state)).toEqual([scoped, unscoped]);
     });
 
     it("skips a damaged line and a line missing a field", async () => {

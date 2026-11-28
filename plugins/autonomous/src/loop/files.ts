@@ -1,6 +1,8 @@
 import { appendFile, mkdir, readFile, rename, stat, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 
+import type { Scope } from "../label-contract/contract.ts";
+
 function logPath(state: string): string {
     return join(state, "loop.log");
 }
@@ -56,9 +58,10 @@ export async function readNotices(state: string, since: Date | null = null): Pro
     }
 }
 
-// A task that cannot launch, one JSON object per line; `task` is `<source>:<id>`.
+// A task that cannot launch, one JSON object per line; `task` is `<source>:<id>`. The scope is part
+// of the identity: a task that moves into another scope with the same reason is a new entry.
 // A damaged line is skipped, so at worst a notice is told again or a prerequisite is checked again.
-export type StuckEntry = { task: string; exclusion: string; detail: string };
+export type StuckEntry = { task: string; exclusion: string; detail: string; scope?: Scope | null };
 
 // The exclusion of an entry that is only a memory: the task's prerequisites could not be read
 // once, and no task was excluded for it.
@@ -73,7 +76,8 @@ function isStuckEntry(value: unknown): value is StuckEntry {
     return (
         typeof entry?.task === "string" &&
         typeof entry.exclusion === "string" &&
-        typeof entry.detail === "string"
+        typeof entry.detail === "string" &&
+        (entry.scope === undefined || entry.scope === null || typeof entry.scope === "string")
     );
 }
 

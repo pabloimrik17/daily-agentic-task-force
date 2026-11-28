@@ -13,6 +13,7 @@ import { exitCodeFor } from "../report.ts";
 import type { StepResult } from "../runner.ts";
 import { grillMeStage } from "../stages/grill-me/stage.ts";
 import { implementStage } from "../stages/implement/stage.ts";
+import { proposalStage } from "../stages/proposal/stage.ts";
 import type { Stage } from "../stages/stage.ts";
 import { selectStep } from "./step.ts";
 import {
@@ -858,6 +859,34 @@ describe("select: the chosen task's prerequisites", () => {
         expect(result.reasons).toEqual([
             "the grill-me prerequisites of linear:DOT-1 cannot be read: EACCES: home",
         ]);
+        expect(result.data.selected).toBeNull();
+    });
+
+    it("Repository prerequisites cannot be read: not evaluable with the reason, nothing excluded", async () => {
+        const reason = "the OpenSpec root /w/repo/openspec of /w/repo cannot be read: EIO";
+        vi.spyOn(proposalStage, "repositoryPrerequisites").mockResolvedValue({
+            ok: false,
+            reason,
+            unreadable: true,
+        });
+        const calls: string[] = [];
+        const result = await selectStep.run(
+            selectContext({
+                workspace,
+                calls,
+                readers: [
+                    locatedReader(
+                        "linear",
+                        [workTask("linear", "DOT-1", ["personal", "AFK", "proposal"])],
+                        calls,
+                    ),
+                ],
+            }),
+        );
+
+        expect(result.outcome).toBe("not-evaluable");
+        expect(result.reasons).toEqual([reason]);
+        expect(result.data.excluded).toEqual([]);
         expect(result.data.selected).toBeNull();
     });
 

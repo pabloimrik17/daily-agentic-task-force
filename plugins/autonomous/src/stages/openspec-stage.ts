@@ -415,28 +415,42 @@ const oneAutonomy =
         return Promise.resolve(found.ok ? NOTHING : failed(found.error));
     };
 
-async function isDirectory(path: string): Promise<boolean> {
-    try {
-        return (await stat(path)).isDirectory();
-    } catch {
-        return false;
-    }
+// The stat errors that say the path is not there, as opposed to not readable.
+const ABSENT = new Set(["ENOENT", "ENOTDIR", "ELOOP"]);
+
+function isAbsence(error: unknown): boolean {
+    return error instanceof Error && "code" in error && ABSENT.has(error.code as string);
 }
 
 // Only looked at: OpenSpec is initialised by a human, never by a run.
 export async function openspecRepository(repository: string): Promise<RepositoryPrerequisites> {
     const root = join(repository, "openspec");
-    return (await isDirectory(root))
-        ? { ok: true }
-        : {
-              ok: false,
-              reason: `the repository ${repository} has no OpenSpec root: ${root} is not a directory`,
-          };
+    try {
+        if ((await stat(root)).isDirectory()) {
+            return { ok: true };
+        }
+    } catch (error) {
+        if (!isAbsence(error)) {
+            const message = error instanceof Error ? error.message : String(error);
+            return {
+                ok: false,
+                reason: `the OpenSpec root ${root} of ${repository} cannot be read: ${message}`,
+                unreadable: true,
+            };
+        }
+    }
+    return {
+        ok: false,
+        reason: `the repository ${repository} has no OpenSpec root: ${root} is not a directory`,
+    };
 }
 
 const openspecRoot: Check = async ({ repository }) => {
     const held = await openspecRepository(repository);
-    return held.ok ? NOTHING : failed(held.reason);
+    if (held.ok) {
+        return NOTHING;
+    }
+    return held.unreadable === true ? unreadable(held.reason) : failed(held.reason);
 };
 
 const workflowCheck =

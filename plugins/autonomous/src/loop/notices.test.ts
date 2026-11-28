@@ -191,8 +191,13 @@ describe("iterationNotices of newly marked tasks", () => {
 
 const REPOSITORY = "no repository label names a directory of the workspace";
 
-function entry(task: string, exclusion = "repository", detail = REPOSITORY): StuckEntry {
-    return { task, exclusion, detail };
+function entry(
+    task: string,
+    exclusion = "repository",
+    detail = REPOSITORY,
+    scope: StuckEntry["scope"] = "personal",
+): StuckEntry {
+    return { task, exclusion, detail, scope };
 }
 
 describe("stuckNotices", () => {
@@ -246,7 +251,24 @@ describe("stuckNotices", () => {
         const work = stuckTask("X-12", { scope: "work" });
         const told = stuckNotices(report("wait", [selected([work], "personal")]), []);
         expect(told.notices).toEqual([]);
-        expect(told.entries).toEqual([entry("beads:X-12")]);
+        expect(told.entries).toEqual([entry("beads:X-12", "repository", REPOSITORY, "work")]);
+    });
+
+    it("tells a task of another scope once the machine scope takes it, and then no more", () => {
+        const work = stuckTask("X-12", { scope: "work" });
+        const first = stuckNotices(report("wait", [selected([work], "personal")]), []);
+        expect(first.notices).toEqual([]);
+
+        const now = stuckTask("X-12");
+        const second = stuckNotices(report("wait", [selected([now])]), first.entries);
+        expect(second.notices).toEqual([`stuck beads:X-12: ${REPOSITORY}`]);
+        expect(second.entries).toEqual([entry("beads:X-12")]);
+
+        const third = stuckNotices(report("wait", [selected([now])]), [
+            ...first.entries,
+            ...second.entries,
+        ]);
+        expect(third).toEqual({ notices: [], entries: [] });
     });
 
     it("does not let a task of another scope take one of the five", () => {

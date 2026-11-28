@@ -304,7 +304,7 @@ describe("runLoop stuck notices", () => {
                 .split("\n")
                 .filter(Boolean)
                 .map((line) => JSON.parse(line) as unknown),
-        ).toEqual([{ task: "beads:W-1", exclusion: "repository", detail: REASON }]);
+        ).toEqual([{ task: "beads:W-1", exclusion: "repository", detail: REASON, scope: "work" }]);
     });
 
     it("remembers a task whose prerequisites could not be read, with no notice", async () => {

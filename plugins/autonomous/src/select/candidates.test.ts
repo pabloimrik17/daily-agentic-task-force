@@ -895,6 +895,23 @@ describe("selectCandidates: the repository", () => {
         expect(check).toHaveBeenCalledWith("/w/dotfiles");
     });
 
+    it("OpenSpec root cannot be read: an error with the read error, and no task excluded", async () => {
+        const reason = "the OpenSpec root /w/dotfiles/openspec of /w/dotfiles cannot be read: EIO";
+        vi.spyOn(proposalStage, "repositoryPrerequisites").mockResolvedValue({
+            ok: false,
+            reason,
+            unreadable: true,
+        });
+        const tasks = ["B-1", "B-2"].map((id) =>
+            workTask("beads", id, ["personal", "AFK", "proposal", "dotfiles"]),
+        );
+
+        expect(await evaluate(tasks, { workspace: workspace() })).toEqual({
+            ok: false,
+            error: reason,
+        });
+    });
+
     it("Grill in the same repository: not excluded as repository prerequisites", async () => {
         const task = workTask("beads", "B-1", ["personal", "grill-me", "dotfiles"]);
 

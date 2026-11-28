@@ -590,6 +590,11 @@ A stage's prerequisites SHALL tell a check that cannot read what it needs (a fil
 - **WHEN** `openspec --version` cannot run for a task in `proposal`
 - **THEN** the prerequisites fail as unreadable
 
+#### Scenario: OpenSpec root cannot be read
+
+- **WHEN** reading the OpenSpec root of a `proposal` task's repository fails for a reason other than its absence
+- **THEN** the prerequisites fail as unreadable, and `launch` waits with the read error
+
 ### Requirement: Launch never tries another task
 
 When a precondition of `launch` fails, the step SHALL wait with that reason and SHALL NOT choose, read or launch any other task. Every precondition of `launch` SHALL stay in force whatever `select` checked.

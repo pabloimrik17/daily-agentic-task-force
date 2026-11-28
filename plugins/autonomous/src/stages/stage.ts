@@ -66,7 +66,10 @@ export function notMet({ error, unreadable }: ReadFailure): StagePrerequisites {
         : { ok: false, reason: error };
 }
 
-export type RepositoryPrerequisites = { ok: true } | { ok: false; reason: string };
+// `unreadable`: as for `StagePrerequisites`. `select` excludes no task for it.
+export type RepositoryPrerequisites =
+    | { ok: true }
+    | { ok: false; reason: string; unreadable?: true };
 
 export interface StagePromptInput {
     attempt: AttemptRecord;

@@ -370,6 +370,11 @@ Beside the notices that "Notices" lists, an iteration SHALL record one notice pe
 - **WHEN** the machine scope is `personal` and a `work` task is excluded as repository
 - **THEN** no notice is recorded for it, and the iteration's report still lists it as stuck
 
+#### Scenario: Scope changed
+
+- **WHEN** the machine scope is `personal` and `beads:X-12`, a `work` task excluded as repository, gains `personal` with the same reason
+- **THEN** one notice names it
+
 #### Scenario: New loop
 
 - **WHEN** the loop is stopped and started again, and `beads:X-12` is still stuck for the same reason
