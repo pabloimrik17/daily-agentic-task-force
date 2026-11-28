@@ -5,6 +5,7 @@
 import type { AutonomousConfig, Scope, Source } from "../config.ts";
 import type { AutonomyLabel, StageLabel } from "../label-contract/contract.ts";
 import type { TrackerResult, TrackerTask } from "../label-triage/trackers/tracker.ts";
+import type { BotStatus } from "../review-bots/classify.ts";
 
 export interface TaskLink {
     id: string;
@@ -59,6 +60,16 @@ export interface Excluded {
     id: string;
     title: string;
     reason: Exclusion;
+    wait?: ReviewBotsWait; // only under waiting-for-review-bots
+}
+
+// Why a task in external-review waits (spec review-bots, "The wait is reported").
+export interface ReviewBotsWait {
+    pullRequest: { number: number; url: string } | null; // null when none was found
+    draft: "marked-ready" | "left-draft" | null; // null when it was not a draft
+    bots: BotStatus[]; // empty when the pull request could not be read
+    running: string[]; // the checks of the pull request that have not ended
+    reasons: string[]; // the settled check's, or why the pull request cannot be read or marked ready
 }
 
 export interface SelectionRequest {

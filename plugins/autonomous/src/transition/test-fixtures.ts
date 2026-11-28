@@ -14,6 +14,7 @@ import {
     writePublishReceipt,
 } from "../publish/receipt.ts";
 import type { Result } from "../result.ts";
+import { CONFIG } from "../review-bots/test-fixtures.ts";
 import type { GuardTools } from "./guards.ts";
 
 export const BRANCH = "feature/DOT-110-implement-stage";
@@ -29,7 +30,10 @@ export const NO_TOOLS: GuardTools = {
     pullRequests: () => {
         throw new Error("no pull requests were expected");
     },
+    bots: [],
 };
+
+export const PULL_REQUEST = 7;
 
 // What the workspace holds; the defaults are finished work.
 export interface Work {
@@ -39,6 +43,7 @@ export interface Work {
     remote?: boolean; // whether origin/<branch> exists
     ahead?: number;
     fetchError?: string;
+    pullRequest?: boolean; // whether the branch has an open pull request
     draft?: boolean; // whether the pull request is still a draft
     readyError?: string; // the failure of marking the pull request ready
     checkRuns?: CheckRun[]; // the head commit's check runs
@@ -71,6 +76,7 @@ export function workTools(work: Work = {}, calls: string[] = []): GuardTools {
             return Promise.resolve({ ok: true, stdout: listing });
         },
         pullRequests: () => workPullRequests(work, calls),
+        bots: CONFIG.bots,
     };
 }
 
@@ -80,6 +86,15 @@ function workPullRequests(work: Work, calls: string[]): PullRequests {
         Promise.resolve(error === undefined ? { ok: true, value } : { ok: false, error });
     return {
         defaultBranch: () => Promise.resolve({ ok: true, value: "main" }),
+        find: (branch) => {
+            calls.push(`pr find ${branch}`);
+            const found = {
+                number: PULL_REQUEST,
+                url: "https://github.com/o/r/pull/7",
+                title: "t",
+            };
+            return answer(undefined, work.pullRequest === false ? null : found);
+        },
         state: (number) => {
             calls.push(`pr state ${number}`);
             return answer(undefined, {
@@ -138,20 +153,30 @@ export interface Reviewed {
     persisted?: boolean; // the persistence receipt
     findings?: string | null; // the bytes of findings.json; null writes none
     published?: string | null; // the digest published.json names; null writes none
+    stage?: "code-review" | "external-review";
+    attempt?: number;
+    quiet?: boolean; // whether the publish receipt marks a quiet round
 }
 
-// A state directory with a started attempt of the task at `code-review`, whose workspace is a
-// directory that exists. By default it is persisted, holds a record and has published exactly it.
+// A state directory with a started attempt of the task at `code-review` (or `stage`), whose
+// workspace is a directory that exists. By default it is persisted, holds a record and has
+// published exactly it.
 export async function stateInReview(
     task: TaskRef,
     reviewed: Reviewed = {},
 ): Promise<{ state: string; workspace: string; attempt: AttemptId; dir: string }> {
-    const { persisted = true, findings = FINDINGS } = reviewed;
+    const {
+        persisted = true,
+        findings = FINDINGS,
+        stage = "code-review",
+        quiet = false,
+    } = reviewed;
     const published = reviewed.published === undefined ? digestOf(FINDINGS) : reviewed.published;
-    const attempt = attemptId(task, "code-review", 1);
+    const attempt = attemptId(task, stage, reviewed.attempt ?? 1);
     const made = await stateWithWorkspace(task, {
         id: attempt,
-        stage: "code-review",
+        stage,
+        attempt: reviewed.attempt ?? 1,
         state: "started",
     });
     const dir = attemptDir(made.state, attempt);
@@ -170,6 +195,7 @@ export async function stateInReview(
             findingsDigest: published,
             walkthroughDigest: null,
             publishedAt: "2026-11-01T09:00:00.000Z",
+            ...(quiet ? { quiet: true as const } : {}),
         });
     }
     return { ...made, attempt, dir };

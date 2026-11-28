@@ -3,6 +3,7 @@
 // waiting for an implementation.
 
 import { codeReviewStage } from "./code-review/stage.ts";
+import { externalReviewStage } from "./external-review/stage.ts";
 import { grillMeStage } from "./grill-me/stage.ts";
 import { implementStage } from "./implement/stage.ts";
 import { proposalStage } from "./proposal/stage.ts";
@@ -17,6 +18,7 @@ export const STAGES: ReadonlyMap<StageId, Stage> = new Map([
     [implementStage.id, implementStage],
     [verifyStage.id, verifyStage],
     [codeReviewStage.id, codeReviewStage],
+    [externalReviewStage.id, externalReviewStage],
 ]);
 
 export function stageFor(id: StageId): Stage | undefined {

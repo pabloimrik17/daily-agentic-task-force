@@ -51,8 +51,8 @@ With `--transition <source>:<task>`, the run SHALL run no step: it reads the tas
 
 #### Scenario: Task not in grill-me
 
-- **WHEN** the run is invoked with `--apply --transition linear:DOT-110` and DOT-110 carries `personal`, `AFK` and `external-review`
-- **THEN** the report says DOT-110 is in none of `grill-me`, `proposal`, `implement`, `verify` and `code-review`, carries no handoff, and the process exits with code 3
+- **WHEN** the run is invoked with `--apply --transition linear:DOT-110` and DOT-110 carries `personal`, `AFK` and `wrap-up`
+- **THEN** the report says DOT-110 is in none of `grill-me`, `proposal`, `implement`, `verify`, `code-review` and `external-review`, carries no handoff, and the process exits with code 3
 
 #### Scenario: Second run after a lost read-back
 

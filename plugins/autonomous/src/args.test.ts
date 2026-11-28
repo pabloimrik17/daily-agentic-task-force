@@ -182,6 +182,18 @@ describe("parseArgs", () => {
         );
     });
 
+    it("reads --apply --transition --from external-review", () => {
+        expect(
+            parseArgs(["--apply", "--transition", "linear:DOT-110", "--from", "external-review"]),
+        ).toEqual(
+            accepted({
+                apply: true,
+                transition: { source: "linear", id: "DOT-110" },
+                from: "external-review",
+            }),
+        );
+    });
+
     it("reads --apply --pull-request with and without --title and --json", () => {
         const id = "linear:DOT-121:grill-me:1";
         expect(parseArgs(["--apply", "--pull-request", id])).toEqual(
@@ -307,8 +319,8 @@ describe("parseArgs", () => {
             "--stage given more than once",
         ],
         [
-            ["--task", "linear:A-1", "--stage", "external-review"],
-            "--stage external-review is not a registered stage (test, grill-me, proposal, implement, verify, code-review)",
+            ["--task", "linear:A-1", "--stage", "qa"],
+            "--stage qa is not a registered stage (test, grill-me, proposal, implement, verify, code-review, external-review)",
         ],
         [["--stage", "test"], "--stage requires --task"],
         [
@@ -355,8 +367,8 @@ describe("parseArgs", () => {
             "--from requires a stage name",
         ],
         [
-            ["--apply", "--transition", "linear:DOT-110", "--from", "external-review"],
-            "--from external-review is not a stage a transition leaves (grill-me, proposal, implement, verify, code-review)",
+            ["--apply", "--transition", "linear:DOT-110", "--from", "wrap-up"],
+            "--from wrap-up is not a stage a transition leaves (grill-me, proposal, implement, verify, code-review, external-review)",
         ],
         [
             ["--apply", "--transition", "linear:DOT-110", "--from", "verify", "--from", "verify"],

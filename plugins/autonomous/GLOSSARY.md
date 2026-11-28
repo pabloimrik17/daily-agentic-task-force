@@ -7,12 +7,14 @@ attempt to advance a stage.
 Labels come in three groups: scope, autonomy and stage. Scope and autonomy are
 properties that persist, and each transition replaces the stage
 ([ADR 0001](docs/adr/0001-properties-persist-stages-replace.md)). The grill,
-proposal preparation, the implementation, the verification and the code review
-run as stages (see the README's [grill-me stage](README.md#the-grill-me-stage),
+proposal preparation, the implementation, the verification, the code review and
+the external review run as stages (see the README's
+[grill-me stage](README.md#the-grill-me-stage),
 [proposal stage](README.md#the-proposal-stage),
 [implementation stage](README.md#the-implementation-stage),
-[verification stage](README.md#the-verification-stage) and
-[code review stage](README.md#the-code-review-stage)).
+[verification stage](README.md#the-verification-stage),
+[code review stage](README.md#the-code-review-stage) and
+[external review stage](README.md#the-external-review-stage)).
 
 ## Language
 
@@ -74,13 +76,15 @@ The stage that follows every review stage: once a task's pull request is open
 to the review bots and the human reviewers, it handles what they report
 through an adversarial review, one review round per attempt, until a quiet
 round. It is not a review stage, since it judges what others found, not the
-work from its own angle.
+work from its own angle (see the README's
+[external review stage](README.md#the-external-review-stage)).
 _Avoid_: bot review, pull request review, code review
 
 **Review bot**:
 An external service that reviews a pull request on its own once it is no
 longer a draft, such as CodeRabbit, Greptile or Pullfrog. As a reviewer it
-only reports.
+only reports. The runner knows the ones listed in `review.external.bots` (see
+the README's [review bots](README.md#the-review-bots)).
 _Avoid_: external agent, bot reviewer
 
 **Quiet round**:
@@ -325,7 +329,9 @@ _Avoid_: subagent, worker
 
 **Stage contract**:
 What a stage declares: its id, its emoji, its prerequisites, its prompt for a
-task, its agent arguments and its completion check against the task's tracker.
+task, its agent arguments and its completion check against the task's tracker,
+and, optionally, a check for a round that ended without a transition. A stage
+that declares none never accepts the result marker's outcome `round-ended`.
 A stage can be launched only when an implementation is registered for its id
 and its prerequisites hold; what they read at launch is passed to its prompt.
 
@@ -338,10 +344,13 @@ It never deletes the branch.
 **Result marker**:
 The file `result.json` that the agent writes in the attempt's directory, with
 the schema `autonomous.result.v1`, the attempt's id and the outcome
-`completed`. It is valid only when it parses, names that attempt and reports
-`completed`; any other marker counts as absent. It is one of the two proofs
-that a stage completed, the other being the stage's own check against the
-tracker.
+`completed` or `round-ended`. It is valid only when it parses, names that
+attempt and reports one of the two, and `round-ended` is valid only for a stage
+that declares the check of an ended round, which only the external review does;
+any other marker counts as absent. It is one of the two proofs that a stage
+completed, the other being the stage's own check against the tracker. An
+attempt that ended a round is completed only when its directory also holds a
+persistence receipt and a publish receipt whose digest is its record's.
 
 **Retained attempt**:
 A started attempt whose session exited, or is gone, without the stage having
@@ -379,11 +388,12 @@ task has exactly one, and each transition replaces it.
 A task whose autonomy is decided starts at `proposal`, a task in `grill-me`
 moves to `proposal` when the grill ends, a task in `proposal` moves to
 `implement` when its proposal preparation ends, a task in `implement` moves to
-`verify` when its implementation ends, and a task in `verify` moves to
-`code-review` when its verification ends, and a task in `code-review` moves to
-`external-review` when its code review ends. `external-review` means the
-task's pull request is open to the review bots and the human reviewers, and
-its external review handles what they report. `ready-to-merge` is a label with no stage: the task waits there for
+`verify` when its implementation ends, a task in `verify` moves to
+`code-review` when its verification ends, a task in `code-review` moves to
+`external-review` when its code review ends, and a task in `external-review`
+moves to `wrap-up` when a quiet round ends its external review.
+`external-review` means the task's pull request is open to the review bots and
+the human reviewers, and its external review handles what they report. `ready-to-merge` is a label with no stage: the task waits there for
 a person to merge its pull request.
 
 **Taken label**:
@@ -411,8 +421,9 @@ to the human.
 A task leaving its stage: its stage label is replaced and, when the stage
 decided it, its autonomy label is set. It follows the human's answer to a
 question at the end of the stage, except when an `AFK` task leaves proposal
-preparation, implementation, verification or code review, which needs no
-answer. A script
+preparation, implementation, verification, code review or external review,
+which needs no answer. The transition into `external-review` also marks the
+task's pull request ready for review, whichever stage it leaves. A script
 applies it.
 
 ### Talking to the human

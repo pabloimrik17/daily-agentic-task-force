@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import { ATTEMPT_SCHEMA, type AttemptRecord } from "../attempts/record.ts";
 import { workTask } from "../select/test-fixtures.ts";
 import { codeReviewStage } from "./code-review/stage.ts";
+import { externalReviewStage } from "./external-review/stage.ts";
 import { grillMeStage } from "./grill-me/stage.ts";
 import { implementStage } from "./implement/stage.ts";
 import { proposalStage } from "./proposal/stage.ts";
@@ -50,7 +51,7 @@ function input(description: string | null = "Do the thing."): StagePromptInput {
 }
 
 describe("the stage registry", () => {
-    it("holds the test, grill-me, proposal, implement, verify and code-review stages", () => {
+    it("holds the test, grill-me, proposal, implement, verify, code-review and external-review stages", () => {
         expect([...STAGES.keys()]).toEqual([
             "test",
             "grill-me",
@@ -58,6 +59,7 @@ describe("the stage registry", () => {
             "implement",
             "verify",
             "code-review",
+            "external-review",
         ]);
         expect(stageFor("test")).toBe(testStage);
         expect(stageFor("grill-me")).toBe(grillMeStage);
@@ -65,6 +67,16 @@ describe("the stage registry", () => {
         expect(stageFor("implement")).toBe(implementStage);
         expect(stageFor("verify")).toBe(verifyStage);
         expect(stageFor("code-review")).toBe(codeReviewStage);
+        expect(stageFor("external-review")).toBe(externalReviewStage);
+    });
+
+    it("Stage with rounds: external-review declares both the completion check and the check of an ended round", () => {
+        const task = workTask("linear", "DOT-121", ["external-review"]);
+        expect(externalReviewStage.completed(task)).toBe(false);
+        expect(externalReviewStage.roundEnded?.(task)).toBe(true);
+        expect([...STAGES.values()].filter((stage) => "roundEnded" in stage)).toEqual([
+            externalReviewStage,
+        ]);
     });
 });
 

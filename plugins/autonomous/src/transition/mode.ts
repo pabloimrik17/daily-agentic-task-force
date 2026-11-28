@@ -1,7 +1,7 @@
 // Transition mode (spec autonomous-run, "Transition mode", "Transition question", "Approval
 // question", "Transition report"). It writes only for an AFK task leaving a stage left on
-// approval, proposal, implement, verify or code-review; every other answer comes back through
-// answer mode (./answer.ts).
+// approval, proposal, implement, verify, code-review or external-review; every other answer comes
+// back through answer mode (./answer.ts).
 
 import { isSource, taskKey, type TaskRef } from "../attempts/record.ts";
 import type { AutonomousConfig, Source } from "../config.ts";
@@ -157,7 +157,7 @@ function rowToLeave(
     return { ok: true, value: row };
 }
 
-// "grill-me, proposal, implement, verify and code-review"
+// "grill-me, proposal, implement, verify, code-review and external-review"
 const STAGE_LIST = `${TRANSITION_STAGES.slice(0, -1).join(", ")} and ${TRANSITION_STAGES.at(-1)}`;
 
 function asking(
@@ -192,6 +192,8 @@ async function leaveStage(
         row,
         before: task.labels,
         wait: deps.wait,
+        state: deps.state,
+        tools: deps,
     });
     if (settled.status !== "applied") {
         return { ...report, reasons: [settled.detail] };
@@ -204,8 +206,9 @@ async function leaveStage(
         by: "agent",
         at: (deps.now ?? (() => new Date()))(),
     });
-    // A record that cannot be written costs the logbook its answer, not the transition.
-    const reasons = failure === null ? [] : [failure];
+    // A record that cannot be written costs the logbook its answer, not the transition; what the
+    // transition left undone is said too.
+    const reasons = [...(settled.notes ?? []), ...(failure === null ? [] : [failure])];
     // The read-back confirmed exactly these labels, so the report shows the task as it is now.
     const labels = [
         ...task.labels.filter((label) => label !== row.from && label !== row.to),

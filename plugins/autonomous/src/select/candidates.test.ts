@@ -1,17 +1,24 @@
-import { describe, expect, it, vi } from "vitest";
+import { rmSync } from "node:fs";
+
+import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { taskKey } from "../attempts/record.ts";
+import { tempState } from "../attempts/test-fixtures.ts";
 import type { Exec } from "../exec.ts";
 import { LABEL_TRIAGE } from "../label-triage/question-id.ts";
 import type { LabelTriageData } from "../label-triage/step.ts";
 import { config } from "../label-triage/test-fixtures.ts";
 import type { TriageRecord } from "../label-triage/write.ts";
+import { NOW } from "../quota-gate/test-fixtures.ts";
+import { ALL_PASSED, CONFIG, run } from "../review-bots/test-fixtures.ts";
 import type { StepResult } from "../runner.ts";
 import { labelledThisRun, selectCandidates } from "./candidates.ts";
 import subIssues from "./readers/fixtures/github-subissues.json";
 import { githubWorkReader } from "./readers/github.ts";
-import { workTask } from "./test-fixtures.ts";
+import { BRANCH, stateWithWorkspace } from "../transition/test-fixtures.ts";
+import { fakePullRequests, type PullRequestFacts, workTask } from "./test-fixtures.ts";
 import type { WorkTask } from "./types.ts";
+import { reviewBotsCheck } from "./wait.ts";
 
 function evaluate(
     tasks: WorkTask[],
@@ -617,6 +624,179 @@ describe("selectCandidates: no free slot", () => {
         const result = await evaluate([grill], { full: { grill: false, work: true } });
 
         expect(result).toMatchObject({ ok: true, value: { candidates: [{ task: grill }] } });
+    });
+});
+
+describe("selectCandidates: waiting for review bots", () => {
+    const kept: string[] = [];
+    const task = workTask("linear", "DOT-7", ["personal", "AFK", "external-review"]);
+
+    afterEach(() => {
+        for (const directory of kept.splice(0)) {
+            rmSync(directory, { recursive: true, force: true });
+        }
+    });
+
+    // The task's attempt record names an existing workspace unless `state` is given.
+    async function waitDeps(calls: string[], facts: PullRequestFacts, state?: string) {
+        const directories =
+            state === undefined
+                ? await stateWithWorkspace({ source: task.source, id: task.id })
+                : { state, workspace: state };
+        kept.push(directories.state, directories.workspace);
+        return {
+            wait: reviewBotsCheck({
+                config: CONFIG,
+                state: directories.state,
+                pullRequests: fakePullRequests(calls, facts),
+                apply: false,
+                now: NOW,
+            }),
+        };
+    }
+
+    it("Review bot still reviewing: excludes the task as waiting for review bots", async () => {
+        const calls: string[] = [];
+        const checkRuns = [...ALL_PASSED.slice(1), run("CodeRabbit", { status: "in_progress" })];
+        const result = await evaluate([task], await waitDeps(calls, { checkRuns }));
+
+        expect(result).toMatchObject({
+            ok: true,
+            value: {
+                candidates: [],
+                excluded: [
+                    {
+                        id: "DOT-7",
+                        reason: "waiting-for-review-bots",
+                        wait: {
+                            pullRequest: { number: 12, url: "https://example.test/pull/12" },
+                            draft: null,
+                            running: [],
+                            reasons: ["coderabbit is reviewing"],
+                        },
+                    },
+                ],
+            },
+        });
+        expect(calls).toEqual([
+            `pr find ${BRANCH}`,
+            "pr state 12",
+            "pr checkRuns a1b2c3d",
+            "pr threads 12",
+            "pr reviews 12",
+        ]);
+    });
+
+    it("Settled pull request: is a candidate", async () => {
+        const result = await evaluate([task], await waitDeps([], { checkRuns: ALL_PASSED }));
+
+        expect(result).toMatchObject({
+            ok: true,
+            value: { candidates: [{ task, stage: "external-review" }], excluded: [] },
+        });
+    });
+
+    it("Taken task in external-review: is excluded as taken, and its pull request is not read", async () => {
+        const calls: string[] = [];
+        const taken = workTask("linear", "DOT-7", ["personal", "AFK", "external-review", "taken"]);
+        const result = await evaluate([taken], await waitDeps(calls, {}));
+
+        expect(result).toMatchObject({ ok: true, value: { excluded: [{ reason: "taken" }] } });
+        expect(calls).toEqual([]);
+    });
+
+    it("No attempt record: excludes the task as waiting, because this machine holds no workspace of it", async () => {
+        const calls: string[] = [];
+        const result = await evaluate([task], await waitDeps(calls, {}, tempState()));
+
+        expect(result).toMatchObject({
+            ok: true,
+            value: {
+                excluded: [
+                    {
+                        reason: "waiting-for-review-bots",
+                        wait: {
+                            pullRequest: null,
+                            bots: [],
+                            reasons: ["there is no workspace to check: the task has no attempt"],
+                        },
+                    },
+                ],
+            },
+        });
+        expect(calls).toEqual([]);
+    });
+
+    it("excludes a task whose branch has no open pull request as waiting, naming the branch", async () => {
+        const result = await evaluate([task], await waitDeps([], { found: null }));
+
+        expect(result).toMatchObject({
+            ok: true,
+            value: {
+                excluded: [
+                    {
+                        reason: "waiting-for-review-bots",
+                        wait: { reasons: [`the branch ${BRANCH} has no open pull request`] },
+                    },
+                ],
+            },
+        });
+    });
+
+    it("excludes a task whose pull request cannot be found as waiting, with the error", async () => {
+        const result = await evaluate([task], await waitDeps([], { found: "gh: offline" }));
+
+        expect(result).toMatchObject({
+            ok: true,
+            value: {
+                excluded: [
+                    {
+                        wait: {
+                            reasons: [
+                                `cannot find the pull request of the branch ${BRANCH}: gh: offline`,
+                            ],
+                        },
+                    },
+                ],
+            },
+        });
+    });
+
+    it("excludes a split task in external-review as split, without reading its pull request", async () => {
+        const calls: string[] = [];
+        const parent = workTask("linear", "DOT-7", ["personal", "AFK", "external-review"], {
+            children: ["DOT-8"],
+        });
+        const result = await evaluate([parent], await waitDeps(calls, {}));
+
+        expect(result).toMatchObject({ ok: true, value: { excluded: [{ reason: "split" }] } });
+        expect(calls).toEqual([]);
+    });
+
+    it("excludes a waiting task as waiting for review bots, not as no free slot", async () => {
+        const deps = await waitDeps([], { checkRuns: [] });
+        const result = await evaluate([task], { ...deps, full: { grill: false, work: true } });
+
+        expect(result).toMatchObject({
+            ok: true,
+            value: { excluded: [{ reason: "waiting-for-review-bots" }] },
+        });
+    });
+
+    it("reads no pull request for a task in another stage", async () => {
+        const calls: string[] = [];
+        const implement = workTask("linear", "DOT-7", ["personal", "AFK", "implement"]);
+        const result = await evaluate([implement], await waitDeps(calls, {}));
+
+        expect(result).toMatchObject({ ok: true, value: { candidates: [{ stage: "implement" }] } });
+        expect(calls).toEqual([]);
+    });
+
+    it("keeps an unsettled task as a candidate without a wait check, as launch checks a supplied task", async () => {
+        expect(await evaluate([task])).toMatchObject({
+            ok: true,
+            value: { candidates: [{ task, stage: "external-review" }], excluded: [] },
+        });
     });
 });
 

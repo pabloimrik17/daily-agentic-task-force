@@ -1451,12 +1451,12 @@ describe("main --transition", () => {
     });
 
     it("Task not in grill-me: exits 3 with the reason and no handoff", async () => {
-        const { d, out, calls } = transitionDeps(["personal", "AFK", "external-review"]);
+        const { d, out, calls } = transitionDeps(["personal", "AFK", "wrap-up"]);
         expect(await main(transitionArgs("--json"), d)).toBe(3);
         const report = documentOf(out);
         expect(report.outcome).toBe("not-evaluable");
         expect(report.reasons).toEqual([
-            "beads B-1 is in none of grill-me, proposal, implement, verify and code-review (labels [personal, AFK, external-review])",
+            "beads B-1 is in none of grill-me, proposal, implement, verify, code-review and external-review (labels [personal, AFK, wrap-up])",
         ]);
         expect(report).not.toHaveProperty("handoff");
         expect(calls).toEqual(["beads:readTask:B-1"]);

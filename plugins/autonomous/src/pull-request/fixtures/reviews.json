@@ -5,52 +5,44 @@
                 "reviews": {
                     "pageInfo": {
                         "hasNextPage": false,
-                        "endCursor": "Y3Vyc29yOnYyOpHOAAAB"
+                        "endCursor": "Y3Vyc29yOnYyOpHODemo"
                     },
                     "nodes": [
                         {
-                            "id": "PRR_kwDOUNYMKc7aaaa1",
+                            "id": "PRR_demo1",
                             "author": {
-                                "login": "coderabbitai"
+                                "login": "pullfrog"
                             },
                             "state": "COMMENTED",
                             "commit": {
-                                "oid": "9f1c2b7e4a6d8035b1c7e2f49a0d3c5b8e6f7a12"
+                                "oid": "c2338a22165151255d29a376636e2af04196e085"
                             },
-                            "body": "**Actionable comments posted: 3**",
+                            "body": "> [!IMPORTANT]\n> Reusing a named `--dir` lets `collect` report a previous run's reviewer files as this run's. That silently skips the required-reviewer error the spec asks for. Two smaller issues are inline.\n\n**Approach:** Sound. A deterministic CLI decides the subject, tier, team, availability, sev…",
                             "url": "https://github.com/demo/repo/pull/42#pullrequestreview-1"
                         },
                         {
-                            "id": "PRR_kwDOUNYMKc7aaaa2",
+                            "id": "PRR_demo2",
                             "author": {
                                 "login": "greptile-apps"
                             },
-                            "state": "CHANGES_REQUESTED",
+                            "state": "COMMENTED",
                             "commit": {
-                                "oid": "9f1c2b7e4a6d8035b1c7e2f49a0d3c5b8e6f7a12"
+                                "oid": "c2338a22165151255d29a376636e2af04196e085"
                             },
                             "body": "",
                             "url": "https://github.com/demo/repo/pull/42#pullrequestreview-2"
                         },
                         {
-                            "id": "PRR_kwDOUNYMKc7aaaa3",
+                            "id": "PRR_demo3",
                             "author": {
-                                "login": "demo-user"
+                                "login": "coderabbitai"
                             },
-                            "state": "APPROVED",
+                            "state": "CHANGES_REQUESTED",
                             "commit": {
-                                "oid": "4be07d19c3a85f6e20b94d7a1c8e3f5602ad9b41"
+                                "oid": "c2338a22165151255d29a376636e2af04196e085"
                             },
-                            "body": "Looks good.",
+                            "body": "<!-- coderabbit-ai-generated:v1 -->\n\n**Actionable comments posted: 15**\n\n---",
                             "url": "https://github.com/demo/repo/pull/42#pullrequestreview-3"
-                        },
-                        {
-                            "id": "PRR_kwDOUNYMKc7aaaa4",
-                            "author": null,
-                            "state": "DISMISSED",
-                            "commit": null,
-                            "body": "true",
-                            "url": "https://github.com/demo/repo/pull/42#pullrequestreview-4"
                         }
                     ]
                 }

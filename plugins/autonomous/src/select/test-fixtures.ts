@@ -2,6 +2,16 @@ import type { RunArgs } from "../args.ts";
 import type { AutonomousConfig, ConfigLoad, Source } from "../config.ts";
 import type { Exec } from "../exec.ts";
 import { task, trackers, triageContext } from "../label-triage/test-fixtures.ts";
+import type {
+    CheckRun,
+    PullRequest,
+    PullRequests,
+    PullRequestsFactory,
+    ReviewThread,
+} from "../pull-request/port.ts";
+import { NOW } from "../quota-gate/test-fixtures.ts";
+import type { Result } from "../result.ts";
+import { HEAD, prState } from "../review-bots/test-fixtures.ts";
 import type { RunContext, StepResult } from "../runner.ts";
 import type { Candidate, SelectionExec, SelectionRequest, WorkReader, WorkTask } from "./types.ts";
 
@@ -92,6 +102,66 @@ export function fakeSelection(
     return Object.assign(exec, { requests });
 }
 
+const PULL_REQUEST: PullRequest = {
+    number: 12,
+    url: "https://example.test/pull/12",
+    title: "Build the feature",
+};
+
+// Eighteen minutes before the run: a review bot with no check run has 12 of its 30 minutes left.
+const COMMITTED = new Date(NOW.getTime() - 18 * 60_000).toISOString();
+
+export interface PullRequestFacts {
+    found?: PullRequest | null | string; // what find answers; a string makes it fail with it
+    draft?: boolean;
+    readyError?: string;
+    checkRuns?: CheckRun[];
+    threads?: ReviewThread[];
+}
+
+// Pull requests over `facts`, logging each call to `calls` as "pr <method> <argument>". Marking a
+// draft ready takes effect at the run's time, as GitHub's ReadyForReviewEvent would.
+export function fakePullRequests(
+    calls: string[],
+    facts: PullRequestFacts = {},
+): PullRequestsFactory {
+    let draft = facts.draft ?? false;
+    let readyAt: string | null = null;
+    const answer = <T>(call: string, value: Result<T>): Promise<Result<T>> => {
+        calls.push(call);
+        return Promise.resolve(value);
+    };
+    const found = facts.found === undefined ? PULL_REQUEST : facts.found;
+    const port: Partial<PullRequests> = {
+        find: (branch) =>
+            answer(
+                `pr find ${branch}`,
+                typeof found === "string"
+                    ? { ok: false, error: found }
+                    : { ok: true, value: found },
+            ),
+        state: (number) =>
+            answer(`pr state ${number}`, {
+                ok: true,
+                value: prState({ draft, readyAt, head: { sha: HEAD, committedAt: COMMITTED } }),
+            }),
+        ready: (number) => {
+            if (facts.readyError !== undefined) {
+                return answer(`pr ready ${number}`, { ok: false, error: facts.readyError });
+            }
+            draft = false;
+            readyAt = NOW.toISOString();
+            return answer(`pr ready ${number}`, { ok: true, value: undefined });
+        },
+        checkRuns: (sha) =>
+            answer(`pr checkRuns ${sha}`, { ok: true, value: facts.checkRuns ?? [] }),
+        threads: (number) =>
+            answer(`pr threads ${number}`, { ok: true, value: facts.threads ?? [] }),
+        reviews: (number) => answer(`pr reviews ${number}`, { ok: true, value: [] }),
+    };
+    return () => port as PullRequests;
+}
+
 // A run context for the select step. Every reader, chezmoi and tracker call goes
 // to `calls`; the trackers are there only to show that the step never uses them.
 export function selectContext(options: {
@@ -102,6 +172,8 @@ export function selectContext(options: {
     config?: ConfigLoad | AutonomousConfig;
     results?: StepResult[];
     args?: Partial<RunArgs>;
+    pullRequests?: PullRequestsFactory;
+    state?: string;
 }): RunContext {
     const base = triageContext({
         trackers: trackers(options.calls, {}),
@@ -121,6 +193,8 @@ export function selectContext(options: {
             selection:
                 options.selection ??
                 fakeSelection(() => ({ ok: false, error: "selection was not expected" })),
+            pullRequests: options.pullRequests ?? base.io.pullRequests,
+            state: options.state ?? base.io.state,
         },
     };
 }

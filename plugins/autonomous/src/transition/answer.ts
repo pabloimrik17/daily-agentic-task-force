@@ -88,7 +88,7 @@ async function settle(answer: Answer, ctx: AnswerContext, handling: Handling): P
 }
 
 async function transition(answering: Answering): Promise<Settlement> {
-    const { tracker, ref, row, before, value, state, wait } = answering;
+    const { tracker, ref, row, before, value, state, wait, tools } = answering;
     const awaited = await awaitedDetails(state, ref, row.from);
     if (!awaited.ok) {
         return { status: "failed", detail: awaited.error };
@@ -101,7 +101,16 @@ async function transition(answering: Answering): Promise<Settlement> {
         return { status: "rejected", detail: refused };
     }
     const autonomy = isAutonomyLabel(value) ? value : undefined;
-    const settled = await applyTransition({ tracker, ref, row, before, autonomy, wait });
+    const settled = await applyTransition({
+        tracker,
+        ref,
+        row,
+        before,
+        autonomy,
+        wait,
+        state,
+        tools,
+    });
     return leaveRecord(settled, answering);
 }
 

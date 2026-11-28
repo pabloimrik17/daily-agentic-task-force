@@ -591,10 +591,10 @@ it("reads a ready pull request: not a draft, its head commit and its last ready 
         value: {
             draft: false,
             head: {
-                sha: "9f1c2b7e4a6d8035b1c7e2f49a0d3c5b8e6f7a12",
-                committedAt: "2026-03-12T09:41:07Z",
+                sha: "ae801318e07587f58ed3ab73392d79a4a80281b5",
+                committedAt: "2026-11-20T18:35:41Z",
             },
-            readyAt: "2026-03-12T09:55:30Z",
+            readyAt: "2026-11-20T18:04:11Z",
         },
     });
     const call = graphqlCall(gh, 0);
@@ -617,8 +617,8 @@ it("reads a draft pull request that never was marked ready", async () => {
         value: {
             draft: true,
             head: {
-                sha: "4be07d19c3a85f6e20b94d7a1c8e3f5602ad9b41",
-                committedAt: "2026-03-10T16:02:44Z",
+                sha: "e735b02a539cb4a7da064829c1f932c29a93b29f",
+                committedAt: "2026-11-27T09:19:56Z",
             },
             readyAt: null,
         },
@@ -645,7 +645,7 @@ it("marks a draft ready with gh pr ready", async () => {
     );
 });
 
-const SHA = "9f1c2b7e4a6d8035b1c7e2f49a0d3c5b8e6f7a12";
+const SHA = "0b804a417c28fbb153cd1c8ef5cbf8e66dd6941f";
 
 function checkRunsEndpoint(page: number): string[] {
     return ["api", `repos/{owner}/{repo}/commits/${SHA}/check-runs?per_page=100&page=${page}`];
@@ -655,27 +655,44 @@ it("lists the check runs of a commit with their app, status, output and times", 
     const { gh, port } = scripted(ok(checkRunsFixture));
     const result = await port.checkRuns(SHA);
     if (!result.ok) throw new Error(result.error);
-    const [done, running, failed, queued] = result.value;
-    expect(done).toEqual({
+    const [limited, finished, cancelled, plain] = result.value;
+    expect(limited).toEqual({
         name: "CodeRabbit",
         app: "coderabbitai",
         status: "completed",
-        conclusion: "success",
-        title: "Review completed",
-        summary: "CodeRabbit reviewed 6 files and left 3 comments.",
+        conclusion: "neutral",
+        title: "Review rate limited",
+        summary: "Result: Rate limited - Review rate limited",
         url: "https://github.com/demo/repo/runs/1001",
-        startedAt: "2026-03-12T09:56:02Z",
-        completedAt: "2026-03-12T10:03:41Z",
+        startedAt: "2026-11-25T20:36:27Z",
+        completedAt: "2026-11-25T20:36:27Z",
     });
-    expect(running).toMatchObject({
-        status: "in_progress",
-        conclusion: null,
-        title: null,
-        completedAt: null,
+    expect(finished).toMatchObject({ app: "greptile-apps", conclusion: "success" });
+    expect(cancelled).toMatchObject({ app: "pullfrog", conclusion: "cancelled" });
+    // A run with no output reads as null title and summary.
+    expect(plain).toMatchObject({ name: "audit", title: null, summary: null });
+    // A run without an app reads as an empty slug, one not started has no times: derived, since
+    // none of the recorded runs lacks them.
+    const [first = {}] = checkRunsFixture.check_runs;
+    const queued = scripted(
+        ok({
+            total_count: 1,
+            check_runs: [
+                {
+                    ...first,
+                    status: "queued",
+                    conclusion: null,
+                    started_at: null,
+                    completed_at: null,
+                    app: null,
+                },
+            ],
+        }),
+    );
+    expect(await queued.port.checkRuns(SHA)).toMatchObject({
+        ok: true,
+        value: [{ app: "", status: "queued", startedAt: null, completedAt: null }],
     });
-    expect(failed).toMatchObject({ app: "pullfrog", conclusion: "failure" });
-    // A run without an app reads as an empty slug, one not started has no times.
-    expect(queued).toMatchObject({ app: "", status: "queued", startedAt: null, completedAt: null });
     expect(gh).toHaveBeenCalledTimes(1);
     expect(gh).toHaveBeenCalledWith(checkRunsEndpoint(1));
 });
@@ -717,21 +734,39 @@ it("lists the reviews oldest first with their author, state and commit", async (
     const result = await port.reviews(42);
     if (!result.ok) throw new Error(result.error);
     expect(result.value.map(({ id, author, state }) => [id, author, state])).toEqual([
-        ["PRR_kwDOUNYMKc7aaaa1", "coderabbitai", "COMMENTED"],
-        ["PRR_kwDOUNYMKc7aaaa2", "greptile-apps", "CHANGES_REQUESTED"],
-        ["PRR_kwDOUNYMKc7aaaa3", "demo-user", "APPROVED"],
-        ["PRR_kwDOUNYMKc7aaaa4", "", "DISMISSED"],
+        ["PRR_demo1", "pullfrog", "COMMENTED"],
+        ["PRR_demo2", "greptile-apps", "COMMENTED"],
+        ["PRR_demo3", "coderabbitai", "CHANGES_REQUESTED"],
     ]);
-    expect(result.value[0]).toEqual({
-        id: "PRR_kwDOUNYMKc7aaaa1",
+    expect(result.value[2]).toEqual({
+        id: "PRR_demo3",
         author: "coderabbitai",
-        state: "COMMENTED",
-        commit: SHA,
-        body: "**Actionable comments posted: 3**",
-        url: "https://github.com/demo/repo/pull/42#pullrequestreview-1",
+        state: "CHANGES_REQUESTED",
+        commit: "c2338a22165151255d29a376636e2af04196e085",
+        body: "<!-- coderabbit-ai-generated:v1 -->\n\n**Actionable comments posted: 15**\n\n---",
+        url: "https://github.com/demo/repo/pull/42#pullrequestreview-3",
     });
-    // A deleted author reads as "", a review whose commit is gone as null.
-    expect(result.value[3]).toMatchObject({ author: "", commit: null, body: "true" });
+    // A bot that posts no body reads as "".
+    expect(result.value[1]).toMatchObject({ author: "greptile-apps", body: "" });
+    // A deleted author reads as "", a review whose commit is gone as null: derived, since the
+    // recorded reviews all have both.
+    const [review = {}] = reviewsFixture.data.repository.pullRequest.reviews.nodes;
+    const gone = scripted(
+        data({
+            repository: {
+                pullRequest: {
+                    reviews: {
+                        pageInfo: { hasNextPage: false, endCursor: null },
+                        nodes: [{ ...review, author: null, commit: null, state: "DISMISSED" }],
+                    },
+                },
+            },
+        }),
+    );
+    expect(await gone.port.reviews(42)).toMatchObject({
+        ok: true,
+        value: [{ author: "", commit: null, state: "DISMISSED" }],
+    });
     const call = graphqlCall(gh, 0);
     expect(call.variables).toEqual(PR_42);
     expect(call.query).toMatchInlineSnapshot(`

@@ -1,5 +1,5 @@
 ---
-description: Run the autonomous loop's reconcile, gate, label triage, select and launch steps, or launch a supplied task, or discard an attempt, or bootstrap the label contract, or hand off the transition question of a task in grill-me, proposal, implement, verify or code-review, or move an AFK task in proposal, implement, verify or code-review, or save a grill-me, proposal, implementation, verification or code review attempt's stage summary, and a grill's definition, to its task, or open the pull request of an attempt's branch, or publish an attempt's logbook entry, or publish a code review attempt's findings as threads on its pull request, or list the questions of the tasks marked `triage-me`, report the outcome, and ask the user the questions the run hands off
+description: Run the autonomous loop's reconcile, gate, label triage, select and launch steps, or launch a supplied task, or discard an attempt, or bootstrap the label contract, or hand off the transition question of a task in grill-me, proposal, implement, verify, code-review or external-review, or move an AFK task in proposal, implement, verify, code-review or external-review, or save a grill-me, proposal, implementation, verification, code review or external review attempt's stage summary, and a grill's definition, to its task, or open the pull request of an attempt's branch, or publish an attempt's logbook entry, or publish a code review or external review attempt's findings as threads on its pull request, or list the questions of the tasks marked `triage-me`, report the outcome, and ask the user the questions the run hands off
 argument-hint: "[--task <source>:<id> [--stage <stage>]] [--force] [--json] [--apply] [--no-handoff] | --apply --discard <attempt> [--release-workspace] [--json] | --bootstrap-labels [--json] | --triage-questions [--json] | --apply --transition <source>:<task> [--from <stage>] [--json] | --apply --persist <attempt> [--json] | --apply --pull-request <attempt> [--title <title>] [--json] | --apply --log <attempt> [--json] | --apply --publish <attempt> [--json]"
 allowed-tools: Bash(bun:*)
 ---
@@ -19,31 +19,48 @@ chooses the next work unit and writes nothing, and `launch` starts one session
 for it. `--task` supplies a task to `launch` in place of `label-triage` and
 `select`; `--discard` discards an attempt and runs no step. `--apply` lets the
 `label-triage` step write labels and hand off questions, which `--no-handoff`
-suppresses; `--bootstrap-labels` creates missing labels on every enabled
+suppresses, and lets the `select` step mark ready for review a draft pull
+request it finds for a task in `external-review`, which it reports (without
+`--apply` the report only names the draft). The report also shows, for each task
+in `external-review` that waits for the review bots, the pull request, each
+bot's state, the checks that have not ended and the minutes left of the wait; `--bootstrap-labels` creates missing labels on every enabled
 tracker and exits instead of running the steps. `--transition` reads a task in
-`grill-me`, `proposal`, `implement`, `verify` or `code-review`, running no step:
+`grill-me`, `proposal`, `implement`, `verify`, `code-review` or
+`external-review`, running no step:
 for `grill-me` it hands off the autonomy question, for an `HITL` task in
-`proposal`, `implement`, `verify` or `code-review` the approval question (for a
-task in `code-review`, that the code review is ready, with `Approve` moving it
-to `external-review`), and an `AFK` task in `proposal` it moves to `implement`
-itself, one in `implement` to `verify`, one in `verify` to `code-review` and one
-in `code-review` to `external-review`, with no question. A task in `implement`,
-`verify` or `code-review` whose workspace has unchecked tasks of its change,
+`proposal`, `implement`, `verify`, `code-review` or `external-review` the
+approval question (for a task in `code-review`, that the code review is ready,
+with `Approve` moving it to `external-review`; for one in `external-review`,
+`Approve` moves it to `wrap-up`), and an `AFK` task in `proposal` it moves to
+`implement` itself, one in `implement` to `verify`, one in `verify` to
+`code-review`, one in `code-review` to `external-review` and one in
+`external-review` to `wrap-up`, with no question. A transition into
+`external-review` marks the task's pull request ready for review first, and is
+refused, with no question and exit code 3, when a check of the pull request's
+head commit has failed. A task in `implement`,
+`verify`, `code-review` or `external-review` whose workspace has unchecked
+tasks of its change,
 uncommitted changes or unpushed commits is refused, with no question, and exit
 code 3. So is a task in `code-review` whose open attempt has no current publish
-receipt. With `--from <stage>`, a task not in that stage is refused the same way,
-so a second run cannot leave the stage a first one reached. `--persist` saves a `grill-me`, `proposal`, `implement`, `verify` or
-`code-review` attempt's stage summary, and a grill's definition, to its task and writes the
+receipt, and a task in `external-review` whose open attempt has no current
+publish receipt of a quiet round, or whose head commit has a check that failed
+or has not ended. With `--from <stage>`, a task not in that stage is refused the same way,
+so a second run cannot leave the stage a first one reached. `--persist` saves a `grill-me`, `proposal`, `implement`, `verify`,
+`code-review` or `external-review` attempt's stage summary, and a grill's definition, to its task and writes the
 receipt the transition waits for, running no step. `--pull-request`
 finds or opens the draft pull request of an attempt's workspace branch and
 writes its cover, running no step; `--title` gives its title. `--log` publishes
 the attempt's logbook entry on that pull request and writes its receipt,
-running no step. `--publish` publishes a `code-review` attempt's findings
+running no step. `--publish` publishes a `code-review` or `external-review`
+attempt's findings
 as threads on the attempt's pull request, answers the threads its entries
 link to (a refuted or dismissed entry too, leaving the thread's state as it is),
 brings its walkthrough up to date and writes the receipt the transition waits for, running no step; in a code
 review's closing it runs after the checks pass and before `--persist` and
-`--transition`. `--triage-questions` reads the tasks that carry `triage-me`
+`--transition`. For an `external-review` attempt it only replies in the threads
+its record links to, and resolves threads and dismisses a review bot's request
+for changes only when the record is marked quiet, in the round that ends with
+the transition. `--triage-questions` reads the tasks that carry `triage-me`
 and lists their questions, running no step, requesting no judgement and
 writing nothing; it takes no `--apply` and combines only with `--json`, and its
 answers are applied with `--apply --answer`. `--apply` can
@@ -69,18 +86,24 @@ task that is complete.
 2. Relay the script's stdout and stderr verbatim, in a code block, followed by
    its exit code: 0 advance, 2 wait, 3 not evaluable, 1 usage or runner error.
    With `--transition`, 0 means a handoff was emitted or an `AFK` task was
-   moved to `implement`, `verify`, `code-review` or `external-review`, and 3 means
-   the task is in none of `grill-me`, `proposal`, `implement`, `verify` and
-   `code-review`, a task in `proposal`, `implement`, `verify` or `code-review`
+   moved to `implement`, `verify`, `code-review`, `external-review` or
+   `wrap-up`, and 3 means
+   the task is in none of `grill-me`, `proposal`, `implement`, `verify`,
+   `code-review` and `external-review`, a task in `proposal`, `implement`,
+   `verify`, `code-review` or `external-review`
    has no single autonomy, its source is
    disabled, it could not be read, an open attempt of the stage the task is
    leaving has no persistence receipt, an open code review attempt has no
-   current publish receipt, the guards refused a task in `implement`, `verify`
-   or `code-review` whose work is unfinished, the
+   current publish receipt, an open external review attempt has no current
+   publish receipt of a quiet round, the guards refused a task in `implement`,
+   `verify`, `code-review` or `external-review` whose work is unfinished, a
+   check of the head commit of a pull request that enters or leaves
+   `external-review` failed or, on leaving, has not ended, marking the pull
+   request ready failed, the
    `AFK` transition was not applied or the configuration could not be loaded.
    With `--persist`, 0 means the receipt was written and 3 means it was not:
    the attempt is unknown, not open or not a `grill-me`, `proposal`,
-   `implement`, `verify` or `code-review` attempt, a file is missing or empty, a tracker call or read-back
+   `implement`, `verify`, `code-review` or `external-review` attempt, a file is missing or empty, a tracker call or read-back
    failed, or the configuration could not be loaded. With `--pull-request`, 0
    means a pull request is reported or the task needs none, and 3 means the
    attempt is unknown or not open, a title is missing for a pull request to
@@ -89,8 +112,9 @@ task that is complete.
    pull request, the body is missing or rejected, a publish or read-back failed
    or the configuration could not be loaded. With `--publish`, 0 means the receipt
    was written and 3 means it was not: the attempt is unknown, not open or not a
-   `code-review` attempt, `findings.json` is missing or invalid, there is no open
-   pull request, the branch has unpushed commits, a post or the read-back failed,
+   `code-review` or `external-review` attempt, `findings.json` is missing or
+   invalid, or marked quiet where it may not be, there is no open
+   pull request, the branch has unpushed commits, a post, a resolution, a dismissal or the read-back failed,
    or the configuration could not be loaded. With `--triage-questions`, 0 means
    every enabled source was read, with or without a question, and 3 means a
    source or the configuration could not be read. Write nothing else around it.
@@ -100,8 +124,8 @@ task that is complete.
    that line starts with `handoff:` and a space; the rest of the line after
    that space is the handoff as JSON. A transition report carries its handoff
    in the same place and in the same form, whether it holds the autonomy
-   question or the approval question, including that of a task in `verify` or
-   `code-review`. A `--triage-questions` report carries
+   question or the approval question, including that of a task in `verify`,
+   `code-review` or `external-review`. A `--triage-questions` report carries
    its handoff in the same place and in the same form, and, unlike a run's, it
    carries it without `--apply`. A transition report with `applied` true
    and no handoff, the `AFK` path, is relayed and the command ends: nothing is

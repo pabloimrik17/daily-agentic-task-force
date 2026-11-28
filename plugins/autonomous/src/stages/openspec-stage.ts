@@ -30,7 +30,10 @@ export const PULL_REQUEST_KEY = "pullRequest"; // absent when the branch has no 
 export const UPDATE_WORKFLOW_KEY = "updateWorkflow"; // `/openspec-update-change` or `/opsx:update`
 export const CHANGE_KEY = "change"; // the name of the OpenSpec change the branch adds
 
-type OpenspecStage = Extract<TransitionStage, "proposal" | "implement" | "verify" | "code-review">;
+type OpenspecStage = Extract<
+    TransitionStage,
+    "proposal" | "implement" | "verify" | "code-review" | "external-review"
+>;
 
 type OpenspecWorkflow = Parameters<typeof findWorkflow>[1];
 
@@ -107,7 +110,7 @@ export function contextSection(
 }
 
 interface LogbookSection {
-    name: "Proposal" | "Implementation" | "Verification" | "Code review";
+    name: "Proposal" | "Implementation" | "Verification" | "Code review" | "External review";
     holds: string;
 }
 
@@ -122,6 +125,7 @@ export interface Closing {
     transition: string; // the step that runs the transition, written for the autonomy
     onFailure: string; // what to do when persist mode exits non-zero
     logbook: LogbookSection;
+    marker?: string; // the last step, when the marker is not written as the frame shows it
 }
 
 // The order every OpenSpec stage closes in after its own steps: stage summary, transition,
@@ -133,7 +137,7 @@ export function closingSection(paths: Paths, closing: Closing): Section {
         `Write the stage summary to \`${summary}\` (see the stage summary section) only now, once every step above is done: never before, not even while you wait for the human. Then run \`/autonomous:run --apply --persist ${attempt}\`. It posts the stage summary as a comment on the task. If it exits non-zero, do not run the transition: ${closing.onFailure}.`,
         closing.transition,
         `Write the logbook entry's body to \`${entry}\` (described below), then run \`/autonomous:run --apply --log ${attempt}\`. It publishes the entry as a comment on the pull request. If log mode rejects the body, correct \`${entry}\` as it reports and run it again.`,
-        "Only once the entry is published, write the result marker.",
+        closing.marker ?? "Only once the entry is published, write the result marker.",
     ];
     return {
         title: "Closing",
@@ -220,9 +224,10 @@ export function orchestrationSection({ each, ends }: Orchestration): Section {
 export interface CommitUnit {
     unit: string; // e.g. "one coherent unit of work at a time: its code, its tests, ..."
     next: string; // e.g. "the next unit of work"
+    push?: string; // replaces the rule that pushes each commit before the next
 }
 
-export function commitsSection({ unit, next }: CommitUnit): Section {
+export function commitsSection({ unit, next, push }: CommitUnit): Section {
     return {
         title: "Commits",
         lines: [
@@ -230,7 +235,8 @@ export function commitsSection({ unit, next }: CommitUnit): Section {
             `- Commit ${unit}, in the same commit. Stage by path, never with \`git add -A\` or \`git add .\`, so no other file reaches the commit.`,
             "- Write each message as a conventional commit, in this repository's conventions: take the type and the scope from its contributor instructions (AGENTS.md, CONTRIBUTING or the like), its commit rules (a commitlint configuration or the like) and its recent history. In a monorepo, give every commit a scope.",
             "- Mark a commit breaking (`!` after the type and scope, or a `BREAKING CHANGE` footer) only when the change's proposal declares the change breaking. Otherwise no commit carries either.",
-            `- Push each commit before you start ${next}, so the pull request always shows the work done.`,
+            push ??
+                `- Push each commit before you start ${next}, so the pull request always shows the work done.`,
             "- Never amend a commit and never rewrite one already pushed.",
         ],
     };
@@ -287,11 +293,13 @@ export function confirmStep(onFailure: string): string {
     return `Confirm that every check the repository defines passes, that nothing is left uncommitted, and that every commit is pushed. If something is not, finish it first; if a check cannot be made to pass, or a push fails, ${onFailure}.`;
 }
 
-// `rules` are the stage's own commit rules, after the shared ones.
-export function fixCommitsSection(rules: readonly string[]): Section {
+// `rules` are the stage's own commit rules, after the shared ones; `push` replaces the rule that
+// pushes each fix before the next.
+export function fixCommitsSection(rules: readonly string[], push?: string): Section {
     const shared = commitsSection({
         unit: "each fixed finding on its own: its fix, and its reproduction test when it has one",
         next: "the next fix",
+        ...(push === undefined ? {} : { push }),
     });
     return { ...shared, lines: [...shared.lines, ...rules] };
 }
@@ -331,6 +339,44 @@ export function reviewBlockedWhen(name: string, causes: string): string {
     return `When you cannot finish ${name} (${causes}), do not force it: a human settles it from your explanation, and a forced fix costs more than a late one. Instead:`;
 }
 
+// The rules a review of the code holds, whichever review it is, on the change's artifacts and the
+// task's definition, on doubts and on the base branch (spec external-review-stage, "The external
+// review never changes the proposal or the definition": the code review's, unchanged).
+
+// What happens to a finding whose fix would change the artifacts or the definition; `name` is the
+// review's, e.g. "The code review".
+export const ARTIFACTS: Record<AutonomyLabel, (name: string) => string> = {
+    AFK: () =>
+        "is deferred to a proposed follow-up task, with that as its reason: never edit the artifacts or the definition to fix it.",
+    HITL: (name) =>
+        `goes to the human: ask them what to do with it, and record their answer as its reason. ${name} still changes neither the artifacts nor the definition.`,
+};
+
+export function artifactsStep(change: string, artifacts: string): string {
+    return `Never change the change's artifacts, under \`openspec/changes/${change}/\`, or the task's definition, its description above. A finding whose fix would contradict or change either, including one located in the change's own artifacts, ${artifacts} Any other finding located in the change's artifacts, one whose fix lies in the code, is an ordinary finding.`;
+}
+
+// What happens to a doubt the definition and the proposal do not settle.
+export const DOUBTS: Record<AutonomyLabel, string> = {
+    AFK: "A doubt neither settles is published: give it the destination `publish`, and publish mode posts it as an open `question (blocking)` thread.",
+    HITL: "Ask the human each doubt neither settles: give it the destination `ask`, record their answer as its reason, and its publication is `asked`.",
+};
+
+export function doubtsStep(doubt: string): string {
+    return `Settle each doubt in the finding triage against the task's definition and the change's proposal first: when either answers it, as a non-goal of the definition answers whether a behaviour is intended, give it the destination \`settled\`, with that answer as its reason. ${doubt} A doubt is neither refuted nor fixed.`;
+}
+
+export const AS_IT_IS =
+    "Review the branch as it is: never merge or rebase the base branch into it, and never resolve a conflict with it. When the pull request conflicts with its base, name the conflict in the stage summary and the logbook entry.";
+
+// The adversarial review's subject in a review of the code.
+export const REVIEW_SUBJECT =
+    "- Subject: the pull request's diff from its merge base: the commits of this workspace's branch, from its merge base with the pull request's base to `HEAD`.";
+
+export function blockedPublishStep(attempt: string): string {
+    return `Unless publish mode is what failed, record each finding you could not fix as \`blocked\`, with its reason, and run \`/autonomous:run --apply --publish ${attempt}\` once, so the pull request shows where the review stopped. Do not run it again if it fails: name its error in the stage summary.`;
+}
+
 export const ACCEPTED_FIXES =
     "Commit and push the fixes their fix checks accepted, by the rules of the commits section, so no work is lost. Commit no fix that no fix check accepted, and name its finding and its rejections in the stage summary. If the push fails, do not retry it and do not start this section over: keep the commits, and name the push's error and the unpushed commits in the stage summary and the logbook entry.";
 
@@ -346,15 +392,22 @@ export const ON_FAILURE: Record<AutonomyLabel, string> = {
     HITL: "tell the human what it reported, and continue only as the human decides",
 };
 
+const LEAVE_DRAFT =
+    "- Leave the task's pull request a draft: never mark it ready for review, and open no other pull request.";
+
 // `onFailure` says what to do when a push fails; `written` what the stage writes besides the stage
-// summary and the logbook entry.
-export function constraintsSection(onFailure: string, written: string): Section {
+// summary and the logbook entry; `pullRequest` what the stage may do with the pull request.
+export function constraintsSection(
+    onFailure: string,
+    written: string,
+    pullRequest: readonly string[] = [LEAVE_DRAFT],
+): Section {
     return {
         title: "Constraints",
         lines: [
             "- Commit and push only on this workspace's current branch.",
             NO_FORCE_PUSH,
-            "- Leave the task's pull request a draft: never mark it ready for review, and open no other pull request.",
+            ...pullRequest,
             `- If a push fails, ${onFailure}.`,
             publicRepository(written),
         ],

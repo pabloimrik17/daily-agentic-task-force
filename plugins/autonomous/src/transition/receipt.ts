@@ -1,6 +1,6 @@
-// The transition waits for the persistence receipt, and for a code review's publish receipt (spec
-// autonomous-run). The attempts are read without the run lock: the checks only read, and a receipt
-// that appears while they run can only make them pass.
+// The transition waits for the persistence receipt, and for a code review's or an external
+// review's publish receipt (spec autonomous-run). The attempts are read without the run lock: the
+// checks only read, and a receipt that appears while they run can only make them pass.
 
 import { access, readFile } from "node:fs/promises";
 import { join } from "node:path";
@@ -16,7 +16,9 @@ import { attemptDir, listRecords, receiptPath } from "../attempts/state.ts";
 import {
     digestOf,
     FINDINGS_FILE,
+    isQuietReceipt,
     PUBLISH_RECEIPT_FILE,
+    type PublishReceipt,
     readPublishReceipt,
 } from "../publish/receipt.ts";
 import type { Result } from "../result.ts";
@@ -78,6 +80,36 @@ export async function exists(file: string): Promise<boolean> {
     }
 }
 
+// The publish receipt each open attempt of `stage` lacks: none, one whose digest is not its
+// record's, or, with `quiet` (spec autonomous-run, "Leaving external-review needs a quiet round"),
+// one that is not a quiet round's. A receipt that cannot be read is the error.
+export async function unpublishedReasons(
+    state: string,
+    ref: TaskRef,
+    stage: TransitionStage,
+    quiet: boolean,
+): Promise<Result<string[]>> {
+    const open = await openAttempts(state, ref, stage);
+    if (!open.ok) {
+        return open;
+    }
+    const reasons: string[] = [];
+    for (const attempt of open.value) {
+        const dir = attemptDir(state, attempt);
+        const receipt = await readPublishReceipt(dir);
+        if (!receipt.ok) {
+            return receipt;
+        }
+        const detail = await unpublished({ stage, attempt, dir }, receipt.value, quiet);
+        if (detail !== null) {
+            reasons.push(detail);
+        }
+    }
+    return { ok: true, value: reasons };
+}
+
+// A code review's receipt is checked here; an external review's is one of its guards
+// (./guards.ts), so it is reported with every other reason that holds.
 async function awaitedPublish(
     state: string,
     ref: TaskRef,
@@ -86,22 +118,8 @@ async function awaitedPublish(
     if (stage !== "code-review") {
         return { ok: true, value: null };
     }
-    const open = await openAttempts(state, ref, stage);
-    if (!open.ok) {
-        return open;
-    }
-    for (const id of open.value) {
-        const dir = attemptDir(state, id);
-        const receipt = await readPublishReceipt(dir);
-        if (!receipt.ok) {
-            return receipt;
-        }
-        const detail = await unpublished(id, dir, receipt.value?.findingsDigest ?? null);
-        if (detail !== null) {
-            return { ok: true, value: detail };
-        }
-    }
-    return { ok: true, value: null };
+    const reasons = await unpublishedReasons(state, ref, stage, false);
+    return reasons.ok ? { ok: true, value: reasons.value[0] ?? null } : reasons;
 }
 
 // Whether the `findings.json` in `dir` is the record whose digest `published` names.
@@ -114,18 +132,21 @@ export async function isCurrentFindings(dir: string, published: string): Promise
 }
 
 async function unpublished(
-    attempt: AttemptId,
-    dir: string,
-    published: string | null,
+    { stage, attempt, dir }: { stage: TransitionStage; attempt: AttemptId; dir: string },
+    receipt: PublishReceipt | null,
+    quiet: boolean,
 ): Promise<string | null> {
     const publish = `publish it with --apply --publish ${attempt}`;
-    if (published === null) {
-        const file = join(dir, PUBLISH_RECEIPT_FILE);
-        return `code-review attempt ${attempt} has no publish receipt at ${file}, so its record is not published; ${publish}, or discard the attempt`;
+    const file = join(dir, PUBLISH_RECEIPT_FILE);
+    if (receipt === null) {
+        return `${stage} attempt ${attempt} has no publish receipt at ${file}, so its record is not published; ${publish}, or discard the attempt`;
     }
-    return (await isCurrentFindings(dir, published))
-        ? null
-        : `code-review attempt ${attempt} has a ${FINDINGS_FILE} that differs from the one published, so its record is not published; ${publish}, or discard the attempt`;
+    if (!(await isCurrentFindings(dir, receipt.findingsDigest))) {
+        return `${stage} attempt ${attempt} has a ${FINDINGS_FILE} that differs from the one published, so its record is not published; ${publish}, or discard the attempt`;
+    }
+    return quiet && !isQuietReceipt(receipt)
+        ? `${stage} attempt ${attempt} has a publish receipt at ${file} that is not a quiet round's, so the external review is not over; leave the task to its next round, or discard the attempt`
+        : null;
 }
 
 export async function awaitedDetails(

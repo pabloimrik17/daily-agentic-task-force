@@ -322,6 +322,7 @@ function stageEnv(
             openspec: io.openspec,
             git: io.git,
         },
+        externalReview: { config: config.review.external, now: ctx.now },
     };
 }
 

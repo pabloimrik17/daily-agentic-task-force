@@ -4,13 +4,13 @@
         {
             "name": "CodeRabbit",
             "status": "completed",
-            "conclusion": "success",
+            "conclusion": "neutral",
             "html_url": "https://github.com/demo/repo/runs/1001",
-            "started_at": "2026-03-12T09:56:02Z",
-            "completed_at": "2026-03-12T10:03:41Z",
+            "started_at": "2026-11-25T20:36:27Z",
+            "completed_at": "2026-11-25T20:36:27Z",
             "output": {
-                "title": "Review completed",
-                "summary": "CodeRabbit reviewed 6 files and left 3 comments."
+                "title": "Review rate limited",
+                "summary": "Result: Rate limited - Review rate limited"
             },
             "app": {
                 "slug": "coderabbitai"
@@ -18,14 +18,14 @@
         },
         {
             "name": "Greptile Review",
-            "status": "in_progress",
-            "conclusion": null,
+            "status": "completed",
+            "conclusion": "success",
             "html_url": "https://github.com/demo/repo/runs/1002",
-            "started_at": "2026-03-12T09:56:20Z",
-            "completed_at": null,
+            "started_at": "2026-11-25T20:36:18Z",
+            "completed_at": "2026-11-25T20:38:27Z",
             "output": {
-                "title": null,
-                "summary": null
+                "title": "Base review",
+                "summary": "Greptile has reviewed the Pull Request.\n\n79 files reviewed, 0 comments added."
             },
             "app": {
                 "slug": "greptile-apps"
@@ -34,30 +34,32 @@
         {
             "name": "pullfrog",
             "status": "completed",
-            "conclusion": "failure",
+            "conclusion": "cancelled",
             "html_url": "https://github.com/demo/repo/runs/1003",
-            "started_at": "2026-03-12T09:56:11Z",
-            "completed_at": "2026-03-12T09:58:09Z",
+            "started_at": "2026-11-25T20:36:16Z",
+            "completed_at": "2026-11-25T20:36:32Z",
             "output": {
-                "title": "Review failed",
-                "summary": "The review could not read the diff."
+                "title": "Pullfrog run cancelled",
+                "summary": "The Pullfrog run was cancelled before it finished."
             },
             "app": {
                 "slug": "pullfrog"
             }
         },
         {
-            "name": "lint",
-            "status": "queued",
-            "conclusion": null,
+            "name": "audit",
+            "status": "completed",
+            "conclusion": "success",
             "html_url": "https://github.com/demo/repo/runs/1004",
-            "started_at": null,
-            "completed_at": null,
+            "started_at": "2026-11-25T20:36:19Z",
+            "completed_at": "2026-11-25T20:36:39Z",
             "output": {
                 "title": null,
                 "summary": null
             },
-            "app": null
+            "app": {
+                "slug": "github-actions"
+            }
         }
     ]
 }

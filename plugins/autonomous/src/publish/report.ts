@@ -28,7 +28,7 @@ interface PublishedReview {
 }
 
 // A review bot's request for changes a quiet round dismissed.
-export interface DismissedReview {
+interface DismissedReview {
     bot: string; // the bot's id in review.external.bots
     url: string;
 }
