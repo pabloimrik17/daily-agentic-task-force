@@ -6,7 +6,9 @@ import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import type { RunArgs } from "../args.ts";
+import type { CapacityData } from "../capacity/step.ts";
 import type { ConfigLoad } from "../config.ts";
+import type { ContextReader } from "../context/types.ts";
 import type { Exec } from "../exec.ts";
 import { config, trackers } from "../label-triage/test-fixtures.ts";
 import { NOW } from "../quota-gate/test-fixtures.ts";
@@ -14,7 +16,9 @@ import type { RunContext, StepResult } from "../runner.ts";
 import { fakeReader, selectContext, workTask } from "../select/test-fixtures.ts";
 import type { SelectData, SelectedUnit, WorkTask } from "../select/types.ts";
 import type { SessionManager, SessionSpec } from "../sessions/manager.ts";
+import type { PullRequests } from "../pull-request/port.ts";
 import type { StagePrerequisites } from "../stages/stage.ts";
+import { grillMeStage } from "../stages/grill-me/stage.ts";
 import { testStage } from "../stages/test.ts";
 import type { WorkspaceManager } from "../workspace/manager.ts";
 import { launchStep } from "./launch.ts";
@@ -103,9 +107,28 @@ function selectResult(overrides: Partial<SelectedUnit> = {}): StepResult<SelectD
             machineScope: "personal",
             selected,
             candidates: [],
+            setAside: [],
             excluded: [],
             comparison: null,
+            readyToClose: [],
         },
+    };
+}
+
+function capacityResult(full: { grill: boolean; work: boolean }): StepResult<CapacityData> {
+    const kind = (isFull: boolean) => ({
+        occupied: isFull ? 1 : 0,
+        limit: 1,
+        source: "default" as const,
+        attempts: [],
+        full: isFull,
+    });
+    return {
+        step: "capacity",
+        tier: "code",
+        outcome: "advance",
+        reasons: [],
+        data: { grill: kind(full.grill), work: kind(full.work) },
     };
 }
 
@@ -153,6 +176,13 @@ function setup(options: Setup = {}) {
             ...options.args,
         },
     });
+    const readers = {
+        context: { source: "linear", read: () => Promise.resolve({ ok: false, error: "unused" }) },
+        pullRequests: {} as PullRequests,
+        openspec: (() => Promise.resolve({ ok: true, stdout: "" })) as Exec,
+        git: (() => Promise.resolve({ ok: true, stdout: "" })) as Exec,
+    } satisfies { context: ContextReader; pullRequests: PullRequests; openspec: Exec; git: Exec };
+    const bound: string[] = [];
     const ctx: RunContext = {
         ...base,
         io: {
@@ -161,10 +191,21 @@ function setup(options: Setup = {}) {
             sessions: () => sessions,
             workspace: () => workspace,
             naming: options.naming ?? answering("Stage manager"),
+            context: () => ({
+                beads: readers.context,
+                github: readers.context,
+                linear: readers.context,
+            }),
+            pullRequests: (directory) => {
+                bound.push(directory);
+                return readers.pullRequests;
+            },
+            openspec: readers.openspec,
+            git: readers.git,
             state,
         },
     };
-    return { ctx, calls, sessions, workspace, trackers: tracked };
+    return { ctx, calls, sessions, workspace, trackers: tracked, readers, bound };
 }
 
 const SELECTED_PATH = { args: { task: undefined, stage: undefined } };
@@ -251,6 +292,19 @@ describe("launch: the unit", () => {
         expect(workspace.calls).toEqual([]);
     });
 
+    it("waits as excluded when a supplied task carries a stage with no implementation", async () => {
+        const qa = { ...TASK, labels: ["personal", "AFK", "qa"] };
+        const { ctx, workspace, sessions } = setup({ tasks: [qa], args: { stage: undefined } });
+
+        expect(await launchStep.run(ctx)).toMatchObject({
+            outcome: "wait",
+            reasons: ["linear:DOT-109 is excluded: unsupported stage"],
+            data: { input: "supplied", excluded: { id: "DOT-109", reason: "unsupported-stage" } },
+        });
+        expect(workspace.calls).toEqual([]);
+        expect(sessionCalls(sessions.calls)).toEqual([]);
+    });
+
     it("launches --stage test on a task whose next stage is proposal", async () => {
         const afk = { ...TASK, labels: ["personal", "AFK", "proposal"] };
         const { ctx } = setup({ tasks: [afk] });
@@ -262,21 +316,55 @@ describe("launch: the unit", () => {
     });
 });
 
-describe("launch: preconditions", () => {
-    // parseArgs refuses `--stage proposal` and selection supports grill-me only, so the args are set here.
-    it("waits naming a stage without implementation, before any workspace", async () => {
-        const { ctx, workspace, sessions } = setup({ args: { stage: "proposal" } });
+describe("launch: the slots of the loop", () => {
+    // The task was selected in `grill-me` with a free grill slot, and carries `proposal` now.
+    const MOVED = { ...TASK, labels: ["personal", "AFK", "proposal"] };
+    const WORK_FULL = capacityResult({ grill: false, work: true });
 
-        expect(await launchStep.run(ctx)).toMatchObject({
-            step: "launch",
-            tier: "code",
+    it("waits in an iteration when the task moved to a kind that is full", async () => {
+        const { ctx, workspace } = setup({
+            tasks: [MOVED],
+            args: { task: undefined, stage: undefined, loop: true },
+            results: [WORK_FULL, selectResult()],
+        });
+
+        const result = await launchStep.run(ctx);
+
+        expect(result).toMatchObject({
             outcome: "wait",
-            reasons: ["stage proposal has no implementation"],
-            data: { stage: "proposal", repository: null },
+            data: { input: "selected", excluded: { id: "DOT-109", reason: "no-free-slot" } },
         });
         expect(workspace.calls).toEqual([]);
-        expect(sessionCalls(sessions.calls)).toEqual([]);
     });
+
+    it("does not refuse a launch outside the loop for a full kind", async () => {
+        const { ctx } = setup({ tasks: [MOVED], results: [WORK_FULL] });
+
+        const result = await launchStep.run(ctx);
+
+        expect(result).toMatchObject({ outcome: "advance", data: { stage: "test" } });
+    });
+});
+
+describe("launch: preconditions", () => {
+    // Selection excludes a task in a stage without an implementation, so none reaches this
+    // guard; the args force a declared stage here.
+    it.each(["qa", "external-review", "wrap-up"] as const)(
+        "Declared stage without implementation reaches launch: %s waits naming a stage without implementation, before any workspace",
+        async (stage) => {
+            const { ctx, workspace, sessions } = setup({ args: { stage } });
+
+            expect(await launchStep.run(ctx)).toMatchObject({
+                step: "launch",
+                tier: "code",
+                outcome: "wait",
+                reasons: [`stage ${stage} has no implementation`],
+                data: { stage, repository: null },
+            });
+            expect(workspace.calls).toEqual([]);
+            expect(sessionCalls(sessions.calls)).toEqual([]);
+        },
+    );
 
     it("waits when the task read again carries taken, and launches nothing", async () => {
         const taken = { ...TASK, labels: [...TASK.labels, "taken"] };
@@ -367,10 +455,10 @@ describe("launch: stage prerequisites", () => {
         expect(workspace.calls).toEqual([]);
     });
 
-    it("is checked before the open-attempt and repository checks", async () => {
+    it("is checked before the open-attempt check", async () => {
         unmet();
         await writeRecord(state, record());
-        const { ctx } = setup({ details: {} });
+        const { ctx } = setup();
 
         expect((await launchStep.run(ctx)).reasons).toEqual([REASON]);
     });
@@ -411,7 +499,92 @@ describe("launch: stage prerequisites", () => {
 
         await launchStep.run(ctx);
 
-        expect(spy).toHaveBeenCalledWith({ tool: "codex", home: "/unused/home" });
+        expect(spy).toHaveBeenCalledWith(
+            expect.objectContaining({ tool: "codex", home: "/unused/home" }),
+        );
+    });
+
+    it("is given the task, the repository's absolute path, the branch and the readers", async () => {
+        const spy = prerequisites({ ok: true, context: {} });
+        const { ctx, readers, bound } = setup({ args: { apply: false } });
+
+        const result = await launchStep.run(ctx);
+
+        expect(spy).toHaveBeenCalledOnce();
+        expect(spy.mock.calls[0]![0]).toEqual({
+            tool: "claude",
+            home: "/unused/home",
+            task: expect.objectContaining({
+                source: "linear",
+                id: "DOT-109",
+                project: "Dotfiles",
+            }) as WorkTask,
+            repository: join(root, "dotfiles"),
+            branch: result.data.branch,
+            readers,
+        });
+        expect(bound).toEqual([join(root, "dotfiles")]);
+    });
+
+    it("is given the branch of an earlier attempt, the one the workspace will use", async () => {
+        const spy = prerequisites({ ok: true, context: {} });
+        await writeRecord(
+            state,
+            record({
+                state: "discarded",
+                workspace: { ...record().workspace, branch: "feature/DOT-109-an-earlier-title" },
+            }),
+        );
+        const { ctx } = setup({ args: { apply: false } });
+
+        await launchStep.run(ctx);
+
+        expect(spy.mock.calls[0]![0].branch).toBe("feature/DOT-109-an-earlier-title");
+    });
+
+    describe("about the repository", () => {
+        const lacking = (env: { repository: string }): StagePrerequisites => ({
+            ok: false,
+            reason: `${env.repository} has no openspec directory`,
+        });
+
+        it("Prerequisite about the repository: waits naming the repository and what it lacks, and writes nothing", async () => {
+            vi.spyOn(testStage, "prerequisites").mockImplementation((env) =>
+                Promise.resolve(lacking(env)),
+            );
+            const { ctx, calls, workspace, sessions } = setup();
+
+            expect(await launchStep.run(ctx)).toMatchObject({
+                outcome: "wait",
+                reasons: [`${join(root, "dotfiles")} has no openspec directory`],
+                data: { workspace: null, attempt: null },
+            });
+            expect(await readdir(state)).toEqual([]);
+            expect(calls.filter((call) => /addLabel/.test(call))).toEqual([]);
+            expect(sessionCalls(sessions.calls)).toEqual([]);
+            expect(workspace.calls).toEqual([]);
+        });
+
+        it("No repository inferred: waits with the inference's reason and does not check the prerequisites", async () => {
+            const spy = prerequisites({ ok: true, context: {} });
+            const { ctx, workspace } = setup({ details: {} });
+
+            expect(await launchStep.run(ctx)).toMatchObject({
+                outcome: "wait",
+                reasons: ["no repository under the workspace root matches linear signals [none]"],
+            });
+            expect(spy).not.toHaveBeenCalled();
+            expect(workspace.calls).toEqual([]);
+        });
+
+        it("No repository inferred: the unchanged reason wins over an unmet prerequisite", async () => {
+            unmet();
+            const { ctx } = setup({ details: {} });
+
+            expect((await launchStep.run(ctx)).reasons).toEqual([
+                "no repository under the workspace root matches linear signals [none]",
+            ]);
+        });
     });
 
     it("hands the context to the prompt, which the prompt file then follows", async () => {
@@ -724,6 +897,47 @@ describe("launch: session title and group", () => {
 
         expect((await launchStep.run(ctx)).data.group).toBe(group);
         expect((await readAttempt()).session?.group).toBe(group);
+    });
+});
+
+describe("launch: The attempt keeps its agent arguments", () => {
+    afterEach(() => {
+        vi.restoreAllMocks();
+    });
+
+    it("Grill-me attempt launched: the record holds --model opus --effort high from the first write", async () => {
+        vi.spyOn(grillMeStage, "prerequisites").mockResolvedValue({ ok: true, context: {} });
+        vi.spyOn(grillMeStage, "prompt").mockReturnValue("THE PROMPT");
+        const grill = "linear:DOT-109:grill-me:1";
+        const written: (string[] | null)[] = [];
+        const { ctx } = setup({
+            args: { stage: "grill-me" },
+            sessions: {
+                // the pending and taken writes are on disk before the session is created
+                create: async () => {
+                    written.push((await readAttempt(grill)).agentArgs);
+                    return { ok: true, value: { id: SESSION } };
+                },
+            },
+        });
+
+        await launchStep.run(ctx);
+
+        expect(written).toEqual([["--model", "opus", "--effort", "high"]]);
+        expect((await readAttempt(grill)).agentArgs).toEqual([
+            "--model",
+            "opus",
+            "--effort",
+            "high",
+        ]);
+    });
+
+    it("holds what the stage declares for the configured tool", async () => {
+        const { ctx } = setup();
+
+        await launchStep.run(ctx);
+
+        expect((await readAttempt()).agentArgs).toEqual(testStage.agentArgs("claude"));
     });
 });
 

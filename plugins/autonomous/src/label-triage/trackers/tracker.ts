@@ -29,9 +29,9 @@ export interface Tracker {
     listTasks(): Promise<TrackerResult<TrackerTask[]>>; // only open tasks (per source: see beads.ts, github.ts, linear.ts)
     readTask(id: string): Promise<TrackerResult<TrackerTask>>;
     addLabel(id: string, label: string): Promise<TrackerResult<void>>;
-    // Two callers, neither of them triage: the stage sessions remove `taken`; the
-    // transition removes the stage it leaves and the autonomy it replaces. Removing a
-    // label the task does not carry is tracker-defined: read the task first.
+    // Three callers: the stage sessions remove `taken`; the transition removes the stage
+    // it leaves and the autonomy it replaces; label triage removes `triage-me` and only
+    // that. Removing a label the task does not carry is tracker-defined: read the task first.
     removeLabel(id: string, label: string): Promise<TrackerResult<void>>;
     updateDescription(id: string, file: string): Promise<TrackerResult<void>>; // file: path of the new description
     addComment(id: string, file: string): Promise<TrackerResult<void>>; // file: path of the comment body

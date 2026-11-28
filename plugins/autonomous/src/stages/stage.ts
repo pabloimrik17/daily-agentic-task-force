@@ -2,12 +2,26 @@
 // written, and what it reads reaches the synchronous `prompt` as `context`.
 
 import type { AttemptRecord } from "../attempts/record.ts";
+import type { ContextReader } from "../context/types.ts";
+import type { Exec } from "../exec.ts";
 import type { TrackerTask } from "../label-triage/trackers/tracker.ts";
+import type { PullRequests } from "../pull-request/port.ts";
 import type { WorkTask } from "../select/types.ts";
 import type { SessionTool } from "../sessions/manager.ts";
 
-// Every stage the system knows: the selectable ones (select's `StageName`) and `test`.
-export const STAGE_IDS = ["test", "grill-me", "proposal"] as const;
+// Every stage an attempt may name: `test` and the stage labels, except `ready-to-merge`,
+// where no session ever runs.
+export const STAGE_IDS = [
+    "test",
+    "grill-me",
+    "proposal",
+    "implement",
+    "verify",
+    "code-review",
+    "qa",
+    "external-review",
+    "wrap-up",
+] as const;
 
 export type StageId = (typeof STAGE_IDS)[number];
 
@@ -15,9 +29,20 @@ export function isStageId(value: string): value is StageId {
     return (STAGE_IDS as readonly string[]).includes(value);
 }
 
+interface StageReaders {
+    context: ContextReader; // of the task's source
+    pullRequests: PullRequests; // bound to the repository
+    openspec: Exec;
+    git: Exec; // run with `-C <directory>`
+}
+
 export interface StageEnv {
     tool: SessionTool;
     home: string;
+    task: WorkTask; // read again and detailed
+    repository: string; // absolute path
+    branch: string; // the workspace branch the attempt will use
+    readers: StageReaders;
 }
 
 export type StageContext = Readonly<Record<string, string>>;
@@ -41,3 +66,12 @@ export interface Stage {
     prompt(input: StagePromptInput): string; // the whole prompt file
     completed(task: TrackerTask): boolean; // the tracker check; reconcile checks the marker
 }
+
+// The model and effort of grill-me and the OpenSpec stages; DOT-119 replaces the fixed model. No
+// codex flags: their prerequisites never let a codex session start.
+const OPUS_HIGH: Record<SessionTool, readonly string[]> = {
+    claude: ["--model", "opus", "--effort", "high"],
+    codex: [],
+};
+
+export const opusHighArgs = (tool: SessionTool): string[] => [...OPUS_HIGH[tool]];

@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-import { taskKey } from "../attempts/record.ts";
+import { type TaskKey, taskKey } from "../attempts/record.ts";
 import type { Derivation } from "./rules.ts";
 import { inertDocumentMethods } from "./test-fixtures.ts";
 import type {
@@ -10,12 +10,14 @@ import type {
     TrackerTask,
     Trackers,
 } from "./trackers/tracker.ts";
-import { applyDerivations, BOOTSTRAP_HINT, labelCheckFor, missingLabelDetail } from "./write.ts";
+import { applyDerivations, labelCheckFor, missingLabelDetail } from "./write.ts";
 
 interface FakeState {
     labels: string[];
     addLabelResult?: (label: string) => TrackerResult<void>;
     readTaskResult?: () => TrackerResult<TrackerTask>;
+    removeLabelResult?: TrackerResult<void>;
+    keepsOnRemove?: boolean; // the removal command succeeds and the label stays
 }
 
 // `labels` makes the tracker one that creates labels, listing these (or failing with a
@@ -31,7 +33,15 @@ function fakeTracker(
         labelScopes: [],
         createsLabels: labels !== undefined,
         listTasks: () => Promise.resolve({ ok: true, value: [] }),
-        removeLabel: () => Promise.reject(new Error("triage never removes a label")),
+        removeLabel: (id, name) => {
+            calls.push(`${source}:removeLabel:${id}:${name}`);
+            const state = states.get(id);
+            const result = state?.removeLabelResult ?? { ok: true, value: undefined };
+            if (result.ok && state !== undefined && state.keepsOnRemove !== true) {
+                state.labels = state.labels.filter((label) => label !== name);
+            }
+            return Promise.resolve(result);
+        },
         addLabel: (id, label) => {
             calls.push(`${source}:addLabel:${id}:${label}`);
             const state = states.get(id);
@@ -918,7 +928,6 @@ describe("applyDerivations: the label check without --apply", () => {
 
 describe("missingLabelDetail", () => {
     it("names the label, the source and the bootstrap flag", () => {
-        expect(BOOTSTRAP_HINT).toBe("run --bootstrap-labels");
         expect(missingLabelDetail("proposal", "linear")).toBe(
             "proposal is missing on linear; run --bootstrap-labels",
         );
@@ -957,5 +966,624 @@ describe("labelCheckFor", () => {
             fakeTracker("github", [], new Map(), "gh label list: boom"),
         );
         expect(check).toEqual({ ok: false, error: "gh label list: boom" });
+    });
+});
+
+function tasksOf(...given: TrackerTask[]): Map<TaskKey, TrackerTask> {
+    return new Map(given.map((one) => [taskKey(one.source, one.id), one]));
+}
+
+// Fakes that hold the listed tasks, so addLabel and removeLabel act on what readTask returns.
+function statesOf(...given: TrackerTask[]): Map<string, FakeState> {
+    return new Map(given.map((one) => [one.id, { labels: [...one.labels] }]));
+}
+
+function marks(...given: TrackerTask[]): Set<TaskKey> {
+    return new Set(given.map((one) => taskKey(one.source, one.id)));
+}
+
+describe("applyDerivations: Mark the tasks left for the human", () => {
+    it("Doubt in a run with apply: triage-me is added to the Beads task and its other labels remain", async () => {
+        const calls: string[] = [];
+        const doubt = task("beads", "bd-1", ["personal"]);
+        const states = statesOf(doubt);
+        const beads = fakeTracker("beads", calls, states);
+        const written = await applyDerivations(
+            [],
+            tasksOf(doubt),
+            trackersOf(beads, beads, beads),
+            true,
+            marks(doubt),
+        );
+        expect(written.marked).toEqual([
+            { source: "beads", taskId: "bd-1", status: "applied", detail: null },
+        ]);
+        expect(written.unmarked).toEqual([]);
+        expect(written.failures).toEqual([]);
+        expect(states.get("bd-1")?.labels).toEqual(["personal", "triage-me"]);
+        expect(calls).toEqual(["beads:addLabel:bd-1:triage-me", "beads:readTask:bd-1"]);
+    });
+
+    it("Doubt in an iteration of the loop: triage-me is added to the GitHub task, checked in its repository", async () => {
+        const calls: string[] = [];
+        const doubt = task("github", "owner/repo#3", ["AFK"]);
+        const states = statesOf(doubt);
+        const github = fakeTracker("github", calls, states, [label("owner/repo", "triage-me")]);
+        const beads = fakeTracker("beads", calls, new Map());
+        const written = await applyDerivations(
+            [],
+            tasksOf(doubt),
+            trackersOf(beads, github, beads),
+            true,
+            marks(doubt),
+        );
+        expect(written.marked).toEqual([
+            { source: "github", taskId: "owner/repo#3", status: "applied", detail: null },
+        ]);
+        expect(states.get("owner/repo#3")?.labels).toEqual(["AFK", "triage-me"]);
+        expect(calls).toEqual([
+            "github:listLabels",
+            "github:addLabel:owner/repo#3:triage-me",
+            "github:readTask:owner/repo#3",
+        ]);
+    });
+
+    it("Run without apply: the mark is reported as proposed and no write is issued", async () => {
+        const calls: string[] = [];
+        const doubt = task("beads", "bd-1", ["work"]);
+        const beads = fakeTracker("beads", calls, statesOf(doubt));
+        const written = await applyDerivations(
+            [],
+            tasksOf(doubt),
+            trackersOf(beads, beads, beads),
+            false,
+            marks(doubt),
+        );
+        expect(written.marked).toEqual([
+            { source: "beads", taskId: "bd-1", status: "proposed", detail: null },
+        ]);
+        expect(calls).toEqual([]);
+    });
+
+    it("One group written, one in doubt: the task gains work, then triage-me", async () => {
+        const calls: string[] = [];
+        const doubt = task("beads", "bd-1", ["nazaries"]);
+        const states = statesOf(doubt);
+        const beads = fakeTracker("beads", calls, states);
+        const written = await applyDerivations(
+            [derivation()],
+            tasksOf(doubt),
+            trackersOf(beads, beads, beads),
+            true,
+            marks(doubt),
+        );
+        expect(written.records).toEqual([{ ...derivation(), status: "applied", detail: null }]);
+        expect(written.marked).toEqual([
+            { source: "beads", taskId: "bd-1", status: "applied", detail: null },
+        ]);
+        expect(states.get("bd-1")?.labels).toEqual(["nazaries", "work", "triage-me"]);
+        expect(calls).toEqual([
+            "beads:addLabel:bd-1:work",
+            "beads:readTask:bd-1",
+            "beads:addLabel:bd-1:triage-me",
+            "beads:readTask:bd-1",
+        ]);
+    });
+
+    it("skips a task to mark that already carries triage-me", async () => {
+        const calls: string[] = [];
+        const marked = task("beads", "bd-1", ["work", "triage-me"]);
+        const beads = fakeTracker("beads", calls, statesOf(marked));
+        const written = await applyDerivations(
+            [],
+            tasksOf(marked),
+            trackersOf(beads, beads, beads),
+            true,
+            marks(marked),
+        );
+        expect(written.marked).toEqual([]);
+        expect(written.unmarked).toEqual([]);
+        expect(calls).toEqual([]);
+    });
+
+    it("fails a mark whose read-back lacks it, as a write failure that stops the source", async () => {
+        const calls: string[] = [];
+        const first = task("linear", "DOT-1", ["work"]);
+        const second = task("linear", "DOT-2", ["personal"]);
+        const complete = task("linear", "DOT-3", ["work", "AFK", "proposal", "triage-me"]);
+        const states = statesOf(first, second, complete);
+        states.set("DOT-1", {
+            labels: ["work"],
+            readTaskResult: () => ({ ok: true, value: task("linear", "DOT-1", ["work"]) }),
+        });
+        const linear = fakeTracker("linear", calls, states, [label("workspace", "triage-me")]);
+        const beads = fakeTracker("beads", calls, new Map());
+        const pending = applyDerivations(
+            [],
+            tasksOf(first, second, complete),
+            trackersOf(beads, beads, linear),
+            true,
+            marks(first, second),
+        );
+        await vi.runAllTimersAsync();
+        const written = await pending;
+        const error =
+            "read-back mismatch: before [work] + [triage-me] → after [work] (read 6 times over 30 s)";
+        const skipped = "skipped after a write failure on linear";
+        expect(written.marked).toEqual([
+            { source: "linear", taskId: "DOT-1", status: "failed", detail: error },
+            { source: "linear", taskId: "DOT-2", status: "proposed", detail: skipped },
+        ]);
+        expect(written.unmarked).toEqual([
+            { source: "linear", taskId: "DOT-3", status: "proposed", detail: skipped },
+        ]);
+        expect(written.failures).toEqual([
+            {
+                source: "linear",
+                taskId: "DOT-1",
+                labels: ["triage-me"],
+                before: ["work"],
+                after: ["work"],
+                error,
+            },
+        ]);
+        expect(calls.filter((call) => !call.includes("readTask"))).toEqual([
+            "linear:listLabels",
+            "linear:addLabel:DOT-1:triage-me",
+        ]);
+    });
+
+    it("fails a mark on an addLabel error with no read-back, and lets other sources mark", async () => {
+        const calls: string[] = [];
+        const error = "gh issue edit: gh CLI not found on PATH";
+        const failing = task("github", "owner/repo#1", []);
+        const states = statesOf(failing);
+        states.set("owner/repo#1", { labels: [], addLabelResult: () => ({ ok: false, error }) });
+        const github = fakeTracker("github", calls, states, [label("owner/repo", "triage-me")]);
+        const doubt = task("linear", "DOT-1", ["work"]);
+        const linear = fakeTracker("linear", calls, statesOf(doubt), [
+            label("workspace", "triage-me"),
+        ]);
+        const beads = fakeTracker("beads", calls, new Map());
+        const written = await applyDerivations(
+            [],
+            tasksOf(failing, doubt),
+            trackersOf(beads, github, linear),
+            true,
+            marks(failing, doubt),
+        );
+        expect(written.marked).toEqual([
+            { source: "github", taskId: "owner/repo#1", status: "failed", detail: error },
+            { source: "linear", taskId: "DOT-1", status: "applied", detail: null },
+        ]);
+        expect(written.failures).toEqual([
+            {
+                source: "github",
+                taskId: "owner/repo#1",
+                labels: ["triage-me"],
+                before: [],
+                after: null,
+                error,
+            },
+        ]);
+    });
+
+    it("fails the first mark of a source whose labels cannot be listed, stopping it", async () => {
+        const calls: string[] = [];
+        const error = "linear label list --all --json: Linear CLI is not authenticated";
+        const first = task("linear", "DOT-1", []);
+        const second = task("linear", "DOT-2", []);
+        const linear = fakeTracker("linear", calls, statesOf(first, second), error);
+        const beads = fakeTracker("beads", calls, new Map());
+        const written = await applyDerivations(
+            [],
+            tasksOf(first, second),
+            trackersOf(beads, beads, linear),
+            true,
+            marks(first, second),
+        );
+        expect(written.marked).toEqual([
+            { source: "linear", taskId: "DOT-1", status: "failed", detail: error },
+            {
+                source: "linear",
+                taskId: "DOT-2",
+                status: "proposed",
+                detail: "skipped after a write failure on linear",
+            },
+        ]);
+        expect(written.failures.map((failure) => [failure.taskId, failure.after])).toEqual([
+            ["DOT-1", null],
+        ]);
+        expect(calls).toEqual(["linear:listLabels"]);
+    });
+});
+
+describe("applyDerivations: Doubts that are not marked", () => {
+    it("does not mark a task of a source whose writes stopped, nor issue its write", async () => {
+        const calls: string[] = [];
+        const error = "bd label add: bd CLI not found on PATH";
+        const failing = task("beads", "bd-1", []);
+        const doubt = task("beads", "bd-2", ["work"]);
+        const states = statesOf(failing, doubt);
+        states.set("bd-1", { labels: [], addLabelResult: () => ({ ok: false, error }) });
+        const beads = fakeTracker("beads", calls, states);
+        const written = await applyDerivations(
+            [derivation()],
+            tasksOf(failing, doubt),
+            trackersOf(beads, beads, beads),
+            true,
+            marks(failing, doubt),
+        );
+        const skipped = "skipped after a write failure on beads";
+        expect(written.marked).toEqual([
+            { source: "beads", taskId: "bd-1", status: "proposed", detail: skipped },
+            { source: "beads", taskId: "bd-2", status: "proposed", detail: skipped },
+        ]);
+        expect(written.failures.map((failure) => failure.labels)).toEqual([["work"]]);
+        expect(calls).toEqual(["beads:addLabel:bd-1:work"]);
+    });
+
+    it("Label not bootstrapped: the mark is proposed with the bootstrap note, and the other Linear writes happen", async () => {
+        const calls: string[] = [];
+        const doubt = task("linear", "DOT-1", []);
+        const other = task("linear", "DOT-2", []);
+        const complete = task("linear", "DOT-3", ["work", "AFK", "proposal", "triage-me"]);
+        const states = statesOf(doubt, other, complete);
+        const linear = fakeTracker("linear", calls, states, [label("workspace", "personal")]);
+        const beads = fakeTracker("beads", calls, new Map());
+        const scope = derivation({ source: "linear", taskId: "DOT-1", labels: ["personal"] });
+        const written = await applyDerivations(
+            [scope],
+            tasksOf(doubt, other, complete),
+            trackersOf(beads, beads, linear),
+            true,
+            marks(doubt, other),
+        );
+        const detail = missingLabelDetail("triage-me", "linear");
+        expect(detail).toBe("triage-me is missing on linear; run --bootstrap-labels");
+        expect(written.records).toEqual([{ ...scope, status: "applied", detail: null }]);
+        expect(written.marked).toEqual([
+            { source: "linear", taskId: "DOT-1", status: "proposed", detail },
+            { source: "linear", taskId: "DOT-2", status: "proposed", detail },
+        ]);
+        expect(written.unmarked).toEqual([
+            { source: "linear", taskId: "DOT-3", status: "applied", detail: null },
+        ]);
+        expect(written.missing).toEqual([detail]);
+        expect(written.failures).toEqual([]);
+        expect(calls.filter((call) => !call.includes("readTask"))).toEqual([
+            "linear:listLabels",
+            "linear:addLabel:DOT-1:personal",
+            "linear:removeLabel:DOT-3:triage-me",
+        ]);
+    });
+
+    it("Label not bootstrapped in a dry run: the mark is proposed with the bootstrap note", async () => {
+        const calls: string[] = [];
+        const doubt = task("github", "owner/repo#1", []);
+        const github = fakeTracker("github", calls, statesOf(doubt), [
+            label("owner/other", "triage-me"),
+        ]);
+        const beads = fakeTracker("beads", calls, new Map());
+        const written = await applyDerivations(
+            [],
+            tasksOf(doubt),
+            trackersOf(beads, github, beads),
+            false,
+            marks(doubt),
+        );
+        const detail = missingLabelDetail("triage-me", "github");
+        expect(written.marked).toEqual([
+            { source: "github", taskId: "owner/repo#1", status: "proposed", detail },
+        ]);
+        expect(written.missing).toEqual([detail]);
+        expect(calls).toEqual(["github:listLabels"]);
+    });
+});
+
+describe("applyDerivations: Remove the mark from a complete task", () => {
+    it("Label added by the person: triage-me is removed and nothing else is removed", async () => {
+        const calls: string[] = [];
+        const marked = task("beads", "bd-1", ["personal", "HITL", "proposal", "triage-me"]);
+        const states = statesOf(marked);
+        const beads = fakeTracker("beads", calls, states);
+        const written = await applyDerivations(
+            [],
+            tasksOf(marked),
+            trackersOf(beads, beads, beads),
+            true,
+        );
+        expect(written.unmarked).toEqual([
+            { source: "beads", taskId: "bd-1", status: "applied", detail: null },
+        ]);
+        expect(written.marked).toEqual([]);
+        expect(states.get("bd-1")?.labels).toEqual(["personal", "HITL", "proposal"]);
+        expect(calls).toEqual(["beads:removeLabel:bd-1:triage-me", "beads:readTask:bd-1"]);
+    });
+
+    it("Completed by a rule in the same run: proposal is written, then triage-me is removed", async () => {
+        const calls: string[] = [];
+        const marked = task("beads", "bd-1", ["work", "AFK", "triage-me"]);
+        const states = statesOf(marked);
+        const beads = fakeTracker("beads", calls, states);
+        const proposal = derivation({ group: "stage", labels: ["proposal"] });
+        const written = await applyDerivations(
+            [proposal],
+            tasksOf(marked),
+            trackersOf(beads, beads, beads),
+            true,
+        );
+        expect(written.records).toEqual([{ ...proposal, status: "applied", detail: null }]);
+        expect(written.unmarked).toEqual([
+            { source: "beads", taskId: "bd-1", status: "applied", detail: null },
+        ]);
+        expect(states.get("bd-1")?.labels).toEqual(["work", "AFK", "proposal"]);
+        expect(calls).toEqual([
+            "beads:addLabel:bd-1:proposal",
+            "beads:readTask:bd-1",
+            "beads:removeLabel:bd-1:triage-me",
+            "beads:readTask:bd-1",
+        ]);
+    });
+
+    it("removes triage-me from a task deferred to the grill", async () => {
+        const calls: string[] = [];
+        const marked = task("beads", "bd-1", ["personal", "grill-me", "triage-me"]);
+        const beads = fakeTracker("beads", calls, statesOf(marked));
+        const written = await applyDerivations(
+            [],
+            tasksOf(marked),
+            trackersOf(beads, beads, beads),
+            true,
+        );
+        expect(written.unmarked.map((record) => record.status)).toEqual(["applied"]);
+    });
+
+    it("Still in doubt: a marked task with work and no autonomy or stage keeps triage-me", async () => {
+        const calls: string[] = [];
+        const marked = task("beads", "bd-1", ["work", "triage-me"]);
+        const beads = fakeTracker("beads", calls, statesOf(marked));
+        const written = await applyDerivations(
+            [],
+            tasksOf(marked),
+            trackersOf(beads, beads, beads),
+            true,
+        );
+        expect(written.unmarked).toEqual([]);
+        expect(calls).toEqual([]);
+    });
+
+    it("keeps triage-me on a marked task in conflict", async () => {
+        const calls: string[] = [];
+        const marked = task("beads", "bd-1", ["work", "AFK", "HITL", "proposal", "triage-me"]);
+        const beads = fakeTracker("beads", calls, statesOf(marked));
+        const written = await applyDerivations(
+            [],
+            tasksOf(marked),
+            trackersOf(beads, beads, beads),
+            true,
+        );
+        expect(written.unmarked).toEqual([]);
+        expect(calls).toEqual([]);
+    });
+
+    it("keeps triage-me on a marked task whose write failed or was skipped for a missing label", async () => {
+        const calls: string[] = [];
+        const missing = task("linear", "DOT-1", ["work", "AFK", "triage-me"]);
+        const failing = task("linear", "DOT-2", ["work", "AFK", "triage-me"]);
+        const states = statesOf(missing, failing);
+        states.set("DOT-2", {
+            labels: [...failing.labels],
+            addLabelResult: () => ({ ok: false, error: "linear issue update: boom" }),
+        });
+        const linear = fakeTracker("linear", calls, states, [label("workspace", "plan")]);
+        const beads = fakeTracker("beads", calls, new Map());
+        const written = await applyDerivations(
+            [
+                derivation({
+                    source: "linear",
+                    taskId: "DOT-1",
+                    group: "stage",
+                    labels: ["proposal"],
+                }),
+                derivation({
+                    source: "linear",
+                    taskId: "DOT-2",
+                    group: "stage",
+                    labels: ["plan"],
+                }),
+            ],
+            tasksOf(missing, failing),
+            trackersOf(beads, beads, linear),
+            true,
+        );
+        expect(written.records.map((record) => record.status)).toEqual(["proposed", "failed"]);
+        expect(written.unmarked).toEqual([]);
+        expect(calls.filter((call) => call.includes("removeLabel"))).toEqual([]);
+    });
+
+    it("without --apply proposes the removal, counting the labels it would write, and issues no call", async () => {
+        const calls: string[] = [];
+        const byPerson = task("beads", "bd-1", ["personal", "HITL", "proposal", "triage-me"]);
+        const byRule = task("beads", "bd-2", ["work", "AFK", "triage-me"]);
+        const beads = fakeTracker("beads", calls, statesOf(byPerson, byRule));
+        const written = await applyDerivations(
+            [derivation({ taskId: "bd-2", group: "stage", labels: ["proposal"] })],
+            tasksOf(byPerson, byRule),
+            trackersOf(beads, beads, beads),
+            false,
+        );
+        expect(written.unmarked).toEqual([
+            { source: "beads", taskId: "bd-1", status: "proposed", detail: null },
+            { source: "beads", taskId: "bd-2", status: "proposed", detail: null },
+        ]);
+        expect(calls).toEqual([]);
+    });
+
+    it("without --apply does not propose a removal that rests on a label the tracker lacks", async () => {
+        const calls: string[] = [];
+        const marked = task("linear", "DOT-1", ["work", "AFK", "triage-me"]);
+        const linear = fakeTracker("linear", calls, statesOf(marked), [
+            label("workspace", "triage-me"),
+        ]);
+        const beads = fakeTracker("beads", calls, new Map());
+        const written = await applyDerivations(
+            [
+                derivation({
+                    source: "linear",
+                    taskId: "DOT-1",
+                    group: "stage",
+                    labels: ["proposal"],
+                }),
+            ],
+            tasksOf(marked),
+            trackersOf(beads, beads, linear),
+            false,
+        );
+        expect(written.records.map((record) => record.status)).toEqual(["proposed"]);
+        expect(written.unmarked).toEqual([]);
+    });
+});
+
+describe("applyDerivations: A failed removal of the mark", () => {
+    it("Removal not confirmed: failed with the labels found, no write failure, and the source keeps going", async () => {
+        const calls: string[] = [];
+        const stuck = task("linear", "DOT-1", ["work", "AFK", "proposal", "triage-me"]);
+        const next = task("linear", "DOT-2", ["personal", "grill-me", "triage-me"]);
+        const states = statesOf(stuck, next);
+        states.set("DOT-1", { labels: [...stuck.labels], keepsOnRemove: true });
+        const linear = fakeTracker("linear", calls, states, "must not be listed");
+        const beads = fakeTracker("beads", calls, new Map());
+        const pending = applyDerivations(
+            [],
+            tasksOf(stuck, next),
+            trackersOf(beads, beads, linear),
+            true,
+        );
+        await vi.runAllTimersAsync();
+        const written = await pending;
+        expect(written.unmarked).toEqual([
+            {
+                source: "linear",
+                taskId: "DOT-1",
+                status: "failed",
+                detail: "triage-me still present after removal: [work, AFK, proposal, triage-me] (read 6 times over 30 s)",
+            },
+            { source: "linear", taskId: "DOT-2", status: "applied", detail: null },
+        ]);
+        expect(written.failures).toEqual([]);
+        expect(calls).toEqual([
+            "linear:removeLabel:DOT-1:triage-me",
+            ...Array<string>(6).fill("linear:readTask:DOT-1"),
+            "linear:removeLabel:DOT-2:triage-me",
+            "linear:readTask:DOT-2",
+        ]);
+    });
+
+    it("reports a removal command that fails with its error and the labels known, stopping nothing", async () => {
+        const calls: string[] = [];
+        const marked = task("beads", "bd-1", ["work", "AFK", "proposal", "triage-me"]);
+        const states = statesOf(marked);
+        states.set("bd-1", {
+            labels: [...marked.labels],
+            removeLabelResult: { ok: false, error: "bd label remove: boom" },
+        });
+        const beads = fakeTracker("beads", calls, states);
+        const doubt = task("linear", "DOT-1", []);
+        const linear = fakeTracker("linear", calls, statesOf(doubt), [
+            label("workspace", "triage-me"),
+        ]);
+        const written = await applyDerivations(
+            [],
+            tasksOf(marked, doubt),
+            trackersOf(beads, beads, linear),
+            true,
+            marks(doubt),
+        );
+        expect(written.unmarked).toEqual([
+            {
+                source: "beads",
+                taskId: "bd-1",
+                status: "failed",
+                detail: "bd label remove: boom (labels [work, AFK, proposal, triage-me])",
+            },
+        ]);
+        expect(written.marked.map((record) => record.status)).toEqual(["applied"]);
+        expect(written.failures).toEqual([]);
+    });
+
+    it("reports a read-back that fails after the removal with the read's error", async () => {
+        const calls: string[] = [];
+        const marked = task("beads", "bd-1", ["work", "AFK", "proposal", "triage-me"]);
+        const states = statesOf(marked);
+        states.set("bd-1", {
+            labels: [...marked.labels],
+            readTaskResult: () => ({ ok: false, error: "bd show: boom" }),
+        });
+        const beads = fakeTracker("beads", calls, states);
+        const written = await applyDerivations(
+            [],
+            tasksOf(marked),
+            trackersOf(beads, beads, beads),
+            true,
+        );
+        expect(written.unmarked).toEqual([
+            { source: "beads", taskId: "bd-1", status: "failed", detail: "bd show: boom" },
+        ]);
+        expect(written.failures).toEqual([]);
+    });
+});
+
+describe("applyDerivations: Trackers can remove a label", () => {
+    it("Triage never removes: no removal command when no task it reads carries triage-me", async () => {
+        const calls: string[] = [];
+        const done = task("beads", "bd-1", ["personal", "HITL", "proposal"]);
+        const doubt = task("beads", "bd-2", ["nazaries"]);
+        const beads = fakeTracker("beads", calls, statesOf(done, doubt));
+        await applyDerivations(
+            [derivation({ taskId: "bd-2" })],
+            tasksOf(done, doubt),
+            trackersOf(beads, beads, beads),
+            true,
+            marks(doubt),
+        );
+        expect(calls.filter((call) => call.includes("removeLabel"))).toEqual([]);
+    });
+
+    it("Triage removes only the triage label from a complete task", async () => {
+        const calls: string[] = [];
+        const marked = task("beads", "bd-1", ["work", "AFK", "bug", "triage-me"]);
+        const states = statesOf(marked);
+        const beads = fakeTracker("beads", calls, states);
+        await applyDerivations(
+            [derivation({ group: "stage", labels: ["proposal"] })],
+            tasksOf(marked),
+            trackersOf(beads, beads, beads),
+            true,
+        );
+        expect(calls.filter((call) => call.includes("removeLabel"))).toEqual([
+            "beads:removeLabel:bd-1:triage-me",
+        ]);
+        expect(states.get("bd-1")?.labels).toEqual(["work", "AFK", "bug", "proposal"]);
+    });
+});
+
+describe("applyDerivations: Write only with --apply, additively, with read-back", () => {
+    it("Default is read-only: marks and removals are proposed and no CLI write is issued", async () => {
+        const calls: string[] = [];
+        const doubt = task("beads", "bd-1", ["nazaries"]);
+        const marked = task("beads", "bd-2", ["personal", "HITL", "proposal", "triage-me"]);
+        const beads = fakeTracker("beads", calls, statesOf(doubt, marked));
+        const written = await applyDerivations(
+            [derivation()],
+            tasksOf(doubt, marked),
+            trackersOf(beads, beads, beads),
+            false,
+            marks(doubt),
+        );
+        expect(
+            [...written.records, ...written.marked, ...written.unmarked].map((r) => r.status),
+        ).toEqual(["proposed", "proposed", "proposed"]);
+        expect(calls).toEqual([]);
     });
 });

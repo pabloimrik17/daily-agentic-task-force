@@ -153,6 +153,21 @@ describe("parseRecord", () => {
         expect(parse((r) => (r.attempt = 0))).toThrow("$.attempt");
     });
 
+    it.each(["code-review", "qa", "external-review", "wrap-up"] as const)(
+        "reads a record of the declared stage %s, whether or not it has an implementation",
+        (stage) => {
+            const declared = record({ id: `linear:DOT-109:${stage}:1`, stage });
+            expect(parseRecord(structuredClone(declared))).toEqual(declared);
+        },
+    );
+
+    it("rejects a record naming ready-to-merge, a stage label no attempt names", () => {
+        const copy = structuredClone(record()) as unknown as Record<string, unknown>;
+        copy.id = "linear:DOT-109:ready-to-merge:1";
+        copy.stage = "ready-to-merge";
+        expect(() => parseRecord(copy)).toThrow("$.stage must be one of");
+    });
+
     it("rejects unknown keys, missing fields and bad nested values", () => {
         expect(parse((r) => (r.extra = 1))).toThrow("$.extra");
         expect(parse((r) => delete r.taken)).toThrow("$.taken");
@@ -162,6 +177,36 @@ describe("parseRecord", () => {
             "$.cleanup.pending",
         );
         expect(parse((r) => ((r.task as { extra?: 1 }).extra = 1))).toThrow("$.task.extra");
+    });
+});
+
+describe("parseRecord: agent arguments", () => {
+    const ARGS = ["--model", "opus", "--effort", "high"];
+
+    const raw = (change: (r: Record<string, unknown>) => void): Record<string, unknown> => {
+        const copy = structuredClone(record()) as unknown as Record<string, unknown>;
+        change(copy);
+        return copy;
+    };
+
+    it("Older record: a record without the key parses with agentArgs null", () => {
+        const older = raw((r) => delete r.agentArgs);
+
+        expect(parseRecord(older)).toEqual(record({ agentArgs: null }));
+    });
+
+    it("round-trips a record holding the arguments, through the file", async () => {
+        const written = record({ agentArgs: ARGS });
+        await writeRecord(state, written);
+
+        expect(parseRecord(structuredClone(written))).toEqual(written);
+        expect(await readRecord(recordPath(attemptDir(state, written.id)))).toEqual(written);
+    });
+
+    it("rejects an element that is not a string, naming the path", () => {
+        const bad = raw((r) => (r.agentArgs = ["--model", 3]));
+
+        expect(() => parseRecord(bad)).toThrow("$.agentArgs[1] must be a string");
     });
 });
 

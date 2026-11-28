@@ -3,16 +3,24 @@
 // the comparison (D6) and the step's data (D9).
 
 import type { AutonomousConfig, Scope, Source } from "../config.ts";
-import type { AutonomyLabel } from "../label-contract/contract.ts";
+import type { AutonomyLabel, StageLabel } from "../label-contract/contract.ts";
 import type { TrackerResult, TrackerTask } from "../label-triage/trackers/tracker.ts";
+
+export interface TaskLink {
+    id: string;
+    url: string | null;
+}
 
 export interface WorkTask extends TrackerTask {
     priority: string | null; // the tracker's own priority label; null when it has none (GitHub)
     blocks: string[]; // ids this task blocks while it is open
     blockedBy: string[]; // open blockers
     children: string[] | null; // open children; null until detail reads them (GitHub, Linear)
+    childCount: number | null; // children in all, closed included; null until detail reads them
     project: string | null; // Linear project name, read by detail; null elsewhere, when absent and before detail
     repository: string | null; // GitHub "owner/name", from the id; null elsewhere
+    url?: string | null; // filled by detail; null when the tracker has none (Beads)
+    parent?: TaskLink | null; // filled by detail; null when the task is not a subtask
 }
 
 export interface WorkReader {
@@ -23,15 +31,17 @@ export interface WorkReader {
 
 export type WorkReaderFactory = (config: AutonomousConfig) => WorkReader[]; // one per enabled source
 
-export type StageName = "grill-me" | "proposal";
+export type StageName = StageLabel;
 
 export type Exclusion =
     | "classification"
     | "taken"
+    | "triage-me"
     | "labelled-this-run"
     | "unsupported-stage"
     | "blocked"
-    | "split";
+    | "split"
+    | "no-free-slot";
 
 type Autonomy = AutonomyLabel;
 
@@ -64,7 +74,7 @@ export interface SelectionAnswer {
     exception: string | null;
 }
 
-export type SelectionResult = { ok: true; answer: SelectionAnswer } | { ok: false; error: string };
+type SelectionResult = { ok: true; answer: SelectionAnswer } | { ok: false; error: string };
 
 export type SelectionExec = (request: SelectionRequest) => Promise<SelectionResult>;
 
@@ -79,10 +89,14 @@ export interface SelectedUnit {
     exception: string | null; // non-null only when scope differs from the machine scope
 }
 
+type Summary = { source: Source; id: string; title: string; scope: Scope; stage: StageName };
+
 export interface SelectData {
     machineScope: Scope | null;
     selected: SelectedUnit | null;
-    candidates: { source: Source; id: string; title: string; scope: Scope; stage: StageName }[];
+    candidates: Summary[]; // the candidates compared: those at the most advanced stage
+    setAside: Summary[]; // candidates at a less advanced stage, left for a later run
     excluded: Excluded[];
+    readyToClose: { source: Source; id: string; title: string }[]; // split parents whose children are all closed
     comparison: { model: string; effort: string } | null; // set only when the LLM was called
 }

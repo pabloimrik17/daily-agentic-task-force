@@ -8,8 +8,9 @@ to a task; a task carrying both is in conflict.
 The autonomy group holds `AFK` and `HITL`. Exactly one of the two applies to
 a task; a task carrying both is in conflict.
 
-The stage group holds `grill-me` and `proposal`. Exactly one of the two
-applies to a task; a task carrying both is in conflict.
+The stage group holds `grill-me`, `proposal`, `implement`, `verify`, `code-review`,
+`qa`, `external-review`, `wrap-up` and `ready-to-merge`. Exactly one of the nine
+applies to a task; a task carrying two is in conflict.
 
 `work` is Nazaries work.
 
@@ -26,6 +27,23 @@ anyone works on it.
 `proposal` means the task is ready for proposal preparation, its autonomy
 decided and any grill it needed over.
 
+`implement` means the task has a proposal and is ready to implement.
+
+`verify` means the task is implemented and ready to verify against its
+proposal.
+
+`code-review` means the task is verified and ready for code review.
+
+`qa` means the task has passed code review and is ready for QA.
+
+`external-review` means the task has passed every review stage and is ready for
+external review.
+
+`wrap-up` means the task has passed external review and is ready for wrap-up.
+
+`ready-to-merge` means the task is wrapped up and waits for a person to merge
+its pull request.
+
 Two things are decided for a task: its scope and its autonomy. The stage is
 never decided on its own; it follows the autonomy decision.
 
@@ -37,7 +55,7 @@ decides it. A task with no stage label that is decided `AFK` or `HITL` gets
 `proposal` as its stage.
 
 `grill-me` is an option only when the task has no stage label. A task that
-already carries `grill-me` or `proposal` is decided `AFK` or `HITL`.
+already carries any stage label is decided `AFK` or `HITL`.
 
 Constraints: exactly one scope label applies to a task. Exactly one of `AFK`
 and `HITL` applies to a task, except that a task whose stage is `grill-me`

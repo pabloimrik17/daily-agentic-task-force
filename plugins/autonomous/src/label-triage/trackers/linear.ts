@@ -7,7 +7,7 @@
 import type { LinearConfig } from "../../config.ts";
 import type { Exec } from "../../exec.ts";
 import { array, boolean, type Json, object, optional, ParseError, string } from "../../validate.ts";
-import { commentBodies, run, runJson } from "./cli-json.ts";
+import { type AuthoredComment, authoredComments, run, runJson } from "./cli-json.ts";
 import type { Tracker, TrackerLabel, TrackerResult, TrackerTask } from "./tracker.ts";
 
 function isUnauthenticated(text: string): boolean {
@@ -133,15 +133,31 @@ async function readTask(exec: Exec, id: string): Promise<TrackerResult<TrackerTa
     return { ok: true, value: { ...viewed.value, closed } };
 }
 
-function parseComments(value: unknown): { bodies: string[]; more: boolean } {
+const COMMENT_ACTORS = ["user", "externalUser", "botActor"];
+
+// A comment is written by a user, an external user or a bot; the others are null.
+function commentAuthor(entry: Json, path: string): string | null {
+    const key = COMMENT_ACTORS.find(
+        (actor) => typeof entry[actor] === "object" && entry[actor] !== null,
+    );
+    if (key === undefined) return null;
+    const actor = object(entry[key], `${path}.${key}`);
+    const name = actor.displayName ?? actor.name;
+    return typeof name === "string" ? name : null;
+}
+
+function parseComments(value: unknown): { comments: AuthoredComment[]; more: boolean } {
     const root = object(value, "$");
     const more = boolean(object(root.pageInfo, "$.pageInfo"), "hasNextPage", "$.pageInfo");
     const nodes = array(root.nodes, "$.nodes");
-    const bodies = commentBodies(nodes, "$.nodes", { body: "body", createdAt: "createdAt" });
-    return { bodies, more };
+    const keys = { body: "body", createdAt: "createdAt" };
+    return { comments: authoredComments(nodes, "$.nodes", keys, commentAuthor), more };
 }
 
-async function readComments(exec: Exec, id: string): Promise<TrackerResult<string[]>> {
+export async function readAuthoredComments(
+    exec: Exec,
+    id: string,
+): Promise<TrackerResult<AuthoredComment[]>> {
     const command = `linear issue comment list ${id}`;
     const result = await runJson(
         exec,
@@ -158,7 +174,12 @@ async function readComments(exec: Exec, id: string): Promise<TrackerResult<strin
               ok: false,
               error: `${command}: more than one page of comments; the listing would be incomplete`,
           }
-        : { ok: true, value: result.value.bodies };
+        : { ok: true, value: result.value.comments };
+}
+
+async function readComments(exec: Exec, id: string): Promise<TrackerResult<string[]>> {
+    const read = await readAuthoredComments(exec, id);
+    return read.ok ? { ok: true, value: read.value.map((comment) => comment.body) } : read;
 }
 
 function labelEntry(entry: Json, path: string): TrackerLabel {

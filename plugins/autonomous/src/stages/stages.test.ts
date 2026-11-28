@@ -1,11 +1,16 @@
 import { describe, expect, it } from "vitest";
 import { ATTEMPT_SCHEMA, type AttemptRecord } from "../attempts/record.ts";
 import { workTask } from "../select/test-fixtures.ts";
+import { codeReviewStage } from "./code-review/stage.ts";
 import { grillMeStage } from "./grill-me/stage.ts";
+import { implementStage } from "./implement/stage.ts";
+import { proposalStage } from "./proposal/stage.ts";
 import { expectedMarker } from "./prompt.ts";
 import { STAGES, stageFor } from "./registry.ts";
 import type { StagePromptInput } from "./stage.ts";
+import { stageEnv } from "./test-fixtures.ts";
 import { testStage } from "./test.ts";
+import { verifyStage } from "./verify/stage.ts";
 
 const ID = "linear:DOT-109:test:1";
 const RESULT_PATH = "/state/attempts/linear/DOT-109/test/1/result.json";
@@ -31,6 +36,7 @@ function attempt(): AttemptRecord {
         observed: null,
         cleanup: null,
         retained: null,
+        agentArgs: null,
     };
 }
 
@@ -44,14 +50,21 @@ function input(description: string | null = "Do the thing."): StagePromptInput {
 }
 
 describe("the stage registry", () => {
-    it("holds the test and grill-me stages", () => {
-        expect([...STAGES.keys()]).toEqual(["test", "grill-me"]);
+    it("holds the test, grill-me, proposal, implement, verify and code-review stages", () => {
+        expect([...STAGES.keys()]).toEqual([
+            "test",
+            "grill-me",
+            "proposal",
+            "implement",
+            "verify",
+            "code-review",
+        ]);
         expect(stageFor("test")).toBe(testStage);
         expect(stageFor("grill-me")).toBe(grillMeStage);
-    });
-
-    it("has no proposal stage yet", () => {
-        expect(stageFor("proposal")).toBeUndefined();
+        expect(stageFor("proposal")).toBe(proposalStage);
+        expect(stageFor("implement")).toBe(implementStage);
+        expect(stageFor("verify")).toBe(verifyStage);
+        expect(stageFor("code-review")).toBe(codeReviewStage);
     });
 });
 
@@ -98,7 +111,7 @@ describe("the test stage", () => {
     it.each(["claude", "codex"] as const)(
         "holds its prerequisites without any check for %s",
         async (tool) => {
-            expect(await testStage.prerequisites({ tool, home: "/unused/home" })).toEqual({
+            expect(await testStage.prerequisites(stageEnv({ tool }))).toEqual({
                 ok: true,
                 context: {},
             });

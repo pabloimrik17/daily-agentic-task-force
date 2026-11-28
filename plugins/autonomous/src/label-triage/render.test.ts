@@ -5,7 +5,7 @@ import type { JudgementAnswer } from "./judgement.ts";
 import type { Derivation } from "./rules.ts";
 import { type LabelTriageData, labelTriageStep } from "./step.ts";
 import { triageContext, fakeJudgement, task, trackers } from "./test-fixtures.ts";
-import type { TriageRecord } from "./write.ts";
+import type { MarkRecord, TriageRecord } from "./write.ts";
 
 function record(
     overrides: Partial<Derivation>,
@@ -149,6 +149,9 @@ describe("renderLabelTriage", () => {
                         error: "linear issue update DOT-11: linear timed out after 120 s",
                     },
                 ],
+                marked: [],
+                unmarked: [],
+                markedRead: 0,
             },
         };
         expect(labelTriageStep.render(result)).toBe(
@@ -266,5 +269,129 @@ describe("renderLabelTriage", () => {
         ]);
         expect(JSON.stringify(data)).not.toContain("entry");
         expect(data.records.every((r) => r.title !== "" && r.labels.length > 0)).toBe(true);
+    });
+});
+
+// Spec label-triage, "Marks in the triage report" (the text half).
+describe("renderLabelTriage: marks", () => {
+    const EMPTY_DATA: LabelTriageData = {
+        sources: [],
+        records: [],
+        conflicts: [],
+        notJudged: [],
+        remainder: 0,
+        judgement: null,
+        failures: [],
+        marked: [],
+        unmarked: [],
+        markedRead: 0,
+    };
+
+    const render = (data: Partial<LabelTriageData>) =>
+        labelTriageStep.render({
+            step: "label-triage",
+            tier: "code",
+            outcome: "advance",
+            reasons: [],
+            data: { ...EMPTY_DATA, ...data },
+        });
+
+    const mark = (
+        overrides: Partial<MarkRecord>,
+        taskId = "DOT-130",
+        source: MarkRecord["source"] = "linear",
+    ): MarkRecord => ({ source, taskId, status: "applied", detail: null, ...overrides });
+
+    it("shows nothing when no task is marked, unmarked or read marked", () => {
+        expect(render({})).not.toContain("triage-me");
+    });
+
+    it("Newly marked: names linear, DOT-130 and triage-me, as marked", () => {
+        expect(render({ marked: [mark({})], markedRead: 0 })).toBe(
+            [
+                "[label-triage] advance (code)",
+                "  triage-me:",
+                "    linear → DOT-130 → triage-me → marked",
+                "    read with the label: 0 tasks",
+                "  reasons:",
+            ].join("\n"),
+        );
+    });
+
+    it("shows the count alone when the run only read marked tasks", () => {
+        expect(render({ markedRead: 1 })).toContain(
+            "  triage-me:\n    read with the label: 1 task\n",
+        );
+    });
+
+    it("lists marks, then unmarks, with proposed worded for either and failed with its detail", () => {
+        expect(
+            render({
+                marked: [
+                    mark({ status: "proposed" }, "DOT-1"),
+                    mark(
+                        {
+                            status: "proposed",
+                            detail: "triage-me is missing on linear; run --bootstrap-labels",
+                        },
+                        "DOT-2",
+                    ),
+                    mark({ status: "failed", detail: "read-back mismatch" }, "B-3", "beads"),
+                ],
+                unmarked: [
+                    mark({}, "DOT-4"),
+                    mark({ status: "proposed" }, "DOT-5"),
+                    mark(
+                        { status: "failed", detail: "still carries triage-me: [work, triage-me]" },
+                        "DOT-6",
+                    ),
+                ],
+                markedRead: 4,
+            }),
+        ).toBe(
+            [
+                "[label-triage] advance (code)",
+                "  triage-me:",
+                "    linear → DOT-1 → triage-me → proposed marked",
+                "    linear → DOT-2 → triage-me → proposed marked — triage-me is missing on linear; run --bootstrap-labels",
+                "    beads → B-3 → triage-me → failed marking — read-back mismatch",
+                "    linear → DOT-4 → triage-me → unmarked",
+                "    linear → DOT-5 → triage-me → proposed unmarked",
+                "    linear → DOT-6 → triage-me → failed unmarking — still carries triage-me: [work, triage-me]",
+                "    read with the label: 4 tasks",
+                "  reasons:",
+            ].join("\n"),
+        );
+    });
+
+    it("places the block after the derived labels and before the human's share", () => {
+        const text = render({
+            records: [record({}, "applied"), record({ tier: "marked", confidence: null }, "asked")],
+            marked: [mark({})],
+        });
+        expect(text.indexOf("  applied:")).toBeLessThan(text.indexOf("  triage-me:"));
+        expect(text.indexOf("  triage-me:")).toBeLessThan(text.indexOf("  for the human:"));
+    });
+
+    it("Listed without a judgement: an asked record of tier marked shows no confidence", () => {
+        const text = render({
+            records: [
+                record(
+                    {
+                        taskId: "B-2",
+                        group: "autonomy",
+                        labels: [],
+                        tier: "marked",
+                        confidence: null,
+                        reason: "carries triage-me: left for the human, not judged again",
+                    },
+                    "asked",
+                ),
+            ],
+        });
+        expect(text).toContain(
+            "    beads → B-2 → autonomy: no label (marked) — carries triage-me: left for the human, not judged again",
+        );
+        expect(text).not.toMatch(/\d\.\d\d/);
     });
 });

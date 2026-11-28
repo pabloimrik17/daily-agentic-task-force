@@ -23,8 +23,11 @@ import { reconcileStep } from "./attempts/reconcile.ts";
 import type { AttemptId, TaskRef } from "./attempts/record.ts";
 import { resolveStateDir } from "./attempts/state.ts";
 import { PRINT_TIMEOUT_MS } from "./claude-print.ts";
+import { capacityStep } from "./capacity/step.ts";
 import { type ConfigLoad, loadConfig } from "./config.ts";
-import { type Exec, execCommand } from "./exec.ts";
+import { cliContext } from "./context/cli.ts";
+import type { ContextReaderFactory } from "./context/types.ts";
+import { CLI_TIMEOUT_MS, type Exec, execCommand } from "./exec.ts";
 import {
     bootstrapLabels,
     renderBootstrapJson,
@@ -32,12 +35,37 @@ import {
     unconfiguredBootstrap,
 } from "./label-contract/bootstrap.ts";
 import { claudeJudgement, type JudgementExec } from "./label-triage/judgement.ts";
+import {
+    renderTriageQuestionsJson,
+    renderTriageQuestionsText,
+    runTriageQuestions,
+    unconfiguredTriageQuestions,
+} from "./label-triage/questions-mode.ts";
 import { labelTriageStep } from "./label-triage/step.ts";
+import { runLog } from "./logbook/logbook.ts";
+import { renderLogJson, renderLogText, unconfiguredLog } from "./logbook/report.ts";
 import { cliTrackers } from "./label-triage/trackers/cli.ts";
 import type { TrackerFactory } from "./label-triage/trackers/tracker.ts";
+import { intervalMs } from "./loop/interval.ts";
+import { runLoop } from "./loop/loop.ts";
+import { sleep, stopOnSignals, type Wait } from "./loop/signals.ts";
+import { stopLoop } from "./loop/stop.ts";
+import { waitForNotices } from "./loop/wait-notices.ts";
 import { runPersist } from "./persist/persist.ts";
+import { runPublish } from "./publish/publish.ts";
+import { renderPublishJson, renderPublishText, unconfiguredPublish } from "./publish/report.ts";
+import { updateWalkthrough } from "./publish/walkthrough.ts";
 import { renderPersistJson, renderPersistText, unconfiguredPersist } from "./persist/report.ts";
-import { execOpenUsage, type OpenUsageExec } from "./quota-gate/openusage.ts";
+import { ghPullRequests } from "./pull-request/github.ts";
+import { runPullRequest } from "./pull-request/mode.ts";
+import type { PullRequestsFactory } from "./pull-request/port.ts";
+import {
+    renderPullRequestJson,
+    renderPullRequestText,
+    unconfiguredPullRequest,
+} from "./pull-request/report.ts";
+import { execOpenUsage, openUsageSource } from "./quota-gate/openusage.ts";
+import type { QuotaSource } from "./quota-gate/source.ts";
 import { quotaGateStep } from "./quota-gate/step.ts";
 import {
     buildReport,
@@ -67,6 +95,7 @@ import { worktrunkWorkspace } from "./workspace/worktrunk.ts";
 
 const STEPS: readonly Step[] = [
     reconcileStep,
+    capacityStep,
     quotaGateStep,
     labelTriageStep,
     selectStep,
@@ -75,12 +104,18 @@ const STEPS: readonly Step[] = [
 
 // Spec stage-sessions, "Supplied task": with --task, triage and selection are
 // skipped and launch takes the supplied task.
-const SUPPLIED_TASK_STEPS: ReadonlySet<string> = new Set(["reconcile", "quota-gate", "launch"]);
+const SUPPLIED_TASK_STEPS: ReadonlySet<string> = new Set([
+    "reconcile",
+    "capacity",
+    "quota-gate",
+    "launch",
+]);
 
 export interface MainDeps {
     now: () => Date;
     env: Record<string, string | undefined>;
-    openUsage: OpenUsageExec;
+    quota: QuotaSource;
+    login: Exec;
     trackers: TrackerFactory;
     judgement: JudgementExec;
     chezmoi: Exec;
@@ -89,8 +124,18 @@ export interface MainDeps {
     sessions: SessionManagerFactory;
     workspace: WorkspaceManagerFactory;
     naming: Exec;
+    pullRequests: PullRequestsFactory;
+    context: ContextReaderFactory;
+    openspec: Exec;
+    // `openspec` finds its root from its working directory and has no flag to name another.
+    openspecIn: (directory: string) => Exec;
+    git: Exec; // run with `-C <directory>`
+    plannotatorIn: (directory: string) => Exec; // `plannotator` reads git from its working directory
     stdout: (text: string) => void;
     stderr: (text: string) => void;
+    wait: Wait; // the loop's interval and the polls of --notices and --stop-loop
+    stopSignal: () => AbortSignal; // the loop's stop request
+    signalLoop: (pid: number) => void; // the one SIGTERM of --stop-loop; throws like process.kill
     steps?: readonly Step[];
 }
 
@@ -112,9 +157,15 @@ export async function main(argv: readonly string[], deps: MainDeps): Promise<num
     }
 }
 
+// Without --apply, --loop is one dry iteration: a run with the limits enforced.
+const looping = (args: RunArgs) => args.loop && args.apply;
+
 function dispatch(args: RunArgs, steps: readonly Step[], deps: MainDeps): Promise<number> {
     if (args.bootstrapLabels) {
         return runBootstrap(args, deps);
+    }
+    if (args.triageQuestions) {
+        return runTriageQuestionsMode(args, deps);
     }
     if (args.transition !== undefined) {
         return runTransitionMode(args.transition, args, deps);
@@ -122,21 +173,43 @@ function dispatch(args: RunArgs, steps: readonly Step[], deps: MainDeps): Promis
     if (args.persist !== undefined) {
         return runPersistMode(args.persist, args, deps);
     }
+    if (args.pullRequest !== undefined) {
+        return runPullRequestMode(args.pullRequest, args, deps);
+    }
+    if (args.log !== undefined) {
+        return runLogMode(args.log, args, deps);
+    }
+    if (args.publish !== undefined) {
+        return runPublishMode(args.publish, args, deps);
+    }
+    return dispatchRest(args, steps, deps);
+}
+
+function dispatchRest(args: RunArgs, steps: readonly Step[], deps: MainDeps): Promise<number> {
     if (args.answers.length > 0) {
         return runAnswers(args, steps, deps);
     }
     if (args.discard !== undefined) {
         return runDiscard(args, deps);
     }
+    if (args.notices !== undefined) {
+        return runNoticesMode(args.notices, deps);
+    }
+    if (args.stopLoop) {
+        return runStopLoopMode(deps);
+    }
+    if (looping(args)) {
+        return runLoopMode(args, steps, deps);
+    }
     return runPipeline(args, steps, deps);
 }
 
 // Design D12: one run at a time reads or writes attempts.
-async function withLock(
+async function withLock<T>(
     state: string,
-    held: () => Promise<number>,
-    refused: (error: string) => number,
-): Promise<number> {
+    held: () => Promise<T>,
+    refused: (error: string) => T,
+): Promise<T> {
     const lock = await acquireLock(state);
     if (!lock.ok) {
         return refused(lock.error);
@@ -149,14 +222,20 @@ async function withLock(
 }
 
 async function runPipeline(args: RunArgs, steps: readonly Step[], deps: MainDeps): Promise<number> {
+    const report = await pipelineReport(args, steps, deps);
+    deps.stdout(args.json ? renderJson(report) : renderText(report, steps));
+    return exitCodeFor(report.outcome);
+}
+
+async function pipelineReport(
+    args: RunArgs,
+    steps: readonly Step[],
+    deps: MainDeps,
+): Promise<RunReport> {
     const startedAt = deps.now();
     const load = loadConfig(deps.env);
     const defaulted = load.ok ? load.defaulted : [];
     const state = resolveStateDir(deps.env);
-    const print = (report: RunReport) => {
-        deps.stdout(args.json ? renderJson(report) : renderText(report, steps));
-        return exitCodeFor(report.outcome);
-    };
     return withLock(
         state,
         async () => {
@@ -164,13 +243,52 @@ async function runPipeline(args: RunArgs, steps: readonly Step[], deps: MainDeps
                 stepsFor(args, steps),
                 context(args, startedAt, load, state, deps),
             );
-            return print(buildReport(startedAt, run, args, defaulted));
+            return buildReport(startedAt, run, args, defaulted);
         },
         (error) => {
             const none = { results: [], questions: [], outcome: "not-evaluable" as const };
-            return print({ ...buildReport(startedAt, none, args, defaulted), lock: { error } });
+            return { ...buildReport(startedAt, none, args, defaulted), lock: { error } };
         },
     );
+}
+
+// Design D5: every iteration is a run with the limits enforced and no handoff.
+function runLoopMode(args: RunArgs, steps: readonly Step[], deps: MainDeps): Promise<number> {
+    const iterationArgs = { ...args, noHandoff: true };
+    return runLoop({
+        state: resolveStateDir(deps.env),
+        json: args.json,
+        now: deps.now,
+        wait: deps.wait,
+        stopSignal: deps.stopSignal,
+        iterate: () => pipelineReport(iterationArgs, steps, deps),
+        render: (report) => renderText(report, steps),
+        intervalMs: () => intervalMs(args, loadConfig(deps.env)),
+        stderr: deps.stderr,
+    });
+}
+
+// Design D8: reads only the loop's files, so it needs no configuration and takes no lock.
+function runNoticesMode(seen: number, deps: MainDeps): Promise<number> {
+    return waitForNotices(seen, {
+        state: resolveStateDir(deps.env),
+        now: deps.now,
+        wait: deps.wait,
+        stdout: deps.stdout,
+    });
+}
+
+// Spec autonomous-loop, "Stopping the loop" (design D7): reads only the loop's files and
+// signals its owner, so it needs no configuration and takes no lock.
+function runStopLoopMode(deps: MainDeps): Promise<number> {
+    return stopLoop({
+        state: resolveStateDir(deps.env),
+        now: deps.now,
+        wait: deps.wait,
+        stdout: deps.stdout,
+        stderr: deps.stderr,
+        signal: deps.signalLoop,
+    });
 }
 
 function stepsFor(args: RunArgs, steps: readonly Step[]): readonly Step[] {
@@ -190,7 +308,8 @@ function context(
         config,
         results: [],
         io: {
-            openUsage: deps.openUsage,
+            quota: deps.quota,
+            login: deps.login,
             trackers: deps.trackers,
             judgement: deps.judgement,
             chezmoi: deps.chezmoi,
@@ -199,6 +318,10 @@ function context(
             sessions: deps.sessions,
             workspace: deps.workspace,
             naming: deps.naming,
+            context: deps.context,
+            pullRequests: deps.pullRequests,
+            openspec: deps.openspec,
+            git: deps.git,
             state,
             home: deps.env.HOME ?? homedir(),
         },
@@ -237,6 +360,22 @@ async function runBootstrap(args: RunArgs, deps: MainDeps): Promise<number> {
     return exitCodeFor(report.outcome);
 }
 
+// Design D7: like the bootstrap it needs the configuration and the trackers; it reads no
+// attempt and writes nothing, so it takes no lock, and it asks for no quota.
+async function runTriageQuestionsMode(args: RunArgs, deps: MainDeps): Promise<number> {
+    const startedAt = deps.now();
+    const load = modeConfig(args, deps, (path, error) =>
+        renderTriageQuestionsJson(unconfiguredTriageQuestions(path, error, startedAt)),
+    );
+    if (load === null) {
+        return exitCodeFor("not-evaluable");
+    }
+    const { config } = load;
+    const report = await runTriageQuestions({ config, trackers: deps.trackers(config) }, startedAt);
+    deps.stdout(args.json ? renderTriageQuestionsJson(report) : renderTriageQuestionsText(report));
+    return exitCodeFor(report.outcome);
+}
+
 // Handoff design D3: answer mode, like the bootstrap, needs the configuration
 // and the trackers but runs no step, no quota gate and no judgement.
 async function runAnswers(args: RunArgs, steps: readonly Step[], deps: MainDeps): Promise<number> {
@@ -249,7 +388,11 @@ async function runAnswers(args: RunArgs, steps: readonly Step[], deps: MainDeps)
     }
     const { config } = load;
     const ctx = { config, trackers: deps.trackers(config) };
-    const handlers = [...answeringSteps(steps), transitionHandler(resolveStateDir(deps.env))];
+    const tools = { git: deps.git, openspecIn: deps.openspecIn, pullRequests: deps.pullRequests };
+    const handlers = [
+        ...answeringSteps(steps),
+        transitionHandler(resolveStateDir(deps.env), tools),
+    ];
     const report = await applyAnswers(handlers, args.answers, ctx, startedAt);
     deps.stdout(args.json ? renderAnswersJson(report) : renderAnswersText(report));
     return exitCodeFor(report.outcome);
@@ -270,8 +413,11 @@ async function runTransitionMode(ref: TaskRef, args: RunArgs, deps: MainDeps): P
         config,
         trackers: deps.trackers(config),
         state: resolveStateDir(deps.env),
+        git: deps.git,
+        openspecIn: deps.openspecIn,
+        pullRequests: deps.pullRequests,
     };
-    const report = await runTransition(ref, transitionDeps, startedAt);
+    const report = await runTransition(ref, transitionDeps, startedAt, args.from);
     deps.stdout(args.json ? renderTransitionJson(report) : renderTransitionText(report));
     return exitCodeFor(report.outcome);
 }
@@ -295,6 +441,77 @@ async function runPersistMode(attempt: AttemptId, args: RunArgs, deps: MainDeps)
     };
     const report = await runPersist(attempt, persistDeps, startedAt);
     deps.stdout(args.json ? renderPersistJson(report) : renderPersistText(report));
+    return exitCodeFor(report.outcome);
+}
+
+// No run lock: the only state it writes is the cover beside the attempt record.
+async function runPullRequestMode(
+    attempt: AttemptId,
+    args: RunArgs,
+    deps: MainDeps,
+): Promise<number> {
+    const startedAt = deps.now();
+    const load = modeConfig(args, deps, (path, error) =>
+        renderPullRequestJson(unconfiguredPullRequest(attempt, path, error, startedAt)),
+    );
+    if (load === null) {
+        return exitCodeFor("not-evaluable");
+    }
+    const { config } = load;
+    const pullRequestDeps = {
+        config,
+        state: resolveStateDir(deps.env),
+        work: deps.work(config),
+        pullRequests: deps.pullRequests,
+    };
+    const report = await runPullRequest(attempt, args.title, pullRequestDeps, startedAt);
+    deps.stdout(args.json ? renderPullRequestJson(report) : renderPullRequestText(report));
+    return exitCodeFor(report.outcome);
+}
+
+// No run lock: it writes only the entry and its receipt beside the attempt record, never the
+// record.
+async function runLogMode(attempt: AttemptId, args: RunArgs, deps: MainDeps): Promise<number> {
+    const startedAt = deps.now();
+    const load = modeConfig(args, deps, (path, error) =>
+        renderLogJson(unconfiguredLog(attempt, path, error, startedAt)),
+    );
+    if (load === null) {
+        return exitCodeFor("not-evaluable");
+    }
+    const { config } = load;
+    const logDeps = {
+        config,
+        state: resolveStateDir(deps.env),
+        trackers: deps.trackers(config),
+        pullRequests: deps.pullRequests,
+        home: deps.env.HOME ?? homedir(),
+    };
+    const report = await runLog(attempt, logDeps, startedAt);
+    deps.stdout(args.json ? renderLogJson(report) : renderLogText(report));
+    return exitCodeFor(report.outcome);
+}
+
+// Design D6 of add-code-review-stage: no run lock, as persist and log modes; it writes only the
+// receipt and the walkthrough beside the attempt record, never the record.
+async function runPublishMode(attempt: AttemptId, args: RunArgs, deps: MainDeps): Promise<number> {
+    const startedAt = deps.now();
+    const load = modeConfig(args, deps, (path, error) =>
+        renderPublishJson(unconfiguredPublish(attempt, path, error, startedAt)),
+    );
+    if (load === null) {
+        return exitCodeFor("not-evaluable");
+    }
+    const publishDeps = {
+        config: load.config,
+        state: resolveStateDir(deps.env),
+        pullRequests: deps.pullRequests,
+        git: deps.git,
+        plannotatorIn: deps.plannotatorIn,
+        walkthrough: updateWalkthrough,
+    };
+    const report = await runPublish(attempt, publishDeps, startedAt);
+    deps.stdout(args.json ? renderPublishJson(report) : renderPublishText(report));
     return exitCodeFor(report.outcome);
 }
 
@@ -324,6 +541,7 @@ async function runDiscard(args: RunArgs, deps: MainDeps): Promise<number> {
                 workspace: deps.workspace(config),
                 trackers: deps.trackers(config),
                 now: deps.now,
+                pullRequests: deps.pullRequests,
             };
             return print(await discardAttempt(args, discardDeps, startedAt));
         },
@@ -341,6 +559,7 @@ function lockedDiscard(error: string, startedAt: Date): DiscardReport {
         found: [],
         removed: { session: false, taken: false, workspace: false },
         reasons: [error],
+        notes: [],
     };
 }
 
@@ -348,7 +567,9 @@ if (import.meta.main) {
     process.exitCode = await main(process.argv.slice(2), {
         now: () => new Date(),
         env: process.env,
-        openUsage: execOpenUsage,
+        quota: openUsageSource(execOpenUsage),
+        // Exit 1 is the answer for "no login", so its output is kept.
+        login: execCommand("claude", CLI_TIMEOUT_MS, { keepOutputOnExit: true }),
         trackers: cliTrackers,
         judgement: claudeJudgement(execCommand("claude", PRINT_TIMEOUT_MS)),
         chezmoi: execCommand("chezmoi"),
@@ -357,7 +578,17 @@ if (import.meta.main) {
         sessions: aoeSessions,
         workspace: worktrunkWorkspace,
         naming: execCommand("claude", NAMING_TIMEOUT_MS),
+        pullRequests: ghPullRequests,
+        context: cliContext,
+        openspec: execCommand("openspec"),
+        openspecIn: (directory) => execCommand("openspec", CLI_TIMEOUT_MS, { cwd: directory }),
+        git: execCommand("git"),
+        plannotatorIn: (directory) =>
+            execCommand("plannotator", CLI_TIMEOUT_MS, { cwd: directory }),
         stdout: (text) => process.stdout.write(`${text}\n`),
         stderr: (text) => process.stderr.write(`${text}\n`),
+        wait: sleep,
+        stopSignal: stopOnSignals,
+        signalLoop: (pid) => process.kill(pid, "SIGTERM"),
     });
 }

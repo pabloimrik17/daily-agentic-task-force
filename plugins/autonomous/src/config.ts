@@ -2,9 +2,9 @@
 // file"): per-user parts of the label contract live in one JSON file outside
 // the plugin, validated strictly. A missing file, a missing required field, a
 // mistyped field or an unknown field is an error naming the path, never a
-// default. The one exception is the optional `sessions`, `workspace` and
-// `naming` blocks: a key absent from the file takes the shipped default, and
-// the load records which keys did (design D13).
+// default. The one exception is the optional `sessions`, `workspace`,
+// `naming`, `runner` and `review` blocks: a key absent from the file takes the shipped
+// default, and the load records which keys did (design D13; review-team design D12).
 
 import { readFileSync } from "node:fs";
 import { homedir } from "node:os";
@@ -14,11 +14,21 @@ import { fileURLToPath } from "node:url";
 import {
     type ContractLabel,
     isContractLabel,
+    isUngroupedLabel,
     isScope,
     type Scope,
 } from "./label-contract/contract.ts";
+import {
+    REVIEWER_IDS,
+    type ReviewConfig,
+    type ReviewerId,
+    TIERS,
+    type TeamRow,
+    type TierThreshold,
+} from "./review-team/types.ts";
 import type { SessionTool } from "./sessions/manager.ts";
 import {
+    array,
     boolean,
     type Json,
     number,
@@ -88,6 +98,12 @@ interface WorkspaceConfig {
 
 type NamingConfig = SelectionConfig;
 
+export interface RunnerConfig {
+    grills: number; // grill slots: open attempts at the grill-me stage
+    parallel: number; // work slots: open attempts at any other stage
+    intervalMinutes: number; // time between two iterations of the loop
+}
+
 export interface AutonomousConfig {
     schema: "autonomous.config.v1";
     sources: { linear: LinearConfig; beads: BeadsConfig; github: GithubConfig };
@@ -96,18 +112,24 @@ export interface AutonomousConfig {
     sessions: SessionsConfig;
     workspace: WorkspaceConfig;
     naming: NamingConfig;
+    runner: RunnerConfig;
+    review: ReviewConfig;
 }
 
 // The shipped values of the optional blocks, as the JSON file holds them.
-export interface ConfigDefaults {
+interface ConfigDefaults {
     sessions: Json;
     workspace: Json;
     naming: Json;
+    runner: Json;
+    review: Json;
 }
 
+// `missing` marks the failure of a file that does not exist, for the one consumer that
+// tolerates it (review-team design D12).
 export type ConfigLoad =
     | { ok: true; path: string; config: AutonomousConfig; defaulted: string[] }
-    | { ok: false; path: string; error: string };
+    | { ok: false; path: string; error: string; missing?: true };
 
 export function resolveConfigPath(env: Record<string, string | undefined>): string {
     const override = env.AUTONOMOUS_CONFIG;
@@ -150,6 +172,7 @@ export function loadConfig(
             return {
                 ok: false,
                 path,
+                missing: true,
                 error: `configuration file not found at ${path}; create it from the example at ${EXAMPLE_PATH}`,
             };
         }
@@ -176,7 +199,17 @@ function config(
     const root = object(input, "$");
     rejectUnknownKeys(
         root,
-        ["schema", "sources", "judgement", "selection", "sessions", "workspace", "naming"],
+        [
+            "schema",
+            "sources",
+            "judgement",
+            "selection",
+            "sessions",
+            "workspace",
+            "naming",
+            "runner",
+            "review",
+        ],
         "$",
     );
     const schema = string(root, "schema", "$");
@@ -211,6 +244,8 @@ function config(
 const SESSIONS_KEYS = ["tool", "profile", "binary"];
 const WORKSPACE_KEYS = ["root"];
 const NAMING_KEYS = ["model", "effort"];
+const RUNNER_KEYS = ["grills", "parallel", "intervalMinutes"];
+const REVIEW_KEYS = ["tiers", "team", "security"];
 
 // Design D13. The filled values are validated afterwards, by the caller.
 function overlay(
@@ -237,15 +272,21 @@ function optionalConfig(
     root: Json,
     defaults: ConfigDefaults,
     home: string,
-): Pick<AutonomousConfig, "sessions" | "workspace" | "naming"> & { defaulted: string[] } {
+): Pick<AutonomousConfig, "sessions" | "workspace" | "naming" | "runner" | "review"> & {
+    defaulted: string[];
+} {
     const defaulted: string[] = [];
     const sessions = overlay(root, "sessions", SESSIONS_KEYS, defaults, defaulted);
     const workspace = overlay(root, "workspace", WORKSPACE_KEYS, defaults, defaulted);
     const naming = overlay(root, "naming", NAMING_KEYS, defaults, defaulted);
+    const runner = overlay(root, "runner", RUNNER_KEYS, defaults, defaulted);
+    const review = overlay(root, "review", REVIEW_KEYS, defaults, defaulted);
     return {
         sessions: sessionsConfig(sessions, "$.sessions"),
         workspace: workspaceConfig(workspace, "$.workspace", home),
         naming: modelSettings(naming, "$.naming"),
+        runner: runnerConfig(runner, "$.runner"),
+        review: reviewConfig(review, "$.review"),
         defaulted,
     };
 }
@@ -290,6 +331,22 @@ function workspaceConfig(entry: Json, path: string, home: string): WorkspaceConf
     return { root: expandHome(root, home) };
 }
 
+function integerAtLeast(entry: Json, key: string, path: string, min: number): number {
+    const value = number(entry, key, path);
+    if (!Number.isInteger(value) || value < min) {
+        throw new ParseError(`${path}.${key} must be an integer >= ${min}`);
+    }
+    return value;
+}
+
+function runnerConfig(entry: Json, path: string): RunnerConfig {
+    return {
+        grills: integerAtLeast(entry, "grills", path, 0),
+        parallel: integerAtLeast(entry, "parallel", path, 0),
+        intervalMinutes: integerAtLeast(entry, "intervalMinutes", path, 1),
+    };
+}
+
 function expandHome(value: string, home: string): string {
     if (value === "~") {
         return home;
@@ -302,11 +359,13 @@ function expandHome(value: string, home: string): string {
 function readDefaults(): ConfigDefaults {
     try {
         const root = object(JSON.parse(readFileSync(DEFAULTS_PATH, "utf8")), "$");
-        rejectUnknownKeys(root, ["sessions", "workspace", "naming"], "$");
+        rejectUnknownKeys(root, ["sessions", "workspace", "naming", "runner", "review"], "$");
         const defaults = {
             sessions: object(root.sessions, "$.sessions"),
             workspace: object(root.workspace, "$.workspace"),
             naming: object(root.naming, "$.naming"),
+            runner: object(root.runner, "$.runner"),
+            review: object(root.review, "$.review"),
         };
         optionalConfig({}, defaults, "/");
         return defaults;
@@ -343,8 +402,9 @@ function aliasesValue(
     const aliasPath = `${path}.${key}`;
     const result: Partial<Record<ContractLabel, string[]>> = {};
     for (const label of Object.keys(entry)) {
-        // taken is set by hand or by an agent, never inferred, so it has no aliases.
-        if (!isContractLabel(label) || label === "taken") {
+        // A label outside the groups is set by a person or by the runner, never inferred,
+        // so it has no aliases.
+        if (!isContractLabel(label) || isUngroupedLabel(label)) {
             throw new ParseError(`${aliasPath}.${label} is not a recognised field`);
         }
         const values = stringArray(entry, label, aliasPath);
@@ -423,6 +483,148 @@ function judgementConfig(entry: Json, path: string): JudgementConfig {
 function selectionConfig(entry: Json, path: string): SelectionConfig {
     rejectUnknownKeys(entry, ["model", "effort"], path);
     return modelSettings(entry, path);
+}
+
+const LEVELS = ["low", "medium", "high", "xhigh", "max"];
+const ROW_KEYS = ["reviewer", "model", "effort", "level"];
+
+// The `review` block (review-team design D12). `blockPath` is where it sits, so errors name
+// the full path.
+function reviewConfig(entry: Json, blockPath: string): ReviewConfig {
+    rejectUnknownKeys(entry, REVIEW_KEYS, blockPath);
+    return {
+        tiers: tiersConfig(object(entry.tiers, `${blockPath}.tiers`), `${blockPath}.tiers`),
+        team: teamConfig(object(entry.team, `${blockPath}.team`), `${blockPath}.team`),
+        security: securityConfig(
+            object(entry.security, `${blockPath}.security`),
+            `${blockPath}.security`,
+        ),
+    };
+}
+
+function tiersConfig(entry: Json, path: string): ReviewConfig["tiers"] {
+    rejectUnknownKeys(entry, ["S", "M"], path);
+    return {
+        S: tierThreshold(object(entry.S, `${path}.S`), `${path}.S`),
+        M: tierThreshold(object(entry.M, `${path}.M`), `${path}.M`),
+    };
+}
+
+function tierThreshold(entry: Json, path: string): TierThreshold {
+    rejectUnknownKeys(entry, ["maxLines", "maxFiles"], path);
+    return {
+        maxLines: integerAtLeast(entry, "maxLines", path, 1),
+        maxFiles: integerAtLeast(entry, "maxFiles", path, 1),
+    };
+}
+
+function teamConfig(entry: Json, path: string): ReviewConfig["team"] {
+    rejectUnknownKeys(entry, TIERS, path);
+    return {
+        S: tierRows(entry.S, `${path}.S`),
+        M: tierRows(entry.M, `${path}.M`),
+        L: tierRows(entry.L, `${path}.L`),
+    };
+}
+
+function tierRows(value: unknown, path: string): TeamRow[] {
+    const rows = array(value, path);
+    if (rows.length === 0) {
+        throw new ParseError(`${path} must not be empty`);
+    }
+    const parsed = rows.map((row, index) =>
+        teamRow(object(row, `${path}[${index}]`), `${path}[${index}]`),
+    );
+    rejectRepeatedReviewer(parsed, path);
+    return parsed;
+}
+
+// Rows of one reviewer share its brief and its output file, so a tier may not repeat one.
+function rejectRepeatedReviewer(rows: TeamRow[], path: string): void {
+    rows.forEach((row, index) => {
+        const first = rows.findIndex((other) => other.reviewer === row.reviewer);
+        if (first !== index) {
+            throw new ParseError(
+                `${path}[${index}].reviewer repeats ${row.reviewer} (already at ${path}[${first}])`,
+            );
+        }
+    });
+}
+
+function isReviewerId(value: string): value is ReviewerId {
+    return (REVIEWER_IDS as readonly string[]).includes(value);
+}
+
+function oneOf(entry: Json, key: string, path: string, allowed: readonly string[]): string {
+    const value = string(entry, key, path);
+    if (!allowed.includes(value)) {
+        throw new ParseError(`${path}.${key} must be one of ${allowed.join(", ")}`);
+    }
+    return value;
+}
+
+function effortOf(entry: Json, key: string, path: string): string {
+    return oneOf(entry, key, path, EFFORTS);
+}
+
+function nonEmpty(entry: Json, key: string, path: string): string {
+    const value = string(entry, key, path);
+    if (value === "") {
+        throw new ParseError(`${path}.${key} must not be empty`);
+    }
+    return value;
+}
+
+function teamRow(entry: Json, path: string): TeamRow {
+    rejectUnknownKeys(entry, ROW_KEYS, path);
+    const reviewer = string(entry, "reviewer", path);
+    if (!isReviewerId(reviewer)) {
+        throw new ParseError(`${path}.reviewer must be one of ${REVIEWER_IDS.join(", ")}`);
+    }
+    const model = optional(entry, "model", path, nonEmpty);
+    const effort = optional(entry, "effort", path, effortOf);
+    const level = optional(entry, "level", path, (parent, key, at) =>
+        oneOf(parent, key, at, LEVELS),
+    );
+    return {
+        reviewer,
+        ...(model === undefined ? {} : { model }),
+        ...(effort === undefined ? {} : { effort }),
+        ...(level === undefined ? {} : { level }),
+    };
+}
+
+function securityConfig(entry: Json, path: string): ReviewConfig["security"] {
+    rejectUnknownKeys(entry, ["pathPatterns", "linePatterns", "model", "effort"], path);
+    const model = optional(entry, "model", path, nonEmpty);
+    const effort = optional(entry, "effort", path, effortOf);
+    return {
+        pathPatterns: patterns(entry, "pathPatterns", path),
+        linePatterns: patterns(entry, "linePatterns", path),
+        ...(model === undefined ? {} : { model }),
+        ...(effort === undefined ? {} : { effort }),
+    };
+}
+
+// An empty source matches everything, so it would put the security reviewer on every review.
+function patterns(entry: Json, key: string, path: string): string[] {
+    const sources = stringArray(entry, key, path);
+    sources.forEach((source, index) => {
+        if (source === "") {
+            throw new ParseError(`${path}.${key}[${index}] must not be empty`);
+        }
+        try {
+            new RegExp(source);
+        } catch {
+            throw new ParseError(`${path}.${key}[${index}] must be a valid regular expression`);
+        }
+    });
+    return sources;
+}
+
+// The shipped `review` block, for a run with no configuration file.
+export function shippedReview(): ReviewConfig {
+    return reviewConfig(SHIPPED_DEFAULTS.review, "$.review");
 }
 
 // Last, so every constant the validators read is initialised first.

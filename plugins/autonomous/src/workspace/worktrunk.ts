@@ -8,7 +8,7 @@ import { type Exec, execCommand } from "../exec.ts";
 import type { Result } from "../result.ts";
 import type { WorkspaceManager, WorkspaceManagerFactory } from "./manager.ts";
 
-export const WORKSPACE_TIMEOUT_MS = 120_000;
+const WORKSPACE_TIMEOUT_MS = 120_000;
 
 interface Prepared {
     path: string;

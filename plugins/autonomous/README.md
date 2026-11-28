@@ -1,35 +1,47 @@
 # autonomous
 
 Entry point of the autonomous loop: an orchestrator that discovers previously
-defined work and delegates it to other agents. It runs a fixed list of five
+defined work and delegates it to other agents. It runs a fixed list of six
 steps, in this order:
 
 1. `reconcile` brings the attempts of earlier runs up to date: it resolves,
    observes, finalises or retains each one (see
    [The `reconcile` step](#the-reconcile-step)).
-2. `quota-gate` decides whether the Claude account has quota to spend.
-3. `label-triage` reports the tasks missing a label of the contract and, with
-   `--apply`, writes the labels it is confident about.
-4. `select` chooses the next work unit and explains the choice (see
+2. `capacity` counts the open attempts as slots and compares them with the
+   limits (see [Slots and the `capacity` step](#slots-and-the-capacity-step)).
+3. `quota-gate` decides whether the [active account](#the-active-account) has
+   quota to spend.
+4. `label-triage` reports the tasks missing a label of the contract and, with
+   `--apply`, writes the labels it is confident about (see
+   [The `label-triage` step](#the-label-triage-step)).
+5. `select` chooses the next work unit and explains the choice (see
    [The `select` step](#the-select-step)).
-5. `launch` starts one managed session for the selected unit (see
+6. `launch` starts one managed session for the selected unit (see
    [The `launch` step](#the-launch-step)).
 
 With `--apply`, a run can also end with questions for the human, which
 `/autonomous:run` asks and applies in one round (see
 [The handoff](#the-handoff)). `--apply` can now also create sessions and
 worktrees and write the `taken` label. A separate mode, `--transition`, runs no
-step: it reads a task in `grill-me` and hands off the question that moves it to
-`proposal` (see [Transition mode](#transition-mode)). Another, `--persist`,
-runs no step either: it saves a grill-me attempt's definition and stage summary
-to the task and writes the receipt the transition waits for (see
-[Persist mode](#persist-mode)).
+step: it reads a task in `grill-me`, `proposal`, `implement`, `verify` or
+`code-review` and hands off the question that moves it to its next stage, or,
+for an `AFK` task in `proposal`, `implement`, `verify` or `code-review`, moves
+it itself (see
+[Transition mode](#transition-mode)). Another, `--persist`, runs no step
+either: it saves a grill-me, proposal, implementation, verification or code
+review attempt's stage summary, and the definition of a grill, to the
+task and writes the receipt the transition waits for (see
+[Persist mode](#persist-mode)). `--publish` runs no step either: it publishes a
+code review attempt's findings and walkthrough on its pull request (see
+[Publish mode](#publish-mode)). A third, `--triage-questions`, runs no
+step and writes nothing: it lists the questions of the tasks marked `triage-me`
+(see [Triage questions mode](#triage-questions-mode)).
 
 **The contracts are provisional.** The step contract, the run report and the
 runner shape are a first iteration and are expected to change as further steps
 are added. The JSON report is versioned (`autonomous.run.v2`) so consumers can
 detect a change: version 2 names the label groups `scope`, `autonomy` and
-`stage` in the triage and selection data.
+`stage` in the label triage and selection data.
 
 ## Domain language
 
@@ -40,11 +52,20 @@ mode) are defined in [`GLOSSARY.md`](GLOSSARY.md).
 [ADR 0001](docs/adr/0001-properties-persist-stages-replace.md) records the
 label model of DOT-110: properties persist, stages replace. The
 [label contract](#the-label-contract) implements it, and the
-[grill-me stage](#the-grill-me-stage) is the first stage that uses it.
+[grill-me stage](#the-grill-me-stage) is the first stage that uses it; the
+[proposal stage](#the-proposal-stage) is the second, the
+[implementation stage](#the-implementation-stage) the third and the
+[verification stage](#the-verification-stage) the fourth and the
+[code review stage](#the-code-review-stage) the fifth.
 [ADR 0002](docs/adr/0002-remove-taken-on-finalisation.md) records why the
 runner removes `taken` when an attempt is finalised or discarded.
 [ADR 0003](docs/adr/0003-optional-config-blocks-with-shipped-defaults.md)
 records why the new configuration blocks are optional and the old ones are not.
+[ADR 0004](docs/adr/0004-afk-proposal-transition-needs-no-answer.md) records why
+an `AFK` task leaves proposal preparation, the implementation, the
+verification and the code review without an answer.
+[ADR 0005](docs/adr/0005-slot-limits-bind-only-the-loop.md) records why the
+slot limits bind only the loop.
 
 ## Install
 
@@ -59,17 +80,23 @@ records why the new configuration blocks are optional and the old ones are not.
   from source; plugins install without dependencies, so it uses nothing but
   `bun` and Node built-ins.
 - The [`openusage`](https://github.com/robinebers/openusage) CLI on `PATH`,
-  verified against 0.7.16. Its `openusage.limits.v1` output is validated
-  strictly; a change in that contract makes the gate `not-evaluable`, never a
-  silent pass. A call that takes longer than 120 s is treated as a failure
-  (`not-evaluable`).
+  0.8.0 or later, verified against 0.8.0. Its `openusage.limits.v2` output is
+  validated strictly; a change in that contract makes the gate `not-evaluable`,
+  never a silent pass. OpenUsage 0.7 prints `openusage.limits.v1`, which the
+  gate does not read: the reason asks for 0.8 or later. The CLI prints what the
+  OpenUsage app last fetched and never refreshes, so the app must be running to
+  keep the data fresh. A call that takes longer than 120 s is treated as a
+  failure (`not-evaluable`).
 - [`bd`](https://github.com/steveyegge/beads) on `PATH`, verified against
   1.3.0.
 - [`gh`](https://cli.github.com) on `PATH`, 2.100.0 or later, authenticated
   through its own keyring. The `select` step reads a GitHub issue's blockers with
   `gh issue list --json blockedBy,blocking` and its sub-issues with
   `gh issue view --json subIssues`, fields that 2.100.0 provides; with an older
-  `gh` those reads fail and the step is `not-evaluable`.
+  `gh` those reads fail and the step is `not-evaluable`. For every source,
+  not only GitHub tasks, [pull-request mode](#pull-request-mode) and
+  [log mode](#log-mode) also need `gh` authenticated and a repository whose
+  remote is on GitHub.
 - [`linear`](https://github.com/schpet/linear-cli) (schpet/linear-cli) on
   `PATH`, verified against 2.6.0, authenticated with `linear auth login`
   (credentials in the macOS keychain, or `LINEAR_API_KEY`). No official
@@ -81,7 +108,31 @@ records why the new configuration blocks are optional and the old ones are not.
   `--safe-mode`, `--tools`, `--strict-mcp-config` and
   `--no-session-persistence`.
 - The `mattpocock-skills` plugin installed in Claude Code, only to launch the
-  grill-me stage (see [Prerequisites](#prerequisites)).
+  grill-me, the proposal, the implementation, the verification or the code review
+  stage (see
+  [Prerequisites](#prerequisites),
+  [Proposal prerequisites](#proposal-prerequisites),
+  [Implementation prerequisites](#implementation-prerequisites),
+  [Verification prerequisites](#verification-prerequisites) and
+  [Code review prerequisites](#code-review-prerequisites)).
+- The `openspec` CLI on `PATH`, only to launch the proposal, the
+  implementation, the verification or the code review stage, and to move a task out of
+  `implement`, `verify` or `code-review` (see
+  [Proposal prerequisites](#proposal-prerequisites),
+  [Implementation prerequisites](#implementation-prerequisites),
+  [Verification prerequisites](#verification-prerequisites),
+  [Code review prerequisites](#code-review-prerequisites) and
+  [The guards on leaving implement, verify or code-review](#the-guards-on-leaving-implement-verify-or-code-review)).
+- `git` on `PATH`, to launch the implementation, the verification or the code
+  review stage and to move a task out of `implement`, `verify` or `code-review`: all find the change with it, and
+  the guards read the workspace's status and commits with it. Both also read
+  the repository's default branch through `gh`. The task's repository must
+  provide the OpenSpec apply and update workflows for the implementation, and
+  the verify and update workflows for the verification. The code review needs
+  neither workflow (see
+  [Implementation prerequisites](#implementation-prerequisites),
+  [Verification prerequisites](#verification-prerequisites) and
+  [Code review prerequisites](#code-review-prerequisites)).
 - `aoe` (Agent of Empires) on `PATH`, verified against 1.14.0. It creates,
   observes and removes the managed sessions.
 - `wt` (worktrunk) on `PATH`, verified against 0.77.0. It prepares and
@@ -102,60 +153,76 @@ adding the Linear CLI there is tracked as DOT-82 sub-issue 7.
 ## Usage
 
 ```text
-/autonomous:run [--account <provider-key>] [--force] [--json] [--apply] [--no-handoff]
-/autonomous:run --task <source>:<id> [--stage <stage>] [--account <provider-key>] [--force] [--json] [--apply] [--no-handoff]
+/autonomous:run [--force] [--json] [--apply] [--no-handoff]
+/autonomous:run --task <source>:<id> [--stage <stage>] [--force] [--json] [--apply] [--no-handoff]
 /autonomous:run --bootstrap-labels [--json]
+/autonomous:run --triage-questions [--json]
 /autonomous:run --apply --answer <id>=<value>[,<value>]... [--json]
 /autonomous:run --apply --discard <attempt-id|source:id> [--release-workspace] [--json]
-/autonomous:run --apply --transition <source>:<task> [--json]
+/autonomous:run --apply --transition <source>:<task> [--from <stage>] [--json]
 /autonomous:run --apply --persist <attempt-id> [--json]
+/autonomous:run --apply --pull-request <attempt-id> [--title <title>] [--json]
+/autonomous:run --apply --log <attempt-id> [--json]
+/autonomous:run --apply --publish <attempt-id> [--json]
+/autonomous:loop [--apply] [--force] [--json] [--grills <n>] [--parallel <n>] [--interval <minutes>]
+/autonomous:loop-stop
+bun src/run.ts --notices <n>
 ```
 
-| Flag                                | Effect                                                                                                                                                                                                                                                                                                                                                                                                                       |
-| ----------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `--account <provider-key>`          | Claude account to evaluate (`claude` or `claude@<id>`). Required when several Claude accounts are present                                                                                                                                                                                                                                                                                                                    |
-| `--force`                           | Ask OpenUsage to bypass its shared cache                                                                                                                                                                                                                                                                                                                                                                                     |
-| `--json`                            | Print one `autonomous.run.v2` JSON document instead of the text report; with `--bootstrap-labels`, one `autonomous.bootstrap.v1` document; with `--answer`, one `autonomous.answers.v1` document; with `--discard`, one `autonomous.discard.v1` document; with `--transition`, one `autonomous.transition.v1` document; with `--persist`, one `autonomous.persist.v1` document                                               |
-| `--apply`                           | Let steps write. Without it a run has no side effects beyond the CLIs' own caches and the run lock. Required by `--answer`, `--discard`, `--transition` and `--persist`                                                                                                                                                                                                                                                      |
-| `--no-handoff`                      | Emit no handoff; the questions stay in the step's report. For runs with no human present, such as a `/loop`. Not combined with `--bootstrap-labels`, `--answer`, `--transition` or `--persist`                                                                                                                                                                                                                               |
-| `--answer <id>=<value>[,<value>]`   | [Answer mode](#answer-mode): apply the answer to the question `<id>` and exit, running no step. Repeat it once per question. Only combines with `--apply` and `--json`                                                                                                                                                                                                                                                       |
-| `--bootstrap-labels`                | Run only the label bootstrap and exit. Only combines with `--json`                                                                                                                                                                                                                                                                                                                                                           |
-| `--task <source>:<id>`              | Give that task to `launch` instead of running `label-triage` and `select`. `<source>` is `linear`, `beads` or `github`, split at the first `:`. Given once. Not combined with `--bootstrap-labels`, `--answer`, `--discard`, `--transition` or `--persist`. See [The supplied task](#the-supplied-task)                                                                                                                      |
-| `--stage <stage>`                   | The stage `launch` runs for the supplied task. Requires `--task`. Given once. Its name is checked when the arguments are parsed: a stage that is not registered is a usage error (exit 1) that names the registered stages                                                                                                                                                                                                   |
-| `--discard <attempt-id\|source:id>` | [Discard mode](#discard-mode): discard that attempt, or the one open attempt of that task, and exit, running no step. Requires `--apply`. Only combines with `--apply`, `--json` and `--release-workspace`. Given once                                                                                                                                                                                                       |
-| `--release-workspace`               | With `--discard`, also release the attempt's worktree. Requires `--discard`                                                                                                                                                                                                                                                                                                                                                  |
-| `--transition <source>:<task>`      | [Transition mode](#transition-mode): read the task, which must carry `grill-me`, and hand off the question that moves it to `proposal`, running no step. `<source>` is `linear`, `beads` or `github`, split at the first `:`. Requires `--apply`. Only combines with `--apply` and `--json`. Given once. Not combined with `--no-handoff`, `--answer`, `--task`, `--stage`, `--discard`, `--persist` or `--bootstrap-labels` |
-| `--persist <attempt-id>`            | [Persist mode](#persist-mode): save the definition and the stage summary of that open grill-me attempt to its task and write the receipt, running no step. `<attempt-id>` is `<source>:<task>:<stage>:<n>`. Requires `--apply`. Only combines with `--apply` and `--json`. Given once                                                                                                                                        |
+| Flag                                | Effect                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                 |
+| ----------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `--force`                           | Accepted, and does nothing: OpenUsage 0.8 prints what its app last fetched and refreshes on its own schedule                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                           |
+| `--json`                            | Print one `autonomous.run.v2` JSON document instead of the text report; with `--bootstrap-labels`, one `autonomous.bootstrap.v1` document; with `--answer`, one `autonomous.answers.v1` document; with `--discard`, one `autonomous.discard.v1` document; with `--transition`, one `autonomous.transition.v1` document; with `--persist`, one `autonomous.persist.v1` document; with `--pull-request`, one `autonomous.pull-request.v1` document; with `--log`, one `autonomous.log.v1` document; with `--publish`, one `autonomous.publish.v1` document; with `--triage-questions`, one `autonomous.triage-questions.v1` document                     |
+| `--apply`                           | Let steps write. Without it a run has no side effects beyond the CLIs' own caches and the run lock. Required by `--answer`, `--discard`, `--transition`, `--persist`, `--pull-request`, `--log` and `--publish`                                                                                                                                                                                                                                                                                                                                                                                                                                        |
+| `--no-handoff`                      | Emit no handoff; the questions stay in the step's report. For runs with no human present; the unattended way is the [loop](#the-loop). Not combined with `--bootstrap-labels`, `--answer`, `--transition` or `--persist`                                                                                                                                                                                                                                                                                                                                                                                                                               |
+| `--answer <id>=<value>[,<value>]`   | [Answer mode](#answer-mode): apply the answer to the question `<id>` and exit, running no step. Repeat it once per question. Only combines with `--apply` and `--json`                                                                                                                                                                                                                                                                                                                                                                                                                                                                                 |
+| `--bootstrap-labels`                | Run only the label bootstrap and exit. Only combines with `--json`                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                     |
+| `--triage-questions`                | [Triage questions mode](#triage-questions-mode): read the tasks marked `triage-me` and list their questions, running no step and writing nothing. Only combines with `--json`                                                                                                                                                                                                                                                                                                                                                                                                                                                                          |
+| `--task <source>:<id>`              | Give that task to `launch` instead of running `label-triage` and `select`. `<source>` is `linear`, `beads` or `github`, split at the first `:`. Given once. Not combined with `--bootstrap-labels`, `--answer`, `--discard`, `--transition` or `--persist`. See [The supplied task](#the-supplied-task)                                                                                                                                                                                                                                                                                                                                                |
+| `--stage <stage>`                   | The stage `launch` runs for the supplied task. Requires `--task`. Given once. Its name is checked when the arguments are parsed: a stage that is not registered is a usage error (exit 1) that names the registered stages                                                                                                                                                                                                                                                                                                                                                                                                                             |
+| `--discard <attempt-id\|source:id>` | [Discard mode](#discard-mode): discard that attempt, or the one open attempt of that task, and exit, running no step. Requires `--apply`. Only combines with `--apply`, `--json` and `--release-workspace`. Given once                                                                                                                                                                                                                                                                                                                                                                                                                                 |
+| `--release-workspace`               | With `--discard`, also release the attempt's worktree. Requires `--discard`                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                            |
+| `--transition <source>:<task>`      | [Transition mode](#transition-mode): read the task, which must carry `grill-me`, `proposal`, `implement`, `verify` or `code-review`, and hand off the question that moves it to its next stage, or move an `AFK` task in `proposal` to `implement`, in `implement` to `verify`, in `verify` to `code-review`, or in `code-review` to `external-review`, running no step. `<source>` is `linear`, `beads` or `github`, split at the first `:`. Requires `--apply`. Only combines with `--apply`, `--from` and `--json`. Given once. Not combined with `--no-handoff`, `--answer`, `--task`, `--stage`, `--discard`, `--persist` or `--bootstrap-labels` |
+| `--from <stage>`                    | With `--transition`, the stage the task is expected to leave: `grill-me`, `proposal`, `implement`, `verify` or `code-review`. A task in another stage is refused, and nothing is written. Requires `--transition`. Given once                                                                                                                                                                                                                                                                                                                                                                                                                          |
+| `--pull-request <attempt-id>`       | [Pull-request mode](#pull-request-mode): find or open the draft pull request of that open attempt's workspace branch and write its cover, running no step. `<attempt-id>` is `<source>:<task>:<stage>:<n>`. Requires `--apply`. Only combines with `--apply`, `--title` and `--json`. Given once                                                                                                                                                                                                                                                                                                                                                       |
+| `--title <title>`                   | With `--pull-request`, the text of the pull request's title; the task id is appended. Required to open a pull request; replaces the title of one already open. Requires `--pull-request`. Given once                                                                                                                                                                                                                                                                                                                                                                                                                                                   |
+| `--log <attempt-id>`                | [Log mode](#log-mode): publish the attempt's [logbook entry](#the-logbook) on the pull request, read it back and write the receipt, running no step. `<attempt-id>` is `<source>:<task>:<stage>:<n>`. Requires `--apply`. Only combines with `--apply` and `--json`. Given once                                                                                                                                                                                                                                                                                                                                                                        |
+| `--publish <attempt-id>`            | [Publish mode](#publish-mode): publish the findings and the walkthrough of that open code review attempt as [finding threads](#finding-threads) on its pull request, read them back and write the receipt, running no step. `<attempt-id>` is `<source>:<task>:<stage>:<n>`. Requires `--apply`. Only combines with `--apply` and `--json`. Given once                                                                                                                                                                                                                                                                                                 |
+| `--persist <attempt-id>`            | [Persist mode](#persist-mode): save the definition and the stage summary of that open grill-me attempt, or the stage summary of that open proposal, implementation, verification or code review attempt, to its task and write the receipt, running no step. `<attempt-id>` is `<source>:<task>:<stage>:<n>`. Requires `--apply`. Only combines with `--apply` and `--json`. Given once                                                                                                                                                                                                                                                                |
+| `--loop`                            | Run an iteration of the loop, where the [slot limits](#slots-and-the-capacity-step) bind. Only combines with `--apply`, `--force`, `--json`, `--grills`, `--parallel` and `--interval`. Not combined with `--no-handoff`, `--bootstrap-labels`, `--answer`, `--task`, `--stage`, `--discard`, `--release-workspace`, `--transition`, `--persist`, `--pull-request`, `--title`, `--log`, `--notices` or `--stop-loop`                                                                                                                                                                                                                                   |
+| `--grills <n>`                      | The limit of grill slots for this loop, an integer of 0 or more. Replaces `runner.grills`. Requires `--loop`. Given once                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                               |
+| `--parallel <n>`                    | The limit of work slots for this loop, an integer of 0 or more. Replaces `runner.parallel`. Requires `--loop`. Given once                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                              |
+| `--interval <minutes>`              | The time between two iterations, an integer of 1 or more. Replaces `runner.intervalMinutes`. Requires `--loop`. Given once                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                             |
+| `--notices <n>`                     | The count of notices already shown, an integer of 0 or more. Cannot be combined with any other flag. Given once                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                        |
+| `--stop-loop`                       | Stop the live loop: send its process one termination signal and wait up to 10 seconds. Cannot be combined with any other flag. Run by `/autonomous:loop-stop`                                                                                                                                                                                                                                                                                                                                                                                                                                                                                          |
 
-The script can also be run directly, which is what a shell or `/loop` should
-branch on:
+The script can also be run directly, which is what a shell should branch on:
 
 ```bash
-bun plugins/autonomous/src/run.ts --account claude --json --apply --no-handoff
+bun plugins/autonomous/src/run.ts --json --apply --no-handoff
 ```
 
 `--apply` and `--bootstrap-labels` are the only ways anything is written;
-answer mode, discard mode, transition mode and persist mode require `--apply`.
+answer mode, discard mode, transition mode, persist mode, pull-request mode,
+log mode and publish mode require `--apply`.
 They are separate write paths that cannot be combined, and each must be typed
 explicitly: nothing adds either on its own. With `--apply`, `reconcile` and
 `launch` write attempt records, sessions, worktrees and the `taken` label.
 The one exception is the answer invocation of `/autonomous:run`, which passes
 `--apply` again; it only follows a run the user started with `--apply`. A
-`/loop` that should write passes `--apply` explicitly, and `--no-handoff` with
-it, as above; through the command that is
-`/autonomous:run --account claude --apply --no-handoff` (see
-[The round](#the-round)).
+script run that should write passes `--apply` explicitly, as above. The
+unattended way is [the loop](#the-loop), which needs no `--no-handoff`.
 
 ### Exit codes
 
-For `/autonomous:run [--account …] [--force] [--json] [--apply] [--no-handoff]`:
+For `/autonomous:run [--force] [--json] [--apply] [--no-handoff]`:
 
-| Code | Outcome                                                                                                                                                                                        |
-| ---- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| 0    | `advance` — every step advanced                                                                                                                                                                |
-| 2    | `wait` — a step says to wait (for example, a window exhausted, or no task is selectable)                                                                                                       |
-| 3    | `not-evaluable` — no decision possible: account absent, ambiguous or unknown, data missing, incomplete, invalid, outdated, stale or failed, or another run holds the [run lock](#the-run-lock) |
-| 1    | Invalid arguments or a failure of the runner itself                                                                                                                                            |
+| Code | Outcome                                                                                                                                                                                                                                                                                                                                                |
+| ---- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| 0    | `advance` — every step advanced                                                                                                                                                                                                                                                                                                                        |
+| 2    | `wait` — a step says to wait (for example, a window exhausted, or no task is selectable)                                                                                                                                                                                                                                                               |
+| 3    | `not-evaluable` — no decision possible: no usable [active account](#the-active-account) (no login, a login with no email address, `claude auth status` unreadable, or no OpenUsage account or more than one with that email address), data missing, incomplete, invalid, outdated, stale or failed, or another run holds the [run lock](#the-run-lock) |
+| 1    | Invalid arguments or a failure of the runner itself                                                                                                                                                                                                                                                                                                    |
 
 The same codes apply with `--task`. A run that finds the lock held runs no
 step: it prints a report with no steps, outcome `not-evaluable` and, after the
@@ -170,6 +237,14 @@ For `/autonomous:run --bootstrap-labels [--json]`:
 | 3    | The configuration could not be loaded, a source could not be evaluated, or a label failed to create or recolour |
 | 1    | Invalid arguments or a failure of the runner itself                                                             |
 
+For `/autonomous:run --triage-questions [--json]`:
+
+| Code | Outcome                                                                        |
+| ---- | ------------------------------------------------------------------------------ |
+| 0    | `advance` — every enabled source was read                                      |
+| 3    | `not-evaluable` — a source or the configuration could not be read; no question |
+| 1    | Invalid arguments or a failure of the runner itself                            |
+
 For `/autonomous:run --apply --answer <id>=<value>[,<value>]... [--json]`:
 
 | Code | Outcome                                                                                      |
@@ -178,21 +253,45 @@ For `/autonomous:run --apply --answer <id>=<value>[,<value>]... [--json]`:
 | 3    | `not-evaluable` — an answer was rejected or failed, or the configuration could not be loaded |
 | 1    | Invalid arguments or a failure of the runner itself                                          |
 
-For `/autonomous:run --apply --transition <source>:<task> [--json]`:
+For `/autonomous:run --apply --transition <source>:<task> [--from <stage>] [--json]`:
 
-| Code | Outcome                                                                                                                                                                                                    |
-| ---- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| 0    | `advance` — the task is in `grill-me` and a handoff was emitted                                                                                                                                            |
-| 3    | `not-evaluable` — the task is not in `grill-me`, its source is disabled, it could not be read, an open `grill-me` attempt of the task has no persistence receipt, or the configuration could not be loaded |
-| 1    | Invalid arguments or a failure of the runner itself                                                                                                                                                        |
+| Code | Outcome                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                          |
+| ---- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 0    | `advance` — a handoff was emitted, or an `AFK` task in `proposal` was moved to `implement`, in `implement` to `verify`, in `verify` to `code-review`, or in `code-review` to `external-review`                                                                                                                                                                                                                                                                                                                                                                                   |
+| 3    | `not-evaluable` — the task is in none of `grill-me`, `proposal`, `implement`, `verify` and `code-review`, or not in the stage `--from` names, its source is disabled, it could not be read, a task in `proposal`, `implement`, `verify` or `code-review` has no single autonomy, an open attempt of the stage the task is leaving has no persistence receipt, an open code review attempt has no current publish receipt, the guards on leaving `implement`, `verify` or `code-review` refused it, an `AFK` transition was not applied, or the configuration could not be loaded |
+| 1    | Invalid arguments or a failure of the runner itself                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                              |
 
 For `/autonomous:run --apply --persist <attempt-id> [--json]`:
 
 | Code | Outcome                                                                                                                                  |
 | ---- | ---------------------------------------------------------------------------------------------------------------------------------------- |
-| 0    | `advance` — the definition and the comment were written and read back, and the receipt was written                                       |
+| 0    | `advance` — the comment (and, for a grill, the definition) was written and read back, and the receipt was written                        |
 | 3    | `not-evaluable` — a precondition failed, a write or a read-back failed, or the configuration could not be loaded; no receipt was written |
 | 1    | Invalid arguments or a failure of the runner itself                                                                                      |
+
+For `/autonomous:run --apply --pull-request <attempt-id> [--title <title>] [--json]`:
+
+| Code | Outcome                                                                                                                                                                         |
+| ---- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 0    | `advance` — a pull request is reported, opened or reused, or the task needs none (the parent of a split with no commit ahead)                                                   |
+| 3    | `not-evaluable` — a precondition failed, the title is missing for a pull request to open, a command failed (a rejected push included), or the configuration could not be loaded |
+| 1    | Invalid arguments or a failure of the runner itself                                                                                                                             |
+
+For `/autonomous:run --apply --log <attempt-id> [--json]`:
+
+| Code | Outcome                                                                                                                                                                                   |
+| ---- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 0    | `advance` — the entry was published and read back, or already existed, and the receipt was written                                                                                        |
+| 3    | `not-evaluable` — no pull request, the body is missing or rejected, a publish or read-back failed, a precondition failed or the configuration could not be loaded; no receipt was written |
+| 1    | Invalid arguments or a failure of the runner itself                                                                                                                                       |
+
+For `/autonomous:run --apply --publish <attempt-id> [--json]`:
+
+| Code | Outcome                                                                                                                                                                                                   |
+| ---- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 0    | `advance` — the threads were posted and read back, or already were, and the receipt was written                                                                                                           |
+| 3    | `not-evaluable` — a precondition failed (see [What publish mode requires](#what-publish-mode-requires)), a post or the read-back failed, or the configuration could not be loaded; no receipt was written |
+| 1    | Invalid arguments or a failure of the runner itself                                                                                                                                                       |
 
 For `/autonomous:run --apply --discard <attempt-id|source:id> [--release-workspace] [--json]`:
 
@@ -209,7 +308,9 @@ command: what the run asks it to do next. Its only kind today is a list of
 questions for the human. `label-triage` contributes them (see
 [Questions for the human](#questions-for-the-human)), and so does
 [transition mode](#transition-mode), which emits a handoff with one question
-through the same mechanism.
+through the same mechanism, and so does
+[triage questions mode](#triage-questions-mode), which emits it without
+`--apply`.
 
 A run emits a handoff only when all three hold:
 
@@ -274,8 +375,226 @@ ends; nothing is asked and nothing more is written.
 
 `--no-handoff` suppresses the handoff and changes nothing else about the run;
 the questions stay in the step's report. It is meant for runs with no human
-present. A `/loop` that runs `/autonomous:run` with `--apply` must pass it, or
-it stops at the first question until someone answers.
+present. An unattended `/autonomous:run --apply` must pass it, or it stops at
+the first question until someone answers. The [loop](#the-loop) never hands
+off.
+
+## The loop
+
+The loop repeats iterations at a fixed interval. An iteration runs the steps of
+a run without a supplied task, in the same order and under the same rules, with
+the [slot limits](#slots-and-the-capacity-step) enforced and no handoff. It
+launches at most one session. The loop is the only thing the limits bind.
+
+### Starting it
+
+From an agent session:
+
+```text
+/autonomous:loop --apply
+```
+
+Before it starts the loop, the command asks the questions of the marked tasks
+(see [Questions before the loop starts](#questions-before-the-loop-starts)).
+Then it starts the loop as a background task, waits for its notices in the
+background and shows each one verbatim. Once the loop has started it shows
+nothing else and says nothing while no notice arrives.
+
+From a shell:
+
+```bash
+bun plugins/autonomous/src/run.ts --loop --apply
+```
+
+The loop prints nothing to standard output. It exits with 0 when stopped, 1 on
+a runner error, and 3 when another loop is alive; the message on standard error
+names that loop. Only one loop runs per state directory. A manual
+`/autonomous:run` may run between two iterations, and an iteration that starts
+while a manual run holds the run lock is `not-evaluable`.
+
+**The loop outlives the session.** A loop started from an agent session is a
+background task of that session, and it keeps running after the session is
+closed. No agent then receives its notices, so stop it on purpose with
+`/autonomous:loop-stop` (see [Stopping it](#stopping-it)) or wait for its notices again from a new session
+with `--notices <n>`: the notices stay on disk.
+
+`--interval <minutes>` replaces `runner.intervalMinutes` (10 by default), the
+wait between the end of one iteration and the start of the next. `--grills` and
+`--parallel` replace the slot limits for that loop.
+
+### Questions before the loop starts
+
+With `--apply`, `/autonomous:loop` runs
+`/autonomous:run --triage-questions --json` once before it starts the loop and
+takes the report's full list of questions, not only its handoff. It asks them
+with the question tool in the list's order, in rounds of at most 4, passing each
+question as `/autonomous:run` does (see [The round](#the-round)). After each
+round it applies that round's answers in answer mode, shows its output and asks
+the next round. It composes nothing: every question comes from the report.
+
+It starts the loop when no question is left, or as soon as every question of a
+round is answered `Later`: nothing is written for that round and the remaining
+questions are not asked. A question answered `Later` is not asked again in the
+same start, because the list is read once. When `--triage-questions` exits with
+code 3, the command shows its reason in a code block and starts the loop without
+asking. When it does not finish within the command's ten minutes, the command
+says so in one line and starts the loop without asking: the mode reads the
+description of each marked Linear task one by one, so a long queue of marks takes
+longer, and the questions wait for the next start.
+
+The loop's process asks nothing. A loop started from a shell starts without the
+rounds, and the dry iteration does not run `--triage-questions`.
+
+### The dry iteration
+
+Without `--apply`, `--loop` runs exactly one iteration that writes nothing,
+prints its report as a run does, and exits with the code of its outcome (see
+[Exit codes](#exit-codes)). It takes no loop lock and writes no log or notice.
+
+```bash
+bun plugins/autonomous/src/run.ts --loop
+```
+
+### What keeps it going
+
+An iteration ending in `advance`, `wait` or `not-evaluable` does not stop the
+loop: an exhausted quota, an unreachable tracker, full slots or a run lock held
+by a manual run all end in the next iteration after the interval. The loop
+stops only on a runner error or when its process is asked to stop.
+
+An iteration never waits for an answer. When `label-triage` leaves a scope or
+autonomy group for the human, the iteration marks the task `triage-me` and goes
+on: a marked task is not judged again and is never selected, so the same doubt
+costs one judgement (see [Marking](#marking-the-tasks-left-for-the-human)). The
+questions of marked tasks wait for the next `/autonomous:loop --apply` or
+`/autonomous:run --triage-questions`.
+
+### Notices
+
+A notice is one line, recorded only when:
+
+- an iteration finalises an attempt: `<source>:<task> <stage> → <stage now>`,
+  where the last part is the stage label the task now carries, or `closed`;
+- an iteration newly retains an attempt: `retained <attempt>: <reason>`;
+- an iteration adds `triage-me` to one or more tasks:
+  `triage-me +<n>: <task>, <task>`, naming how many and at most five of
+  them, and ending with `…` when there are more. A task that already carried
+  `triage-me` produces no notice;
+- the loop stops: `loop stopped: received SIGINT`,
+  `loop stopped: received SIGTERM` or `loop stopped: runner error: <message>`.
+
+A session that waits for the person produces no notice. For example:
+
+```text
+linear:DOT-98 grill-me → proposal
+retained linear:DOT-77:grill-me:1: <reason>
+triage-me +2: linear:DOT-130, beads:X-12
+```
+
+`--notices <n>` prints the notices recorded after the first `n`, then
+`next: <m>` with the new count, and exits with 0. While there is none and a
+loop is alive, it waits. With no live loop it first waits up to 10 seconds for
+one to start, then prints what it has, or prints `loop stopped: not running`
+and exits with 2. It takes no other flag.
+
+```bash
+bun plugins/autonomous/src/run.ts --notices 0
+```
+
+### Files
+
+In the state directory (`$AUTONOMOUS_STATE`, else `$XDG_STATE_HOME/autonomous`,
+else `~/.local/state/autonomous`):
+
+| File           | Content                                                                                                  |
+| -------------- | -------------------------------------------------------------------------------------------------------- |
+| `loop.lock`    | The loop's pid and start time, held from start to end                                                    |
+| `loop.log`     | The report of every iteration with its start time, as text or, with `--json`, JSON; the only full report |
+| `loop.log.1`   | The log of the previous loop; a new loop renames the log to it, so the log is bounded to two loops       |
+| `loop.notices` | The notices of the current loop, one per line; emptied when a loop starts                                |
+
+### Stopping it
+
+From any session or shell:
+
+```text
+/autonomous:loop-stop
+```
+
+```bash
+bun plugins/autonomous/src/run.ts --stop-loop
+```
+
+It needs no `--apply` and no configuration, and takes no lock. It sends the
+loop's process one SIGTERM, then waits up to 10 seconds for the loop to end.
+
+| Output                                                | Exit code | Meaning                                                             |
+| ----------------------------------------------------- | --------- | ------------------------------------------------------------------- |
+| `loop stopped`                                        | 0         | The loop ended within the wait                                      |
+| `loop stopping: the iteration in progress ends first` | 0         | The loop is still in an iteration; it stops when the iteration ends |
+| `loop stopped: not running`                           | 2         | No live loop; no signal was sent                                    |
+| An error on standard error                            | 1         | The signal could not be sent, or the lock has no readable owner     |
+
+A lock left by a process that no longer exists counts as no live loop and is
+left in place; the next loop reclaims it. A lock with no readable owner is a
+loop still writing its lock, or a damaged file. For a loop that is starting, run
+the command again; a damaged lock is reclaimed by the next loop.
+
+Stopping changes no session and no attempt. Launched sessions stay open, and
+open attempts keep their slots until the next `/autonomous:run` or loop.
+
+Do not repeat the command while the loop is stopping. After
+`loop stopping: …` nothing more is needed: the loop ends when its iteration
+does, and `loop stopped: received SIGTERM` in its notices confirms it. A second
+signal kills the process and can cut a launch.
+
+Underneath, the command sends SIGTERM to the pid in `loop.lock`; SIGINT does the
+same. A stop sent to that pid
+during an iteration is honoured when the iteration ends, so a launch is never
+cut. A second identical signal kills the process, and the next loop reclaims
+the stale lock.
+
+Ctrl+C on a loop in the foreground of a shell is different: the shell sends
+SIGINT to the commands of the launch too, so a launch in progress can be cut.
+The next `reconcile` with `--apply` recovers that attempt (see "Recovery of a
+pending attempt" in [The reconcile step](#the-reconcile-step)).
+
+## Triage questions mode
+
+```text
+/autonomous:run --triage-questions [--json]
+```
+
+Triage questions mode lists the questions of every task that carries
+`triage-me` and exits. It reads the open tasks of every enabled source as
+`label-triage` does and composes the questions of the marked tasks as that step
+does (see [Questions of marked tasks](#questions-of-marked-tasks)). A marked
+task with a question that its source lists without a description (Linear) is
+read for it; when that read fails, the question is listed without one. It runs no
+step, requests no judgement, needs no quota and takes no lock, and it writes
+nothing. It only combines with `--json`: any other flag is a usage error (exit
+1).
+
+The report carries the count of marked tasks read, every question in the order
+of the step, and a `handoff` of at most 4 questions with `remaining`, in the
+form of [The handoff](#the-handoff). The handoff is emitted without `--apply`
+and is absent when there is no question. With no marked task, the text report
+says `no marked task`. The answers are applied by
+[answer mode](#answer-mode): `--apply --answer <id>=<value>`.
+
+With `--json` the report is one JSON document identified by
+`schema: "autonomous.triage-questions.v1"`:
+`{ schema, startedAt, outcome, marked, questions, handoff?, reasons }`.
+`outcome` is `advance` or `not-evaluable`, `marked` is the count of marked tasks
+read, `questions` holds every question and `reasons` the error when the report
+is not evaluable. The exit code is 0 when every enabled source was read. It is 3
+when a source or the configuration could not be read: the report then gives the
+reason and prints no question.
+
+`/autonomous:run --triage-questions` runs the script once, relays its output,
+and asks the questions of its handoff as it does for a run's handoff (see
+[The round](#the-round)). `/autonomous:loop --apply` runs the mode before it
+starts the loop (see [Starting it](#starting-it)).
 
 ## Answer mode
 
@@ -297,7 +616,7 @@ Each `--answer` is split at its first `=` into the question's id and its
 values, and the values at `,`. These are usage errors (exit 1):
 
 - `--answer` without `--apply`;
-- `--answer` with `--account`, `--force`, `--no-handoff`,
+- `--answer` with `--force`, `--no-handoff`,
   `--bootstrap-labels` or `--transition`: it only combines with `--apply` and
   `--json`;
 - an `--answer` without `=`, with an empty id or with an empty value;
@@ -333,60 +652,119 @@ report never carries a handoff.
 ## Transition mode
 
 ```text
-/autonomous:run --apply --transition <source>:<task> [--json]
+/autonomous:run --apply --transition <source>:<task> [--from <stage>] [--json]
 ```
 
-A grill ends by moving its task from `grill-me` to `proposal`, on a human's
-answer. Transition mode starts that move: it reads the task and hands off one
-question, the task's autonomy. It runs no step, so it needs no quota and no
-judgement, and it takes no [run lock](#the-run-lock): it writes labels, not
-attempts. The answer comes back through [answer mode](#answer-mode), which does
-the writing (see [The transition answer](#the-transition-answer)). The
-[grill-me stage](#the-grill-me-stage) runs it at its end; it can also be run by
-hand. Beyond the task's labels it reads only the attempts in the state
-directory, to find a grill that has not persisted its definition yet (see
-[The persistence receipt](#the-persistence-receipt)); it does not check that a
-grill took place otherwise.
+A stage ends with a transition: the task's stage label is replaced by the next
+one. There are five, and the stage label the task carries picks the row:
+
+| From          | To                | Asks                                                      |
+| ------------- | ----------------- | --------------------------------------------------------- |
+| `grill-me`    | `proposal`        | The autonomy, on a human's answer                         |
+| `proposal`    | `implement`       | The approval of an `HITL` task; nothing for an `AFK` task |
+| `implement`   | `verify`          | The approval of an `HITL` task; nothing for an `AFK` task |
+| `verify`      | `code-review`     | The approval of an `HITL` task; nothing for an `AFK` task |
+| `code-review` | `external-review` | The approval of an `HITL` task; nothing for an `AFK` task |
+
+Transition mode starts the move. It reads the task and, for a task in
+`grill-me`, hands off one question, the task's autonomy. For an `HITL` task in
+`proposal`, `implement`, `verify` or `code-review` it hands off the approval
+question. For an `AFK` task in `proposal`, `implement`, `verify` or `code-review`
+it asks nothing: it applies the
+transition itself, reads it back and emits no handoff (see
+[ADR 0004](docs/adr/0004-afk-proposal-transition-needs-no-answer.md)).
+It runs no step, so it needs no quota and no judgement, and it takes no
+[run lock](#the-run-lock): it writes labels, not attempts. A handoff's answer
+comes back through [answer mode](#answer-mode), which does the writing (see
+[The transition answer](#the-transition-answer)). The
+[grill-me stage](#the-grill-me-stage), the
+[proposal stage](#the-proposal-stage), the
+[implementation stage](#the-implementation-stage), the
+[verification stage](#the-verification-stage) and the code review stage run it
+at their end; it can also be run by hand. Beyond the task's labels it reads the attempts in the state
+directory, to find an attempt of the stage the task is leaving that has not
+persisted yet (see [The persistence receipt](#the-persistence-receipt)). For a
+task in `code-review` it also looks for that attempt's publish receipt (see
+[The publish receipt](#the-publish-receipt)). For a task in `implement`,
+`verify` or `code-review` it also checks, in the task's workspace, that the work
+is finished (see
+[The guards on leaving implement, verify or code-review](#the-guards-on-leaving-implement-verify-or-code-review)).
+It does not check that a stage took place otherwise.
+
+Transition mode can now write: with `--apply`, the `AFK` path adds and removes
+labels itself, as answer mode does for a human's answer.
+
+`--from <stage>` names the stage the caller expects the task to leave:
+`grill-me`, `proposal`, `implement`, `verify` or `code-review`. A task in
+another stage is refused with its labels, and nothing is written. The
+implementation, verification and code review stages pass it, so that a second
+run after a first that moved the task but lost its read-back cannot move the
+task on out of the stage the first run reached: an `AFK` task moved from
+`implement` to `verify` is refused, not moved to `code-review` without a
+verification.
 
 `<source>` is `linear`, `beads` or `github`, split at the first `:`. These are
 usage errors (exit 1):
 
 - `--transition` without `--apply`;
-- `--transition` with any flag other than `--apply` and `--json`;
+- `--transition` with any flag other than `--apply`, `--from` and `--json`;
 - a value without `:` or with an unknown source;
-- `--transition` given twice.
+- `--transition` given twice;
+- `--from` without `--transition`, with a value that is not a stage a transition
+  leaves, or given twice.
 
 `/autonomous:run` relays the report's handoff exactly like a run report's, asks
 the question and runs answer mode once with the answer, so
 `/autonomous:run --apply --transition <source>:<task>` moves a task in one
-round (see [The round](#the-round)). From a shell, quote the answer, because
-GitHub task ids contain `#`:
+round (see [The round](#the-round)). A report with no handoff, such as that of
+an `AFK` task whose transition was applied, is relayed and ends the command:
+nothing is asked. From a shell, quote the answer, because GitHub task ids
+contain `#`:
 
 ```bash
 bun plugins/autonomous/src/run.ts --apply --transition linear:DOT-110
 bun plugins/autonomous/src/run.ts --apply --answer 'transition:linear:DOT-110=AFK'
+bun plugins/autonomous/src/run.ts --apply --answer 'transition:linear:DOT-121=implement'
+bun plugins/autonomous/src/run.ts --apply --answer 'transition:linear:DOT-121=verify'
+bun plugins/autonomous/src/run.ts --apply --answer 'transition:linear:DOT-121=code-review'
+bun plugins/autonomous/src/run.ts --apply --answer 'transition:linear:DOT-121=external-review'
 ```
 
 ### The transition report
 
 The report holds the start time, the outcome, the task (its source, id, title
-and labels, or null when it was not read), the reasons and the handoff. The
-outcome is `advance` exactly when a handoff is emitted, and `not-evaluable`
-otherwise, with the reason:
+and labels, or null when it was not read), `applied`, the reasons and the
+handoff. `applied` is `true` only when the mode itself moved the task, which
+only the `AFK` path does, and `false` otherwise. The task's labels are the ones
+read before the mode acted, except when `applied` is `true`: they are then the
+labels after the move, as read back. The outcome is `advance`
+exactly when a handoff is emitted or the transition was applied, and
+`not-evaluable` otherwise, with the reason:
 
-| Reason                                                                                                                                                   | When                                                                  |
-| -------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------- |
-| `<source> is not enabled`                                                                                                                                | The source is disabled; no task is read                               |
-| The tracker's error                                                                                                                                      | The task cannot be read; the task is null                             |
-| `<source> <id> is not in grill-me (labels [<labels>])`                                                                                                   | The task does not carry `grill-me`                                    |
-| `grill-me attempt <attempt-id> has no persistence receipt at <path>; persist its definition with --apply --persist <attempt-id>, or discard the attempt` | The task has an open `grill-me` attempt without a receipt (see below) |
-| The error of reading the attempts                                                                                                                        | An attempt record in the state directory cannot be read or parsed     |
+| Reason                                                                                                                                                                                             | When                                                                                                                                                                                                      |
+| -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `<source> is not enabled`                                                                                                                                                                          | The source is disabled; no task is read                                                                                                                                                                   |
+| The tracker's error                                                                                                                                                                                | The task cannot be read; the task is null                                                                                                                                                                 |
+| `<source> <id> is in none of grill-me, proposal, implement, verify and code-review (labels [<labels>])`                                                                                            | The task carries none of these stage labels                                                                                                                                                               |
+| `<source> <id> in <stage> has no autonomy: expected one of AFK, HITL`                                                                                                                              | The task in `proposal`, `implement`, `verify` or `code-review` carries no autonomy label                                                                                                                  |
+| `<source> <id> in <stage> has conflicting autonomy [AFK, HITL]: expected one of AFK, HITL`                                                                                                         | The task in `proposal`, `implement`, `verify` or `code-review` carries both autonomy labels                                                                                                               |
+| `<stage> attempt <attempt-id> has no persistence receipt at <path>; persist its <definition or stage summary> with --apply --persist <attempt-id>, or discard the attempt`                         | The task has an open attempt of its stage without a receipt (see below)                                                                                                                                   |
+| Every reason of the guards that holds                                                                                                                                                              | The task is in `implement`, `verify` or `code-review` and its work is not finished (see [The guards on leaving implement, verify or code-review](#the-guards-on-leaving-implement-verify-or-code-review)) |
+| `code-review attempt <attempt-id> has no publish receipt at <path>, so its record is not published; publish it with --apply --publish <attempt-id>, or discard the attempt`                        | The task has an open code review attempt that was never published (see [The publish receipt](#the-publish-receipt))                                                                                       |
+| `code-review attempt <attempt-id> has a findings.json that differs from the one published, so its record is not published; publish it with --apply --publish <attempt-id>, or discard the attempt` | The record changed after its last publication                                                                                                                                                             |
+| The failure of the transition                                                                                                                                                                      | The `AFK` transition was not applied: a label the tracker lacks, a write or a read-back                                                                                                                   |
+| The error of reading the attempts                                                                                                                                                                  | An attempt record in the state directory cannot be read or parsed                                                                                                                                         |
 
-A task in `grill-me` with no attempt waiting for a receipt has no reasons and
-one question in its handoff. A task that is not in `grill-me`, from a disabled
-source, unreadable or waiting for a receipt has no handoff. The task is null for
-a disabled source and for an unreadable task, and filled in for the other
-reasons.
+A task in `grill-me`, or an `HITL` task in `proposal`, `implement`, `verify` or
+`code-review`, with no attempt waiting for a receipt and no guard refusing it has
+no reasons and one question in its handoff. An `AFK` task in `proposal`,
+`implement`, `verify` or `code-review` in the same case has no reasons and no
+handoff, and its transition is applied. A task in none of the five stages, from
+a disabled source, unreadable, in `proposal`, `implement`, `verify` or
+`code-review` without a single autonomy, waiting for a receipt, or in
+`implement`, `verify` or `code-review` with unfinished work has no handoff, and
+nothing is written. The task is null for a disabled source and for an unreadable
+task, and filled in for the other reasons.
 The exit codes are in [Exit codes](#exit-codes). A configuration that cannot be
 loaded is reported as in answer mode: the error is printed on stderr and, with
 `--json`, the document holds `config: { path, error }`, a null task and no
@@ -407,6 +785,7 @@ With `--json` the report is one document identified by
         "title": "Grill-me stage",
         "labels": ["work", "HITL", "grill-me"]
     },
+    "applied": false,
     "reasons": [],
     "handoff": {
         "questions": [
@@ -451,20 +830,35 @@ task: linear DOT-110 → "Grill-me stage" → labels [work, HITL, grill-me]
 handoff: {"questions":[{"id":"transition:linear:DOT-110","step":"transition", …}],"remaining":0}
 ```
 
-For a task that is not in `grill-me`, the text report names the reason and
-carries no handoff line:
+For a task that is in none of the five stages, the text report names the
+reason and carries no handoff line:
 
 ```text
 autonomous transition — started 2026-11-01T09:00:00.000Z
 outcome: not-evaluable
-task: linear DOT-110 → "Grill-me stage" → labels [personal, AFK, proposal]
+task: linear DOT-110 → "Grill-me stage" → labels [personal, AFK, external-review]
 reasons:
-  - linear DOT-110 is not in grill-me (labels [personal, AFK, proposal])
+  - linear DOT-110 is in none of grill-me, proposal, implement, verify and code-review (labels [personal, AFK, external-review])
 ```
+
+For an `AFK` task in `proposal`, `implement`, `verify` or `code-review` whose
+transition was applied, the text report adds a line `applied: true` after the outcome, and carries no handoff line. In
+the JSON document `applied` is `true` and `handoff` is null:
+
+```text
+autonomous transition — started 2026-11-01T09:00:00.000Z
+outcome: advance
+applied: true
+task: linear DOT-110 → "Grill-me stage" → labels [personal, AFK, implement]
+```
+
+The task's labels are those read back after the move. A failure to write
+`transition.json` after an applied transition is added to the reasons and does
+not change the outcome or `applied`.
 
 ### The transition question
 
-The question has the id `transition:<source>:<task>`, the step `transition` and
+The question for a task in `grill-me` has the id `transition:<source>:<task>`, the step `transition` and
 a single choice. The task is everything after the second `:`; task ids contain
 no `:`. The header is the task id when it has at most 12 characters, and
 `autonomy` otherwise. The text has two lines:
@@ -482,33 +876,125 @@ none. `Later` has a null value and the description `Leave the task in
 grill-me`. The question never asks for scope: scope is a property, and the
 grill does not change it.
 
+### The approval question
+
+An `HITL` task in `proposal`, `implement`, `verify` or `code-review` gets the
+approval question instead.
+It has the same id shape and step as the transition question,
+`transition:<source>:<task>` and `transition`, a single choice, and the same
+header rule with `approval` in place of `autonomy`. The text has two lines. For
+a task in `proposal`:
+
+```text
+<source> <taskId> "<title>": the proposal is ready. Approve it to move the task to implement?
+Labels: [<labels on the task>]
+```
+
+For a task in `implement`:
+
+```text
+<source> <taskId> "<title>": the implementation is ready. Approve it to move the task to verify?
+Labels: [<labels on the task>]
+```
+
+For a task in `verify`:
+
+```text
+<source> <taskId> "<title>": the verification is ready. Approve it to move the task to code-review?
+Labels: [<labels on the task>]
+```
+
+For a task in `code-review`:
+
+```text
+<source> <taskId> "<title>": the code review is ready. Approve it to move the task to external-review?
+Labels: [<labels on the task>]
+```
+
+Its options are `Approve`, with the next stage as its value, `implement`,
+`verify`, `code-review` or `external-review`, and the description
+`Move the task to <next stage>`,
+and `Later`, with a null value and the description `Leave the task in <stage>`,
+the stage the task is in. It never asks for autonomy or scope. The mode writes
+nothing for this question: the task stays in its stage until the answer comes
+back. For a task in `implement`, `verify` or `code-review` the question is
+emitted only once the
+[guards](#the-guards-on-leaving-implement-verify-or-code-review) pass, so the
+human is never asked to approve unfinished work. For a task in `code-review` it
+is emitted only once the [publish receipt](#the-publish-receipt) holds too.
+
 ### The transition answer
 
-The answer is a single `AFK` or `HITL`, passed to answer mode as
-`--apply --answer 'transition:<source>:<task>=<value>'`. The transition
-validates it and reports one status for it:
+The answer is a single `AFK` or `HITL` for a task in `grill-me`, a single
+`implement` for a task in `proposal`, a single `verify` for a task in
+`implement`, a single `code-review` for a task in `verify`, and a single
+`external-review` for a task in `code-review`. It is passed to answer mode as
+`--apply --answer 'transition:<source>:<task>=<value>'`. Answer mode reads the
+task again to know which row it answers, validates the value and reports one
+status for it:
 
-| Status     | When                                                                                                                                                                                        |
-| ---------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `applied`  | The transition was written and read back                                                                                                                                                    |
-| `skipped`  | The task, read again, no longer carries `grill-me`. Nothing is written                                                                                                                      |
-| `rejected` | The value is not a single `AFK` or `HITL`, the id is malformed, the source is unknown or disabled, or an open `grill-me` attempt of the task has no persistence receipt                     |
-| `failed`   | The task or the attempts cannot be read, the tracker lacks `proposal` or the answered autonomy (the detail names `--bootstrap-labels`; nothing is written), or a write or a read-back fails |
+| Status     | When                                                                                                                                                                                                                                                                                                                                                                                                                                                                |
+| ---------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `applied`  | The transition was written and read back                                                                                                                                                                                                                                                                                                                                                                                                                            |
+| `skipped`  | The task, read again, carries none of the five stages or no longer the one the value answers, such as `AFK` for a task in `proposal`. Nothing is written                                                                                                                                                                                                                                                                                                            |
+| `rejected` | The value is not a single `AFK`, `HITL`, `implement`, `verify`, `code-review` or `external-review`, the id is malformed, the source is unknown or disabled, an open attempt of the stage the task is leaving has no persistence receipt, an open code review attempt has no current publish receipt, a task in `proposal`, `implement`, `verify` or `code-review` has no single autonomy, or the guards on leaving `implement`, `verify` or `code-review` refuse it |
+| `failed`   | The task or the attempts cannot be read, the tracker lacks the label the transition adds (the detail names `--bootstrap-labels`; nothing is written), or a write or a read-back fails                                                                                                                                                                                                                                                                               |
 
 `Later` has a null value, which the command never passes back, so it writes
-nothing and the task stays in `grill-me`.
+nothing and the task stays in its stage. A task in `proposal` or `implement`
+whose autonomy is missing or in conflict is not transitioned: the answer is
+`rejected` with the reason transition mode gives. A `verify`, `code-review` or
+`external-review` answer for a task whose work is unfinished is `rejected` too,
+because the guards run again when the answer arrives: the workspace may have
+changed since the question was asked. Its detail is
+`<stage> is not finished: <reason>; <reason>`, where `<stage>` is `implement`,
+`verify` or `code-review`, with every reason of the guards that holds (see
+[The guards on leaving implement, verify or code-review](#the-guards-on-leaving-implement-verify-or-code-review)).
+An `implement`, `verify`, `code-review` or `external-review` answer for an `AFK`
+task is applied, because the human approving is enough.
+
+When a transition is applied and read back, and the task has an open attempt of
+the stage being left (the same lookup as for the persistence receipt),
+`transition.json` is written in that attempt's directory. An open attempt of
+another stage gets no record: a grill attempt that still holds the task, for
+instance with a cleanup pending, must not have its record overwritten by the
+proposal's.
+
+```json
+{
+    "schema": "autonomous.transitioned.v1",
+    "answer": ["HITL"],
+    "at": "2026-11-13T10:38:00.000Z",
+    "by": "human"
+}
+```
+
+`answer` is the labels answered and `at` the time the file is written, after
+the read-back. `by` says who moved the task: `human` for an answer applied by
+answer mode, `agent` for the `AFK` path of transition mode, which records
+`["implement"]`, `["verify"]`, `["code-review"]` or `["external-review"]`. `by` is optional: a record without it, as every grill-me record
+written before it existed, still parses, and any other value is rejected. A
+failure to write the file is added to the answer's detail, or to the report's
+reasons on the `AFK` path, and leaves the transition applied. A task with no
+open attempt, such as one transitioned by hand, leaves no file. `Later` leaves
+none either. The [logbook entry](#the-logbook) reads it for its header.
 
 The transition runs in phases, and reads the task back after each write phase:
 
-1. **Check.** The tracker must have the answered autonomy and `proposal`, as in
+1. **Check.** The tracker must have the labels the transition adds, the
+   answered autonomy and `proposal` for a grill, `implement` for a proposal,
+   `verify` for an implementation, `code-review` for a verification,
+   `external-review` for a code review, as in
    [Labels the tracker lacks](#labels-the-tracker-lacks): one listing, Linear
    in any scope, GitHub in the task's repository, Beads unchecked. This happens
    before any write.
-2. **Add.** The answered autonomy and `proposal` are added, each only when the
-   task lacks it. The task is read back and must hold exactly its earlier
+2. **Add.** The labels the transition adds are added, each only when the task
+   lacks it. The task is read back and must hold exactly its earlier
    labels plus the added ones.
-3. **Remove.** Every other autonomy label is removed, and then `grill-me`. The
-   task is read back.
+3. **Remove.** For a grill, every other autonomy label is removed, and then
+   `grill-me`. For a proposal, `proposal` is removed, for an implementation,
+   `implement`, for a verification, `verify`, and for a code review,
+   `code-review`. The task is read back.
 4. **Verify.** The final labels must equal the earlier labels, plus the added
    ones, minus the removed ones.
 
@@ -519,11 +1005,19 @@ that holds them settles it (see
 reads without `proposal` for at least 8 s after it acknowledged the write.
 
 Labels are added before any is removed. The transition removes only the stage it
-leaves, `grill-me`, and the autonomy labels the answer replaces. It never
-removes scope, `taken`, an alias or any other label: a Beads task that carries
-`nazaries`, `work` and `grill-me` ends with `nazaries`, `work`, the answered
-autonomy and `proposal`. This is the first exception to the rule that the loop
-never removes a label; the second is `taken`.
+leaves and, for a grill, the autonomy labels the answer replaces. The
+transitions out of `proposal`, `implement`, `verify` and `code-review` touch no
+autonomy label. It never removes scope, `taken`, an alias
+or any other label: a Beads task that carries `nazaries`, `work` and `grill-me`
+ends with `nazaries`, `work`, the answered autonomy and `proposal`, and one that
+carries `personal`, `AFK` and `proposal` ends with `personal`, `AFK` and
+`implement`; one that carries `personal`, `HITL` and `implement` ends with
+`personal`, `HITL` and `verify`; one that carries `personal`, `HITL` and
+`verify` ends with `personal`, `HITL` and `code-review`; and one that carries
+`personal`, `HITL` and `code-review` ends with `personal`, `HITL` and
+`external-review`. This is the first exception to the rule that the loop never removes
+a label; the second is `taken`, and the third is `triage-me`, removed by
+`label-triage` and its answers.
 
 A transition cut short reports `failed` with the label sets. A read-back that
 never holds them reads 6 times over 30 s and fails with
@@ -547,28 +1041,34 @@ outcome: advance
 Answering a task that has moved on is `skipped`, with the detail
 `already moved on: stage [proposal]`. A `grill-me` answer to the transition
 question is `rejected`, with `invalid for the transition: expected one of AFK,
-HITL`.
+HITL, implement, verify, code-review, external-review`. A task carrying both `grill-me` and `proposal`, left so by a
+cut-short transition, is treated as being in `grill-me`: answering its autonomy
+completes the move, and an `implement` answer is `skipped`.
 
 ### The persistence receipt
 
-A grill must persist its definition before it moves the task. When the task has
-an open `grill-me` attempt, transition mode and the transition answer both look
-for that attempt's persistence receipt, `persisted.json`, which
-[persist mode](#persist-mode) writes in the attempt's directory. They read the
-attempts in the state directory, take no run lock and write nothing for this
-check. An attempt is open when it is `pending`, `created`, `started` or
-`retained`, or `completed` with a cleanup pending. Only attempts of the task at
-the `grill-me` stage count.
+A stage must persist what it saves before it moves the task: a grill its
+definition and stage summary, a proposal, an implementation, a verification and
+a code review their stage summary. When the task has an open attempt of the
+stage it is leaving, `grill-me`, `proposal`, `implement`, `verify` or
+`code-review`, transition mode and
+the transition answer both look for that attempt's persistence
+receipt, `persisted.json`, which [persist mode](#persist-mode) writes in the
+attempt's directory. They read the attempts in the state directory, take no run
+lock and write nothing for this check. An attempt is open when it is `pending`,
+`created`, `started` or `retained`, or `completed` with a cleanup pending. Only
+attempts of the task at the stage it is leaving count: the row's `from`.
 
-- Without the receipt, transition mode reports `not-evaluable`, exits 3 and
-  emits no handoff. Its reason names the attempt and the path where the receipt
+- Without the receipt, transition mode reports `not-evaluable`, exits 3, emits
+  no handoff and, for an `AFK` task in `proposal`, `implement`, `verify` or
+  `code-review`, applies nothing. Its reason names the attempt and the path where the receipt
   is expected, as in the table of
   [The transition report](#the-transition-report).
 - Without the receipt, the answer is `rejected`, with the same text as its
   detail. This also covers an answer passed by hand without the question.
-- With the receipt, the question is emitted and the answer is applied as
-  before.
-- A task with no open `grill-me` attempt, such as one moved on by hand, is
+- With the receipt, the question is emitted, or the `AFK` transition applied,
+  and the answer is applied as before.
+- A task with no open attempt of its stage, such as one moved on by hand, is
   transitioned as before. No receipt is checked.
 - When the task has several open attempts, the first by id without a receipt is
   named; if each holds one, the transition proceeds.
@@ -584,11 +1084,101 @@ reasons:
   - grill-me attempt linear:DOT-110:grill-me:1 has no persistence receipt at /home/me/.local/state/autonomous/attempts/linear/DOT-110/grill-me/1/persisted.json; persist its definition with --apply --persist linear:DOT-110:grill-me:1, or discard the attempt
 ```
 
-The check comes after the task is read and found in `grill-me`. A task that has
-moved on is reported as such, and invalid answer values, disabled sources and
-unreadable tasks are reported before it, whatever the attempts hold. In the
+The check comes after the task is read and found in `grill-me`, `proposal`,
+`implement`, `verify` or `code-review`, and before the
+[publish receipt](#the-publish-receipt), the autonomy check and the
+[guards](#the-guards-on-leaving-implement-verify-or-code-review). A task that has moved on
+is reported as such, and invalid answer values, disabled sources and unreadable
+tasks are reported before it, whatever the attempts hold. In the
 [grill-me session](#what-the-session-does) the transition is step 6, after
-persist mode, which is step 4.
+persist mode, which is step 4. In the
+[proposal session](#what-the-session-does-1), in the
+[implementation session](#what-the-orchestrator-does), in the verification
+session and in the code review session it also comes after persist mode.
+
+### The publish receipt
+
+A code review publishes its findings before it moves the task. When the task is
+in `code-review` and has an open attempt of that stage, transition mode and the
+transition answer look for that attempt's publish receipt, `published.json`,
+in the attempt's directory. It holds the digest of the exact `findings.json`
+that was published. The check reads the files, takes no run lock and writes
+nothing.
+
+- Without the receipt, transition mode reports `not-evaluable`, exits 3, emits
+  no handoff and, for an `AFK` task, applies nothing. Its reason names the
+  attempt and the path where the receipt is expected, and says its record is not
+  published.
+- When `findings.json` has changed since, or can no longer be read, the digest
+  differs and the reason says the attempt's `findings.json` differs from the one
+  published. A human round that changed the record needs a new publication.
+- A `published.json` that cannot be read or parsed is an error: transition mode
+  gives it as the reason and the answer is `failed`, not "not published".
+- Without a current receipt, the answer is `rejected`, naming the attempt.
+- A task with no open attempt of the stage, such as one moved on by hand, is
+  transitioned without this check. Attempts that are not open are skipped.
+- When the task has several open attempts, the first not published is named.
+
+The persistence receipt is checked first, then the publish receipt, then the
+autonomy and the guards. Only `code-review` attempts have a publish receipt: a
+`verify` attempt needs none.
+
+### The guards on leaving implement, verify or code-review
+
+A task leaves `implement`, `verify` or `code-review` only with its work
+finished. Transition mode and the transition answer both refuse a task in one of
+them while, in the task's workspace, the change the stage works on has an unchecked
+task, the working tree has uncommitted changes, or the branch has commits its
+remote branch lacks. The three guards are the same for the three stages: the
+verification and the code review check no task box of their own, but a task left
+unchecked by hand is unfinished work, and a fix left uncommitted or unpushed is
+what the guards exist to catch. The guards run for those three stages only:
+leaving `grill-me` or `proposal` runs no command. They come after the receipt and the autonomy checks, and before the
+approval question is emitted or anything is written, so an `HITL` human is never
+asked to approve unfinished work. Answer mode runs them again when the answer
+arrives, because the workspace may have changed since the question was asked.
+
+The workspace is the path recorded in the task's latest attempt record, of any
+stage, by creation time: every stage of a task shares one workspace. A task with
+no attempt gives the reason
+`there is no workspace to check: the task has no attempt`, and a recorded path
+that no longer exists, for instance after `--release-workspace`, gives
+`there is no workspace to check: <path> no longer exists`. Nothing else is
+checked then.
+
+Otherwise, every command runs in the workspace. `git fetch --prune origin` runs
+first, so a deleted remote branch leaves no stale `origin/<branch>`; a fetch that
+fails is a reason, `fetching origin in the workspace: <error>`, and the three
+checks still run. Each check gives at most one reason, and every
+reason that holds is reported, so one run names all there is to finish:
+
+| Check               | How                                                                                                                                                                                                                                                                                                                         | Reason                                                                                  |
+| ------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------- |
+| Unchecked tasks     | The repository's default branch is read through `gh`, the change is found as the stage's prerequisites find it (see [Implementation prerequisites](#implementation-prerequisites) and [Verification prerequisites](#verification-prerequisites)), on `HEAD`, and `openspec list --json` gives its completed and total tasks | `the change <name> has <n> of <total> tasks unchecked`                                  |
+| Uncommitted changes | `git status --porcelain --untracked-files=normal` prints a line per change                                                                                                                                                                                                                                                  | `the working tree has <n> uncommitted changes`                                          |
+| Unpushed commits    | `git rev-parse --verify --quiet origin/<branch>`, then `git rev-list --count origin/<branch>..HEAD`, with the branch of the attempt record                                                                                                                                                                                  | `the branch <branch> has <n> commits origin/<branch> lacks`                             |
+| No remote branch    | `origin/<branch>` does not exist; it counts as unpushed                                                                                                                                                                                                                                                                     | `the branch <branch> has no remote branch origin/<branch>, so its commits are unpushed` |
+
+The nouns are singular for a count of 1. A check that cannot be made is a
+reason too, never a pass: the default branch, the change, the OpenSpec listing,
+the status or the commit count that cannot be read names what failed, and a
+change that `openspec list` does not report, or reports without task counts,
+gives `openspec list reports no task count for the change <name>`.
+
+In transition mode each reason is one entry of the report's reasons: the outcome
+is `not-evaluable`, the report carries no handoff, nothing is written, and the
+process exits 3. In answer mode the answer is `rejected`, with the detail
+`<stage> is not finished: <reason>; <reason>` with `<stage>` being `implement`,
+`verify` or `code-review`, and the task keeps its stage. For a task whose change has 11 of 12 tasks checked and an uncommitted change:
+
+```text
+autonomous transition — started 2026-11-16T10:00:00.000Z
+outcome: not-evaluable
+task: linear DOT-121 → "Read GitHub blockers" → labels [personal, AFK, implement]
+reasons:
+  - the change read-github-blockers has 1 of 12 tasks unchecked
+  - the working tree has 1 uncommitted change
+```
 
 ## Persist mode
 
@@ -596,13 +1186,25 @@ persist mode, which is step 4.
 /autonomous:run --apply --persist <attempt-id> [--json]
 ```
 
-Persist mode saves what a grill-me attempt confirmed. It writes the attempt's
-definition at the top of the task's description, posts its stage summary as a
-comment on the task, reads both back and writes a receipt. It runs no step, so
-it needs no quota and no judgement: it loads the configuration and builds the
-trackers, nothing more. The [grill-me session](#what-the-session-does) runs it
-as step 4 of its closing; it can also be run from a shell, for instance to
-persist again after a failure. Quote a GitHub attempt id, because the task id
+Persist mode saves what a grill-me, proposal, implementation, verification or
+code review attempt produced.
+What it saves depends on the attempt's stage:
+
+| Stage         | Requires                               | Writes                                                                       |
+| ------------- | -------------------------------------- | ---------------------------------------------------------------------------- |
+| `grill-me`    | `definition.md` and `stage-summary.md` | The definition at the top of the description, the stage summary as a comment |
+| `proposal`    | `stage-summary.md`                     | The stage summary as a comment; the description is never touched             |
+| `implement`   | `stage-summary.md`                     | The stage summary as a comment; the description is never touched             |
+| `verify`      | `stage-summary.md`                     | The stage summary as a comment; the description is never touched             |
+| `code-review` | `stage-summary.md`                     | The stage summary as a comment; the description is never touched             |
+
+It reads what it wrote back and writes a receipt. It runs no step, so it needs
+no quota and no judgement: it loads the configuration and builds the trackers,
+nothing more. The [grill-me session](#what-the-session-does) runs it as step 4
+of its closing, and the [proposal session](#what-the-session-does-1), the
+[implementation session](#what-the-orchestrator-does), the verification session
+and the code review session in theirs; it can also be run from a shell, for instance to persist again after a
+failure. Quote a GitHub attempt id, because the task id
 contains `#`:
 
 ```bash
@@ -629,15 +1231,20 @@ hold:
 - the attempt has a record, which can be read;
 - the attempt is open: `pending`, `created`, `started` or `retained`. A
   `completed`, `aborted` or `discarded` attempt is refused;
-- the attempt's stage is `grill-me`;
+- the attempt's stage is `grill-me`, `proposal`, `implement`, `verify` or
+  `code-review`; an attempt of the `test` stage is refused, with the reason
+  `attempt <attempt-id> is a test attempt: persist mode takes only grill-me, proposal, implement, verify and code-review attempts`;
 - the attempt's source is enabled;
-- the attempt's directory holds `definition.md` and `stage-summary.md`, and
-  neither is empty or only whitespace. The agent writes both; a reason names
-  each file that is missing or empty.
+- the attempt's directory holds the files its stage requires (see the table
+  above), and none is empty or only whitespace. The agent writes them; a reason
+  names each file that is missing or empty. A proposal, implementation,
+  verification or code review attempt's missing `definition.md` is not a reason.
 
 ### What it writes
 
-In this order, stopping at the first failure:
+For a `grill-me` attempt, in this order, stopping at the first failure. A
+`proposal`, `implement`, `verify` or `code-review` attempt takes steps 1, 3 and
+4 and skips step 2: it reads the task, posts its comment and writes its receipt.
 
 1. **Read.** The task is read again, right before the write, so a description
    edited while the grill ran is the one that is spliced.
@@ -672,6 +1279,16 @@ In this order, stopping at the first failure:
    When none holds it after the last read, persist mode fails with the reason
    `<source> <id>: the comment headed "<header>" was not found when read back (read 6 times over 30 s)`.
    The header is `autonomous · grill-me · <attempt-id> · definition saved`.
+   For a proposal attempt it is
+   `autonomous · proposal · <attempt-id> · stage summary saved`, for an
+   implementation attempt
+   `autonomous · implement · <attempt-id> · stage summary saved`, and for a
+   verification attempt
+   `autonomous · verify · <attempt-id> · stage summary saved`, and for a code
+   review attempt
+   `autonomous · code-review · <attempt-id> · stage summary saved`. For all of
+   them but the grill, the comment is the header, a blank line and the stage summary, and the comment is
+   the only thing written to the task.
 4. **The receipt.** `persisted.json` is written in the attempt's directory,
    through a temporary file and a rename:
 
@@ -792,6 +1409,10 @@ With `--json` the report is one document identified by
 | `receipt`   | The path of `persisted.json` once written, otherwise `null`                                                                          |
 | `config`    | `{ path, error }`, only when the configuration could not be loaded                                                                   |
 
+For a proposal, an implementation, a verification or a code review attempt the
+description is never written: the `description:` line reads `not written` and, in the JSON document, `written.description` and
+`readBack.description` are false, in a report whose outcome is still `advance`.
+
 `existing` means an earlier run posted the comment, so this one posted none and
 `readBack.comment` is true. When the configuration cannot be loaded, the error
 is printed on stderr and, with `--json`, the document holds `config`, a null
@@ -799,12 +1420,713 @@ task, no reasons and no notes; without `--json`, the error is on stderr only,
 as in answer mode. The persist report never carries a handoff. The exit codes
 are in [Exit codes](#exit-codes).
 
+## Pull-request mode
+
+```text
+/autonomous:run --apply --pull-request <attempt-id> [--title <title>] [--json]
+```
+
+Pull-request mode gives a task its draft pull request. It finds the open pull
+request of the attempt's workspace branch and reuses it, or pushes the branch
+and opens one. It runs no step, so it needs no quota and no judgement. The
+[grill-me session](#what-the-session-does) runs it as step 7 of its closing, the
+[proposal session](#what-the-session-does-1) as its step 2, and it can be run
+from a shell. Quote a GitHub attempt id, because the task id
+contains `#`:
+
+```bash
+bun plugins/autonomous/src/run.ts --apply --pull-request linear:DOT-121:grill-me:1 --title 'feat(autonomous): read GitHub blockers'
+```
+
+These are usage errors (exit 1):
+
+- `--pull-request` without `--apply`;
+- `--pull-request` with any flag other than `--apply`, `--title` and `--json`;
+- `--title` without `--pull-request`;
+- a value that is not an attempt id, `<source>:<task>:<stage>:<n>`, or no value;
+- `--pull-request` or `--title` given twice.
+
+Pull-request mode takes no [run lock](#the-run-lock). It never writes the
+attempt's record.
+
+### What pull-request mode requires
+
+The mode writes nothing, reports the reasons and exits 3 unless all of these
+hold:
+
+- the attempt has a record, which can be read;
+- the attempt is open: `pending`, `created`, `started` or `retained`;
+- the attempt's source is enabled;
+- `gh` is installed and authenticated, and the repository's remote is on GitHub.
+  This holds for every source, not only for GitHub tasks: a Linear or a Beads
+  task gets its pull request through `gh` too.
+
+### What it does
+
+Every command runs in the attempt's worktree. The mode never marks a pull
+request ready, never merges it and never closes it, and it never forces a push
+or skips a hook. In this order:
+
+1. **Find.** `gh` lists the open pull requests of the workspace branch. When one
+   exists, it is reused and nothing is pushed or opened. Only an open pull
+   request counts: a branch whose earlier pull request was merged or closed
+   gets a new one.
+2. **Nothing to show.** The branch is compared with the repository's default
+   branch. When it has no commit ahead of it, the mode adds one empty commit,
+   `chore: open the pull request of <task id>`, so the pull request can exist.
+   The exception is the parent of a split, a task with at least one open
+   subtask: it gets no commit and no pull request. The mode reports
+   `needed: false` with the reason and exits 0. A parent whose grill committed
+   documentation has commits ahead and gets its pull request as any task does.
+3. **Push.** `git push -u origin <branch>`. The repository's hooks run, and a
+   rejected push opens nothing: the report names the failed command and the mode
+   exits 3.
+4. **Open.** A **draft** pull request against the default branch, with the
+   title and the cover.
+5. **Cover.** The description is written again on every run, whether the pull
+   request was opened or reused.
+
+### The title
+
+The title is the text of `--title` followed by a space and `(<task id>)`, unless the text
+already ends with it: `feat(autonomous): read GitHub blockers` becomes
+`feat(autonomous): read GitHub blockers (DOT-121)`. The agent writes the text in
+the repository's own conventions. A title is required to open a pull request:
+without one, nothing is pushed or opened and the mode exits 3, naming the
+missing title. The parent of a split with no commit ahead needs no title,
+because the mode checks it first and opens nothing. When a title is passed for a pull request that is already open,
+the mode replaces its title, which lets a later stage correct it. When none is
+passed, the title stays as it is.
+
+### The cover
+
+The pull request's description is its cover, written by code from the task as
+its tracker holds it:
+
+```markdown
+Task: [DOT-121](https://linear.app/example/issue/DOT-121)
+Parent: [DOT-120](https://linear.app/example/issue/DOT-120)
+
+### Problem
+
+…
+
+### Solution
+
+…
+```
+
+- `Task:` links the task. `Parent:` appears for a subtask and links its parent.
+  A link is `[id](url)`, or the id in code when the tracker gives no URL, as
+  Beads does.
+- When the task's description holds a definition (see
+  [The description layout](#the-description-layout)), the cover carries its
+  `### Problem` and `### Solution` sections and none of the others.
+- A task with no definition gets, in their place, the first paragraph of its
+  description, cut to 500 characters.
+- A task with no description gets the links only.
+
+Code owns the description. The cover is rewritten on every run of the mode, so a
+person's edit to the description is lost at the next stage. Edit the task
+instead: that is where the cover comes from.
+
+### The pull-request report
+
+Without `--json`, the report is text: the header lines (`outcome`, `attempt`),
+then `task`, `branch`, `base`, the pull request (`#<n> opened` or `reused`, its
+URL and its title, or `none`, or `not needed`), `empty commit: added` or `none`,
+and a `reasons:` block when there are reasons.
+
+With `--json` it is one document identified by
+`schema: "autonomous.pull-request.v1"`:
+
+```json
+{
+    "schema": "autonomous.pull-request.v1",
+    "startedAt": "2026-11-13T10:40:00.000Z",
+    "outcome": "advance",
+    "attempt": "linear:DOT-121:grill-me:1",
+    "task": { "source": "linear", "id": "DOT-121", "title": "Fix the login" },
+    "branch": "example-dot-121",
+    "base": "main",
+    "needed": true,
+    "pullRequest": {
+        "number": 42,
+        "url": "https://github.com/example/repo/pull/42",
+        "title": "feat(autonomous): read GitHub blockers (DOT-121)",
+        "action": "opened"
+    },
+    "emptyCommit": true,
+    "reasons": []
+}
+```
+
+| Field         | Content                                                                                          |
+| ------------- | ------------------------------------------------------------------------------------------------ |
+| `schema`      | `autonomous.pull-request.v1`                                                                     |
+| `startedAt`   | The start time of the run                                                                        |
+| `outcome`     | `advance` when a pull request is reported or none is needed, `not-evaluable` otherwise           |
+| `attempt`     | The attempt id that was given                                                                    |
+| `task`        | `{ source, id, title }`, or `null` when the task was not read                                    |
+| `branch`      | The attempt's workspace branch                                                                   |
+| `base`        | The repository's default branch                                                                  |
+| `needed`      | `false` only for the parent of a split with no commit ahead of the base                          |
+| `pullRequest` | `{ number, url, title, action }`, with `action` `opened` or `reused`, or `null` when none exists |
+| `emptyCommit` | Whether the mode added the empty commit                                                          |
+| `reasons`     | Why it stopped or opened nothing, in order                                                       |
+| `config`      | `{ path, error }`, only when the configuration could not be loaded                               |
+
+When the configuration cannot be loaded, the error is printed on stderr and,
+with `--json`, the document holds `config`, as in answer mode. The report never
+carries a handoff. The exit codes are in [Exit codes](#exit-codes).
+
+## The logbook
+
+Each attempt of a stage leaves one logbook entry: a comment on the task's pull
+request, short enough to catch up on the story without reading the work. It
+differs from the stage summary. The summary is for the next agent and is saved
+in the task's tracker. The entry is for a person reading the pull request: what
+the agent did, what was decided and by whom, what it assumed, and what comes
+next.
+
+The agent writes the body, and code writes everything else. The entry is
+published by [log mode](#log-mode), and discard mode publishes a short one of
+its own (see [Discard mode](#discard-mode)).
+
+### The body
+
+The agent writes the body to `logbook-entry.md` in the attempt's directory. It
+holds these sections, each as a level-3 heading (`###`) at the start of a line, and a
+stage may add sections of its own:
+
+```markdown
+### What I did
+
+### Decisions
+
+### Assumptions
+
+### Next stage
+```
+
+`none` is fine for Decisions or Assumptions. The proposal prompt adds the
+section `### Proposal`, naming the OpenSpec change and its files, and the
+implementation prompt the section `### Implementation`, listing the tasks of the
+change done and the commits by subject. The grill-me prompt asks the agent
+to mark each decision as the agent's or the human's and to link the stage
+summary from Next stage without repeating it. Code checks the body and does not
+check who took a decision. It rejects the body, and publishes nothing, when:
+
+- a required section is missing;
+- What I did is empty;
+- the body has more than 300 words, counting every whitespace-separated token
+  of the file, headings included;
+- the body names the home directory of the machine, because the entry is public
+  in a public repository.
+
+A rejection names every rule the body breaks at once, so one correction fixes
+them all.
+
+### The header
+
+The agent never writes the header. Code writes it from the attempt's record and
+its files, and puts it above the body:
+
+```markdown
+<!-- autonomous:logbook linear:DOT-121:grill-me:1 -->
+
+### 🔥 grill-me · attempt 1
+
+`HITL` · `--model opus --effort high` · 2026-11-13 10:02 → 10:40 UTC (38 min) · answered `HITL` · 1 commit (`a1b2c3d`)
+```
+
+The first line is the marker, `<!-- autonomous:logbook <attempt-id> -->`, which
+GitHub does not show. The heading carries the stage's emoji, its name and the
+attempt number. The facts line holds, in this order, and leaves out a value that
+is not recorded:
+
+- the task's autonomy label, read from its tracker when the mode runs;
+- the agent arguments of the launch, from the record's `agentArgs` (a record
+  from before the field has none);
+- the start, the first `started` entry of the record, then the end, the time of
+  the run, in UTC, and the duration;
+- `answered <labels>`, from `transition.json`; when the record says the agent
+  moved the task, as the `AFK` path of the proposal, the implementation and the
+  verification and code review stages does, the text is
+  ``moved to `implement` by the agent, with no answer`` instead, or
+  ``moved to `verify` …`` for an implementation,
+  ``moved to `code-review` …`` for a verification, or
+  ``moved to `external-review` …`` for a code review;
+- the commits made on the branch since the start, as short ids, or `no commits`.
+  The empty commit pull-request mode adds is not counted. The count is an
+  approximation by time: a commit made by hand in the worktree during the
+  attempt is counted too.
+
+### The receipt
+
+Log mode publishes at most one entry per attempt, and the marker is how it
+knows. Before publishing, it reads the pull request's comments and skips the
+publish when one starts with the marker. After publishing, it reads the comments
+back, waiting out the read lag (see
+[Read-backs and tracker lag](#read-backs-and-tracker-lag)), and checks that the
+entry is among them. Only then does it write `logbook.json` in the attempt's
+directory, through a temporary file and a rename:
+
+```json
+{
+    "schema": "autonomous.logged.v1",
+    "attempt": "linear:DOT-121:grill-me:1",
+    "pullRequest": { "number": 42, "url": "https://github.com/example/repo/pull/42" },
+    "at": "2026-11-13T10:40:00.000Z"
+}
+```
+
+`at` is the start time of the run. `reconcile` looks for this file (see
+[What it does to each attempt](#what-it-does-to-each-attempt)), and discard mode
+publishes no entry when it exists.
+
+## Log mode
+
+```text
+/autonomous:run --apply --log <attempt-id> [--json]
+```
+
+Log mode publishes the attempt's [logbook entry](#the-logbook). It runs no step.
+The [grill-me session](#what-the-session-does) runs it as step 8 of its closing,
+after pull-request mode, the [proposal session](#what-the-session-does-1), the
+[implementation session](#what-the-orchestrator-does) and the verification
+session in theirs, and it can be run from a shell, for instance again
+after a rejected body. These are usage errors (exit 1):
+
+- `--log` without `--apply`;
+- `--log` with any flag other than `--apply` and `--json`;
+- a value that is not an attempt id, `<source>:<task>:<stage>:<n>`, or no value;
+- `--log` given twice.
+
+Log mode takes no [run lock](#the-run-lock). It writes nothing, reports the
+reasons and exits 3 unless the attempt has a readable record, is open and has an
+enabled source; the attempt's directory holds `logbook-entry.md`; the body
+passes the checks of [The body](#the-body); and the attempt's branch has an open
+pull request. Log mode never opens a pull request: run pull-request mode first.
+A failed publish or read-back leaves no receipt.
+
+Running it again after success publishes nothing new, reports `existing` and
+writes the receipt only if it is missing. A stage that is not registered is a
+reason too: the entry's heading needs the stage's emoji.
+
+### The log report
+
+Without `--json`, the report is text: the header lines, then `task`,
+`pull request`, `body` (the word count), `entry` (`published`, `already
+published` or `not published`), `receipt`, and `notes:` and `reasons:` blocks
+when there are any.
+
+With `--json` it is one document identified by `schema: "autonomous.log.v1"`:
+
+```json
+{
+    "schema": "autonomous.log.v1",
+    "startedAt": "2026-11-13T10:40:00.000Z",
+    "outcome": "advance",
+    "attempt": "linear:DOT-121:grill-me:1",
+    "task": { "source": "linear", "id": "DOT-121", "title": "Fix the login" },
+    "pullRequest": { "number": 42, "url": "https://github.com/example/repo/pull/42" },
+    "entry": "published",
+    "words": 187,
+    "notes": [],
+    "reasons": [],
+    "receipt": "/home/me/.local/state/autonomous/attempts/linear/DOT-121/grill-me/1/logbook.json"
+}
+```
+
+| Field         | Content                                                                                                                   |
+| ------------- | ------------------------------------------------------------------------------------------------------------------------- |
+| `schema`      | `autonomous.log.v1`                                                                                                       |
+| `startedAt`   | The start time of the run                                                                                                 |
+| `outcome`     | `advance` exactly when the receipt was written, `not-evaluable` otherwise                                                 |
+| `attempt`     | The attempt id that was given                                                                                             |
+| `task`        | `{ source, id, title }` once the attempt was read, or `null` when it was not                                              |
+| `pullRequest` | `{ number, url }`, or `null` when the branch has no open pull request                                                     |
+| `entry`       | `published` now, `existing` when an earlier run published it, or `none`                                                   |
+| `words`       | The word count of the body, as the limit counts it; `null` when the body was not read                                     |
+| `notes`       | What happened without stopping the mode, such as an unreadable `transition.json`, whose answer the header then leaves out |
+| `reasons`     | Why it stopped, in order, every broken rule of the body included; empty when the receipt was written                      |
+| `receipt`     | The path of `logbook.json` once written, otherwise `null`                                                                 |
+| `config`      | `{ path, error }`, only when the configuration could not be loaded                                                        |
+
+A rejected body for its length gives `entry: "none"`, the word count, a reason
+that names the limit of 300 and no receipt. The exit codes are in
+[Exit codes](#exit-codes).
+
+## Publish mode
+
+```text
+/autonomous:run --apply --publish <attempt-id> [--json]
+```
+
+Publish mode publishes a code review attempt's findings on its pull request as
+[finding threads](#finding-threads) and brings its [walkthrough](#the-walkthrough)
+up to date. It runs no step, so it needs no quota and no judgement. The
+[code review session](#what-the-orchestrator-does-when-it-closes-1) runs it right
+after the checks pass, and again at the end of each human round; it can also be
+run from a shell, for instance to publish again after a failure. Quote a GitHub
+attempt id, because the task id contains `#`:
+
+```bash
+bun plugins/autonomous/src/run.ts --apply --publish linear:DOT-121:code-review:1
+bun plugins/autonomous/src/run.ts --apply --publish 'github:owner/name#12:code-review:1'
+```
+
+These are usage errors (exit 1):
+
+- `--publish` without `--apply`;
+- `--publish` with any flag other than `--apply` and `--json`;
+- a value that is not an attempt id, `<source>:<task>:<stage>:<n>`, or no value;
+- `--publish` given twice.
+
+Publish mode takes no [run lock](#the-run-lock). It writes to the pull request
+and, in the attempt's directory, new files beside the attempt's record, and never
+the record.
+
+### What publish mode requires
+
+Publish mode posts nothing, reports the reasons and exits 3 unless all of these
+hold, checked in this order:
+
+- the attempt has a record, which can be read, and is open (`pending`,
+  `created`, `started` or `retained`);
+- the attempt's stage is `code-review`; a `verify` attempt is refused, with a
+  reason that says publish mode publishes `code-review` attempts only;
+- the attempt's directory holds `findings.json`, and it is a valid record (see
+  [The findings record](#the-findings-record)); the report names
+  the file and each field at fault, and its `attempt` is the one named;
+- the workspace's branch has an open pull request; the reason names the branch
+  and says to run `--pull-request <attempt>` first;
+- the branch has no commit its remote branch lacks, after `git fetch --prune
+  origin` in the workspace, since a thread can only be anchored to pushed lines;
+  the reason names the unpushed commits;
+- the pull request holds no pending review of the account: the reason names it
+  and says to submit or delete it, then publish again.
+
+Then it reads what it needs to place the threads: the pull request's final diff
+from its merge base with the default branch, the change the branch adds, and
+the threads already on the pull request. Nothing is posted before all of that
+has been read.
+
+### What it does
+
+In order, stopping at the first failure; the next run continues from what was
+posted:
+
+1. **Validate.** The whole record is validated, and an invalid one publishes
+   nothing.
+2. **Plan.** For each entry that is published (see
+   [What is published](#what-is-published)), and each unpublished entry linked to
+   a thread, the mode decides which thread holds
+   it, in this order: the thread the entry is linked to in the record's `thread`
+   field; a thread this attempt already opened for it, found by its marker; an
+   exact match; a new thread. The exact match is the backstop for a finding the
+   record does not link: it continues a thread a code review published, open or
+   resolved, whose file, side, line range and title are the same, the title
+   compared ignoring case and whitespace. The report names each match. An entry
+   linked to a thread the pull request lacks stops the run before any post.
+3. **One review per round.** The new threads of one review round are posted in
+   one review, with the event `COMMENT`, whose body is a three-line index of the
+   round (the stage and round, the threads open and resolved, the review team's
+   tier and skipped reviewers) and the hidden review marker. A round that opens
+   no thread posts no review, and publish mode posts none of its own for a reply
+   or a change of state (GitHub attaches an empty review to a reply by itself). A
+   comment that no thread can hold goes in the body of its round's review; when
+   the round opens no thread, such a comment is not posted, and a note says so.
+   The threads the review opened are found again by their markers.
+4. **Replies and resolutions.** For an entry whose thread exists, the mode
+   replies with its state, resolves the thread when the finding is accounted for
+   and unresolves it when it is open again. An entry that is not published gets a
+   reply with its outcome and leaves the thread's state as it is. One post at a
+   time.
+5. **Read back.** The pull request's threads are read again, with the read lag
+   of [Read-backs and tracker lag](#read-backs-and-tracker-lag), and every post
+   of the run must be there in its state.
+6. **The walkthrough.** It is brought up to date and, when it changed, saved (see
+   [The walkthrough](#the-walkthrough)). A failure here never fails the publish.
+7. **The receipt.** `published.json` is written in the attempt's directory,
+   through a temporary file and a rename.
+
+It is idempotent within an attempt. A finding whose marker for the attempt is
+already on the pull request is not published again, and a state already
+replied is not replied again, so running it twice posts nothing the second time
+and exits 0, and a run cut short after the review resolves its threads on the
+next run without a second review.
+
+It touches only the threads a code review published, those addressed to code
+review and those the record links to. A thread of another reviewer, such as an
+open CodeRabbit thread no entry links to, is never replied to, resolved or
+unresolved.
+
+It posts only `COMMENT` reviews, replies and resolutions. It never marks the
+pull request ready for review, approves it or requests changes: the pull request
+stays a draft. It posts with the `gh` account of the machine; the markers and the
+folded trace, not the author, tell a stage's comments from the human's.
+
+The receipt:
+
+```json
+{
+    "schema": "autonomous.published.v1",
+    "attempt": "linear:DOT-121:code-review:1",
+    "pullRequest": { "number": 90, "url": "https://github.com/example/repo/pull/90" },
+    "findingsDigest": "9f2c…",
+    "walkthroughDigest": "41ab…",
+    "publishedAt": "2026-11-25T10:30:00.000Z"
+}
+```
+
+`findingsDigest` is the SHA-256 of the exact bytes of `findings.json` published,
+and `walkthroughDigest` covers the saved walkthrough and its patch together: it
+is the SHA-256 of the JSON array that holds the text of `walkthrough.json` and
+of `walkthrough.patch`, or null when there is none. The transition waits for this receipt (see
+[The publish receipt](#the-publish-receipt)): a `findings.json` that changed
+after it needs a new publication.
+
+### The publish report
+
+Without `--json`, the report is text: the header lines, then `task`,
+`pull request`, a block each for the threads opened, answered, resolved and
+unresolved and for the exact matches (`none` when empty), the reviews posted,
+`walkthrough`, `receipt`, and `notes:` and `reasons:` blocks when there are any.
+For the first publication of a record with two findings:
+
+```text
+autonomous publish — started 2026-11-25T10:30:00.000Z
+outcome: advance
+attempt: linear:DOT-121:code-review:1
+task: linear DOT-121 → "Read GitHub blockers"
+pull request: #90 https://github.com/example/repo/pull/90
+threads opened:
+  - f1: https://github.com/example/repo/pull/90#discussion_r1001
+  - f2: https://github.com/example/repo/pull/90#discussion_r1002
+threads answered: none
+threads resolved:
+  - f1: https://github.com/example/repo/pull/90#discussion_r1001
+threads unresolved: none
+exact matches: none
+reviews:
+  - round 1: https://github.com/example/repo/pull/90#pullrequestreview-501
+walkthrough: saved
+receipt: /home/me/.local/state/autonomous/attempts/linear/DOT-121/code-review/1/published.json
+```
+
+With `--json` it is one document identified by `schema: "autonomous.publish.v1"`:
+
+| Field         | Content                                                                                                                                                               |
+| ------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `schema`      | `autonomous.publish.v1`                                                                                                                                               |
+| `startedAt`   | The start time of the run                                                                                                                                             |
+| `outcome`     | `advance` exactly when the receipt was written, `not-evaluable` otherwise                                                                                             |
+| `attempt`     | The attempt id that was given                                                                                                                                         |
+| `task`        | `{ source, id, title }` once the attempt was read, or `null`                                                                                                          |
+| `pullRequest` | `{ number, url }`, or `null` when the branch has no open pull request                                                                                                 |
+| `threads`     | `{ opened, answered, resolved, unresolved }`, each a list of `{ finding, url }`; a reply by an exact match, and one to an unpublished linked entry, are in `answered` |
+| `matches`     | The exact matches the run continued, as `{ finding, url }`                                                                                                            |
+| `reviews`     | One `{ round, url }` per round whose new threads the run posted                                                                                                       |
+| `walkthrough` | `{ outcome, reason }` with `outcome` `saved`, `unchanged` or `none`, or `null` when the run stopped before it                                                         |
+| `notes`       | What the operator should know although the run went through                                                                                                           |
+| `reasons`     | Why it stopped, in order; empty when the receipt was written                                                                                                          |
+| `receipt`     | The path of `published.json` once written, otherwise `null`                                                                                                           |
+| `config`      | `{ path, error }`, only when the configuration could not be loaded                                                                                                    |
+
+The exit codes are in [Exit codes](#exit-codes).
+
+## Finding threads
+
+A finding thread is a review thread on the task's pull request that holds one
+finding of a code review and its state. They are how findings reach the people
+who merge, instead of a document (see
+[ADR 0008](docs/adr/0008-findings-live-in-pull-request-threads.md)). Publish mode
+writes them from the record the stage keeps.
+
+### The findings record
+
+The code review keeps its record in `findings.json` in the attempt's directory,
+identified by `schema: "autonomous.findings.v1"`. The agent writes it and the
+prompt describes it; publish mode validates all of it before it posts anything,
+and a record that does not parse, does not follow the schema or names a location
+outside the repository publishes nothing. It holds the attempt id, a `review`
+object (the review team's `tier` and the reviewers it `skipped`, each with its
+reason) and one entry per finding or doubt of every round, with these fields:
+
+| Field         | Content                                                                                                                                                                 |
+| ------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `id`          | Unique in the record                                                                                                                                                    |
+| `round`       | `1` for the stage's round, `2` and later for human rounds                                                                                                               |
+| `kind`        | `finding` or `doubt`                                                                                                                                                    |
+| `reporters`   | At least one `{ reviewer, ids, engine? }`; `reviewer` is a review team reviewer, `verification` or `human`                                                              |
+| `title`       | One line                                                                                                                                                                |
+| `statement`   | One to three lines                                                                                                                                                      |
+| `location`    | `line` (file, start and end line, `side` `new` or `old`), `file` or `change`, as the review team locates a finding                                                      |
+| `severity`    | `CRITICAL`, `WARNING` or `SUGGESTION`; findings only                                                                                                                    |
+| `label`       | `issue` or `suggestion`; findings only                                                                                                                                  |
+| `destination` | For a finding `fix`, `pass-on`, `defer` or `dismiss`; for a doubt `settled`, `ask` or `publish`                                                                         |
+| `reason`      | Why this destination                                                                                                                                                    |
+| `refutation`  | `outcome` `survived`, `refuted` or `not-refuted`, and the `reproduction` or null; findings only                                                                         |
+| `publication` | What happened to it: `fixed` with a commit, `deferred` with a `followUp` URL or a `proposedTitle`, `passed-on` with a stage, `blocked` with a reason, `asked` or `none` |
+| `thread`      | The node id of the existing thread the entry continues, or null                                                                                                         |
+
+### What is published
+
+A finding is published only when it survived the refutation (to fix or defer) or
+was not refuted and is passed on. A refuted finding, a dismissed one and a fixed
+`SUGGESTION` are never published as a new thread. A doubt is published only when
+its destination is `publish`. An entry the record links to an existing thread is
+answered whatever its outcome, published or not (see
+[A linked entry that is not published](#a-linked-entry-that-is-not-published)).
+
+A thread's state follows the finding's outcome:
+
+| Outcome                           | Thread   | Status line                                                               |
+| --------------------------------- | -------- | ------------------------------------------------------------------------- |
+| A fixed `CRITICAL` or `WARNING`   | Resolved | `fixed in <commit>`                                                       |
+| Deferred, follow-up task created  | Resolved | `deferred to <URL>`                                                       |
+| Deferred, follow-up only proposed | Open     | `deferred: follow-up proposed, "<title>"`                                 |
+| Passed on to a later stage        | Open     | `passed on to QA #qa`, and generally `passed on to <Stage name> #<stage>` |
+| Blocked                           | Open     | `blocked: <reason>`                                                       |
+| A doubt                           | Open     | `open question`                                                           |
+
+#### A linked entry that is not published
+
+A refuted or dismissed finding and a settled or asked doubt are not published,
+but the agent may have linked them to an existing thread: a
+doubt of an earlier attempt that this attempt raised again and refuted, or the
+human's own finding that the human withdrew in a human round. Publish mode
+replies in that thread with one status line and the entry's reason, under a
+hidden `autonomous:resolution` marker, and leaves the thread's state as it is:
+it neither resolves nor unresolves it, so closing it is left to a person.
+
+| Outcome of the linked entry   | Status line                           |
+| ----------------------------- | ------------------------------------- |
+| A refuted finding             | `not published (refuted): <reason>`   |
+| A dismissed finding           | `not published (dismissed): <reason>` |
+| A settled doubt               | `not published (settled): <reason>`   |
+| A doubt the human answered    | `not published (asked): <reason>`     |
+| Any other entry not published | `not published: <reason>`             |
+
+A fixed `SUGGESTION` linked to a thread, such as a `nit:` the human left on
+GitHub, is answered like a fixed `WARNING`: `fixed in <commit>`, and the thread
+is resolved.
+
+The reply is not posted twice in an attempt, and the report lists the thread
+among those answered. The record has no state for a finding the human withdrew,
+so it shows as `dismissed`. An unpublished entry linked to no thread posts
+nothing.
+
+A finding passed on carries the visible tag `#<stage>` and a hidden marker
+`for=<stage>`, so the stage it is addressed to finds it: the code review's
+prompt lists the open threads addressed to it, and verification's `Code review`
+findings come in the same way (see
+[The input from verification](#the-input-from-verification)).
+
+### The comment
+
+Each comment is in English and opens with a Conventional Comments label:
+`issue` or `suggestion` from the entry's label, and `question` for a doubt. The
+label is decorated `(blocking)` for a `CRITICAL` finding and for every doubt.
+Then come the statement, the status line, a folded trace (reporters, severity,
+reproduction, tool versions) and hidden markers. References to follow-up tasks
+are full URLs.
+
+```text
+issue (blocking): The retry loop never stops when the token is revoked.
+
+Status: fixed in abc1234
+<details><summary>Trace</summary>
+
+Reported by code-review, codex · CRITICAL · reproduction: test/retry.test.ts "stops on revoked token" · Claude Code 2.1.330, codex 0.171.0
+</details>
+<!-- autonomous:finding v1 attempt=linear:DOT-121:code-review:1 finding=f3 -->
+```
+
+### The hidden markers
+
+Each comment carries a versioned HTML comment, invisible on GitHub, that names
+the attempt and, for a finding or a doubt, its id in the record:
+
+| Marker                     | Where                                                                      |
+| -------------------------- | -------------------------------------------------------------------------- |
+| `autonomous:finding v1`    | The first comment of a thread; `for=<stage>` when the finding is passed on |
+| `autonomous:doubt v1`      | The first comment of a thread that holds a doubt                           |
+| `autonomous:resolution v1` | A reply that changes the thread's state, with `state=<publication state>`  |
+| `autonomous:review v1`     | The body of a review, with its `round`                                     |
+
+A thread is a code review thread when its first comment's marker names an
+attempt of the `code-review` stage. The comments go out with the user's `gh`
+account, so the author does not tell a stage's comment from the human's: the
+markers do.
+
+### Where a comment is anchored
+
+A thread is anchored to the finding's line on the final diff when the diff holds
+it; else to its file, at file level, when the diff changes that file; else to
+the change's `proposal.md`, at file level, which is where a finding on the whole
+change goes; and only when none of these is possible, in the body of the round's
+review. The anchor is the finding's `side`: `new` for the lines of the pull
+request, `old` for the lines it removed.
+
+## The walkthrough
+
+The walkthrough is the guided explanation of the pull request for the human who
+reviews it. The review team writes a draft of it with its report (see
+[The walkthrough guide](#the-walkthrough-guide)). Publish mode brings that draft
+up to the pull request's final diff by code, with each published finding at its
+place, saves it in Plannotator for the pull request and renders a short version
+for the logbook. A fresh teammate never rewrites it: the draft's prose still
+describes the change.
+
+In order, from `review/walkthrough.json` in the attempt's directory:
+
+1. **The final diff.** Every file of the final diff that the draft does not
+   place goes to a trailing section titled "Code review fixes". Every other
+   section, overview and summary stays as the draft wrote it, and a fixes
+   section is added only when a file needs it. A renamed file is placed by its
+   new path.
+2. **The findings.** Each published finding appears in the walkthrough. When the
+   final diff holds its line in one hunk, it is a note on that hunk, with the
+   finding's label, statement, state and thread URL. Otherwise it is a line of the
+   overview of the section that places its file, or of the first section for a
+   finding on the whole change, in the form `- <label> on <file>: …`. A section
+   holds at most 20 notes and a note at most 1000 characters; past either limit
+   the finding goes to the overview.
+3. **Validation.** The result is validated against the final diff's patch, as the
+   review team validates its own guide. A walkthrough that fails validation is
+   dropped.
+4. **The save.** The walkthrough is saved with `plannotator guide import`, for the
+   pull request's URL, only when its digest differs from the last one saved in the
+   attempt. Running publish mode twice with nothing changed saves one walkthrough,
+   and a human round that adds a fix saves a new one.
+
+It leaves three files in the attempt's directory: `walkthrough.json`, the
+walkthrough; `walkthrough.patch`, the patch it was validated against; and
+`walkthrough.md`, a short rendering without headings, since the logbook nests it:
+its title, its intent, and the title of each section with the count of findings
+in it, `0` included. The agent sends the first two to an `HITL` human through the
+Inbox and puts the rendering in the logbook entry's `### Code review` section.
+
+There is no walkthrough, and the report says why, when the review team wrote no
+draft (`review/walkthrough.json`), when Plannotator is not available, or when the
+result fails validation. The threads are published all the same, no
+walkthrough file is left, and the reason reaches the logbook entry. For an `HITL`
+task the human round then runs on GitHub only.
+
+**A known limit.** `plannotator guide import` (0.29.4) keeps each file's summary
+and drops the per-hunk notes. The copy saved in Plannotator for the pull request
+therefore lacks the finding notes, while `walkthrough.json` and the Inbox's
+guided review keep them, and so does each finding's thread on GitHub.
+
 ## Configuration
 
 Per-user settings live outside the plugin, in one JSON file validated as
 strictly as the OpenUsage document: a missing file, a missing required field,
 a mistyped field or an unknown field is an error naming the path, never a
-default. The one exception is the three [optional blocks](#optional-blocks)
+default. The one exception is the five [optional blocks](#optional-blocks)
 below, whose missing keys take a shipped default. No credentials are stored in
 it.
 
@@ -863,6 +2185,43 @@ it.
     "naming": {
         "model": "haiku",
         "effort": "low"
+    },
+    "runner": {
+        "grills": 1,
+        "parallel": 2,
+        "intervalMinutes": 10
+    },
+    "review": {
+        "tiers": {
+            "S": { "maxLines": 150, "maxFiles": 5 },
+            "M": { "maxLines": 600, "maxFiles": 20 }
+        },
+        "team": {
+            "S": [
+                { "reviewer": "walkthrough", "model": "opus", "effort": "medium" },
+                { "reviewer": "code-review", "level": "medium", "model": "opus", "effort": "high" },
+                { "reviewer": "codex", "effort": "medium" }
+            ],
+            "M": [
+                { "reviewer": "walkthrough", "model": "opus", "effort": "medium" },
+                { "reviewer": "code-review", "level": "high", "model": "opus", "effort": "high" },
+                { "reviewer": "codex", "effort": "medium" },
+                { "reviewer": "coderabbit" }
+            ],
+            "L": [
+                { "reviewer": "walkthrough", "model": "opus", "effort": "medium" },
+                { "reviewer": "code-review", "level": "xhigh", "model": "opus", "effort": "high" },
+                { "reviewer": "codex", "effort": "high" },
+                { "reviewer": "coderabbit" },
+                { "reviewer": "tests-lens", "model": "opus", "effort": "high" }
+            ]
+        },
+        "security": {
+            "model": "opus",
+            "effort": "high",
+            "pathPatterns": ["auth", "secret", "(^|/)\\.env(\\.|$)"],
+            "linePatterns": ["\\b(execFile|spawn)\\s*\\(", "\\beval\\s*\\("]
+        }
     }
 }
 ```
@@ -896,52 +2255,113 @@ judged labels, and `/autonomous:run` is not evaluable.
 
 ### Optional blocks
 
-`sessions`, `workspace` and `naming` are optional. The plugin ships
+`sessions`, `workspace`, `naming`, `runner` and `review` are optional. The plugin ships
 `plugins/autonomous/config.defaults.json`, and a key missing from the user's
 file, or a whole missing block, takes the shipped value for that key. A
 mistyped or unknown key is still an error naming its path, so a file written
 for an earlier version keeps working unchanged. ADR 0003 records why these
 blocks have defaults while `selection` stayed required. The shipped defaults:
 
-| Key                | Default              | Meaning                                                                             |
-| ------------------ | -------------------- | ----------------------------------------------------------------------------------- |
-| `sessions.tool`    | `claude`             | The agent each session runs: `claude` or `codex`. Any other value is rejected       |
-| `sessions.profile` | `null`               | The `aoe` profile passed to every `aoe` command; `null` leaves `aoe`'s default      |
-| `sessions.binary`  | `null`               | The agent binary or wrapper, passed as `--cmd-override`; `null` uses the tool's own |
-| `workspace.root`   | `~/WebstormProjects` | The directory whose git repositories a task is inferred against; `~` uses `HOME`    |
-| `naming.model`     | `haiku`              | `--model` of the `claude -p` call that names a session                              |
-| `naming.effort`    | `low`                | `--effort` of that call                                                             |
+| Key                      | Default              | Meaning                                                                             |
+| ------------------------ | -------------------- | ----------------------------------------------------------------------------------- |
+| `sessions.tool`          | `claude`             | The agent each session runs: `claude` or `codex`. Any other value is rejected       |
+| `sessions.profile`       | `null`               | The `aoe` profile passed to every `aoe` command; `null` leaves `aoe`'s default      |
+| `sessions.binary`        | `null`               | The agent binary or wrapper, passed as `--cmd-override`; `null` uses the tool's own |
+| `workspace.root`         | `~/WebstormProjects` | The directory whose git repositories a task is inferred against; `~` uses `HOME`    |
+| `naming.model`           | `haiku`              | `--model` of the `claude -p` call that names a session                              |
+| `naming.effort`          | `low`                | `--effort` of that call                                                             |
+| `runner.grills`          | `1`                  | The limit of [grill slots](#slots-and-the-capacity-step): an integer of 0 or more   |
+| `runner.parallel`        | `2`                  | The limit of work slots: an integer of 0 or more                                    |
+| `runner.intervalMinutes` | `10`                 | The minutes between two iterations of the loop: an integer of 1 or more             |
+| `review.tiers`           | S 150/5, M 600/20    | The changed lines and files a diff may have to stay in tier `S`, then `M`           |
+| `review.team`            | see below            | The reviewers each tier runs, with their model, effort and level                    |
+| `review.security`        | see below            | The path and line patterns that add the security reviewer, and its model and effort |
 
 When a run used a default, the text report's header gains a third line,
 `defaults: sessions.tool, naming.model`, listing the dotted keys in the order
 of the table; with `--json` the report holds `config.defaulted`, the same list.
 A run whose configuration sets every key shows neither.
 
+The `review` block configures the review team. Its keys overlay one by one, so
+a file that sets `review.team` replaces the whole team table, and a file that
+sets `review.tiers` replaces both thresholds:
+
+- `tiers` — `S` and `M`, each with `maxLines` and `maxFiles`, integers of 1 or
+  more. A diff within both limits of `S` is tier `S`, else within both of `M` is
+  tier `M`, else `L`. Added and deleted lines both count.
+- `team` — exactly `S`, `M` and `L`, each a non-empty list of rows
+  `{ "reviewer", "model"?, "effort"?, "level"? }`. `reviewer` is one of
+  `walkthrough`, `code-review`, `codex`, `coderabbit`, `fallow-review`,
+  `tests-lens` and `security-review`; `effort` and `level` are one of `low`,
+  `medium`, `high`, `xhigh` and `max`. A teammate row (`walkthrough`,
+  `tests-lens`) and a `code-review` row name their `model` and `effort`, and the
+  teammate is started with them; a `codex` row names an `effort` and no model.
+  The shipped table is the one set by the calibration. `S` runs `walkthrough`
+  (`opus` at `medium`), `code-review` at `medium` (`opus` at `high`) and `codex`
+  at `medium`; `M` adds `coderabbit` and raises `code-review` to `high`; `L`
+  adds `tests-lens` (`opus` at `high`), `code-review` at `xhigh` and `codex` at
+  `high`. `fallow-review` is in no shipped tier: it runs only in a table that
+  lists it.
+- `security` — `pathPatterns`, matched case-insensitively against a changed
+  path, and `linePatterns`, matched against an added line. Each is a JavaScript
+  regular expression source: a pattern that is empty or does not compile is
+  rejected with its path, for example `review.security.linePatterns[1]`. The
+  shipped lists cover auth, token, secret, credential, crypto and permission
+  paths, `.env` files, and added calls to `exec`, `execFile`, `spawn`, `eval`
+  and `new Function`. The optional `model` (not empty) and `effort` (one of the
+  values of a team row) set the security reviewer's engine, which is built by
+  code and listed in no tier; they ship as `opus` at `high`, and a file that
+  omits them leaves the reviewer on its session's own model.
+
+The review CLI is the one consumer that works without a configuration file:
+it then runs with the shipped `review` block. A file that exists is still
+validated as a whole, and a bad `review` key stops the review with its path,
+for example `review.tiers.S.maxLines`.
+
+A limit of 0 is valid: that kind of slot is then always full. A negative or
+fractional limit, or an interval below 1 or not an integer, is rejected with
+the key's path, for example `runner.parallel`. A flag of the loop replaces the
+file's value for that loop, so each setting takes the first of these that
+exists: the flag, the key in the user's file, the shipped default.
+
 ## The label contract
 
 Every task carries labels from three groups:
 
-| Group    | Labels                 | Rule                                                                |
-| -------- | ---------------------- | ------------------------------------------------------------------- |
-| scope    | `work`, `personal`     | Exactly one. `work` is Nazaries work                                |
-| autonomy | `AFK`, `HITL`          | Exactly one. It may be absent only while the stage is `grill-me`    |
-| stage    | `grill-me`, `proposal` | Exactly one. Two stage labels are a conflict, for a human to settle |
+| Group    | Labels                                                                                                             | Rule                                                                |
+| -------- | ------------------------------------------------------------------------------------------------------------------ | ------------------------------------------------------------------- |
+| scope    | `work`, `personal`                                                                                                 | Exactly one. `work` is Nazaries work                                |
+| autonomy | `AFK`, `HITL`                                                                                                      | Exactly one. It may be absent only while the stage is `grill-me`    |
+| stage    | `grill-me`, `proposal`, `implement`, `verify`, `code-review`, `qa`, `external-review`, `wrap-up`, `ready-to-merge` | Exactly one. Two stage labels are a conflict, for a human to settle |
 
 Two labels of one group are a conflict, reported for a human to settle: neither
-detection, triage nor the bootstrap removes or replaces either label. A task in
+detection, label triage nor the bootstrap removes or replaces either label. A task in
 `grill-me` with no autonomy label is complete: the contract reports its autonomy
-as deferred, because the grill decides it, and triage, selection and the
+as deferred, because the grill decides it, and label triage, selection and the
 creation helper count a deferred autonomy as present. A task in `proposal` with
-no autonomy label is missing its autonomy. `HITL` with `grill-me` is valid: the
-autonomy was decided ahead of the grill.
+no autonomy label is missing its autonomy, and so is a task in `implement`,
+`verify`, `code-review`, `qa`, `external-review`, `wrap-up` or `ready-to-merge`.
+Label triage decides AFK or HITL for a task in any of them.
+`HITL` with `grill-me` is valid: the autonomy was decided ahead of the grill.
 
 Scope and autonomy are properties, kept for the whole life of a task. The stage
 says where the task is, and a transition replaces it (see
-[Transition mode](#transition-mode)).
+[Transition mode](#transition-mode)). There are five transitions: `grill-me` to
+`proposal`, `proposal` to `implement`, `implement` to `verify`, `verify` to
+`code-review` and `code-review` to `external-review`. The last four change no
+autonomy.
 
 `taken` belongs to no group. It is never required, never missing and never
-in conflict, and triage neither derives it nor asks about it. The runner writes
+in conflict, and label triage neither derives it nor asks about it. The runner writes
 it, at launch (see [The `taken` label](#the-taken-label)).
+
+`triage-me` belongs to no group either, with the same standing: never required,
+never missing, never in conflict. It marks a task whose scope or autonomy could
+not be decided without the human. The label names no group: the group in doubt
+is the scope or autonomy group that has no label on the task. `label-triage`
+sets it, or a person does in the tracker, and the runner treats it the same
+either way. While a task carries it, the task is not judged again and is never
+selected (see [Marking the tasks left for the human](#marking-the-tasks-left-for-the-human)).
 
 `personal` is the user's own work. No scope has priority over the other in the
 contract: which scope to prefer is the job of the
@@ -951,38 +2371,58 @@ human intervenes during or at the end of each stage; `grill-me` means the task
 must be refined with a human in a grill before anyone works on it, and its
 autonomy, when it has one, is provisional until the grill confirms it.
 `proposal` means the task is ready for proposal preparation, its autonomy
-decided and any grill it needed over. `taken` means an agent or a person is
-advancing the task now.
+decided and any grill it needed over. `implement` means the task has a
+proposal and is ready to implement. `verify` means the task is implemented and
+ready to verify against its proposal. `code-review` means the task is verified
+and ready for code review. `qa` means the
+task has passed code review and is ready for QA. `external-review` means the
+task has passed every review stage and is ready for external review. `wrap-up`
+means the task has passed external review and is ready for wrap-up.
+`ready-to-merge` means the task is wrapped up and waits for a person to merge
+its pull request. The loop runs no stage for these four yet. `taken` means an
+agent or a person is advancing the task now. `triage-me` means the task is
+waiting for a person to decide its scope or autonomy.
 
 Add `taken` to a task you work on by hand. It is the only evidence that a task
 is taken: a tracker status such as Beads `in_progress` does not count, so work
 done by hand without `taken` can still be selected. A configuration that
-declares aliases for `taken` is rejected. The runner adds and removes `taken`
+declares aliases for `taken` or `triage-me` is rejected. The runner adds and removes `taken`
 only for the attempts it launches (see [The `taken` label](#the-taken-label));
 `label-triage` never does, and a `taken` you added by hand stays until you
 remove it.
 
-The loop never removes a label, with two exceptions: a transition removes the
-stage it leaves and the autonomy labels its answer replaces, and the runner
-removes `taken`. Triage and its answers stay additive. Nothing removes an alias
+The loop never removes a label, with three exceptions: a transition removes the
+stage it leaves and the autonomy labels its answer replaces, the runner
+removes `taken`, and `label-triage` and its answers remove `triage-me`. Label
+triage and its answers add every other label and remove none. Nothing removes an alias
 or any other label outside the contract.
 
 Spelling is exact and case-sensitive: `Grill Me` is not `grill-me`, and
-`Proposal` is not `proposal`. Colours, applied where the tracker supports them:
+`Proposal` is not `proposal`, `Code Review` is not `code-review`, and
+`External Review` is not `external-review`. Colours, applied where the tracker supports them:
 
-| Label      | Colour    |
-| ---------- | --------- |
-| `AFK`      | `#5e6ad2` |
-| `HITL`     | `#eb5757` |
-| `grill-me` | `#f2994a` |
-| `proposal` | `#bb87fc` |
-| `work`     | `#2f80ed` |
-| `personal` | `#27ae60` |
-| `taken`    | `#95a2b3` |
+| Label             | Colour    |
+| ----------------- | --------- |
+| `AFK`             | `#5e6ad2` |
+| `HITL`            | `#eb5757` |
+| `grill-me`        | `#f2994a` |
+| `proposal`        | `#bb87fc` |
+| `implement`       | `#26b5ce` |
+| `verify`          | `#d6409f` |
+| `code-review`     | `#a3e635` |
+| `qa`              | `#0d9488` |
+| `external-review` | `#8b5e3c` |
+| `wrap-up`         | `#64748b` |
+| `ready-to-merge`  | `#15803d` |
+| `work`            | `#2f80ed` |
+| `personal`        | `#27ae60` |
+| `taken`           | `#95a2b3` |
+| `triage-me`       | `#f2c94c` |
 
-The loop never creates labels on its own. `--bootstrap-labels` does, `proposal`
-and `taken` included: at workspace level on Linear (a same-name label in any
-team counts as present), per repo on GitHub, and not at all on Beads, where
+The loop never creates labels on its own. `--bootstrap-labels` does, `proposal`,
+`implement`, `verify`, `code-review`, `qa`, `external-review`, `wrap-up`,
+`ready-to-merge`, `taken` and `triage-me` included: at
+workspace level on Linear (a same-name label in any team counts as present), per repo on GitHub, and not at all on Beads, where
 labels exist only by use.
 
 The bootstrap also recolours. It changes every same-name contract label whose
@@ -1010,7 +2450,7 @@ closure or pull requests. It checks labels before creation. For an unresolved
 group in an interactive session, it asks one question using that group's
 options and reason, then checks the answer. When it cannot ask, it creates
 with the confident labels and names each omitted group in its reply for the
-next triage run. It writes each contract label in its exact spelling (`work`,
+next label triage run. It writes each contract label in its exact spelling (`work`,
 `personal`, `AFK`, `HITL`, `grill-me`, `proposal`), so `afk` becomes `AFK` and
 `Grill Me` becomes `grill-me`. A Beads task created under a parent gets
 `--no-inherit-labels` and the parent's non-contract labels listed explicitly, so
@@ -1112,9 +2552,14 @@ advances without real credentials, and enables only a scaffolded Beads
 database. The run that built it is recorded in
 `openspec/changes/archive/2026-10-04-add-interactive-handoff/evidence/interactive-check.md`.
 
+The two adversarial review cases scaffold a working `git` ahead of the macOS
+`xcrun` shim at `/usr/bin/git`, which cannot write its cache in the eval
+sandbox. Without it every `git` call fails and each session spends its turns
+on git instead of the review.
+
 ## The `label-triage` step
 
-Third in the run, after `reconcile` and `quota-gate`. It reads the open tasks of every
+Fourth in the run, after `reconcile`, `capacity` and `quota-gate`. It reads the open tasks of every
 enabled source — Linear across all teams except completed, canceled and
 `Duplicate` issues, Beads issues that are `open` or `in_progress`, GitHub open
 issues per configured repo — and reports every task missing a label group or
@@ -1130,7 +2575,8 @@ configured `threshold`, and valid under the contract, is written, and only
 with `--apply`: writes are additive, read back to confirm (a read that does not
 show the write yet is read again, see
 [Read-backs and tracker lag](#read-backs-and-tracker-lag)), and a source stops
-writing on the first mismatch — nothing is ever removed. An unreadable source
+writing on the first mismatch — nothing is removed but the `triage-me` mark (see
+[Marking the tasks left for the human](#marking-the-tasks-left-for-the-human)). An unreadable source
 makes the whole run `not-evaluable`; a failed judgement only drops the LLM's
 contribution, and the step itself never blocks the run (`advance`) —
 everything else is still listed for a human.
@@ -1138,7 +2584,9 @@ everything else is still listed for a human.
 The report carries, per source and group, counts and
 `source → task → labels → reason` lines (whether applied or only proposed,
 the tier, the confidence), the tasks left for a human, and any write failure.
-The counts are keyed by group, `scope`, `autonomy` and `stage`, and each JSON
+With `--apply` the step also marks the tasks it leaves for the human and
+unmarks the tasks it finds complete, and the report lists both (see
+[Marks in the report](#marks-in-the-report)). The counts are keyed by group, `scope`, `autonomy` and `stage`, and each JSON
 record names its group. A source's line in the reasons reads
 `<source>: N read, N complete, N missing scope, N missing autonomy, N missing stage, N in conflict`.
 A deferred autonomy counts as complete. The JSON form carries one record per
@@ -1149,7 +2597,7 @@ A first `--apply` over an existing backlog can write hundreds of labels by
 rule, and rule writes are uncapped. Each write is one add and one read-back, so
 such a run issues over 1,000 CLI calls and exceeds the command's timeout. Run
 without `--apply` first and read the report. Then run the `--apply` from a shell
-(`bun plugins/autonomous/src/run.ts --account <key> --apply`), not through
+(`bun plugins/autonomous/src/run.ts --apply`), not through
 `/autonomous:run`. The current example is the first `--apply` after the upgrade
 that introduced `proposal`, which writes it to every open task that has an
 autonomy label and no stage label (see
@@ -1172,9 +2620,9 @@ It follows the autonomy (see [The label contract](#the-label-contract)):
   without autonomy needs no autonomy decision.
 
 The autonomy decision offers `AFK`, `HITL` and `grill-me` ("decide it in a
-grill") only for a task with no stage label. For a task with a stage label it
-offers `AFK` and `HITL`, so a `grill-me` judged for a task in `proposal` is
-invalid and is asked. The question and the validity check take their options
+grill") only for a task with no stage label. For a task with a stage label,
+whichever it is, it offers `AFK` and `HITL` only, so a `grill-me` judged for
+such a task is invalid and is asked. The question and the validity check take their options
 from the same function, so they cannot disagree.
 
 Each decision is recorded in the group of the label it writes. The writes for a
@@ -1208,8 +2656,72 @@ that adds `proposal` to every open task that has an autonomy label and no stage
 label. That first run writes several hundred labels, each write being one add
 plus one read-back. Read the list of proposed `proposal` writes in the dry run
 first, then run that `--apply` from a shell
-(`bun plugins/autonomous/src/run.ts --account <key> --apply`), because the
+(`bun plugins/autonomous/src/run.ts --apply`), because the
 command's timeout cannot hold it.
+
+### Marking the tasks left for the human
+
+`triage-me` (see [The label contract](#the-label-contract)) is the step's only
+memory between runs, and it lives in the tracker. A run with `--apply` adds it,
+as an additive write with its read-back, to every unmarked task for which the
+run lists a scope or autonomy group for the human as `asked`. It is the last
+write to that task, after the task's other labels, so a task that gains `work`
+by rule and whose autonomy is judged at 0.70 ends with `work` and `triage-me`.
+This holds in a run and in an iteration of the loop. Without `--apply` the mark
+is reported as proposed and nothing is written.
+
+The step does not mark:
+
+- a task whose present labels conflict, when no other group is in doubt;
+- a task not judged, such as one whose judgement failed;
+- a task beyond the judgement cap;
+- a task of a source whose writes stopped during the run.
+
+A task the step left unmarked is judged again by the next run. When the tracker
+lacks `triage-me`, the mark is not written: it is reported as proposed with the
+detail `triage-me is missing on <source>; run --bootstrap-labels`, and the
+task's other writes continue (see
+[Labels the tracker lacks](#labels-the-tracker-lacks)).
+
+A marked task is not judged again and does not count against the cap of judged
+tasks. Rules and aliases still apply to it, and what they derive is written as
+for any other task: a marked task that a person gave `AFK` gets `proposal` by
+rule. A scope or autonomy group that no rule decides is listed for the human
+with tier `marked` and no confidence, and `select` never takes the task (see
+[The `select` step](#the-select-step)).
+
+The mark comes off when the task is complete: it has a scope label, and either
+an autonomy label with a stage label or the stage `grill-me`, and no group in
+conflict, counting the labels the run wrote to it. It comes off in any of three
+ways:
+
+- a run with `--apply` finds the task complete, whether a person added the
+  missing label in the tracker or a rule completed it in that run, and removes
+  `triage-me` after the run's additive writes to the task succeeded;
+- the answer that completes the task removes it (see
+  [Applying an answer](#applying-an-answer));
+- the person adds the missing label, and the next run with `--apply` removes it.
+
+A marked task that is not complete keeps the label. Without `--apply` the removal
+is reported as proposed. `triage-me` is the only label the label triage ever removes, and
+it removes it through the tracker's own label removal with a read-back. A
+removal that is not confirmed is reported as failed with the labels found, leaves
+the step's outcome unchanged and stops no source: the next run tries again.
+
+A person who removes `triage-me` without adding the missing label asks for a new
+judgement: the next run judges the task again and marks it again if the doubt
+stands.
+
+### Marks in the report
+
+After the derived labels, the text report shows one line per task marked or
+unmarked by the run, as `source → task → triage-me` with the status `marked`,
+`unmarked` or `proposed`, and under `triage-me:` the count of tasks that carried
+`triage-me` when the run read them. The JSON data of the step carries the same
+information as `marked` and `unmarked`, lists of
+`{ source, taskId, status, detail }` with the status `applied`, `proposed` or
+`failed`, and `markedRead`, the count. A record of a group listed with tier
+`marked` has the status `asked`.
 
 ### Questions for the human
 
@@ -1227,6 +2739,9 @@ These are not `asked` and become no question; they stay only in the report:
   `personal`;
 - a task not judged;
 - a task beyond the cap.
+
+Those three do not mark the task either (see
+[Marking the tasks left for the human](#marking-the-tasks-left-for-the-human)).
 
 Questions are ordered like the judgement:
 
@@ -1314,6 +2829,19 @@ An autonomy question for a Beads task with no stage label, judged `HITL` at
 }
 ```
 
+### Questions of marked tasks
+
+A missing scope or autonomy group of a marked task that no rule or alias decides
+is listed for the human as `asked`, with tier `marked`, no confidence and a
+reason that names `triage-me`. It becomes a question under the same rules, order
+and form as every other asked group, so a marked task with `work` evidence is
+asked before an unmarked `personal` task judged in the same run. The question
+shows the tier `marked` and no confidence on its second line, and no option
+carries the `judged` prefix. A marked task's question for autonomy offers `AFK`,
+`HITL`, `grill-me` and `Later`, in that order, when the task has no stage label.
+The answer is routed and validated as any other (see
+[Applying an answer](#applying-an-answer)).
+
 ### Applying an answer
 
 In [answer mode](#answer-mode), the step applies an answer to one of its
@@ -1335,11 +2863,19 @@ labels found, and nothing is written; so is a `grill-me` answer once the task
 carries a stage label, naming it. One whose task cannot be read is `failed`,
 naming the command that failed.
 
+After an applied answer, the step removes `triage-me` when the task carried it
+and, read back, is complete (see
+[Marking the tasks left for the human](#marking-the-tasks-left-for-the-human)).
+The answer is `applied` whether or not the removal succeeded, and a removal that
+is not confirmed is named in its detail. An answer that leaves another group in
+doubt keeps the label; `Later`, and an answer that is `skipped`, `rejected` or
+`failed`, leave it too.
+
 The remaining answers go through the same additive write, read-back (which
 waits out read lag in the same way) and per-source stop as the step's own
 writes, with the same check that the tracker has each label (see
 [Labels the tracker lacks](#labels-the-tracker-lacks)).
-Nothing is removed. A label the tracker lacks makes that answer `failed`, naming
+Nothing is removed except `triage-me`, below. A label the tracker lacks makes that answer `failed`, naming
 the label and `--bootstrap-labels`, without stopping the source. A
 write error or a read-back mismatch, which ends with `(read 6 times over 30 s)`,
 makes that answer `failed`, with the label sets, and stops further answers to
@@ -1354,16 +2890,17 @@ a task closed in the meantime is harmless.
 ### Active-account caveat
 
 The judgement, and the comparison of the `select` step, run `claude -p` on the
-active Claude account, through the subscription the quota gate already
-checked. `--account` must name that same
-account; `claude-swap` integration is deferred. Both run in safe
+account Claude Code is logged in as at that moment. That is the account the
+quota gate checked, unless the login changed after the gate: the run does not
+hold the login
+([ADR 0006](docs/adr/0006-the-run-follows-the-active-account.md)). Both run in safe
 mode with no tools, no hooks, no MCP servers and no session persistence,
 because the prompt carries issue text anyone can write.
 
 ## The `select` step
 
-Fourth in the run, after `reconcile`, `quota-gate` and `label-triage`, so it
-runs only when all three advanced. It chooses the next work unit: a task
+Fifth in the run, after `reconcile`, `capacity`, `quota-gate` and
+`label-triage`, so it runs only when all four advanced. It chooses the next work unit: a task
 together with its next stage, which [`launch`](#the-launch-step) then takes. It
 writes nothing to any tracker, asks the human nothing and contributes no
 questions to the [handoff](#the-handoff), with or without `--apply`.
@@ -1397,10 +2934,12 @@ In order, the step:
     | ----- | ----------------- | ----------------------------------------------------------------------------------------------------------------- |
     | 1     | classification    | A scope, autonomy or stage group is missing or in conflict; autonomy is not missing while the stage is `grill-me` |
     | 2     | taken             | The task carries `taken`                                                                                          |
-    | 3     | labelled this run | `label-triage` applied a label to it in this run, or a write to it failed in this run                             |
-    | 4     | unsupported stage | Its next stage is not supported                                                                                   |
-    | 5     | blocked           | It has an open blocker                                                                                            |
-    | 6     | split             | It has an open child                                                                                              |
+    | 3     | triage-me         | The task carries `triage-me`                                                                                      |
+    | 4     | labelled this run | `label-triage` applied a label to it in this run, or a write to it failed in this run                             |
+    | 5     | unsupported stage | Its next stage is not supported                                                                                   |
+    | 6     | blocked           | It has an open blocker                                                                                            |
+    | 7     | split             | It has an open child, or its next stage is `proposal` and it has any child, open or closed                        |
+    | 8     | no free slot      | Only in an iteration of the loop: the slot kind of its next stage is full                                         |
 
     Classification counts present contract labels only: an alias or a
     structural rule does not rescue a task here. A task in `grill-me` without an
@@ -1411,18 +2950,47 @@ In order, the step:
     one whose label was skipped because its tracker lacks it. Tracker status does
     not exclude a task; only `taken` does.
 
-4. Chooses among the candidates. A task of either scope is a candidate. With
-   one candidate, it is selected without an LLM and the report says it was the
-   only one; when it is outside the machine scope, the report marks it as a
-   machine-scope exception for that reason. With two or more, an LLM compares
-   them.
+    A marked task is excluded as `triage-me` even when its labels are complete
+    and the mark is only stale, as in a run without `--apply`. A marked task that
+    is also incomplete is excluded under classification. A task from which this
+    run's `label-triage` removed `triage-me` is not excluded for it. The
+    selection report names the exclusion `triage-me`, after `taken`.
 
-The next stage of a task is the stage label it carries, `grill-me` or
-`proposal`. A task without one has no next stage and is excluded under
-classification. Only `grill-me` is supported, so a task in `proposal` is
-reported as waiting for an unsupported stage. `launch` keeps its own list: a
-stage runs only when an implementation is registered for it, and the test and
-grill-me stages are.
+    **No free slot** comes last, so a task that is blocked, split or otherwise
+    excluded keeps that reason. It applies only in an iteration of the loop
+    (`--loop`), and only to a candidate whose slot kind is full: a task in
+    `grill-me` needs a free grill slot, any other stage a free work slot. A
+    run outside the loop never excludes a task for a slot.
+
+4. Keeps the candidates at the most advanced stage. The order is the order of
+   the stage labels of the [label contract](#the-label-contract), by code:
+   `grill-me`, then `proposal`, then `implement`, then `verify`, so a `verify`
+   candidate is kept over every `implement`, `proposal` and `grill-me` one.
+   Candidates at an earlier stage are set aside for this run and shown apart in the report, not among the excluded tasks.
+   The rule applies to every candidate whatever its scope, in a run and in an
+   iteration: a `personal` candidate in `proposal` is kept over a `work`
+   candidate in `grill-me`.
+5. Chooses among the candidates kept. With one, it is selected without an LLM
+   and the report says it was the only one; when it is outside the machine
+   scope, the report marks it as a machine-scope exception for that reason.
+   With two or more, an LLM compares them.
+
+The next stage of a task is the stage label it carries, `grill-me`, `proposal`,
+`implement`, `verify`, `code-review`, `qa`, `external-review`, `wrap-up` or
+`ready-to-merge`. A task without one has no next stage and is excluded under
+classification. `grill-me`, `proposal`, `implement`, `verify` and `code-review`
+are supported, and `code-review` is the most advanced of them. `qa`,
+`external-review`, `wrap-up` and `ready-to-merge` are stage labels with no stage
+behind them yet, so a task in any of them is excluded as an unsupported stage
+and nothing is launched for it. `launch` keeps its own list: a stage runs only
+when an implementation is registered for it.
+
+A task in `proposal` that has any child is a split, even when every child is
+closed: it was split in its grill, and its subtasks carry the work. A task in
+`grill-me` is split only by an open child. The step reads the task's stage from
+its labels for this rule, even when `--stage` is supplied. The loop never closes
+such a parent: it lists it, under `ready to close`, when none of its children is
+open (see [The selection report](#the-selection-report)), and a human closes it.
 
 The autonomy of a selected unit is `AFK`, `HITL` or, for a task in `grill-me`
 without one, none: `none` in the text report and `null` in the JSON data.
@@ -1444,7 +3012,10 @@ issues the task blocks, in any repository. A list is cut short when its
 blocker the token cannot see counts without a node. A cut-short list fails the
 read: the step is `not-evaluable` and the error names the task.
 
-The step reads each GitHub task's sub-issues as its children, with
+For Beads, the children of a task in `proposal` are counted with one more
+read-only command, `bd -C <dir> list --json --limit 0 --all --parent <id>`,
+because the open-task listing excludes closed tasks. For Linear, every child the
+view returns counts. For GitHub, the step reads each task's sub-issues as its children, with
 `gh issue view <number> --repo <owner/name> --json subIssues`. A sub-issue is
 open unless its state is `CLOSED`, and each open one is a child with the id
 `<owner/name>#<number>`; a GitHub issue with an open sub-issue is excluded as
@@ -1481,9 +3052,15 @@ The text report shows:
   task in `grill-me` without one), scope and the explanation;
 - the machine-scope exception reason, when there is one;
 - the candidates compared;
-- the excluded tasks, grouped by reason, each with its source, id and title.
+- the candidates set aside because a candidate at a more advanced stage
+  exists, each with its source, id, title and stage;
+- the excluded tasks, grouped by reason, each with its source, id and title;
+- the `ready to close` tasks: the tasks excluded as split that have no open
+  child, as `ready to close: N task(s)` followed by one line per task with its
+  source, id and title. Nothing is written for them.
 
-With `--json`, the step's data carries the same information, plus the
+With `--json`, the step's data carries the same information, with the ready
+to close tasks as `readyToClose`, `{ source, id, title }` each, plus the
 selection model and effort when the LLM was called.
 
 ## The `reconcile` step
@@ -1530,11 +3107,28 @@ directory, nested by source, task, stage and attempt number:
     capture.txt    the last lines of the session, when one was taken
 ```
 
+The record holds the `agentArgs` the attempt's stage declared when it was
+launched, for instance `["--model", "opus", "--effort", "high"]`, so a later
+change to the stage does not change what the attempt reports. A record written
+before the field existed has none: it still parses and reads `agentArgs` as
+`null`, which means not recorded. The schema id stays `autonomous.attempt.v1`.
+
+An answered transition leaves `transition.json` in the directory of the task's
+open attempt (see [The transition answer](#the-transition-answer)).
+[Log mode](#log-mode) reads the agent's `logbook-entry.md` there and writes
+`logbook.json`.
+
 A grill-me attempt's directory also holds `definition.md` and
 `stage-summary.md`, which the agent writes, and `description.md`, `comment.md`,
 `description.read.md` and `persisted.json`, which [persist mode](#persist-mode)
 writes. `description.read.md` exists only when the description read back was not
 identical to the one written.
+
+A proposal attempt's directory holds `stage-summary.md`, which the agent writes,
+and `comment.md` and `persisted.json`, which persist mode writes, then
+`transition.json` and `logbook-entry.md` and `logbook.json` as for a grill. It
+holds no `definition.md`. An implementation or verification
+attempt's directory holds the same files as a proposal attempt's.
 
 A GitHub id contains a `/`, so its directory nests one level deeper:
 `<state>/attempts/github/owner/name#12/test/1/`. Writes go through a temporary
@@ -1607,12 +3201,21 @@ as `completing`. Finalising, in this order:
 The attempt's directory and the workspace are kept. A session that is already
 `gone` needs neither the capture nor the removal.
 
+A finalised attempt whose directory holds no `logbook.json` (see
+[The logbook](#the-logbook)) is finalised as before, and its `detail` notes
+`attempt <id> left no logbook entry (no logbook.json)`. The note does not change
+the step's outcome. Two endings leave no entry legitimately: a task the human
+closed in the grill, and the parent of a split with no pull request.
+
 **Retention.** A `started` attempt whose session is `exited` or `gone` while
 the proofs do not hold becomes `retained`, with the reason and the time; the
 last lines of the session are captured first when it still exists. A retained
 attempt keeps its session and `taken`, and no run retries it, relaunches it or
 removes it. The user discards it with `--discard` (see
-[Discard mode](#discard-mode)).
+[Discard mode](#discard-mode)). An attempt of a stage this build has no
+implementation for is never retained or finalised here, whatever its session
+reports: it is only observed, so the build that implements the stage can still
+finish it.
 
 **Pending cleanup.** When the session cannot be removed after both proofs hold,
 or `taken` cannot be removed afterwards, the attempt is marked `completed` with
@@ -1684,6 +3287,64 @@ it was not checked. `action` is one of `none`, `adopted`, `aborted`,
 `cleanup-pending` and `cleanup-cleared`. `detail` is free text: the retention
 reason, the cleanup error, the adopted session id, or `null`.
 
+## Slots and the `capacity` step
+
+A slot is one open attempt. Every open attempt occupies exactly one slot,
+whichever command launched it: the loop, `/autonomous:run`, or a run with
+`--task`. A retained attempt occupies its slot until it is discarded, and so
+does a completed attempt whose cleanup is still owed. A session that no attempt
+records, such as one made by hand with the session manager, occupies none. A
+tracker status does not matter.
+
+There are two kinds of slot, counted separately:
+
+- A **grill slot** is occupied by an attempt whose stage is `grill-me`.
+- A **work slot** is occupied by an attempt of any other stage.
+
+Each kind has a limit, `runner.grills` and `runner.parallel` (see
+[Optional blocks](#optional-blocks)). A kind is full when its occupied slots
+are equal to or above its limit, so a limit of 0 is full with no open attempt.
+The limits can be replaced for one loop with `--grills` and `--parallel`.
+
+**Only the loop is bound by the limits.** In an iteration (`--loop`), a launch
+goes only into a kind that has a free slot, as the
+[`select` step](#the-select-step) applies it and the `launch` step checks again
+on the task as it is then. Outside the loop, a launch is
+never refused because a kind is full, and it still occupies its slot: a run
+with `--apply --task linear:DOT-120` launches the grill even when the grill
+kind is full, and the grill kind then reads over its limit.
+
+`capacity` is the second step, after `reconcile`. It counts the open attempts
+from the attempts as `reconcile` left them, so an attempt finalised in the same
+run no longer counts. It writes nothing, with or without `--apply`, and its
+tier is `code`. Its outcomes:
+
+| Outcome         | Exit | When                                                                        |
+| --------------- | ---- | --------------------------------------------------------------------------- |
+| `advance`       | 0    | Outside the loop, whatever the counts; in an iteration, when a kind is free |
+| `wait`          | 2    | In an iteration, when every kind is full. No later step runs                |
+| `not-evaluable` | 3    | The configuration could not be loaded. The reason names the path            |
+
+The text report shows, per kind, the occupied slots over the limit, where the
+limit came from (`flag`, `file` or `default`), the attempts that occupy the
+slots, and `over its limit` when the kind has more slots occupied than its
+limit. A kind that is exactly full says `full`. For example, an iteration with
+one grill attempt and one work attempt open, and `--grills 1` given:
+
+```text
+[capacity] advance (code)
+  grill slots 1/1  limit from flag  full
+    linear:DOT-120:grill-me:1
+  work slots  1/2  limit from file
+    linear:DOT-109:test:1
+  reasons:
+    - grill slots 1/1
+    - work slots 1/2
+```
+
+With `--json` the step's data carries the same information: per kind (`grill`
+and `work`), `occupied`, `limit`, `source`, `attempts` and `full`.
+
 ## The `launch` step
 
 Last in the run, after `select`. It takes the selected work unit, or the task
@@ -1694,16 +3355,18 @@ blocked or is split is reported as excluded. With `--stage`, the
 unsupported-stage exclusion is skipped. It then checks, in this order, and a
 failed check makes the step `wait` with that reason:
 
-1. The stage has an implementation registered. `test` and `grill-me` are. A
-   stage without one waits, and the reason names it.
-2. The stage's prerequisites hold (see **The stage contract**, below). An
+1. The stage has an implementation registered. `test`, `grill-me`, `proposal`,
+   `implement` and `verify` are. A stage without one waits, and the reason names it.
+2. A repository is inferred (see
+   [Sessions and workspaces](#sessions-and-workspaces)). A task with no
+   inferable repository waits with the inference's reason, and the
+   prerequisites are not checked.
+3. The stage's prerequisites hold (see **The stage contract**, below). An
    unmet prerequisite waits with its own reason, before anything is written: no
    record, label, prompt or session exists afterwards.
-3. The task read again carries no `taken`.
-4. No attempt of the task, at any stage, is `pending`, `created`, `started` or
+4. The task read again carries no `taken`.
+5. No attempt of the task, at any stage, is `pending`, `created`, `started` or
    `retained`, or `completed` with a pending cleanup.
-5. A repository is inferred (see
-   [Sessions and workspaces](#sessions-and-workspaces)).
 
 A task that cannot be read, a workspace root that cannot be listed, a record
 that cannot be parsed, or a failed `aoe group list` makes the step
@@ -1742,13 +3405,24 @@ exists, beside the record and never in the workspace.
 **The stage contract.** A stage declares its id, its emoji, its prerequisites,
 its prompt for a task, its agent arguments and its completion check against the
 task's tracker. Registering one needs no change to `reconcile` or `launch`.
-Two are registered: the test stage 🧪 and the
-[grill-me stage](#the-grill-me-stage) 🔥.
+Six are registered: the test stage 🧪, the
+[grill-me stage](#the-grill-me-stage) 🔥, the
+[proposal stage](#the-proposal-stage) 📝, the
+[implementation stage](#the-implementation-stage) 🛠️ and the
+[verification stage](#the-verification-stage) 🔍 and the
+[code review stage](#the-code-review-stage) 🧐.
 
 The prerequisites are `prerequisites(env)`, asynchronous. `env` carries the
-configured session tool and the home directory. It returns either a context or
-a reason. `launch` calls it after the registry check and before the `taken`,
-open-attempt and repository checks, and it does so in a dry run too. A reason
+configured session tool, the home directory, the task, the repository's absolute
+path, the branch and the readers. The branch is the one the workspace will use:
+an earlier attempt's branch is reused. The readers are the task's context
+reader, the repository's pull-request lookup, the `openspec` command and the
+`git` command, which a stage that needs none ignores. It returns either a context or a reason.
+`launch` calls it after the registry check and the repository inference, and
+before the `taken` and open-attempt checks, and it does so in a dry run too.
+Because the records are read to know the branch, a state directory that cannot
+be read makes the step `not-evaluable` even when the prerequisites would have
+failed. A reason
 makes the step `wait` with it; the step writes no attempt record, label,
 prompt file or session. A context is a record of strings, read once at launch
 and given to the stage's synchronous prompt, so a prompt never reads the
@@ -1801,10 +3475,10 @@ The step's tier is `llm` when the LLM named the session and `code` otherwise.
 ### The supplied task
 
 ```text
-/autonomous:run --task <source>:<id> [--stage <stage>] [--account <provider-key>] [--force] [--json] [--apply] [--no-handoff]
+/autonomous:run --task <source>:<id> [--stage <stage>] [--force] [--json] [--apply] [--no-handoff]
 ```
 
-With `--task`, only `reconcile`, `quota-gate` and `launch` run; `label-triage`
+With `--task`, only `reconcile`, `capacity`, `quota-gate` and `launch` run; `label-triage`
 and `select` do not. The task is given to `launch`, with `input` `supplied`,
 and the stage is `--stage`, or the task's next stage when it is omitted.
 `launch` applies every precondition as usual: a supplied task without a scope
@@ -1816,7 +3490,7 @@ command again once the session has finished writing the marker; the second run
 finalises it:
 
 ```bash
-bun plugins/autonomous/src/run.ts --account <key> --apply --task <source>:<id> --stage test
+bun plugins/autonomous/src/run.ts --apply --task <source>:<id> --stage test
 ```
 
 ### The run lock
@@ -1862,7 +3536,9 @@ The grill-me stage 🔥 refines one task with the human. A managed `claude`
 session grills them, saves the confirmed definition and a stage summary in the
 task's own tracker, and moves the task from `grill-me` to `proposal`. It
 prepares no proposal: that is a later stage, and the prompt forbids it in the
-same session.
+same session. It does open the task's draft pull request and leaves a logbook
+entry on it (see [Pull-request mode](#pull-request-mode) and
+[The logbook](#the-logbook)).
 
 Selected `grill-me` units launch like those of any registered stage, and
 `--task <source>:<id> --stage grill-me` supplies one by hand (see
@@ -1921,20 +3597,34 @@ or reorder a step:
 6. Run `/autonomous:run --apply --transition <source>:<task>`, which is
    [transition mode](#transition-mode): it asks the human for the task's
    autonomy and applies the answer.
-7. Write the result marker, only once the transition is applied.
+7. Run `/autonomous:run --apply --pull-request <attempt-id> --title "<title>"`,
+   which is [pull-request mode](#pull-request-mode). The agent writes the title
+   in the repository's own conventions, read from its contributor instructions
+   and recent commit subjects, without the task id, which the mode appends.
+8. Write `logbook-entry.md` in the attempt's directory and run
+   `/autonomous:run --apply --log <attempt-id>`, which is
+   [log mode](#log-mode). If it rejects the body, the agent corrects the file
+   and runs it again. Step 8 is skipped when pull-request mode reported that the
+   task needs no pull request.
+9. Write the result marker, only once the entry is published (or step 8 was
+   skipped).
 
 The prompt names one exception. If the human decides to close the task instead
 of defining it, the human closes it in its tracker, or tells the agent to and
-the agent closes it there. The agent then skips steps 2 to 6 (no documentation
-commit, no definition, no persist, no transition), writes the result marker
-with a summary saying the task was closed, and stops. `reconcile` finalises
+the agent closes it there. The agent then skips steps 2 to 8 (no documentation
+commit, no definition, no persist, no transition, no pull request, no logbook
+entry), writes the result marker with a summary saying the task was closed, and
+stops. `reconcile` finalises
 the attempt because the task is closed (see [Completion](#completion)).
 
 Code enforces the order that matters. The transition refuses without the
 receipt that persist mode writes (see
 [The persistence receipt](#the-persistence-receipt)), so the labels alone prove
 the definition was saved. A marker written before the transition fails the
-stage's completion check, and `reconcile` does not remove the session.
+stage's completion check, and `reconcile` does not remove the session. The
+logbook is not enforced that way: `reconcile` finalises an attempt that left no
+entry and notes it (see
+[What it does to each attempt](#what-it-does-to-each-attempt)).
 
 The prompt gives the agent the template of `definition.md`. Its first line is
 `## Definition`, followed by the sections Problem, Solution, Acceptance
@@ -1954,8 +3644,12 @@ When the human confirms a split, the agent creates each subtask through the
 `labelling-new-tasks` skill, as a native subtask of the task in the same
 tracker, using that tracker's parent option. Each subtask carries its own
 definition in its description, in the same template, and its own autonomy. The
-parent keeps the overall definition and still goes through its own persist and
-transition, steps 4 to 6. Before a Linear split the agent tells the human how
+parent keeps the overall definition and still goes through its own persist,
+transition and pull-request mode, steps 4 to 7. Pull-request mode opens a pull
+request for the parent only when the grill committed documentation: with no
+commit ahead of the default branch, the parent has nothing to show, and the mode
+reports that it needs no pull request. The agent then skips step 8, publishes no
+entry and writes the result marker. Before a Linear split the agent tells the human how
 many Linear issues it creates, because each one counts against the free plan's
 issue limit.
 
@@ -1964,28 +3658,32 @@ issue limit.
 The transition question offers `AFK`, `HITL` and `Later` (see
 [The transition question](#the-transition-question)). When the human answers
 `Later`, or the answer is not applied, the agent writes no result marker and
-leaves the session open. The task keeps `grill-me` and the receipt stays in the
-attempt's directory.
+leaves the session open. It runs neither pull-request mode nor log mode: no pull
+request is opened, no entry is published and no marker is written. The task
+keeps `grill-me` and the receipt stays in the attempt's directory.
 
 ### Documentation commits
 
 The prompt lets the agent commit and push only the glossary and ADR files the
-grill changed, on the workspace's branch. It opens no pull request, never
+grill changed, on the workspace's branch. It opens no pull request itself, never
 forces a push and never skips a hook (`--no-verify`). When the grill changed no
-such file, it commits and pushes nothing. A failed push, for instance one that
-a pre-push hook rejects, goes to the human, who decides whether the stage
+such file, it commits and pushes nothing, and pull-request mode alone pushes the
+branch. A failed push, the agent's or the mode's, for instance one that a
+pre-push hook rejects, goes to the human, who decides whether the stage
 continues.
 
-### GitHub tasks
+### Public content
 
 An issue in a public repository is public, and both the definition (it becomes
 the issue's description) and the stage summary (it becomes a comment) land in
-it. For a GitHub task, the constraints section of the prompt adds a rule: no
-absolute path and no other detail of the machine, such as the user name, the
-home directory and the host name, in the definition or in the stage summary,
-and repository-relative paths and URLs instead. The rule keys on the task's
-source, not on the repository's visibility, so it needs no API call. A Linear
-or a Beads task carries no such restriction.
+it. So do the pull request's cover and the logbook entry, in a public
+repository. The constraints section of the prompt carries a rule for every
+source: no absolute path and no other detail of the machine, such as the user
+name, the home directory and the host name, in the definition, the stage summary
+or the logbook entry, and repository-relative paths and URLs instead. The rule
+no longer keys on the task's source, because the pull request is on GitHub
+whatever the tracker is, and it needs no API call. Log mode also rejects an
+entry that names the home directory (see [The logbook](#the-logbook)).
 
 ### The description layout
 
@@ -2038,6 +3736,1520 @@ the task closed completes through the second case: the agent writes the marker
 without persisting or transitioning (see
 [What the session does](#what-the-session-does)).
 
+## The proposal stage
+
+The proposal stage 📝 is proposal preparation: it turns a task's definition into
+a proposal. A managed `claude` session writes one OpenSpec change for the task,
+commits it on the task's branch, opens the draft pull request, saves a stage
+summary in the task's own tracker, leaves a logbook entry and ends with the
+transition from `proposal` to `implement`, where the
+[implementation stage](#the-implementation-stage) takes the task. It edits no project code and
+creates no subtask: if the proposal is too large for one task, the agent says so
+in the stage summary and still writes one proposal.
+
+Selected `proposal` units launch like those of any registered stage, and
+`--task <source>:<id> --stage proposal` supplies one by hand (see
+[The supplied task](#the-supplied-task)). The session is titled
+`auto 📝 <name> (<task id>)` and runs with `--model opus --effort high`, fixed
+for every task.
+
+### Proposal prerequisites
+
+`launch` checks these, in this order, after it has inferred the task's
+repository and before it writes anything. The first failure makes the step
+`wait`, with its own reason naming what is missing; nothing after it is checked.
+
+- `sessions.tool` is `claude`. The reason is
+  `proposal runs only with claude; sessions.tool is <tool>`.
+- The task carries exactly one autonomy label, `AFK` or `HITL`. The reason is
+  the one transition mode gives for a task in `proposal` without one.
+- The repository holds an OpenSpec root, a directory `openspec`. The reason
+  names the repository and the missing directory. Nothing initialises OpenSpec
+  in a repository: the stage never creates the directory.
+- The repository provides the propose workflow, as the skill `openspec-propose`
+  (`.claude/skills/openspec-propose/SKILL.md`, through a link too, as OpenSpec
+  2.0 writes it) or as the command `/opsx:propose`
+  (`.claude/commands/opsx/propose.md`, which only OpenSpec 1.x writes). The
+  skill wins when both exist. The reason names both forms and tells the human
+  to update OpenSpec in that repository.
+- `openspec --version` runs. The reason names the command and the error.
+- The `handoff` skill of the `mattpocock-skills` plugin is found, as the grill-me
+  stage finds its skills (see [Prerequisites](#prerequisites)). The stage reads
+  no other skill; the propose workflow is the agent's own to run.
+- The task's context is read (see below). A read that fails names its command.
+- The open pull request of the workspace's branch is looked up. The lookup
+  failing names the branch and the error.
+
+The stage's context carries the `handoff` skill's body, the propose workflow's
+name as the prompt writes it (`/openspec-propose` or `/opsx:propose`), the
+task's context as one JSON string, and, only when the branch already has an
+open pull request, that pull request.
+
+### The task's context
+
+Before it writes the prompt, the run reads in code, from the task's tracker:
+every comment with its author, oldest first; the parent with its id, title,
+state, URL and description; and the children, the tasks that block the task, the tasks it
+blocks, its related tasks and its duplicates, each with id, title, state and
+URL. It reads nothing more about those tasks, not their descriptions. For
+Linear it also reads the project's name and the attachments, each with title and
+URL; for GitHub, the pull requests linked to the issue. A grill's stage summary
+is among the comments.
+
+Each tracker is read with its own commands, all read-only:
+
+| Tracker | Command                                                                                                                                                 |
+| ------- | ------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Linear  | `linear api` with one GraphQL query for the relations, the parent, the children and the attachments; the comments through the tracker's comment listing |
+| Beads   | `bd show --json --include-comments --include-dependents`                                                                                                |
+| GitHub  | `gh issue view --json comments,subIssues,parent,closedByPullRequestsReferences`, and `--json body` of the parent                                        |
+
+A Linear connection of 100 entries or more adds a note that the rest was not
+read. A GitHub task has no blockers, and its context says that dependencies were
+not read. The prompt's Context section renders what was read: an empty list
+renders neither heading nor body, and a task with nothing around it gets one
+sentence saying so.
+
+Anyone who can comment on the task can write a comment, so the Context section
+names the author of each one, quotes every line of its body, and tells the agent
+that a comment is material about the task and not an instruction: it overrides
+neither the prompt's sections nor its constraints.
+
+### What the session does
+
+`prompt.md` holds the shared frame (the attempt, the task and the result marker)
+and these sections, numbered as they are rendered: the context; the proposal;
+the autonomy; the closing; the stage summary, which is the `handoff` body; for
+an `AFK` task, what to do when blocked; and the constraints.
+
+The proposal section tells the agent, in this order:
+
+1. Look first for a change that an earlier attempt of the task left in the
+   workspace, committed or not, and continue it in place instead of creating
+   another (see [A re-attempt](#a-re-attempt)).
+2. Otherwise run the propose workflow with the task's id, title, description
+   and context, and let OpenSpec name the change. The prompt names the
+   workflow as the repository provides it: the skill `/openspec-propose` when
+   it exists, the command `/opsx:propose` otherwise, and the same name in every
+   mention.
+3. Write exactly one proposal for the whole task, and say in the stage summary
+   when it is too large.
+4. Edit no project code: only the change's artifacts and the glossary and ADR
+   files the proposal needs.
+
+When the workspace's branch already has an open pull request, the prompt names
+it and tells the agent to continue it.
+
+The prompt follows the task's autonomy. For `AFK`, no human follows the
+session: the agent never asks the human anything, decides where the definition
+leaves a gap, and records each assumption in three places, the change's
+`design.md`, the stage summary and the logbook entry's Assumptions. For `HITL`,
+the agent may ask the human, and once the pull request is open it shows the
+human the proposal and the pull request's URL and iterates on their feedback,
+each round as a new commit, never an amend of a pushed commit.
+
+The session closes the stage in this order, and the prompt says never to skip or
+reorder a step. The review step, 3, exists for `HITL` only: an `AFK` prompt has
+one step fewer and the numbering that follows is shifted by one.
+
+1. Commit and push the proposal on the workspace's branch: only the files of the
+   OpenSpec change, and the glossary and ADR files the agent changed, staged by
+   path. It uses no force push and skips no hook, and it opens no pull request
+   itself.
+2. Run `/autonomous:run --apply --pull-request <attempt-id> --title "<title>"`,
+   which is [pull-request mode](#pull-request-mode), with a title in the
+   repository's conventions and without the task id.
+3. For `HITL`, review the proposal with the human.
+4. Only once the steps above are done, write `stage-summary.md` in the
+   attempt's directory and run
+   `/autonomous:run --apply --persist <attempt-id>`, which is
+   [persist mode](#persist-mode): it posts the stage summary as a comment on
+   the task. The stage summary names the pull request's URL, the OpenSpec change
+   and each deviation from the task's definition.
+5. Run `/autonomous:run --apply --transition <source>:<task>`, which is
+   [transition mode](#transition-mode). For `HITL` it asks the human to
+   approve the proposal and applies the answer. For `AFK` it asks no one and
+   moves the task to `implement` itself.
+6. Write `logbook-entry.md` and run `/autonomous:run --apply --log <attempt-id>`,
+   which is [log mode](#log-mode). Its body adds the section `### Proposal`,
+   naming the OpenSpec change and its files.
+7. Write the result marker, only once the entry is published.
+
+A failed push, pull-request mode or persist mode goes to the human for an `HITL`
+task, who decides whether the stage continues; for an `AFK` task it is a
+blocker (see [A blocked AFK agent](#a-blocked-afk-agent)), and no transition
+runs. When the transition is not applied, the agent publishes no entry, writes
+no result marker and leaves the session open.
+
+Code enforces the order that matters. The transition refuses without the receipt
+that persist mode writes for the stage summary (see
+[The persistence receipt](#the-persistence-receipt)), and a marker written
+before the transition fails the stage's completion check. The logbook is not
+enforced: `reconcile` finalises an attempt that left no entry and notes it.
+
+A `Later` answer to the approval question applies nothing. The prompt's order
+then leaves the entry unpublished, the result marker unwritten and the session
+open, so the human can come back to it. The task keeps `proposal`.
+
+The constraints section forbids absolute paths and other details of the machine
+in the proposal, the stage summary and the logbook entry, for every source,
+because the repository and its pull request may be public (see
+[Public content](#public-content)).
+
+### A blocked AFK agent
+
+When an `AFK` agent cannot write a sound proposal, for instance because the
+definition contradicts itself, it does not force one. The prompt tells it to:
+
+1. write a stage summary that explains the blocker, what it found and what a
+   human must decide, and run persist mode;
+2. when the workspace's branch has a pull request, write a logbook entry that
+   says the attempt is blocked and run log mode;
+3. run no transition, write no result marker and stop.
+
+The task keeps `proposal`, its tracker holds the comment, and `reconcile`
+retains the attempt once its session ends, so a human finds it (see
+[What it does to each attempt](#what-it-does-to-each-attempt)). An `HITL`
+prompt has no blocked section: the agent asks the human.
+
+### A re-attempt
+
+One task ends with one OpenSpec change and one pull request. A new attempt of
+the task reuses the branch of the earlier ones, and so its workspace. The prompt tells the agent to look
+for a change an earlier attempt left there, one that names the task or that the
+branch added, committed or not, and to update it in place. It does not run the
+propose workflow, `/openspec-propose` or `/opsx:propose`, for a task that
+already has a change. The branch's open pull
+request, when there is one, is named in the prompt and pull-request mode finds
+it instead of opening another.
+
+### Proposal completion
+
+The stage's check against the task's tracker holds in either of two cases:
+
+- The task carries `implement` and no `proposal`.
+- The task is closed in its tracker, as for the grill.
+
+As for every stage, `reconcile` also needs a valid result marker. A task still
+carrying `proposal` has not completed the stage.
+
+### Upgrading
+
+`implement` is a new label of the contract. A tracker that was bootstrapped
+before it lacks it, and the transition then fails before it writes anything,
+naming `--bootstrap-labels`. Run `/autonomous:run --bootstrap-labels` once per
+tracker to create `implement` (see [The label contract](#the-label-contract)).
+
+## The implementation stage
+
+The implementation stage 🛠️ is the implementation: it turns a task's approved
+proposal into code. A managed `claude` session, the orchestrator, implements the
+task's OpenSpec change through teammates, commits the work on the task's branch,
+in the draft pull request proposal preparation opened, saves a stage summary in
+the task's own tracker, leaves a logbook entry and ends with the transition from
+`implement` to `verify`. The pull request stays a draft: no step of the stage
+marks it ready for review.
+
+Selected `implement` units launch like those of any registered stage, and
+`--task <source>:<id> --stage implement` supplies one by hand (see
+[The supplied task](#the-supplied-task)). The `select` step prefers an
+`implement` candidate over every `proposal` and `grill-me` one, and any
+`verify` candidate over it (see [The `select` step](#the-select-step)), and an attempt takes a work slot in the
+loop. The session is titled `auto 🛠️ <name> (<task id>)` and runs with
+`--model opus --effort high`, fixed for every task.
+
+### Implementation prerequisites
+
+`launch` checks these, in this order, after it has inferred the task's
+repository and before it writes anything. The first failure makes the step
+`wait`, with its own reason naming what is missing; nothing after it is checked.
+The first seven are those of proposal preparation (see
+[Proposal prerequisites](#proposal-prerequisites)):
+
+- `sessions.tool` is `claude`. The reason is
+  `implement runs only with claude; sessions.tool is <tool>`.
+- The task carries exactly one autonomy label, `AFK` or `HITL`. The reason is
+  the one transition mode gives for a task in `implement` without one, as in
+  `<source> <id> in implement has no autonomy: expected one of AFK, HITL`.
+- The repository holds an OpenSpec root, a directory `openspec`. The reason is
+  `the repository <repository> has no OpenSpec root: <root> is not a directory`.
+  Nothing initialises or updates OpenSpec in a repository.
+- The repository provides the apply workflow, as the skill
+  `openspec-apply-change` or the command `/opsx:apply`, and then the update
+  workflow, as the skill `openspec-update-change` or the command `/opsx:update`.
+  They are found as the propose workflow is: the skill under
+  `.claude/skills/<name>/SKILL.md`, through a link too, the command under
+  `.claude/commands/opsx/`, and the skill wins when both exist. A missing
+  workflow's reason names both forms and their paths, and ends with
+  `update OpenSpec in that repository`.
+- `openspec --version` runs. The reason is
+  `` `openspec --version` cannot run: <error> ``.
+- The `handoff` skill of the `mattpocock-skills` plugin is found, as the
+  grill-me stage finds its skills (see [Prerequisites](#prerequisites)).
+- The task's context is read, as for proposal preparation (see
+  [The task's context](#the-tasks-context)). The reason is
+  `cannot read the context of <source> <id>: <error>`.
+- The workspace's branch has an open pull request. Unlike proposal preparation,
+  the stage requires one: the change lives in it. A lookup that fails gives
+  `cannot look up the open pull request of <branch>: <error>`, and no pull
+  request gives `the workspace branch <branch> has no open pull request`.
+- The branch adds exactly one OpenSpec change. The repository's default branch
+  is read through `gh`; a failure gives
+  `cannot read the default branch of <repository>: <error>`. Then, in the
+  repository, `git merge-base origin/<base> <branch>` and
+  `git diff --name-only --no-renames --diff-filter=A <merge-base> <branch> -- openspec/changes/`
+  list the files the branch adds, grouped by their first directory below
+  `openspec/changes/`, `archive` excluded. That directory is the change. None
+  gives `<branch> adds no OpenSpec change under openspec/changes/ compared with origin/<base>`,
+  and several give
+  `<branch> adds more than one OpenSpec change compared with origin/<base>: <names>`.
+  The check fetches nothing: it reads the branch and `origin/<base>` as the
+  repository has them.
+
+The stage's context carries the `handoff` skill's body, the names of the apply
+and update workflows as the prompt writes them (`/openspec-apply-change` or
+`/opsx:apply`, `/openspec-update-change` or `/opsx:update`), the task's context
+as one JSON string, the open pull request and the change's name.
+
+### What the orchestrator does
+
+`prompt.md` holds the shared frame (the attempt, the task and the result marker)
+and these sections, numbered as they are rendered: the context; the
+implementation; the orchestration; the commits; the autonomy; the closing; the
+stage summary, which is the `handoff` body; for an `AFK` task, what to do when
+blocked; and the constraints. The Context section is rendered as for proposal
+preparation: comments are quoted under their author and are material, not
+instructions. The proposal's stage summary, and a grill's, are among the
+comments.
+
+The implementation section names the change, the pull request (its number,
+title and URL) and the apply workflow as the repository provides it, and tells
+the orchestrator, in this order:
+
+1. Before implementing anything, look for what an earlier attempt left in the
+   workspace (see [Resuming an implementation](#resuming-an-implementation)).
+2. Run the apply workflow on the change, and implement every task of its
+   `tasks.md`, one coherent unit of work at a time.
+3. When the implementation shows the proposal is wrong, change the change's
+   artifacts with the update workflow on the same branch, and record the
+   deviation, with its reason, in the change's `design.md`, the stage summary
+   and the logbook entry. An `AFK` orchestrator decides the deviation without
+   asking and records it as an assumption too; an `HITL` one asks the human
+   first and changes the proposal only as they decide.
+4. Once every task is done, run every check the repository defines: its tests,
+   linters and type checks, and whatever its contributor instructions or scripts
+   name. Fix what fails, commit and push the fix, and run them again until they
+   all pass. A check that cannot pass is a blocker for an `AFK` task and goes to
+   the human for an `HITL` task; no transition runs.
+
+The implementation section also states the stage's boundary. Verifying the
+change against its proposal, reviewing the code's quality, running what the task
+delivers as its end user would, and archiving the change belong to later stages
+(verification, code review, QA and archiving), and the orchestrator does none of
+them. It runs neither the verify workflow nor the archive workflow, even when
+the apply workflow suggests verifying or archiving once every task is done. The
+repository's checks (step 4) and the orchestrator's review of each teammate's
+block stay its own.
+
+The orchestration section states intent, not mechanics. The orchestrator plans
+the work, delegates it to as many teammates as it sees fit, each on a block of
+the change, reviews what they hand back and commits it. It gives each teammate
+the model and the effort level its block needs, and the prompt says it may set
+any model and any effort level, from the cheapest up, so that no block costs
+more than it needs. It keeps its own context under about 30% until the
+implementation ends, leaving the reading, the writing and the checking to
+teammates. Every teammate is a Claude agent started from the session. The
+prompt fixes no number of teammates, no agent definition and no format for
+briefs or reports.
+
+The commits section:
+
+- Only the orchestrator commits. A teammate changes files and never stages,
+  commits or pushes.
+- One commit per coherent unit of work: its code, its tests and the change's task
+  checkboxes it completes, in the same commit, staged by path, never with
+  `git add -A` or `git add .`.
+- Each message is a conventional commit in the repository's conventions, with
+  the type and scope taken from its contributor instructions, its commit rules
+  and its recent history. In a monorepo every commit has a scope.
+- A commit is marked breaking (`!` or a `BREAKING CHANGE` footer) only when the
+  change's proposal declares the change breaking.
+- Each commit is pushed before the next unit of work starts, so the pull request
+  always shows the work done. No commit is amended, and none already pushed is
+  rewritten.
+
+The prompt follows the task's autonomy. For `AFK`, no human follows the session:
+the orchestrator never asks the human anything, not even inside the apply and
+update workflows, decides where the proposal leaves a gap, and records each
+assumption in three places, the change's `design.md`, the stage summary and the
+logbook entry's Assumptions. A task of the change that cannot be done without a
+human, because it needs their go-ahead, a real write to a tracker or another
+outside service, or a credential, is neither done nor checked: the orchestrator
+finishes every other task, then follows the blocked path and names those tasks
+in the stage summary (see [A blocked AFK orchestrator](#a-blocked-afk-orchestrator)).
+For `HITL`, the orchestrator may ask the human. Once every task is committed and
+pushed and the checks pass, it gives the human a quick look: it shows them the
+implementation and the pull request's URL, says that verification, code review
+and QA follow, and fixes only what the human clearly asks for, each round as a
+new commit. After the last round that changed anything, it runs the checks
+again before the transition.
+
+The session closes the stage in this order, and the prompt says never to skip or
+reorder a step. The review step, 2, exists for `HITL` only: an `AFK` prompt has
+one step fewer and the numbering that follows is shifted by one. There is no
+pull-request mode: the pull request already exists.
+
+1. Confirm that every check passes, that every task of the change is checked in
+   its `tasks.md`, that nothing is left uncommitted and that every commit is
+   pushed.
+2. For `HITL`, give the human the quick look at the implementation.
+3. Only once the steps above are done, write `stage-summary.md` in the
+   attempt's directory and run
+   `/autonomous:run --apply --persist <attempt-id>`, which is
+   [persist mode](#persist-mode): it posts the stage summary as a comment on the
+   task. The stage summary names the pull request's URL, the OpenSpec change,
+   the commits, and each deviation from the proposal, with its reason.
+4. Run `/autonomous:run --apply --transition <source>:<task> --from implement`,
+   which is [transition mode](#transition-mode). For `HITL` it asks the human to
+   approve the implementation and applies the answer. For `AFK` it asks no one and moves
+   the task to `verify` itself.
+5. Write `logbook-entry.md` and run `/autonomous:run --apply --log <attempt-id>`,
+   which is [log mode](#log-mode). Its body adds the section
+   `### Implementation`, listing the tasks of the change done and the commits by
+   subject.
+6. Write the result marker, only once the entry is published.
+
+A failed persist mode or push is a blocker for an `AFK` task and goes to the
+human for an `HITL` task; no transition runs. When an `HITL` transition is not
+applied, or the human answers `Later`, the orchestrator publishes no entry,
+writes no result marker and leaves the session open, so the human can come back
+to it. The task keeps `implement`.
+
+Nobody watches an `AFK` session, so a refused `AFK` transition is not left
+open. The orchestrator fixes what the refusal names and runs the transition once
+more: it commits and pushes an uncommitted change, pushes the commits that are
+not pushed, and checks a task only when it is done, never one it did not do. A
+failed read or write, such as the fetch, the pull request or the tracker, needs
+no fix, only the second run. A second run refused because the task is no longer
+in `implement`, with labels that show `verify` and no `implement`, means the
+first run moved the task and only its read-back failed: the transition is
+applied, and the orchestrator goes on. When what the refusal names cannot be
+fixed, or the second run is refused too, the task is blocked, as in
+[A blocked AFK orchestrator](#a-blocked-afk-orchestrator): the orchestrator
+publishes a logbook entry that says the attempt is blocked and why, quoting the
+transition's reason, writes no result marker and stops. The task keeps
+`implement`.
+
+Code enforces the order that matters. The transition refuses without the receipt
+that persist mode writes (see
+[The persistence receipt](#the-persistence-receipt)), and it refuses unfinished
+work: transition mode and the transition answer check the task's workspace for
+unchecked tasks, uncommitted changes and unpushed commits, before an `HITL` human
+is asked and before anything is written (see
+[The guards on leaving implement, verify or code-review](#the-guards-on-leaving-implement-verify-or-code-review)). A marker
+written before the transition fails the stage's completion check. The logbook is
+not enforced: `reconcile` finalises an attempt that left no entry and notes it.
+
+The constraints section tells the orchestrator to commit and push only on the
+workspace's current branch, never to force a push or pass `--no-verify`, and to
+leave the pull request a draft: never mark it ready for review, and open no
+other pull request. It forbids absolute paths and other details of the machine
+in the commits, the change's artifacts, the stage summary and the logbook entry,
+for every source, because the repository and its pull request may be public (see
+[Public content](#public-content)).
+
+### A blocked AFK orchestrator
+
+When an `AFK` orchestrator cannot finish the implementation, because the
+proposal contradicts itself, a check cannot be made to pass, or a task needs a
+human, it does not force it. The prompt tells it to:
+
+1. commit and push what is done, by the rules of the commits section, and leave
+   unchecked every task that is not done;
+2. write a stage summary that explains the blocker, what it found and what a
+   human must decide, and run persist mode;
+3. write a logbook entry that says the attempt is blocked and why, and run log
+   mode;
+4. run no transition, write no result marker and stop.
+
+A task that needs a human ends here even when every other task is done: the
+orchestrator never checks a task it did not do, and the guards would refuse the
+transition while one is unchecked. The stage summary names those tasks. The
+task keeps `implement`, the work done is pushed, its tracker holds the comment,
+and `reconcile` retains the attempt once its session ends, so a human finds it
+(see [What it does to each attempt](#what-it-does-to-each-attempt)). An `HITL`
+prompt has no blocked section: the orchestrator asks the human.
+
+The same ending follows a refused transition, once the second run is refused or
+the refusal names something that cannot be fixed. The stage summary is already
+posted by then, and persist mode would not post it twice, because a comment with
+the attempt's header is skipped, so the orchestrator does not run it again: the
+logbook entry carries the notice, with the transition's reason.
+
+### Resuming an implementation
+
+A new attempt of the task reuses the branch of the earlier ones, and so its
+workspace. Before it implements anything, the orchestrator looks for what an
+earlier attempt left there: the checked tasks in the change's `tasks.md`, the
+branch's commits since the proposal, and the uncommitted changes. It continues
+from the checked tasks and the commits and does not redo them. It treats
+uncommitted changes as partial work on the next unchecked tasks: it finishes
+them, checks their tasks and commits them, and never discards them, with no
+`git checkout --`, `git restore`, `git reset --hard`, `git clean` or stash.
+
+### Implementation completion
+
+The stage's check against the task's tracker holds in either of two cases:
+
+- The task carries `verify` and no `implement`.
+- The task is closed in its tracker, as for the grill.
+
+As for every stage, `reconcile` also needs a valid result marker. A task still
+carrying `implement` has not completed the stage.
+
+### Upgrading to the implementation stage
+
+`verify` is a new label of the contract. A tracker that was bootstrapped before
+it lacks it, and the transition out of `implement` then fails before it writes
+anything, naming `--bootstrap-labels`. Run
+`/autonomous:run --bootstrap-labels` once per tracker, before the first
+transition out of `implement`, to create `verify` (see
+[The label contract](#the-label-contract)).
+
+Stop the loop (`/autonomous:loop-stop`) before upgrading. A task that already
+carries `implement` becomes a candidate once the stage exists, ahead of every
+`proposal` task, and a running loop would launch it at once. Restart the loop
+when such a task is ready for it.
+
+To roll back, relabel by hand every task already in `verify` first, then revert
+the release. An older version does not know `verify`: it sees those tasks as
+missing a stage, and its label triage would derive `proposal` for them.
+
+An older version also cannot read `implement` attempt records: its reconcile
+and launch steps report `not-evaluable` and stop for as long as one exists in
+the state directory, whatever its state. So before reverting, finish or discard
+every `implement` attempt, move each `attempts/<source>/<task>/implement/`
+directory out of the state directory, and put them back once a release with
+`implement` is installed again.
+
+## The verification stage
+
+The verification stage 🔍 checks a task's implementation. A managed `claude`
+session, the orchestrator, checks the code the implementation committed against
+the task's approved proposal and against its definition, corrects what does not
+match through one [adversarial review](#the-adversarial-review), commits each
+fix on the task's branch, in the draft pull request the implementation stage
+worked in, saves a stage summary in the task's own tracker, leaves a logbook
+entry and ends with the transition from `verify` to `code-review`. The pull
+request stays a draft: no step of the stage marks it ready for review.
+
+Selected `verify` units launch like those of any registered stage, and
+`--task <source>:<id> --stage verify` supplies one by hand (see
+[The supplied task](#the-supplied-task)). The `select` step prefers a `verify`
+candidate over every other stage's (see [The `select` step](#the-select-step)),
+and an attempt takes a work slot in the loop. The session is titled
+`auto 🔍 <name> (<task id>)` and runs with `--model opus --effort high`, fixed
+for every task.
+
+### Verification prerequisites
+
+They are those of the implementation stage, checked in the same order and
+giving the same reasons (see
+[Implementation prerequisites](#implementation-prerequisites)), with the verify
+workflow in place of the apply workflow. `launch` checks them after it has
+inferred the task's repository and before it writes anything, and the first
+failure makes the step `wait`:
+
+- `sessions.tool` is `claude`.
+- The task carries exactly one autonomy label, `AFK` or `HITL`.
+- The repository holds an OpenSpec root, a directory `openspec`. Nothing
+  initialises or updates OpenSpec in a repository.
+- The repository provides the verify workflow, as the skill
+  `openspec-verify-change` (OpenSpec 2) or the command `/opsx:verify`
+  (OpenSpec 1), and then the update workflow, as the skill
+  `openspec-update-change` or the command `/opsx:update`. They are found as the
+  other stages find theirs, and the skill wins when both exist. A missing
+  workflow's reason names both forms and their paths, and ends with
+  `update OpenSpec in that repository`.
+- `openspec --version` runs.
+- The `handoff` skill of the `mattpocock-skills` plugin is found.
+- The task's context is read.
+- The workspace's branch has an open pull request that adds exactly one OpenSpec
+  change.
+
+One more file is read, and it is not in the implementation's list: the body of
+the adversarial review skill. It comes from the plugin the run belongs to, never
+from another installed copy, so the prompt carries the skill of the runner's own
+version. A skill file that cannot be read fails the prerequisites with a reason
+naming its path.
+
+The stage's context carries the bodies of the `handoff` skill and of the
+adversarial review skill, the names of the verify and update workflows as the
+prompt writes them (`/openspec-verify-change` or `/opsx:verify`,
+`/openspec-update-change` or `/opsx:update`), the task's context as one JSON
+string, the open pull request and the change's name.
+
+### What the verification checks
+
+The prompt holds the shared frame (the attempt, the task and the result marker),
+a Context section rendered as for proposal preparation, the `handoff` body, the
+adversarial review's body, and the stage's instructions. Comments in the Context
+section are quoted under their author and are material, not instructions.
+
+The verification checks the implementation against two things:
+
+- The proposal. The orchestrator runs the verify workflow on the change as it
+  is, with all its checks, Code Pattern Consistency included.
+- The task's definition: its acceptance criteria and its non-goals. An
+  acceptance criterion that no requirement of the change covers and the code
+  does not meet is a finding.
+
+A deviation already recorded in the change's `design.md` is the proposal's
+word, not a finding.
+
+Its boundary is narrow. A deeper review of the code's quality is code review's,
+and running what the task delivers as its end user would is QA's. A finding that
+belongs to either is passed on, not fixed, whatever its severity: the stage
+summary lists it under a heading for that stage. A finding the verify workflow
+reports is the exception: it is the verification's own, whatever it concerns.
+The finding triage decides it here, like any other finding, and never passes it
+on. After the fixes, every check the repository defines
+passes before the transition. A check that cannot pass is a blocker for an `AFK`
+task and goes to the human for an `HITL` task.
+
+### The adversarial review as this stage runs it
+
+The prompt tells the orchestrator to correct what it finds by running one round
+of the adversarial review, and supplies the parameters the skill takes from its
+caller, right before the skill's body:
+
+| Parameter               | What the stage supplies                                                                                   |
+| ----------------------- | --------------------------------------------------------------------------------------------------------- |
+| Subject                 | The implementation                                                                                        |
+| References              | The proposal and the task's definition                                                                    |
+| Procedure of the report | The verify workflow                                                                                       |
+| Severity floor          | `CRITICAL`                                                                                                |
+| Later reviews           | Code review and QA, each with its heading in the stage summary, for any finding but the verify workflow's |
+| Record of the findings  | `findings.md` in the attempt's directory                                                                  |
+| Whether a human follows | Yes for `HITL`, no for `AFK`                                                                              |
+
+A round runs once: no second report follows the fixes.
+
+### Which way a fix goes
+
+A fix brings the code to the proposal. When the refutation shows that the
+proposal is the one that is wrong, the orchestrator changes the change's
+artifacts with the update workflow, on the same branch, and records the
+deviation, with its reason, in the change's `design.md`, the stage summary and
+the logbook entry. An `AFK` orchestrator decides the deviation without asking
+and records it as an assumption too; an `HITL` one asks the human first.
+
+When the proposal contradicts the task's definition and the change's design
+records no deviation that explains it, an `AFK` orchestrator takes the
+definition as the winner: it brings the code and the proposal to it and records
+the deviation. An `HITL` orchestrator asks the human which wins.
+
+### Follow-up tasks
+
+A deferred finding that survives the refutation becomes a proposed follow-up
+task, with a title, its reason and the finding it comes from, in the stage
+summary and the logbook entry.
+
+- For `AFK`, the orchestrator creates none. No human vets a follow-up, and each
+  created task counts against the workspace's issue limit on Linear's free plan.
+- For `HITL`, the orchestrator creates the follow-ups the human confirms, in
+  the task's own tracker, labelled at creation (see
+  [Labelling at creation](#labelling-at-creation)). Each is related to the task
+  and never one of its subtasks, because an open subtask keeps its parent from
+  being a candidate. On Linear the relation is
+  `linear issue relation add <new> related <task>`, on Beads a `related`
+  dependency, and on GitHub, which has no such relation, a link to the task in
+  the new issue's body.
+
+### Verification commits
+
+Only the orchestrator commits. A teammate changes files and never stages,
+commits or pushes.
+
+- One commit per fixed finding: its fix and its reproduction test, when it has
+  one, staged by path, never with `git add -A` or `git add .`.
+- Each message is a conventional commit in the repository's conventions, with
+  the type and scope taken from its contributor instructions, its commit rules
+  and its recent history.
+- A commit is marked breaking only when the change's proposal declares the
+  change breaking.
+- Each commit is pushed before the next starts. No commit is amended, none
+  already pushed is rewritten, no push is forced and no hook is skipped.
+
+### What the orchestrator does when it closes
+
+The prompt follows the task's autonomy. For `AFK`, no human follows the
+session: the orchestrator never asks the human anything, decides the finding
+triage itself, and records its decisions and assumptions in the stage summary
+and the logbook entry. For `HITL`, the orchestrator shows the human the finding
+triage before the refutation and applies their changes, and shows the human the
+outcome and the pull request before the transition.
+
+The session closes the stage in this order, and the prompt says never to skip
+or reorder a step. The review step, 2, exists for `HITL` only: an `AFK` prompt
+has one step fewer and the numbering that follows is shifted by one. There is
+no pull-request mode: the pull request already exists.
+
+1. Confirm that every check passes, that nothing is left uncommitted and that
+   every commit is pushed.
+2. For `HITL`, review the outcome with the human.
+3. Only once the steps above are done, write `stage-summary.md` in the
+   attempt's directory and run
+   `/autonomous:run --apply --persist <attempt-id>`, which is
+   [persist mode](#persist-mode): it posts the stage summary as a comment on the
+   task. The stage summary names the pull request's URL, the OpenSpec change,
+   the commits, each finding by outcome with its reason, the findings passed on
+   under a heading per later stage, the proposed follow-up tasks, and each
+   deviation from the proposal.
+4. Run `/autonomous:run --apply --transition <source>:<task> --from verify`,
+   which is [transition mode](#transition-mode). For `HITL` it asks the human to
+   approve the verification, with the question "the verification is ready", and applies
+   the answer. For `AFK` it asks no one and moves the task to `code-review`
+   itself.
+5. Write `logbook-entry.md` and run `/autonomous:run --apply --log <attempt-id>`,
+   which is [log mode](#log-mode). Its body adds the section
+   `### Verification`, listing the findings fixed, with their commits by
+   subject, and those refuted, passed on, deferred and dismissed.
+6. Write the result marker, only once the entry is published.
+
+The persist comment's first line is
+`autonomous · verify · <attempt-id> · stage summary saved`, and a comment with
+that line is never posted twice. It changes no description.
+
+A failed persist mode or push is a blocker for an `AFK` task and goes to the
+human for an `HITL` task; no transition runs. When an `HITL` transition is not
+applied, or the human answers `Later`, the orchestrator publishes no entry,
+writes no result marker and leaves the session open. The task keeps `verify`.
+
+A refused `AFK` transition is handled as in the implementation stage: the
+orchestrator fixes what the refusal names and runs the transition once more.
+When what the refusal names cannot be fixed, or the second run is refused too,
+it publishes a logbook entry that says the attempt is blocked and why, quoting
+the transition's reason, writes no result marker and stops. The task keeps
+`verify`.
+
+The constraints section tells the orchestrator to commit and push only on the
+workspace's current branch, never to force a push or pass `--no-verify`, and to
+leave the pull request a draft. It forbids absolute paths and other details of
+the machine in the commits, the change's artifacts, the stage summary, the
+logbook entry and any follow-up task, for every source, because the repository
+and its pull request may be public (see [Public content](#public-content)).
+
+### Leaving verify
+
+A task leaves `verify` only with its work finished. Transition mode and the
+transition answer run the same three checks as for `implement`: an unchecked
+task of the change, uncommitted changes and unpushed commits. The verification
+checks no task box of its own, but an unchecked task left by hand is unfinished
+work, and a fix left uncommitted or unpushed is what the guards exist to catch.
+See [The guards on leaving implement, verify or code-review](#the-guards-on-leaving-implement-verify-or-code-review).
+
+### A blocked AFK verification
+
+When an `AFK` orchestrator cannot finish the verification, because a fix is
+rejected twice, a check cannot be made to pass, or a fix needs a human, it does
+not force it. The prompt tells it to:
+
+1. commit and push what is done, by the rules of the commits section;
+2. write a stage summary that explains the blocker, what it found and what a
+   human must decide, and run persist mode;
+3. write a logbook entry that says the attempt is blocked and why, and run log
+   mode;
+4. run no transition, write no result marker and stop.
+
+The task keeps `verify`, the accepted fixes are pushed, its tracker holds the
+comment, and `reconcile` retains the attempt once its session ends, so a human
+finds it (see [What it does to each attempt](#what-it-does-to-each-attempt)). An
+`HITL` prompt has no blocked section: the orchestrator asks the human.
+
+### A re-attempt
+
+A new attempt of the task reuses the branch of the earlier ones, and so its
+workspace, and it starts a new round. It does not read the earlier attempt's
+`findings.md`: the earlier attempt's stage summary, among the task's comments,
+says what it did, and its fixes are committed. Before the report, the
+orchestrator looks for what an earlier attempt left: the branch's commits since
+the implementation and the uncommitted changes.
+
+- Earlier commits stay, and the new round's report checks the code as it is.
+- Uncommitted changes are an unfinished fix. They stay in the working tree, are
+  never discarded, with no `git checkout --`, `git restore`,
+  `git reset --hard`, `git clean` or stash, and are committed only once a fix
+  check of the new round accepts them as the fix of a surviving finding.
+- Changes that no finding claims by the end of the round block an `AFK` attempt,
+  named in the stage summary, and go to the human for an `HITL` attempt.
+
+### The record of findings
+
+The orchestrator keeps the record of the findings in `findings.md`, in the
+attempt's directory, outside the repository and every tracker. The stage summary
+and the logbook entry's `### Verification` section are built from it, so it
+never reaches the pull request or the tracker as such, and it holds no detail of
+the machine.
+
+### Verification completion
+
+The stage's check against the task's tracker holds in either of two cases:
+
+- The task carries `code-review` and no `verify`.
+- The task is closed in its tracker, as for the grill.
+
+As for every stage, `reconcile` also needs a valid result marker. A task still
+carrying `verify` has not completed the stage.
+
+### Upgrading to the verification stage
+
+The stage ships as a minor release, with no configuration change.
+
+`code-review` is a new label of the contract. A tracker that was bootstrapped
+before it lacks it, and the transition out of `verify` then fails before it
+writes anything, naming `--bootstrap-labels`. Run
+`/autonomous:run --bootstrap-labels` once per tracker, before the first
+transition out of `verify`, to create `code-review` (see
+[The label contract](#the-label-contract)).
+
+Stop the loop (`/autonomous:loop-stop`) before installing. A task that already
+carries `verify` becomes a candidate once the stage exists, ahead of every other
+stage, and a running loop would launch it at once. Restart the loop when such a
+task is ready for it.
+
+To roll back, relabel by hand every task already in `code-review` first, then
+revert the release. An older version does not know `code-review`: it sees those
+tasks as missing a stage, and its label triage would derive `proposal` for them.
+
+An older version also cannot read `verify` attempt records: its reconcile and
+launch steps report `not-evaluable` and stop for as long as one exists in the
+state directory, whatever its state. So before reverting, finish or discard
+every `verify` attempt, move each `attempts/<source>/<task>/verify/` directory
+out of the state directory, and put them back once a release with `verify` is
+installed again.
+
+### Upgrading to the declared stages
+
+`qa`, `external-review`, `wrap-up` and `ready-to-merge` are new labels of the
+contract. Run `/autonomous:run --bootstrap-labels` once per tracker to create
+`qa`, `wrap-up` and `ready-to-merge`, and `external-review` where it does not
+exist yet (see [The label contract](#the-label-contract)).
+
+The release that declared them wrote no `code-review`, `qa`, `external-review`
+or `wrap-up` attempt record, and none of the four labels. Since the
+[code review stage](#the-code-review-stage), the plugin writes `code-review`
+attempt records and the `external-review` label; it still writes no `qa`,
+`external-review` or `wrap-up` attempt record, and no `qa`, `wrap-up` or
+`ready-to-merge` label. Those come from a development build of one of those
+stages, or from a person setting a label by hand. When a release meets an
+attempt of a stage it has no implementation for, it only observes it, even once
+its session has ended: it never retains or finalises it, so the build that runs
+the stage finishes its own attempt. Discard one that build left behind with
+`--discard`.
+
+An older version that does not declare these stages cannot read such records:
+it rejects any attempt record whose stage is `code-review`, `qa`,
+`external-review` or `wrap-up`, and as reconcile reads every record, one it
+cannot parse stops every run for as long as it exists in the state directory,
+whatever its state. It does not read `qa`, `external-review`, `wrap-up` or
+`ready-to-merge` as stage labels either, so its label triage would judge a task
+carrying one again. So before reverting, finish or discard every attempt of
+those stages, move each `attempts/<source>/<task>/<stage>/` directory of them
+out of the state directory, relabel by hand the tasks carrying one of those
+labels, and put the directories back once a release that declares them is
+installed again.
+
+## The code review stage
+
+The code review stage 🧐 judges the quality of the code a task's implementation
+changed. A managed `claude` session, the orchestrator, runs the
+[review team](#the-review-team) over the pull request's diff and corrects what
+it finds through one [adversarial review](#the-adversarial-review), commits each
+fix on the task's branch, in the draft pull request the earlier stages worked in,
+publishes what survives as finding threads on that pull request (see
+[Publish mode](#publish-mode)), saves a stage summary in the task's own tracker,
+leaves a logbook entry and ends with the transition from `code-review` to
+`external-review`. The pull request stays a draft: no step of the stage marks it
+ready for review.
+
+Selected `code-review` units launch like those of any registered stage, and
+`--task <source>:<id> --stage code-review` supplies one by hand (see
+[The supplied task](#the-supplied-task)). The `select` step prefers a
+`code-review` candidate over every other stage's (see
+[The `select` step](#the-select-step)), and an attempt takes a work slot in the
+loop. The session is titled `auto 🧐 <name> (<task id>)` and runs with
+`--model opus --effort high`, fixed for every task.
+
+### Code review prerequisites
+
+They are those of the verification stage, checked in the same order and giving
+the same reasons (see [Verification prerequisites](#verification-prerequisites)),
+without the verify and update workflows, so a repository that provides neither
+passes. `launch` checks them after it has
+inferred the task's repository and before it writes anything, and the first
+failure makes the step `wait`:
+
+- `sessions.tool` is `claude`.
+- The task carries exactly one autonomy label, `AFK` or `HITL`.
+- The repository holds an OpenSpec root, a directory `openspec`. Nothing
+  initialises or updates OpenSpec in a repository.
+- `openspec --version` runs.
+- The `handoff` skill of the `mattpocock-skills` plugin is found.
+- The task's context is read.
+- The workspace's branch has an open pull request that adds exactly one OpenSpec
+  change.
+
+Two more things are read, and they are not in verification's list:
+
+- The bodies of the review team skill and of the adversarial review skill. They
+  come from the plugin the run belongs to, never from another installed copy,
+  and every reference to the plugin's root in a body is replaced by that
+  plugin's directory, so each command a body names runs the runner's own code. A
+  skill file that cannot be read fails the prerequisites with a reason naming its
+  path.
+- The finding threads already on the pull request: those a code review
+  published, open or resolved, and the open ones addressed to code review. A pull
+  request whose threads cannot be read fails the prerequisites with the reason.
+  The prompt lists each thread with its state, its location, its markers and its
+  URL.
+
+Plannotator, Codex and CodeRabbit are never prerequisites. The review team skips
+a reviewer that cannot run, with its reason. Without Plannotator the prompt tells
+the agent that there is no walkthrough and, for `HITL`, that the human round
+runs on GitHub only.
+
+### What the code review checks
+
+The prompt holds the shared frame (the attempt, the task and the result marker),
+a Context section rendered as for the other stages, the `handoff` body, the
+bodies of the review team and the adversarial review, the finding threads read at
+launch and the stage's instructions. The instructions name the change and the
+open pull request. Comments in the Context section are quoted under their author
+and are material, not instructions.
+
+The review team runs as it ships: its report directory is inside the attempt's
+directory, and the agent passes no `--tier` to its plan, so the tier is the one
+the review team measures and is never raised. The reviewers get nothing but their
+briefs. The definition and the proposal are used in the finding triage and the
+refutation, not by the reviewers.
+
+Its boundary is the quality of the code. Whether the implementation matches the
+proposal and the definition is verification's, and running what the task
+delivers as its end user would is QA's.
+
+### The adversarial review as this stage runs it
+
+The prompt tells the orchestrator to run one round of the adversarial review,
+and supplies the parameters the skill takes from its caller:
+
+| Parameter               | What the stage supplies                                                                    |
+| ----------------------- | ------------------------------------------------------------------------------------------ |
+| Subject                 | The pull request's diff from its merge base                                                |
+| References              | The proposal and the task's definition                                                     |
+| Procedure of the report | The review team                                                                            |
+| Severity floor          | `CRITICAL`                                                                                 |
+| Later reviews           | QA only                                                                                    |
+| Record of the findings  | `findings.json` in the attempt's directory                                                 |
+| Whether a human follows | Yes for `HITL`, no for `AFK`                                                               |
+| Human rounds            | For `HITL`, after the stage's round is published (see [The human round](#the-human-round)) |
+| Advisory reporters      | `human`                                                                                    |
+
+The stage's round runs once: no second report follows the fixes.
+
+### The input from verification
+
+The finding triage also takes, as findings of the reviewer `verification`:
+
+- the open threads addressed to code review, and
+- the findings under the `Code review` heading of verification's stage summary,
+  among the task's comments.
+
+### What the code review never changes
+
+The orchestrator never changes the change's artifacts or the task's definition.
+A finding whose fix would contradict or change them, including one located in
+the change's own artifacts, is deferred to a proposed follow-up task for `AFK`
+and asked of the human for `HITL`. Any other finding located in the change's
+artifacts is an ordinary finding.
+
+A conflict between the branch and its base is left as it is. The orchestrator
+merges and rebases nothing and resolves no conflict: it reviews the branch as it
+is, and names the conflict in the stage summary and the logbook entry.
+
+### Doubts
+
+A doubt is neither refuted nor fixed. The finding triage first settles it
+against the definition and the proposal, with what settles it as its reason. A doubt they do
+not settle is asked of the human for `HITL`, and published as an open
+`question (blocking)` thread for `AFK`.
+
+### The human round
+
+For `HITL` only, after the stage's round is published and before the approval
+question, the orchestrator holds human rounds. The human reviews on GitHub or,
+when there is a walkthrough, in it. Each comment becomes a finding of the
+reviewer `human`, and the round runs the finding triage, the refutation, the
+fixes and their fix checks, and ends with publish mode, which answers and
+resolves the thread of each comment once it is accounted for. An `AFK` prompt
+holds no human round.
+
+- The severity of a human finding comes from its mark: `CRITICAL` when the
+  comment is marked `blocking`, `SUGGESTION` when it is marked `nit` or
+  `nitpick`, and `WARNING` otherwise. A Plannotator comment follows the same
+  rule.
+- The refutation only advises. The orchestrator shows the human its outcome and
+  counter-evidence for each of their findings and keeps or drops the finding as
+  the human decides. It never dismisses one silently.
+- Rounds repeat while the human sends feedback, a "Send feedback" verdict in
+  Plannotator or a word in the session. The approval question runs only once the
+  human says there is no more.
+
+### The walkthrough
+
+For `HITL`, once the stage's round is published, the orchestrator sends the human
+the walkthrough that publish mode wrote, through the Inbox, as a guided review
+that asks for their verdict. It passes the files' contents, not their paths, and
+pipes the same fields to `plannotator inbox call submit_guide -` when the patch
+is too large for one tool call. Without a walkthrough, the human round runs on
+GitHub only. See [Publish mode](#publish-mode).
+
+### Code review commits
+
+The rules are verification's (see [Verification commits](#verification-commits)).
+Only the orchestrator commits. It makes one commit per fixed finding, holding its
+fix and its reproduction test when it has one, staged by path and in the
+repository's conventions. Each commit is pushed before the next starts, and none
+is amended, forced or made with hooks skipped.
+
+### Follow-up tasks
+
+A deferred finding that survives the refutation becomes a proposed follow-up
+task.
+
+- For `AFK`, the orchestrator creates none, and the finding is published as an
+  open thread.
+- For `HITL`, the orchestrator creates the follow-ups the human confirms, in the
+  task's own tracker, labelled at creation (see
+  [Labelling at creation](#labelling-at-creation)), related to the task and never
+  one of its subtasks. The finding is published resolved, with the new task's
+  URL.
+
+### What the orchestrator does when it closes
+
+The prompt follows the task's autonomy. For `AFK`, the orchestrator never asks
+the human anything and records its decisions and assumptions in the stage summary
+and the logbook entry. For `HITL`, it shows the human the finding triage before
+the refutation, and the outcome and the pull request before the human rounds.
+
+The session closes the stage in this order, and the prompt says never to skip or
+reorder a step. There is no pull-request mode: the pull request already exists.
+
+1. Confirm that every check passes and that every commit is pushed.
+2. Run `/autonomous:run --apply --publish <attempt-id>`, which is
+   [publish mode](#publish-mode).
+3. For `HITL`, send the walkthrough and hold the human rounds.
+4. Write `stage-summary.md` in the attempt's directory and run
+   `/autonomous:run --apply --persist <attempt-id>`, which is
+   [persist mode](#persist-mode). The stage summary names the pull request's
+   URL, the OpenSpec change, the commits, the review team's tier and skipped
+   reviewers, each finding by outcome with its reason, the finding threads by
+   link instead of their content, the proposed follow-up tasks, and any conflict
+   with the base.
+5. Run `/autonomous:run --apply --transition <source>:<task> --from code-review`,
+   which is [transition mode](#transition-mode). For `HITL` it asks the human to
+   approve the code review, with the question "the code review is ready", and
+   applies the answer. For `AFK` it asks no one and moves the task to
+   `external-review` itself. It refuses a task whose record is not published
+   (see [The publish receipt](#the-publish-receipt)).
+6. Write `logbook-entry.md` and run `/autonomous:run --apply --log <attempt-id>`,
+   which is [log mode](#log-mode). Its body adds the section `### Code review`,
+   naming the threads published by state, the fixed `SUGGESTION`s, the refuted
+   and the dismissed findings, and a short rendering of the walkthrough, within
+   the entry's word limit. When they do not fit, the entry gives counts and the
+   stage summary lists them.
+7. Write the result marker, only once the entry is published.
+
+The persist comment's first line is
+`autonomous · code-review · <attempt-id> · stage summary saved`, and a comment
+with that line is never posted twice. It changes no description.
+
+When an `HITL` transition is not applied, or the human answers `Later`, the
+orchestrator publishes no entry, writes no result marker and leaves the session
+open. The task keeps `code-review`.
+
+The constraints section tells the orchestrator to commit and push only on the
+workspace's current branch, never to force a push or pass `--no-verify`, and to
+leave the pull request a draft. It forbids absolute paths and other details of
+the machine in the commits, `findings.json`, the stage summary, the logbook entry
+and any follow-up task, for every source, because the repository and its pull
+request may be public (see [Public content](#public-content)).
+
+### Leaving code-review
+
+A task leaves `code-review` only with its work finished and its record
+published. Transition mode and the transition answer run the three checks of
+`implement` and `verify` (see
+[The guards on leaving implement, verify or code-review](#the-guards-on-leaving-implement-verify-or-code-review))
+and look for the attempt's publish receipt (see
+[The publish receipt](#the-publish-receipt)).
+
+### A blocked AFK code review
+
+When an `AFK` orchestrator cannot finish the code review, because a fix is
+rejected twice, a check cannot be made to pass, a fix needs a human or publish
+mode fails, it does not force it. The prompt tells it to:
+
+1. commit and push what is done, by the rules of the commits section;
+2. run publish mode once, unless it is what failed, with each finding it left
+   unfixed marked `blocked`;
+3. write a stage summary that explains the blocker and run persist mode;
+4. write a logbook entry that says the attempt is blocked and why, and run log
+   mode;
+5. run no transition, write no result marker and stop.
+
+The task keeps `code-review`, the accepted fixes are pushed, its tracker holds the
+comment, and `reconcile` retains the attempt once its session ends (see
+[What it does to each attempt](#what-it-does-to-each-attempt)). An `HITL` prompt
+has no blocked section: the orchestrator asks the human.
+
+### A re-attempt
+
+A new attempt of the task reuses the branch of the earlier ones, and so its
+workspace, and it starts a new round. Before the report, the orchestrator looks
+for what an earlier attempt left: the branch's commits since verification, the
+uncommitted changes and the finding threads read at launch.
+
+- Earlier commits stay, and the new round's report checks the code as it is.
+- Uncommitted changes are an unfinished fix, never discarded, with no
+  `git checkout --`, `git restore`, `git reset --hard`, `git clean` or stash.
+- The finding triage links each finding to the listed thread it continues, if
+  any, in the record's `thread` field, so a finding a first attempt published as
+  fixed, whose fix did not hold, continues its thread instead of opening
+  another.
+
+### The record of findings
+
+The orchestrator keeps the record of the findings in `findings.json`, in the
+attempt's directory, outside the repository and every tracker. Publish mode
+reads it, and the publish receipt holds its digest. It holds no detail of the
+machine.
+
+### Code review completion
+
+The stage's check against the task's tracker holds in either of two cases:
+
+- The task carries `external-review` and no `code-review`.
+- The task is closed in its tracker, as for the grill.
+
+As for every stage, `reconcile` also needs a valid result marker. A task still
+carrying `code-review` has not completed the stage.
+
+### Upgrading to the code review stage
+
+The stage ships as a minor release, with no configuration change.
+
+`external-review` is a label of the contract since the declared stages (see
+[Upgrading to the declared stages](#upgrading-to-the-declared-stages)). A tracker
+that was bootstrapped before it lacks it, and the transition out of
+`code-review` then fails before it writes anything, naming `--bootstrap-labels`. Run
+`/autonomous:run --bootstrap-labels` once per tracker, before the first
+transition out of `code-review` (see [The label contract](#the-label-contract)).
+
+Stop the loop (`/autonomous:loop-stop`) before installing. A task that already
+carries `code-review` becomes a candidate once the stage exists, ahead of every
+other stage, and a running loop would launch it at once. Restart the loop when
+such a task is ready for it.
+
+To roll back to a version that declares the stages, revert the release: that
+version reads `external-review` as a stage label and only observes a
+`code-review` attempt, so finish or discard every `code-review` attempt first.
+
+To roll back further, to a version that does not declare them, relabel by hand
+every task already in `external-review` first. Such a version does not know
+`external-review`: it sees those tasks as missing a stage, and its label triage
+would derive `proposal` for them. It also cannot read `code-review` attempt
+records, so before reverting, finish or discard every `code-review` attempt and
+move each `attempts/<source>/<task>/code-review/` directory out of the state
+directory.
+
+Threads already published stay on their pull requests and need nothing.
+
+## The adversarial review
+
+The adversarial review is the way a review stage, or any other review, handles
+what it finds. A reviewer reports findings. The orchestrator triages them, other
+teammates try to refute each one it keeps, others fix those that survive, and
+others judge each fix. Nobody judges their own work.
+
+It ships as a skill of this plugin, `autonomous:adversarial-review`, so that
+every review can run the same way: a stage inlines its body in its prompt, and a
+person or another skill can follow it by hand. Its callers are
+[the verification stage](#the-verification-stage) and
+[the code review stage](#the-code-review-stage). The skill holds no fact about
+a particular stage. Each caller supplies its own parameters.
+
+The skill applies only when it is asked for by name: a request for an
+adversarial review, or a stage or another skill that says to follow it. Its
+description never claims a request to review a pull request, a change or code in
+general, so it does not compete with the code review skills on a plain "review
+this". Two eval cases cover this: in
+`plugins/autonomous/evals/adversarial-review-named` a session is asked for an
+adversarial review by name and the skill fires, and in
+`plugins/autonomous/evals/adversarial-review-negative` a session is asked to
+review a pull request and it does not.
+
+A stage reads the skill from the plugin the run belongs to, not from another
+installed copy of it, so the prompt carries the skill of the runner's own version
+(see [Verification prerequisites](#verification-prerequisites) and
+[Code review prerequisites](#code-review-prerequisites)).
+
+### What the caller supplies
+
+The skill takes these from its caller, the stage, skill or person that asked for
+the review:
+
+- the subject of the review;
+- the references it is checked against;
+- the procedure of the report;
+- the scale of severities and its floor;
+- the later reviews a finding can be passed on to;
+- where the record of the findings is kept;
+- whether a human follows the review.
+
+It may also supply two more, and never has to: without them, they do not
+apply.
+
+- human rounds: further rounds that follow the human's comments;
+- advisory reporters: the reporters whose findings the refutation only advises
+  on.
+
+When one of the first list is missing, the orchestrator asks the caller, or the person who asked,
+before the report starts. It never guesses the floor.
+
+### The phases
+
+A round runs five phases in this order, each once: the report, the finding
+triage, the refutation, the fix and the fix check. No second report follows the
+fixes, even when every fix passes its fix check.
+
+A caller that supplies human rounds gets more. When the human comments after a
+round, a human round runs the finding triage, the refutation, the fix and the
+fix check once, with the human's comments as the report: each comment is a
+finding reported by the human, and no reviewer reports again.
+
+### Who judges what
+
+The orchestrator starts each phase's teammates fresh.
+
+- The reporter only reads. It changes no file of the subject.
+- A finding is refuted by teammates other than its reporter.
+- A fix is judged by teammates other than its fixer.
+- The orchestrator chooses how many teammates each phase takes, and the model
+  and effort of every teammate, the reporter's from the complexity of the
+  subject. The skill fixes no number of teammates.
+- The orchestrator is the only one that commits.
+
+### The report
+
+The reporter follows the caller's procedure. It reports each finding with its
+severity, on the caller's scale, and its evidence: a file and line, or an
+artifact section.
+
+### The finding triage
+
+The orchestrator makes the reported findings its own. It may merge findings that
+share one root cause and split a finding that mixes concerns, and each finding
+it makes names the reported findings it comes from. It sends each finding, with
+its reason, to one of four outcomes:
+
+- fix it now;
+- pass it on to a later review the caller named;
+- defer it to a follow-up task;
+- dismiss it.
+
+It never changes a finding's severity, even when it judges the finding lower. It
+may dismiss a finding below the floor that the subject plainly contradicts, with
+its reason, without a refutation.
+
+When a human follows the review, the orchestrator shows them the finding triage,
+each finding with its destination and reason, before any refutation starts, and
+applies their changes. When none does, it records each decision and its reason
+as an assumption.
+
+### The severity floor
+
+A finding at or above the caller's floor is sent only to fix. It leaves the
+review unfixed only when the refutation shows that it does not hold.
+
+The caller may name the findings that go to a later review whatever their
+severity. The orchestrator follows it: such a finding goes to that later review,
+and the floor holds for every other finding.
+
+### The refutation and the reproduction
+
+Teammates try to refute each finding sent to fix or to defer. A finding passed on
+or dismissed is not refuted.
+
+A finding survives only with its reproduction: a test that fails because of it,
+when a test can show it, or else the exact text it contradicts or misses, beside
+the place that does so. A finding with no reproduction does not survive, and the
+record says why it does not hold.
+
+Once the record holds a reproduction test's path and its text, the orchestrator
+removes the test from the working tree, so no finding's failing test is in the
+tree while another finding is fixed, checked, committed or pushed: in a
+repository whose pre-push hook runs its tests, a failing test left behind would
+stop the push of every other fix. A test of a finding left unfixed,
+because it was refuted or deferred, never comes back and never reaches a commit.
+
+### The fix and the fix check
+
+A teammate fixes each surviving finding sent to fix. It never changes the
+finding's reproduction test: the test stays with the fix as a regression test
+and is committed with it. Before the fixer starts, the orchestrator puts that
+test back in the working tree from the record.
+
+The fixes run one at a time: a fix, its fix checks and the commit of an accepted
+fix end before the next fixer starts, so each fix check judges a tree that holds
+no other fix.
+
+Teammates other than the fixer then judge the fix. It is accepted only when:
+
+- its reproduction no longer holds;
+- its reproduction test, when it has one, fails without the fix and passes with
+  it;
+- the fix does no more than its finding asks.
+
+The orchestrator commits each accepted fix. A fix gets at most two fix checks: a
+fix rejected by the first goes back to the fix with the reasons. A fix rejected
+by the second blocks the review when no human follows it, and goes to the human
+otherwise. Either way, the orchestrator names the finding and the rejections.
+
+### Follow-up tasks
+
+A deferred finding that survives the refutation becomes a proposed follow-up
+task in the record, with a title, its reason, the finding it comes from and its
+reproduction. Whether a follow-up task is created, and where, is the caller's to decide. The
+verification stage decides it by autonomy (see
+[Follow-up tasks](#follow-up-tasks)).
+
+### The record of the findings
+
+The orchestrator keeps the record where the caller says. It holds every reported
+finding with its severity, its destination and reason, the refutation's outcome
+and its reproduction and, for a fixed one, the fix's commit and its fix check
+verdicts. What the caller writes for a person or the next agent is built from
+the record.
+
+## The review team
+
+The review team is several reviewers, each judging a change from its own angle.
+Their findings and doubts are pooled into one report of a fixed shape, without
+being judged. It ships as a skill of this plugin, `autonomous:review-team`, so a
+person can run it by hand in any repository, and a stage can follow it for the
+report of a code review.
+
+The skill applies only when it is asked for by name, or when a stage or another
+skill says to follow it. Its description never claims a request to review a pull
+request, a change or code in general. Two eval cases cover this: in
+`plugins/autonomous/evals/review-team-named` a session is asked for the review
+team by name and the skill fires, and in
+`plugins/autonomous/evals/review-team-negative` a session is asked to review a
+pull request and it does not.
+
+A tool of the plugin, `src/review-team/cli.ts`, does everything code can do:
+it plans the team, runs the reviewers that are command line tools and collects
+the report. The session starts the reviewers that are Claude teammates, waits
+for all of them and summarises the report. It has three commands:
+
+```bash
+bun plugins/autonomous/src/review-team/cli.ts plan [--base <ref>] [--tier <S|M|L> --reason <text>] [--dir <dir>]
+bun plugins/autonomous/src/review-team/cli.ts run <id> --dir <dir>
+bun plugins/autonomous/src/review-team/cli.ts collect --dir <dir>
+```
+
+It exits 0 when it is done, 1 on an error and 2 when it refuses a request.
+`run <id>` refuses to start when `HEAD` moved since the plan and writes no
+reviewer file, so `collect` reports that reviewer as not having written its
+output.
+
+### The subject
+
+The subject is the current branch's committed changes: the diff from the merge
+base of `HEAD` with a base ref, to `HEAD`. The base is the one `--base` gives or,
+without it, the base of the branch's open pull request or, when there is none,
+the repository's default branch. Uncommitted changes are left out of the review.
+The plan records that the tree was dirty, and the summary says so.
+
+### The reviewers
+
+| Reviewer          | Angle                                      | Engine                                    |
+| ----------------- | ------------------------------------------ | ----------------------------------------- |
+| `walkthrough`     | comprehension                              | a Claude teammate                         |
+| `code-review`     | correctness                                | Claude Code's built-in `/code-review`     |
+| `codex`           | correctness                                | the Codex CLI, another model family       |
+| `coderabbit`      | what the CodeRabbit bot would say, earlier | the CodeRabbit CLI                        |
+| `fallow-review`   | structure                                  | the `fallow:fallow-review` skill          |
+| `tests-lens`      | tests and silent failures                  | a Claude teammate                         |
+| `security-review` | security                                   | Claude Code's built-in `/security-review` |
+
+`fallow-review` applies only to TypeScript and JavaScript repositories, and the
+shipped team lists it in no tier: it runs when a configuration lists it. The
+Codex CLI runs a review of the subject. The `code-review` reviewer is skipped as
+shadowed while a user or project skill named `code-review` is installed, and so
+is `security-review` while one named `security-review` is.
+
+### The tiers
+
+Code measures the subject's diff with `git diff --numstat`, counting added and
+deleted lines and changed files. It sets the review tier: `S` when the diff
+changes at most 150 lines and 5 files, else `M` when it changes at most 600
+lines and 20 files, else `L`. Lockfiles (`bun.lock`, `bun.lockb`,
+`package-lock.json`, `pnpm-lock.yaml`, `yarn.lock`, `Cargo.lock`, `mise.lock`)
+and `openspec/changes/**` are left out of both counts. A binary file counts as
+one file and no lines. The thresholds come from the configuration.
+
+A caller can raise the tier with `--tier`, which needs a `--reason`. A request
+for a tier below the measured one is refused with exit 2 and nothing runs. The
+plan and the report record the measured tier, the tier used and the reason.
+
+Each tier takes the reviewers the configuration lists. The shipped team, as the
+calibration set it, is:
+
+| Tier | Reviewers                                                                     |
+| ---- | ----------------------------------------------------------------------------- |
+| `S`  | `walkthrough`, `code-review` at `medium`, `codex` at `medium` effort          |
+| `M`  | `S`'s, plus `coderabbit`, with `code-review` at `high`                        |
+| `L`  | `M`'s, plus `tests-lens`, with `code-review` at `xhigh` and `codex` at `high` |
+
+Every teammate of the shipped table names its model and effort: `walkthrough`
+`opus` at `medium`, and `code-review` and `tests-lens` `opus` at `high`. The plan
+records them in the reviewer's engine, and the skill starts the teammate with
+them. The shipped team names no Codex model.
+
+### The security trigger
+
+`security-review` joins the team at any tier when a changed path, or an added
+line, matches one of the configured security patterns. Its model and effort come
+from `review.security`, shipped as `opus` at `high`. The report names the
+patterns that matched and where.
+
+### Reviewers that cannot run
+
+A reviewer is skipped, and never fails the review, when it cannot run. The
+causes are:
+
+- a missing tool, or a missing login;
+- a rate limit;
+- a skill that shadows a built-in of the same name;
+- a repository it does not apply to, such as `fallow-review` without a
+  `package.json`;
+- a timeout, or a non-zero exit of a command line reviewer;
+- output that fails the finding schema, in which case none of its findings
+  reach the report.
+
+The report names every skipped reviewer and its reason. A skipped reviewer is
+not replaced. A Codex entry that names a path outside the repository, or a path
+holding a backslash, which a finding's path cannot hold, is dropped alone and
+named under Codex in the report; any other unreadable Codex output still skips
+Codex.
+
+`walkthrough` and `tests-lens` are required: they need only Claude and the
+plugin, so they run whenever their tier calls for them. When a required
+reviewer fails, for example because its teammate ends without writing its file,
+the report records an error naming it instead of producing a partial report
+silently. A built-in reviewer is not required.
+
+### Findings, severities and doubts
+
+Every finding follows `autonomous.finding.v1`: an id, its kind, its reviewer,
+its engine, a one-line title, a statement, its location (a line range, a file or
+the whole change), its evidence, its Conventional Comments label (`issue` or
+`suggestion`), its native severity and its severity, and optionally a suggested
+fix. Each reviewer's output is validated when the report is collected.
+
+Code sets the severity from the reviewer's native one, through a fixed table
+onto `CRITICAL`, `WARNING` and `SUGGESTION`. Nothing re-rates it. `walkthrough`
+and `tests-lens` report on that scale directly.
+
+| Reviewer          | `CRITICAL`  | `WARNING`      | `SUGGESTION`                       |
+| ----------------- | ----------- | -------------- | ---------------------------------- |
+| `code-review`     | `important` | `pre_existing` | `nit`                              |
+| `codex`           | `P0`, `P1`  | `P2`           | `P3`                               |
+| `coderabbit`      | `critical`  | `major`        | `minor`, `trivial`, `info`, `none` |
+| `security-review` | `High`      | `Medium`       | `Low`                              |
+| `fallow-review`   | `block`     | `address`      | `consider`, `fyi`                  |
+
+A native severity a table does not list fails the validation, and the reviewer
+is skipped with that reason.
+
+What a reviewer cannot judge without knowing the intent is a doubt: kind
+`doubt`, the label `question`, a location and a statement, and no severity. The
+report lists doubts apart from findings.
+
+### Exact duplicates
+
+Findings located on lines with the same file, the same side, the same line range
+and the same title, compared case-insensitively and ignoring whitespace, are
+grouped into one entry that names every reviewer that reported it. Findings that
+differ in any of these stay separate, and so do findings located on a file or on
+the whole change. Merging by root cause is the finding triage's work.
+
+### The walkthrough guide
+
+`walkthrough` drafts the change's walkthrough as a Plannotator guide: a title,
+an intent and sections that place every changed file. `collect` validates the
+guide against the diff's patch. When Plannotator is not available or the guide
+fails validation, the report records that no guide exists and why. The
+walkthrough's findings and doubts count either way.
+
+### The report
+
+The report directory is the one `--dir` names or, without it, a new directory
+outside the repository. A directory that already holds a review's `plan.json`
+is cleaned first: the plan removes that review's generated files (`briefs/`,
+`reviewers/`, `raw/`, the `walkthrough.*` files and `report.*`) and keeps
+anything else, so no earlier file passes for this run's output. A directory that
+holds any of those names but no valid `plan.json` is refused, untouched: empty
+it or name another. A directory inside the repository is left out of every
+tree check, so the files the review writes there never count as a change. The
+plan also fingerprints the contents of the working tree, and `collect` compares
+it: editing a file that was already modified or untracked at plan time is
+reported as a change. `report.json` and `report.md` hide the home and temp
+directories in every text, findings and doubts included. The directory
+holds:
+
+- `plan.json`, the plan: the subject, the tiers, the team and the skipped
+  reviewers;
+- `briefs/`, a filled brief for each teammate;
+- `reviewers/<id>.json`, each reviewer's findings;
+- `raw/`, each command line reviewer's version, output and errors, for
+  diagnosis;
+- `walkthrough.json`, `walkthrough.patch` and `walkthrough.html`, the guide, the
+  patch it was validated against and the page validation leaves;
+- `report.json`, which follows `autonomous.review-report.v1`: the subject, the
+  measured and used tiers, every reviewer with its outcome and reason, the
+  engine and duration of each reviewer the plan put in the team, the findings,
+  the doubts and the guide;
+- `report.md`, a short summary for a person.
+
+By hand, the session also summarises the report in the chat: the tier, who ran
+and who was skipped, the findings by severity and the doubts.
+
+### It only reports
+
+The review team never changes a file of the subject, triages a finding, merges
+findings by root cause, refutes one, fixes one, or posts anything to a pull
+request or a tracker. Those are the work of the
+[adversarial review](#the-adversarial-review)'s finding triage, after the report.
+
+### Configuration
+
+The optional `review` block of the configuration file sets the thresholds, the
+reviewers of each tier with their model, effort and level, and the security
+patterns. See [Optional blocks](#optional-blocks).
+
 ## Discard mode
 
 ```text
@@ -2064,6 +5276,17 @@ It does these, in this order, and stops at the first failure:
    [The `taken` label](#the-taken-label)).
 3. Marks the attempt `discarded`, keeping its directory.
 4. With `--release-workspace`, releases the worktree. The branch is kept.
+5. Publishes a short [logbook entry](#the-logbook), when the branch has an open
+   pull request and the attempt has no `logbook.json`.
+
+The entry is written entirely by code: the marker of the attempt's logbook
+entry, the heading `### <emoji> <stage> · attempt <n> · discarded` and the time
+of the discard, as `Discarded at YYYY-MM-DD HH:MM UTC.`. It carries the same marker as any other entry, so a discarded
+attempt never has two. A branch with no pull request gets no entry. A failure to
+find the pull request or to publish the entry is a note in the report
+(`notes`, always present in the JSON, `[]` by default; the text report prints a
+`notes:` block only when there is one) and never fails the
+discard: the outcome stays `advance`.
 
 Without `--release-workspace` the worktree is kept, so the next attempt of that
 task reuses it. A failure stops the run with exit 3 and names the error. What
@@ -2187,31 +5410,73 @@ matches. The report says which signal matched.
 
 ## The quota gate
 
-Second in the run, after `reconcile`, so a stage that completed is recorded even
-when the gate says to wait. For the selected account the gate reads OpenUsage and evaluates the `session`
+Third in the run, after `reconcile` and `capacity`, so a stage that completed is
+recorded even when the gate says to wait. For the [active account](#the-active-account) the gate reads OpenUsage and evaluates the `session`
 and `weekly` windows: used amount, limit, window length, reset time, and the
 usage projected to the end of the window as OpenUsage's `Pace.evaluate`
-computes it. Other resources, such as `fable`, are listed but not evaluated.
+computes it. Other resources, such as `fable`, are listed but not evaluated; a
+balance, such as `rateLimitResets`, is listed with its available amount.
 They must still be well-formed, because validation covers the whole OpenUsage
-document, including accounts that are not selected.
+document, including accounts that are not evaluated.
 
-OpenUsage exits non-zero when it reports an account error, and still prints the
-document. The gate reads a non-zero exit when its output is a valid
-`openusage.limits.v1` document with at least one account error. An account error
-then affects only the account it names, so another account's error does not
-block the selected one. Any other non-zero exit is `not-evaluable`.
+The gate runs `openusage claude`, which prints every Claude account as one
+`openusage.limits.v2` document. An account is keyed by its id, such as
+`claude@1a2b3c4d`; the bare `claude` is a provider kind, not an account. An
+account OpenUsage has not fetched yet is left out. When an account's refreshes fail, OpenUsage keeps its last
+values and marks them stale once they expire, 10 minutes after they were
+fetched. That account is then `not-evaluable`; the other accounts are
+unaffected.
+
+Any non-zero exit is `not-evaluable`, with stderr and the exit code as the
+reason, and its output is not read. OpenUsage 0.8.0 exits 2 when no Claude
+account is set up and 4 when none has been fetched yet.
 
 The decision, in order of precedence:
 
 1. **wait** when either window, with fresh, complete and valid data, has
    `used ≥ limit` and a reset time still ahead;
-2. **not-evaluable** when the account is stale, OpenUsage reports an error for
-   it, a window is missing, incomplete or invalid, or an exhausted window's
-   reset time has already passed (refresh with `--force`);
+2. **not-evaluable** when the account is stale, a window is missing,
+   incomplete or invalid, or an exhausted window's reset time has already
+   passed (OpenUsage refreshes on its own schedule; to refresh sooner, refresh
+   the account in the app);
 3. **advance** otherwise.
 
 Projection is reported but never blocks. Missing or stale data is never read as
 available capacity.
+
+### The active account
+
+The gate evaluates the active account: the Claude account that Claude Code is
+logged in as when the gate runs. It reads the login with `claude auth status`
+and matches it to OpenUsage's accounts by email address, which OpenUsage
+carries in the account's display name. The run never chooses an account, never
+switches the login and never uses another account when the active one is
+exhausted: it waits
+([ADR 0006](docs/adr/0006-the-run-follows-the-active-account.md)).
+
+The gate is `not-evaluable` when Claude Code reports no login, when its login
+has no email address, when `claude auth status` cannot be read, or when
+OpenUsage reports no account, or more than one, with that email address.
+
+The account line of the report starts with the email address:
+
+```text
+  account   ana@example.com — claude@1a2b3c4d · Claude · ana@example.com · Pro
+```
+
+When the outcome is `wait`, the report also lists the other accounts that have
+capacity. It is information only, and the run does not act on it:
+
+```text
+  capacity elsewhere (Claude Code is not logged in as these):
+    - luis@example.com
+```
+
+To run on another account, switch the Claude Code login to it before the run.
+
+`--account` was removed. Passing it is a usage error (exit 1) with the message
+`--account is no longer accepted: the run evaluates the account Claude Code is
+logged in as`.
 
 ## Read-backs and tracker lag
 
@@ -2274,6 +5539,7 @@ tiering:
 | autonomy (and scope without evidence) by judgement | llm  |
 | threshold, validity, ordering, cap                 | code |
 | writes, label check and read-back                  | code |
+| marking and unmarking, the completeness check      | code |
 | report                                             | code |
 | questions: selection, order, text, options         | code |
 | answers: validation, writes and read-back          | code |
@@ -2315,8 +5581,8 @@ The handoff's tiering:
 The command's LLM work is relaying the script's output, asking the handoff's
 questions and mapping the chosen options back to their values. Transition mode
 is code throughout: reading the task, composing the question, and validating
-and writing the answer. So is persist mode: the checks, the splice, the writes,
-the read-backs and the receipt. The grill itself is the session's work.
+and writing the answer, and the guards on leaving `implement` or `verify`. So is persist
+mode: the checks, the splice, the writes, the read-backs and the receipt. The grill itself is the session's work.
 
 ## Versioning
 

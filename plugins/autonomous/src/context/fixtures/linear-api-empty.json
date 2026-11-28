@@ -1,0 +1,33 @@
+{
+    "data": {
+        "issue": {
+            "identifier": "DEMO-1",
+            "project": null,
+            "parent": null,
+            "children": {
+                "nodes": [],
+                "pageInfo": {
+                    "hasNextPage": false
+                }
+            },
+            "relations": {
+                "nodes": [],
+                "pageInfo": {
+                    "hasNextPage": false
+                }
+            },
+            "inverseRelations": {
+                "nodes": [],
+                "pageInfo": {
+                    "hasNextPage": false
+                }
+            },
+            "attachments": {
+                "nodes": [],
+                "pageInfo": {
+                    "hasNextPage": false
+                }
+            }
+        }
+    }
+}

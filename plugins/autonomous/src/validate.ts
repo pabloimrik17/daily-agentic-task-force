@@ -38,6 +38,21 @@ export function string(parent: Json, key: string, path: string): string {
     return value;
 }
 
+export function choice<T extends string>(
+    parent: Json,
+    key: string,
+    path: string,
+    allowed: readonly T[],
+): T {
+    const value = string(parent, key, path);
+    if (!(allowed as readonly string[]).includes(value)) {
+        throw new ParseError(
+            `${path}.${key} must be one of ${allowed.join(", ")} (got ${JSON.stringify(value)})`,
+        );
+    }
+    return value as T;
+}
+
 export function number(parent: Json, key: string, path: string): number {
     const value = parent[key];
     if (typeof value !== "number" || !Number.isFinite(value)) {

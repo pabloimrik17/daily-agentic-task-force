@@ -8,7 +8,7 @@ Runs one fresh agent session per attempt to advance a task's stage, through repl
 
 ### Requirement: An attempt
 
-An attempt SHALL be one launch of a managed session for one stage of one task, identified as `<source>:<task>:<stage>:<n>`, where `n` counts the attempts of that task and stage from 1. Its record SHALL hold the task, the stage, the attempt number, its state, the time of each state change, the workspace, the session, whether `taken` was added and removed, the last observation, and any retention or pending cleanup. The record SHALL be kept outside every tracker and outside the workspace.
+An attempt SHALL be one launch of a managed session for one stage of one task, identified as `<source>:<task>:<stage>:<n>`, where `n` counts the attempts of that task and stage from 1. Its record SHALL hold the task, the stage, the attempt number, its state, the time of each state change, the workspace, the session, whether `taken` was added and removed, the last observation, and any retention or pending cleanup. The record SHALL be kept outside every tracker and outside the workspace. The stages an attempt MAY name SHALL be `test` and every stage the system declares, registered or not: `grill-me`, `proposal`, `implement`, `verify`, `code-review`, `qa`, `external-review` and `wrap-up`. A record of a declared stage SHALL be read whether or not the running build registers an implementation for it. `ready-to-merge` is a stage label only and no attempt names it.
 
 #### Scenario: Second attempt of a stage
 
@@ -19,6 +19,16 @@ An attempt SHALL be one launch of a managed session for one stage of one task, i
 
 - **WHEN** an attempt is launched for a task whose worktree is `/w/repo-worktrees/feature-DOT-109`
 - **THEN** no file of the attempt is written under that worktree
+
+#### Scenario: Record of a stage this build does not implement
+
+- **WHEN** the state holds the record `linear:DOT-121:code-review:1`, written by a build that implements code review, and a build that only declares `code-review` reads the attempts
+- **THEN** the record is read and the run goes on
+
+#### Scenario: Record naming ready-to-merge
+
+- **WHEN** a record names the stage `ready-to-merge`
+- **THEN** it does not match the attempt schema
 
 ### Requirement: Attempt states
 
@@ -168,7 +178,7 @@ When the session cannot be removed after both proofs are present, the attempt SH
 
 ### Requirement: Retained attempts
 
-When a `started` attempt's session is `exited` or `gone` and the stage is not completed, the attempt SHALL be marked `retained`, with the reason and the time, and the last lines of the session captured into the attempt directory when the session still exists. A retained attempt SHALL keep `taken`, keep its session, and SHALL NOT be retried, relaunched or removed by any run. Every run SHALL list it until the user discards it.
+When a `started` attempt's session is `exited` or `gone` and the stage is not completed, the attempt SHALL be marked `retained`, with the reason and the time, and the last lines of the session captured into the attempt directory when the session still exists. A retained attempt SHALL keep `taken`, keep its session, and SHALL NOT be retried, relaunched or removed by any run. Every run SHALL list it until the user discards it. An attempt of a stage the running build registers no implementation for SHALL NOT be retained or finalised by that build, whatever its session reports: it is only observed, so the build that implements the stage can still finish it.
 
 #### Scenario: Session exited without result
 
@@ -179,6 +189,11 @@ When a `started` attempt's session is `exited` or `gone` and the stage is not co
 
 - **WHEN** a run reconciles a retained attempt
 - **THEN** it is listed in the report and nothing changes
+
+#### Scenario: Ended session of a stage this build does not implement
+
+- **WHEN** the session of the started attempt `linear:DOT-121:code-review:1` reports `stopped` or is gone, a valid marker exists, and the running build registers no implementation for `code-review`
+- **THEN** the attempt stays `started` and is reported as observed, nothing is captured or removed, and the task still carries `taken`
 
 ### Requirement: Recovery of a pending attempt
 
@@ -243,7 +258,7 @@ An attempt SHALL be open when it is `pending`, `created`, `started` or `retained
 
 ### Requirement: The launch step
 
-`/autonomous:run` SHALL run a `launch` step last, after `select`. It SHALL take the selected work unit and, before anything else, check that the stage has an implementation, that the stage's prerequisites hold, that the task read again from its tracker carries no `taken`, that no attempt of the task is open, and that a repository is inferred. A failed precondition SHALL make the step `wait` with that reason. Without `--apply` the step SHALL report what it would launch and `advance`.
+`/autonomous:run` SHALL run a `launch` step last, after `select`. It SHALL take the selected work unit and, before anything else, check that the stage has an implementation, that a repository is inferred, that the stage's prerequisites hold for the task and that repository, that the task read again from its tracker carries no `taken`, and that no attempt of the task is open. A failed precondition SHALL make the step `wait` with that reason. Without `--apply` the step SHALL report what it would launch and `advance`.
 
 #### Scenario: Stage without implementation
 
@@ -254,6 +269,16 @@ An attempt SHALL be open when it is `pending`, `created`, `started` or `retained
 
 - **WHEN** the selected unit's stage is registered and one of its prerequisites fails
 - **THEN** the step is `wait` with the prerequisite's reason, and no record, label, prompt or session is written
+
+#### Scenario: Prerequisite about the repository
+
+- **WHEN** a stage's prerequisite needs something in the task's repository and the repository lacks it
+- **THEN** the step is `wait` with a reason naming the repository and what it lacks, and nothing is written
+
+#### Scenario: No repository inferred
+
+- **WHEN** no repository is inferred for the task
+- **THEN** the step is `wait` with that reason, and the stage's prerequisites are not checked
 
 #### Scenario: Taken since selection
 
@@ -350,7 +375,7 @@ The runner SHALL act only on sessions whose id is recorded in an attempt. It SHA
 
 ### Requirement: Stage contract
 
-A stage SHALL declare: its id, its emoji, its prerequisites, its prompt for a task, its agent arguments, and its completion check against the task's tracker. A stage's prerequisites SHALL be checked by `launch` before anything is written, and what they read at launch MAY be given to its prompt. A stage SHALL be launchable only when an implementation is registered for its id. Registering a stage SHALL require no change to `reconcile` or `launch`.
+A stage SHALL declare: its id, its emoji, its prerequisites, its prompt for a task, its agent arguments, and its completion check against the task's tracker. A stage's prerequisites SHALL be checked by `launch` before anything is written, and what they read at launch MAY be given to its prompt. A stage SHALL be launchable only when an implementation is registered for its id: a declared stage with none makes `launch` wait, saying the stage has no implementation. Registering a stage SHALL require no change to `reconcile` or `launch`.
 
 #### Scenario: Stage registered later
 
@@ -361,6 +386,16 @@ A stage SHALL declare: its id, its emoji, its prerequisites, its prompt for a ta
 
 - **WHEN** the `test` stage is launched
 - **THEN** its prerequisites hold without any check
+
+#### Scenario: Supplied task in a stage with no implementation
+
+- **WHEN** a task is supplied with `--task` and carries `qa`, which is declared and has no implementation
+- **THEN** `launch` waits with `<source>:<id> is excluded: unsupported stage` and writes nothing
+
+#### Scenario: Declared stage without implementation reaches launch
+
+- **WHEN** `launch` is reached with the declared stage `qa`, which has no implementation
+- **THEN** `launch` waits with `stage qa has no implementation` and writes nothing
 
 ### Requirement: The test stage
 
@@ -488,3 +523,31 @@ Every session manager command SHALL be bounded by the plugin's CLI time limit, a
 
 - **WHEN** preparing the worktree takes longer than 120 s
 - **THEN** the launch fails with a reason naming the workspace command, and no `taken` is written
+
+### Requirement: The attempt keeps its agent arguments
+
+The attempt's record SHALL hold the agent arguments its stage declared when the attempt was launched, so a later change to a stage does not change what an attempt reports. A record written before this requirement holds none and SHALL still be read.
+
+#### Scenario: Grill-me attempt launched
+
+- **WHEN** a grill-me attempt is launched with the `claude` tool
+- **THEN** its record holds `--model opus --effort high`
+
+#### Scenario: Older record
+
+- **WHEN** a record without agent arguments is read
+- **THEN** it parses, and its agent arguments read as not recorded
+
+### Requirement: A completed attempt without a logbook entry is noted
+
+When `reconcile` finalises an attempt whose directory holds no logbook receipt, it SHALL finalise it as any other and report a note naming the attempt and the missing entry. The note SHALL NOT change the step's outcome.
+
+#### Scenario: Task closed in the grill
+
+- **WHEN** a grill-me attempt completes because the human closed the task, with no logbook receipt
+- **THEN** the attempt is finalised and the report notes that it left no logbook entry
+
+#### Scenario: Entry published
+
+- **WHEN** a completed attempt's directory holds a logbook receipt
+- **THEN** the attempt is finalised and no note is reported

@@ -7,7 +7,7 @@ import { type CheckInputs, runChecks } from "../checks/index.ts";
 import type { Finding, Report } from "../domain.ts";
 import { withRepeatCounts } from "./counters.ts";
 import { tickerLinks } from "./links.ts";
-import { BLOCK_LIMIT, renderMarkdown, renderSections } from "./markdown.ts";
+import { renderMarkdown, renderSections } from "./markdown.ts";
 import { buildReport } from "./model.ts";
 
 const finding = (
@@ -167,7 +167,7 @@ describe("renderSections", () => {
             sections: [{ mirror: "tracking-sheet", findings: many }],
         };
         const block = renderSections(big).sections["tracking-sheet"];
-        expect(block.length).toBeLessThanOrEqual(BLOCK_LIMIT);
+        expect(block.length).toBeLessThanOrEqual(10_000);
         expect(block).toMatch(/\n… \d+ more, see the markdown report$/);
         expect(renderMarkdown(big)).toContain("T399");
     });
@@ -266,7 +266,7 @@ describe("golden dataset", () => {
             parts.checklist,
         ];
         for (const text of blocks) {
-            expect(text.length).toBeLessThanOrEqual(BLOCK_LIMIT);
+            expect(text.length).toBeLessThanOrEqual(10_000);
         }
     });
 });

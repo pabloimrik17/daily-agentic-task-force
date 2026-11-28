@@ -8,7 +8,7 @@ import {
     nullableDescription,
 } from "../../label-triage/trackers/linear.ts";
 import { array, type Json, number, object, ParseError, string } from "../../validate.ts";
-import type { WorkReader, WorkTask } from "../types.ts";
+import type { TaskLink, WorkReader, WorkTask } from "../types.ts";
 
 // linear-cli v2.6.0 requests these connections without pageInfo, so a full page may hide more.
 const INVERSE_RELATIONS_CAP = 100;
@@ -27,6 +27,17 @@ function nodes(entry: Json, key: string, path: string, cap: number): unknown[] {
 
 function openState(type: string | undefined): boolean {
     return type !== "completed" && type !== "canceled";
+}
+
+interface ListedState {
+    type: string;
+    name: string;
+}
+
+// linear issue view gives a child's state name but not its type. A name that differs from the
+// listed one means the state changed since the listing, so its type is unknown.
+function stillOpen(listed: ListedState | undefined, name: string): boolean {
+    return listed === undefined || listed.name !== name || openState(listed.type);
 }
 
 function blockers(entry: Json, path: string): string[] {
@@ -66,30 +77,51 @@ function projectName(entry: Json, path: string): string | null {
     return string(object(value, projectPath), "name", projectPath);
 }
 
+function nullable(entry: Json, key: string, path: string): string | null {
+    const value = entry[key];
+    return value === undefined || value === null ? null : string(entry, key, path);
+}
+
+// linear-cli 2.6.0 returns the parent as { identifier, title, state } with no url, so its url is
+// null unless a later CLI adds one.
+function parentLink(entry: Json, path: string): TaskLink | null {
+    const value = entry.parent;
+    if (value === undefined || value === null) return null;
+    const parentPath = `${path}.parent`;
+    const parent = object(value, parentPath);
+    return {
+        id: string(parent, "identifier", parentPath),
+        url: nullable(parent, "url", parentPath),
+    };
+}
+
 function parseDetail(
     value: unknown,
     task: WorkTask,
-    states: ReadonlyMap<string, string>,
+    states: ReadonlyMap<string, ListedState>,
 ): WorkTask {
     const entry = object(value, "$");
-    const children = nodes(entry, "children", "$", CHILDREN_CAP)
-        .map((item, index) => {
-            const path = `$.children.nodes[${index}]`;
-            const child = object(item, path);
-            string(object(child.state, `${path}.state`), "name", `${path}.state`);
-            return string(child, "identifier", path);
-        })
-        .filter((id) => openState(states.get(id)));
+    const children = nodes(entry, "children", "$", CHILDREN_CAP).map((item, index) => {
+        const path = `$.children.nodes[${index}]`;
+        const child = object(item, path);
+        const name = string(object(child.state, `${path}.state`), "name", `${path}.state`);
+        return { id: string(child, "identifier", path), name };
+    });
     return {
         ...task,
         description: nullableDescription(entry, "$"),
-        children,
+        children: children
+            .filter(({ id, name }) => stillOpen(states.get(id), name))
+            .map(({ id }) => id),
+        childCount: children.length,
         project: projectName(entry, "$"),
+        url: nullable(entry, "url", "$"),
+        parent: parentLink(entry, "$"),
     };
 }
 
 export function linearWorkReader(exec: Exec, _config: LinearConfig): WorkReader {
-    let states: ReadonlyMap<string, string> = new Map();
+    let states: ReadonlyMap<string, ListedState> = new Map();
     return {
         source: "linear",
         async list() {
@@ -101,7 +133,9 @@ export function linearWorkReader(exec: Exec, _config: LinearConfig): WorkReader 
                 mapExecError,
             );
             if (!result.ok) return result;
-            states = new Map(result.value.map(({ task, type }) => [task.id, type]));
+            states = new Map(
+                result.value.map(({ task, type }) => [task.id, { type, name: task.status }]),
+            );
             const tasks: WorkTask[] = result.value
                 .filter(({ task, type }) => !isExcluded(type, task.status))
                 .map(({ task, priority, blockedBy }) => ({
@@ -109,6 +143,7 @@ export function linearWorkReader(exec: Exec, _config: LinearConfig): WorkReader 
                     priority,
                     blockedBy,
                     children: null,
+                    childCount: null,
                     project: null,
                     repository: null,
                     blocks: [],

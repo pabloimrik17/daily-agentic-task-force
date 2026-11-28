@@ -9,15 +9,17 @@ import {
 } from "../../label-triage/trackers/github.ts";
 import { array, type Json, number, object, ParseError, string } from "../../validate.ts";
 import type { TrackerResult } from "../../label-triage/trackers/tracker.ts";
-import type { WorkReader, WorkTask } from "../types.ts";
+import type { TaskLink, WorkReader, WorkTask } from "../types.ts";
 
 const READER_FIELDS = `${LIST_FIELDS},blockedBy,blocking`;
 
 // gh 2.100 gives a sub-issue node no repository field: its `url` is the only place a cross-repo
 // sub-issue names its own.
-const ISSUE_URL = /^https?:\/\/[^/]+\/([^/]+\/[^/]+)\/issues\/\d+$/;
+export const ISSUE_URL = /^https?:\/\/[^/]+\/([^/]+\/[^/]+)\/issues\/\d+$/;
 
-function splitId(id: string): { repository: string; number: string } {
+const FIELDS = "subIssues,url,parent";
+
+export function splitId(id: string): { repository: string; number: string } {
     const hash = id.lastIndexOf("#");
     return { repository: id.slice(0, hash), number: id.slice(hash + 1) };
 }
@@ -29,9 +31,11 @@ function childId(node: Json, path: string, taskRepository: string): string {
     return `${repository}#${number(node, "number", path)}`;
 }
 
-function openChildren(value: unknown, taskRepository: string): string[] {
-    const root = object(value, "$");
-    const nodes = array(object(root.subIssues, "$.subIssues").nodes, "$.subIssues.nodes");
+function subIssueNodes(root: Json): unknown[] {
+    return array(object(root.subIssues, "$.subIssues").nodes, "$.subIssues.nodes");
+}
+
+function openChildren(nodes: unknown[], taskRepository: string): string[] {
     return nodes.flatMap((item, index) => {
         const path = `$.subIssues.nodes[${index}]`;
         const node = object(item, path);
@@ -39,6 +43,35 @@ function openChildren(value: unknown, taskRepository: string): string[] {
             ? []
             : [childId(node, path, taskRepository)];
     });
+}
+
+function linkId(url: string, number: number, fallbackRepository: string): string {
+    return `${ISSUE_URL.exec(url)?.[1] ?? fallbackRepository}#${number}`;
+}
+
+function parentLink(root: Json, taskRepository: string): TaskLink | null {
+    const value = root.parent;
+    if (value === undefined || value === null) return null;
+    const parent = object(value, "$.parent");
+    const url = string(parent, "url", "$.parent");
+    return { id: linkId(url, number(parent, "number", "$.parent"), taskRepository), url };
+}
+
+function taskUrl(root: Json, repository: string, issue: string): string {
+    const url = root.url;
+    return typeof url === "string" ? url : `https://github.com/${repository}/issues/${issue}`;
+}
+
+function parseDetail(value: unknown, task: WorkTask, repository: string, issue: string): WorkTask {
+    const root = object(value, "$");
+    const nodes = subIssueNodes(root);
+    return {
+        ...task,
+        children: openChildren(nodes, repository),
+        childCount: nodes.length,
+        url: taskUrl(root, repository, issue),
+        parent: parentLink(root, repository),
+    };
 }
 
 // gh asks for the first 50 nodes of each list: a higher totalCount, including a blocker the token
@@ -80,6 +113,7 @@ function parseListing(repo: string, items: unknown[]): WorkTask[] {
             repository: repo,
             blockedBy: openIds(entry, "blockedBy", path, task.id),
             children: null,
+            childCount: null,
             blocks: openIds(entry, "blocking", path, task.id),
         };
     });
@@ -118,9 +152,9 @@ export function githubWorkReader(exec: Exec, config: GithubConfig): WorkReader {
             const { repository, number: issue } = splitId(task.id);
             return runJson(
                 exec,
-                `gh issue view ${issue} --repo ${repository} --json subIssues`,
-                ["issue", "view", issue, "--repo", repository, "--json", "subIssues"],
-                (value) => ({ ...task, children: openChildren(value, repository) }),
+                `gh issue view ${issue} --repo ${repository} --json ${FIELDS}`,
+                ["issue", "view", issue, "--repo", repository, "--json", FIELDS],
+                (value) => parseDetail(value, task, repository, issue),
             );
         },
     };

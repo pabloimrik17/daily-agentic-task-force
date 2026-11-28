@@ -2,7 +2,14 @@ import { describe, expect, it } from "vitest";
 
 import type { Exec, ExecResult } from "../../exec.ts";
 import { ParseError } from "../../validate.ts";
-import { commentBodies, parseError, parseJson, run, runJson } from "./cli-json.ts";
+import {
+    authoredComments,
+    commentBodies,
+    parseError,
+    parseJson,
+    run,
+    runJson,
+} from "./cli-json.ts";
 
 function fakeExec(handler: (args: string[]) => ExecResult): Exec & { calls: string[][] } {
     const calls: string[][] = [];
@@ -113,6 +120,25 @@ describe("run", () => {
         const result = await run(exec, "cmd", [], () => "cmd: mapped");
 
         expect(result).toEqual({ ok: false, error: "cmd: mapped" });
+    });
+});
+
+describe("authoredComments", () => {
+    it("pairs each body with its author, oldest first", () => {
+        expect(
+            authoredComments(
+                [
+                    { text: "second", at: "2026-01-02T00:00:00Z", by: "b" },
+                    { text: "first", at: "2026-01-01T00:00:00Z" },
+                ],
+                "$",
+                { body: "text", createdAt: "at" },
+                (entry) => (typeof entry.by === "string" ? entry.by : null),
+            ),
+        ).toEqual([
+            { author: null, body: "first" },
+            { author: "b", body: "second" },
+        ]);
     });
 });
 

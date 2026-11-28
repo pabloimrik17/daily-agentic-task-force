@@ -1,8 +1,11 @@
 import type { Answer, RunArgs } from "./args.ts";
 import type { AutonomousConfig, ConfigLoad } from "./config.ts";
+import type { ContextReaderFactory } from "./context/types.ts";
 import type { Exec } from "./exec.ts";
 import type { JudgementExec } from "./label-triage/judgement.ts";
 import type { TrackerFactory, Trackers } from "./label-triage/trackers/tracker.ts";
+import type { PullRequestsFactory } from "./pull-request/port.ts";
+import type { QuotaSource } from "./quota-gate/source.ts";
 import type { SelectionExec, WorkReaderFactory } from "./select/types.ts";
 import type { SessionManagerFactory } from "./sessions/manager.ts";
 import type { WorkspaceManagerFactory } from "./workspace/manager.ts";
@@ -46,7 +49,8 @@ export interface RunContext {
     config: ConfigLoad;
     results: readonly StepResult[]; // the steps that already ran, in order (design D1)
     io: {
-        openUsage: Exec;
+        quota: QuotaSource;
+        login: Exec; // claude, asked which account it is logged in as
         trackers: TrackerFactory;
         judgement: JudgementExec;
         chezmoi: Exec;
@@ -55,6 +59,10 @@ export interface RunContext {
         sessions: SessionManagerFactory;
         workspace: WorkspaceManagerFactory;
         naming: Exec; // claude, bounded to the naming time limit
+        context: ContextReaderFactory;
+        pullRequests: PullRequestsFactory;
+        openspec: Exec;
+        git: Exec; // run with `-C <directory>`
         state: string; // the resolved state directory
         home: string; // the home directory, where stage prerequisites look for installed tools
     };

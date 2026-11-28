@@ -5,16 +5,24 @@ import {
     type OtherResource,
     type WindowReport,
 } from "./decide.ts";
-import { readOpenUsage } from "./openusage.ts";
-import type { OpenUsageProvider } from "./parse.ts";
+import { readLogin } from "./login.ts";
 import { renderQuotaGate } from "./render.ts";
-import { type Account, selectAccount } from "./select.ts";
+import { type Account, listAccounts, selectAccount } from "./select.ts";
+import type { QuotaAccount } from "./source.ts";
+
+// Another account whose own data would advance; null `email` when its source carries none.
+export interface CapacityAccount {
+    email: string | null;
+    key: string;
+}
 
 export interface QuotaGateData {
     account: AccountReport | null;
     accounts: Account[];
     windows: WindowReport[];
     otherResources: OtherResource[];
+    // Only on a wait, and only when another account would advance.
+    accountsWithCapacity?: CapacityAccount[];
 }
 
 const EMPTY: QuotaGateData = { account: null, accounts: [], windows: [], otherResources: [] };
@@ -27,28 +35,43 @@ function result(
     return { step: "quota-gate", tier: "code", outcome, reasons, data };
 }
 
-function accountReport(
-    key: string,
-    provider: OpenUsageProvider | undefined,
-    errors: string[],
-): AccountReport {
-    if (provider === undefined) {
-        const none = { displayName: null, plan: null, fetchedAt: null, expiresAt: null };
-        return { key, ...none, stale: false, errors };
-    }
-    const { displayName, plan, fetchedAt, expiresAt, stale } = provider;
-    return { key, displayName, plan: plan ?? null, fetchedAt, expiresAt, stale, errors };
+function accountReport(account: QuotaAccount): AccountReport {
+    const { id, email, displayName, plan, fetchedAt, expiresAt, stale } = account;
+    return { key: id, email, displayName, plan, fetchedAt, expiresAt, stale };
+}
+
+// Information only: the run never uses another account (ADR 0006), but a wait while another
+// account has capacity shows that the login was not switched in time.
+function capacityElsewhere(
+    accounts: readonly QuotaAccount[],
+    active: QuotaAccount,
+    now: Date,
+): Pick<QuotaGateData, "accountsWithCapacity"> {
+    const advancing = accounts
+        .filter((a) => a.id !== active.id)
+        .filter((a) => evaluateAccount(accountReport(a), a, now).outcome === "advance")
+        .map((a) => ({ email: a.email, key: a.id }));
+    return advancing.length > 0 ? { accountsWithCapacity: advancing } : {};
 }
 
 export const quotaGateStep: Step<QuotaGateData> = {
     id: "quota-gate",
     async run(ctx) {
-        const read = await readOpenUsage(ctx.io.openUsage, ctx.args.force);
+        // The quota is read first: when it fails, the login is not worth reading.
+        const read = await ctx.io.quota.read();
         if (!read.ok) {
             return result("not-evaluable", [read.error], EMPTY);
         }
 
-        const selection = selectAccount(read.limits, ctx.args.account);
+        const login = await readLogin(ctx.io.login);
+        if (!login.ok) {
+            return result("not-evaluable", [login.error], {
+                ...EMPTY,
+                accounts: listAccounts(read.accounts),
+            });
+        }
+
+        const selection = selectAccount(read.accounts, login.email);
         if (!selection.ok) {
             return result("not-evaluable", [selection.reason], {
                 ...EMPTY,
@@ -56,14 +79,16 @@ export const quotaGateStep: Step<QuotaGateData> = {
             });
         }
 
-        const { provider } = selection;
-        const account = accountReport(selection.key, provider, selection.errors);
-        const evaluation = evaluateAccount(account, provider, ctx.now);
+        const account = accountReport(selection.account);
+        const evaluation = evaluateAccount(account, selection.account, ctx.now);
         return result(evaluation.outcome, evaluation.reasons, {
             account,
             accounts: selection.accounts,
             windows: evaluation.windows,
             otherResources: evaluation.otherResources,
+            ...(evaluation.outcome === "wait"
+                ? capacityElsewhere(read.accounts, selection.account, ctx.now)
+                : {}),
         });
     },
     render: renderQuotaGate,

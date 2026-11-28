@@ -10,6 +10,10 @@ import { array, object, optional, string } from "../validate.ts";
 
 const SKILL_FILE = "SKILL.md";
 
+// The plugin the grill and the handoff skills come from, and the skill every stage closes with.
+export const SKILLS_PLUGIN = "mattpocock-skills";
+export const HANDOFF_SKILL = "handoff";
+
 interface Installation {
     scope: string | undefined;
     installPath: string;
@@ -129,7 +133,7 @@ async function findSkill(skillsDir: string, name: string): Promise<string | null
 
 const FRONTMATTER = /^---[ \t]*\r?\n(?:[\s\S]*?\r?\n)?---[ \t]*(?:\r?\n|$)/;
 
-function stripFrontmatter(text: string): string {
+export function stripFrontmatter(text: string): string {
     return text.replace(FRONTMATTER, "");
 }
 

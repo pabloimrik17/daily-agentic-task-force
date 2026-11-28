@@ -1,0 +1,67 @@
+{
+    "data": {
+        "issue": {
+            "identifier": "DEMO-110",
+            "project": {
+                "name": "Synthetic project"
+            },
+            "parent": {
+                "identifier": "DEMO-82",
+                "title": "Synthetic DEMO-82",
+                "url": "https://linear.app/demo/issue/DEMO-82/synthetic",
+                "description": "Synthetic parent description.",
+                "state": {
+                    "name": "In Progress"
+                }
+            },
+            "children": {
+                "nodes": [],
+                "pageInfo": {
+                    "hasNextPage": false
+                }
+            },
+            "relations": {
+                "nodes": [
+                    {
+                        "type": "blocks",
+                        "relatedIssue": {
+                            "identifier": "DEMO-111",
+                            "title": "Synthetic DEMO-111",
+                            "url": "https://linear.app/demo/issue/DEMO-111/synthetic",
+                            "state": {
+                                "name": "Backlog"
+                            }
+                        }
+                    }
+                ],
+                "pageInfo": {
+                    "hasNextPage": false
+                }
+            },
+            "inverseRelations": {
+                "nodes": [
+                    {
+                        "type": "blocks",
+                        "issue": {
+                            "identifier": "DEMO-109",
+                            "title": "Synthetic DEMO-109",
+                            "url": "https://linear.app/demo/issue/DEMO-109/synthetic",
+                            "state": {
+                                "name": "Done"
+                            }
+                        }
+                    }
+                ],
+                "pageInfo": {
+                    "hasNextPage": false
+                }
+            },
+            "attachments": {
+                "nodes": [],
+                "pageInfo": {
+                    "hasNextPage": false
+                }
+            }
+        }
+    }
+}

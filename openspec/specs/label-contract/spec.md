@@ -8,11 +8,31 @@ The label vocabulary shared by every tracker the autonomous loop reads — which
 
 ### Requirement: Three label groups
 
-Every task SHALL carry labels from three groups. The **scope** group is `work` and `personal`. The **autonomy** group is `AFK` and `HITL`. The **stage** group is `grill-me` and `proposal`. Each group SHALL hold exactly one label on a task: two labels of the same group are a conflict. A task without a label of a group is untagged for that group, except that a task whose stage is `grill-me` MAY lack autonomy. Missing groups and conflicts SHALL be detected and reported per group, and SHALL NOT be resolved by the system removing or replacing a label.
+Every task SHALL carry labels from three groups. The **scope** group is `work` and `personal`. The **autonomy** group is `AFK` and `HITL`. The **stage** group is `grill-me`, `proposal`, `implement`, `verify`, `code-review`, `qa`, `external-review`, `wrap-up` and `ready-to-merge`. Each group SHALL hold exactly one label on a task: two labels of the same group are a conflict. A task without a label of a group is untagged for that group, except that a task whose stage is `grill-me` MAY lack autonomy. Missing groups and conflicts SHALL be detected and reported per group, and SHALL NOT be resolved by the system removing or replacing a label.
 
 #### Scenario: Complete task
 
 - **WHEN** a task carries `personal`, `AFK` and `proposal`
+- **THEN** it is complete for all three groups
+
+#### Scenario: Task ready to implement
+
+- **WHEN** a task carries `personal`, `AFK` and `implement`
+- **THEN** it is complete for all three groups
+
+#### Scenario: Task ready to verify
+
+- **WHEN** a task carries `personal`, `HITL` and `verify`
+- **THEN** it is complete for all three groups
+
+#### Scenario: Task ready for code review
+
+- **WHEN** a task carries `personal`, `AFK` and `code-review`
+- **THEN** it is complete for all three groups
+
+#### Scenario: Task waiting for external review
+
+- **WHEN** a task carries `personal`, `HITL` and `external-review`
 - **THEN** it is complete for all three groups
 
 #### Scenario: Grill without autonomy
@@ -55,9 +75,39 @@ Every task SHALL carry labels from three groups. The **scope** group is `work` a
 - **WHEN** a task carries `grill-me` and `proposal`
 - **THEN** it is reported as a stage conflict for a human to resolve
 
+#### Scenario: proposal with implement
+
+- **WHEN** a task carries `proposal` and `implement`
+- **THEN** it is reported as a stage conflict for a human to resolve
+
+#### Scenario: implement with verify
+
+- **WHEN** a task carries `implement` and `verify`
+- **THEN** it is reported as a stage conflict for a human to resolve
+
+#### Scenario: verify with code-review
+
+- **WHEN** a task carries `verify` and `code-review`
+- **THEN** it is reported as a stage conflict for a human to resolve
+
+#### Scenario: code-review with external-review
+
+- **WHEN** a task carries `code-review` and `external-review`
+- **THEN** it is reported as a stage conflict for a human to resolve
+
+#### Scenario: Task in a stage with no implementation
+
+- **WHEN** a task carries `personal`, `AFK` and one of `qa`, `external-review`, `wrap-up` or `ready-to-merge`
+- **THEN** it is complete for all three groups
+
+#### Scenario: code-review with qa
+
+- **WHEN** a task carries `code-review` and `qa`
+- **THEN** it is reported as a stage conflict for a human to resolve
+
 ### Requirement: Meaning of each label
 
-The contract SHALL fix one meaning per label: `work` is Nazaries work; `personal` is the user's own work; `AFK` means an agent may advance the task without a human; `HITL` means an agent may advance the task but a human intervenes during or at the end of each stage; `grill-me` means the task must be refined with a human in a grill before anyone works on it; `proposal` means the task is ready for proposal preparation, its autonomy decided and any grill it needed over; `taken` means an agent or a person is advancing the task now. Scope and autonomy are properties, kept for the whole life of a task; the stage says where the task is and is replaced by each transition. While a task is in `grill-me`, its autonomy, when it has one, is provisional until the grill confirms it. No scope has priority over the other in the contract. What each label implies for selecting work, including the preference for the machine's scope, is defined by the capability that selects work, not by this contract.
+The contract SHALL fix one meaning per label: `work` is Nazaries work; `personal` is the user's own work; `AFK` means an agent may advance the task without a human; `HITL` means an agent may advance the task but a human intervenes during or at the end of each stage; `grill-me` means the task must be refined with a human in a grill before anyone works on it; `proposal` means the task is ready for proposal preparation, its autonomy decided and any grill it needed over; `implement` means the task has a proposal and is ready to implement; `verify` means the task is implemented and ready to verify against its proposal; `code-review` means the task is verified and ready for code review; `qa` means the task has passed code review and is ready for QA; `external-review` means the task has passed every review stage and is ready for external review; `wrap-up` means the task has passed external review and is ready for wrap-up; `ready-to-merge` means the task is wrapped up and waits for a person to merge its pull request; `taken` means an agent or a person is advancing the task now. Scope and autonomy are properties, kept for the whole life of a task; the stage says where the task is and is replaced by each transition. While a task is in `grill-me`, its autonomy, when it has one, is provisional until the grill confirms it. No scope has priority over the other in the contract. What each label implies for selecting work, including the preference for the machine's scope, is defined by the capability that selects work, not by this contract.
 
 #### Scenario: grill-me with AFK
 
@@ -69,14 +119,39 @@ The contract SHALL fix one meaning per label: `work` is Nazaries work; `personal
 - **WHEN** a task carries `HITL` and `proposal`
 - **THEN** the contract reads it as ready for proposal preparation, with a human intervening in each stage
 
+#### Scenario: implement with AFK
+
+- **WHEN** a task carries `AFK` and `implement`
+- **THEN** the contract reads it as having a proposal and being ready for an agent to implement without a human
+
+#### Scenario: verify with HITL
+
+- **WHEN** a task carries `HITL` and `verify`
+- **THEN** the contract reads it as implemented and ready to verify against its proposal, with a human intervening in each stage
+
+#### Scenario: code-review with AFK
+
+- **WHEN** a task carries `AFK` and `code-review`
+- **THEN** the contract reads it as verified against its proposal and ready for an agent to review its code without a human
+
+#### Scenario: external-review with HITL
+
+- **WHEN** a task carries `HITL` and `external-review`
+- **THEN** the contract reads it as having passed every review stage and being ready for external review, with a human intervening in each stage
+
 #### Scenario: Meaning of work in a triage question
 
 - **WHEN** triage offers `work` as an option
 - **THEN** its description says it is Nazaries work and does not claim priority over personal work
 
+#### Scenario: ready-to-merge with AFK
+
+- **WHEN** a task carries `AFK` and `ready-to-merge`
+- **THEN** the contract reads it as waiting for a person to merge its pull request, with no stage for an agent to run
+
 ### Requirement: One spelling and one colour per label
 
-Each label SHALL have exactly one spelling, used verbatim on every tracker: `work`, `personal`, `AFK`, `HITL`, `grill-me`, `proposal`, `taken`. Matching SHALL be exact and case-sensitive; a label that differs only in case or spacing (for example `Grill Me`) is not the contract label. Each label SHALL have one colour, applied on trackers that support colour: `AFK` `#5e6ad2`, `HITL` `#eb5757`, `grill-me` `#f2994a`, `proposal` `#bb87fc`, `work` `#2f80ed`, `personal` `#27ae60`, `taken` `#95a2b3`. A tracker without label colours carries the name only.
+Each label SHALL have exactly one spelling, used verbatim on every tracker: `work`, `personal`, `AFK`, `HITL`, `grill-me`, `proposal`, `implement`, `verify`, `code-review`, `qa`, `external-review`, `wrap-up`, `ready-to-merge`, `taken`. Matching SHALL be exact and case-sensitive; a label that differs only in case or spacing (for example `Grill Me`) is not the contract label. Each label SHALL have one colour, applied on trackers that support colour: `AFK` `#5e6ad2`, `HITL` `#eb5757`, `grill-me` `#f2994a`, `proposal` `#bb87fc`, `implement` `#26b5ce`, `verify` `#d6409f`, `code-review` `#a3e635`, `qa` `#0d9488`, `external-review` `#8b5e3c`, `wrap-up` `#64748b`, `ready-to-merge` `#15803d`, `work` `#2f80ed`, `personal` `#27ae60`, `taken` `#95a2b3`. A tracker without label colours carries the name only.
 
 #### Scenario: Near-miss spelling
 
@@ -98,9 +173,44 @@ Each label SHALL have exactly one spelling, used verbatim on every tracker: `wor
 - **WHEN** a task carries `Proposal`
 - **THEN** the task is untagged for the stage group
 
+#### Scenario: implement bootstrapped
+
+- **WHEN** Linear lacks `implement` and the bootstrap runs
+- **THEN** `implement` is created at workspace level with colour `#26b5ce` and reported as created
+
+#### Scenario: verify bootstrapped
+
+- **WHEN** Linear lacks `verify` and the bootstrap runs
+- **THEN** `verify` is created at workspace level with colour `#d6409f` and reported as created
+
+#### Scenario: code-review bootstrapped
+
+- **WHEN** Linear lacks `code-review` and the bootstrap runs
+- **THEN** `code-review` is created at workspace level with colour `#a3e635` and reported as created
+
+#### Scenario: Near-miss code-review
+
+- **WHEN** a task carries `Code Review` and the configuration declares no alias for it
+- **THEN** the task is untagged for the stage group
+
+#### Scenario: external-review bootstrapped
+
+- **WHEN** Linear lacks `external-review` and the bootstrap runs
+- **THEN** `external-review` is created at workspace level with colour `#8b5e3c` and reported as created
+
+#### Scenario: Near-miss external-review
+
+- **WHEN** a task carries `External Review` and the configuration declares no alias for it
+- **THEN** the task is untagged for the stage group
+
+#### Scenario: Declared stage labels bootstrapped
+
+- **WHEN** Linear lacks `qa`, `external-review`, `wrap-up` and `ready-to-merge` and the bootstrap runs
+- **THEN** each is created at workspace level with its colour and reported as created
+
 ### Requirement: Aliases are evidence, never removed
 
-The configuration MAY declare, per source, alias labels that count as evidence for one contract label (for example Beads `nazaries` for `work`, `human` for `HITL`). An alias SHALL NOT count as the contract label being present. The system SHALL NOT remove, rename or replace an alias or any other label outside the contract. Apart from a transition and the removal of `taken`, the only write the contract allows is adding a contract label.
+The configuration MAY declare, per source, alias labels that count as evidence for one contract label (for example Beads `nazaries` for `work`, `human` for `HITL`). An alias SHALL NOT count as the contract label being present. The system SHALL NOT remove, rename or replace an alias or any other label outside the contract. Apart from a transition, the removal of `taken` and the removal of `triage-me` by label triage, the only write the contract allows is adding a contract label.
 
 #### Scenario: Alias present
 
@@ -123,7 +233,7 @@ The configuration MAY declare that every task of a source has a given scope. A s
 
 ### Requirement: User configuration file
 
-The per-user parts of the contract SHALL live in one JSON file outside the plugin, at `~/.config/autonomous/config.json` unless the environment variable `AUTONOMOUS_CONFIG` names another path. It SHALL be identified by `schema: "autonomous.config.v1"` and SHALL hold: per source, whether it is enabled, its aliases and structural rules, the Beads directory and the GitHub repository list; the judgement settings — model, effort, confidence threshold, tasks judged per run, tasks per batch; the selection settings — model and effort; and the optional session, workspace and naming settings. It SHALL carry no credentials. The file SHALL be validated strictly: a missing file, a missing required field, a mistyped field or an unknown field is an error naming the path, never a corrected value; an optional block or key that is absent takes its shipped default, and the run reports it. The plugin SHALL ship the format, the defaults and an example, and the error for a missing file SHALL point to the example.
+The per-user parts of the contract SHALL live in one JSON file outside the plugin, at `~/.config/autonomous/config.json` unless the environment variable `AUTONOMOUS_CONFIG` names another path. It SHALL be identified by `schema: "autonomous.config.v1"` and SHALL hold: per source, whether it is enabled, its aliases and structural rules, the Beads directory and the GitHub repository list; the judgement settings — model, effort, confidence threshold, tasks judged per run, tasks per batch; the selection settings — model and effort; and the optional session, workspace, naming, runner and review settings. It SHALL carry no credentials. The file SHALL be validated strictly: a missing file, a missing required field, a mistyped field or an unknown field is an error naming the path, never a corrected value; an optional block or key that is absent takes its shipped default, and the run reports it. The plugin SHALL ship the format, the defaults and an example, and the error for a missing file SHALL point to the example.
 
 #### Scenario: Missing file
 
@@ -147,7 +257,7 @@ The per-user parts of the contract SHALL live in one JSON file outside the plugi
 
 ### Requirement: Optional configuration blocks with shipped defaults
 
-The configuration file MAY omit the `sessions`, `workspace` and `naming` blocks or any key inside them. The plugin SHALL ship a defaults file for those blocks, and a key absent from the user's file SHALL take the shipped value, key by key. A key present in the user's file SHALL still be validated strictly, and an unknown key is still an error. Every run SHALL report the keys that took a shipped default.
+The configuration file MAY omit the `sessions`, `workspace`, `naming`, `runner` and `review` blocks or any key inside them. The plugin SHALL ship a defaults file for those blocks, and a key absent from the user's file SHALL take the shipped value, key by key. A key present in the user's file SHALL still be validated strictly, and an unknown key is still an error. Every run SHALL report the keys that took a shipped default.
 
 #### Scenario: Block omitted
 
@@ -163,6 +273,16 @@ The configuration file MAY omit the `sessions`, `workspace` and `naming` blocks 
 
 - **WHEN** the file sets `naming.effort` to `"fast"`
 - **THEN** the configuration is rejected with the path `naming.effort`
+
+#### Scenario: Runner block omitted
+
+- **WHEN** the file has no `runner` block
+- **THEN** every `runner` key takes the shipped default and the report lists them
+
+#### Scenario: Review block omitted
+
+- **WHEN** the file has no `review` block
+- **THEN** every `review` key takes the shipped default and the report lists them
 
 ### Requirement: Session, workspace and naming settings
 
@@ -257,7 +377,7 @@ The configuration SHALL NOT declare aliases for `taken`. The label bootstrap SHA
 
 ### Requirement: A transition replaces the stage
 
-A transition SHALL move a task out of its stage on a human's answer. It adds the answered autonomy and the next stage, then removes the stage it leaves and every other autonomy label, and reads the task back. Labels SHALL be added before any is removed. It is the first exception to the rule that the loop never removes a label, and it removes nothing else. The only transition SHALL be from `grill-me` to `proposal`.
+A transition SHALL move a task out of its stage. It adds the next stage and, when the stage decided it, the answered autonomy; then it removes the stage it leaves and, when an autonomy was answered, every other autonomy label; and it reads the task back. Labels SHALL be added before any is removed. It is the first exception to the rule that the loop never removes a label, and it removes nothing else. There SHALL be five transitions: from `grill-me` to `proposal`, on a human's answer that sets the autonomy; from `proposal` to `implement`; from `implement` to `verify`; from `verify` to `code-review`; and from `code-review` to `external-review`. The last four change no autonomy.
 
 #### Scenario: Grill ends with AFK
 
@@ -278,3 +398,155 @@ A transition SHALL move a task out of its stage on a human's answer. It adds the
 
 - **WHEN** adding `proposal` fails after `AFK` was added to a task carrying `work` and `grill-me`
 - **THEN** nothing is removed and the task still carries `grill-me`
+
+#### Scenario: Proposal ready
+
+- **WHEN** the transition out of `proposal` is applied to a task carrying `personal`, `HITL` and `proposal`
+- **THEN** the task carries `personal`, `HITL` and `implement`, and `proposal` was removed
+
+#### Scenario: Implementation done
+
+- **WHEN** the transition out of `implement` is applied to a task carrying `personal`, `HITL` and `implement`
+- **THEN** the task carries `personal`, `HITL` and `verify`, and `implement` was removed
+
+#### Scenario: Verification done
+
+- **WHEN** the transition out of `verify` is applied to a task carrying `personal`, `HITL` and `verify`
+- **THEN** the task carries `personal`, `HITL` and `code-review`, and `verify` was removed
+
+#### Scenario: Code review done
+
+- **WHEN** the transition out of `code-review` is applied to a task carrying `personal`, `HITL` and `code-review`
+- **THEN** the task carries `personal`, `HITL` and `external-review`, and `code-review` was removed
+
+### Requirement: The autonomy decides whether leaving proposal needs an answer
+
+The transition from `proposal` to `implement` SHALL be applied without a human's answer for a task carrying `AFK`, and only on a human's approval for a task carrying `HITL`. A task in `proposal` whose autonomy is missing or in conflict SHALL NOT be transitioned.
+
+#### Scenario: AFK task
+
+- **WHEN** the transition out of `proposal` is requested for a task carrying `work`, `AFK` and `proposal`
+- **THEN** it is applied with no question, and the task carries `work`, `AFK` and `implement`
+
+#### Scenario: HITL task not approved
+
+- **WHEN** the human answers "Later" for a task carrying `HITL` and `proposal`
+- **THEN** the task keeps `proposal` and nothing is written
+
+#### Scenario: Autonomy missing
+
+- **WHEN** the transition out of `proposal` is requested for a task carrying `personal` and `proposal` only
+- **THEN** nothing is written and the reason names the missing autonomy
+
+### Requirement: Runner settings
+
+The configuration SHALL hold, under `runner`: `grills`, the limit of grill slots; `parallel`, the limit of work slots; and `intervalMinutes`, the time between two iterations of the loop. `grills` and `parallel` SHALL be integers of 0 or more and `intervalMinutes` an integer of 1 or more. The shipped defaults SHALL be 1, 2 and 10.
+
+#### Scenario: Shipped defaults
+
+- **WHEN** the file carries no `runner` block
+- **THEN** the limits are 1 grill slot and 2 work slots, and the interval is 10 minutes
+
+#### Scenario: Negative limit
+
+- **WHEN** the file sets `runner.parallel` to `-1`
+- **THEN** the configuration is rejected with the path `runner.parallel`
+
+#### Scenario: Fractional interval
+
+- **WHEN** the file sets `runner.intervalMinutes` to `2.5`
+- **THEN** the configuration is rejected with the path `runner.intervalMinutes`
+
+### Requirement: The triage label
+
+The contract SHALL include a `triage-me` label that belongs to no group. It is never required, never missing and never in conflict. It SHALL mean that the task's scope or autonomy could not be decided without the human, and that the task is neither judged again nor selected until the label is removed. The label names no group: the group in doubt SHALL be the scope or autonomy group that has no label on the task.
+
+#### Scenario: Task without the label
+
+- **WHEN** a task carries `work`, `AFK` and `proposal` and no `triage-me`
+- **THEN** it is complete for every group and nothing reports `triage-me` as missing
+
+#### Scenario: Group in doubt
+
+- **WHEN** a task carries `personal` and `triage-me` and no autonomy or stage label
+- **THEN** its group in doubt is autonomy
+
+### Requirement: Who sets the triage label
+
+Only `label-triage` and the answers to its questions SHALL add or remove `triage-me` on behalf of the runner. A person MAY add or remove it in the tracker, and the runner SHALL treat the label the same whoever set it.
+
+#### Scenario: Label set by a person
+
+- **WHEN** a person adds `triage-me` in the tracker to a task that lacks a scope label
+- **THEN** the task is treated as marked, as if a run had added the label
+
+### Requirement: The triage label has no aliases and is bootstrapped
+
+The configuration SHALL NOT declare aliases for `triage-me`. The label bootstrap SHALL create `triage-me` like every other contract label, with colour `#f2c94c`.
+
+#### Scenario: Alias for the triage label
+
+- **WHEN** the configuration declares a Beads alias for `triage-me`
+- **THEN** the configuration is rejected with the alias's path
+
+#### Scenario: Bootstrap on Linear
+
+- **WHEN** Linear lacks `triage-me` and the bootstrap runs
+- **THEN** `triage-me` is created at workspace level with colour `#f2c94c` and reported as created
+
+### Requirement: The autonomy decides whether leaving implement needs an answer
+
+The transition from `implement` to `verify` SHALL be applied without a human's answer for a task carrying `AFK`, and only on a human's approval for a task carrying `HITL`. A task in `implement` whose autonomy is missing or in conflict SHALL NOT be transitioned.
+
+#### Scenario: AFK task
+
+- **WHEN** the transition out of `implement` is requested for a task carrying `work`, `AFK` and `implement`, and its work is finished
+- **THEN** it is applied with no question, and the task carries `work`, `AFK` and `verify`
+
+#### Scenario: HITL task not approved
+
+- **WHEN** the human answers "Later" for a task carrying `HITL` and `implement`
+- **THEN** the task keeps `implement` and nothing is written
+
+#### Scenario: Autonomy missing
+
+- **WHEN** the transition out of `implement` is requested for a task carrying `personal` and `implement` only
+- **THEN** nothing is written and the reason names the missing autonomy
+
+### Requirement: The autonomy decides whether leaving verify needs an answer
+
+The transition from `verify` to `code-review` SHALL be applied without a human's answer for a task carrying `AFK`, and only on a human's approval for a task carrying `HITL`. A task in `verify` whose autonomy is missing or in conflict SHALL NOT be transitioned.
+
+#### Scenario: AFK task
+
+- **WHEN** the transition out of `verify` is requested for a task carrying `work`, `AFK` and `verify`, and its work is finished
+- **THEN** it is applied with no question, and the task carries `work`, `AFK` and `code-review`
+
+#### Scenario: HITL task not approved
+
+- **WHEN** the human answers "Later" for a task carrying `HITL` and `verify`
+- **THEN** the task keeps `verify` and nothing is written
+
+#### Scenario: Autonomy missing
+
+- **WHEN** the transition out of `verify` is requested for a task carrying `personal` and `verify` only
+- **THEN** nothing is written and the reason names the missing autonomy
+
+### Requirement: The autonomy decides whether leaving code-review needs an answer
+
+The transition from `code-review` to `external-review` SHALL be applied without a human's answer for a task carrying `AFK`, and only on a human's approval for a task carrying `HITL`. A task in `code-review` whose autonomy is missing or in conflict SHALL NOT be transitioned.
+
+#### Scenario: AFK task
+
+- **WHEN** the transition out of `code-review` is requested for a task carrying `work`, `AFK` and `code-review`, its work is finished and its findings are published
+- **THEN** it is applied with no question, and the task carries `work`, `AFK` and `external-review`
+
+#### Scenario: HITL task not approved
+
+- **WHEN** the human answers "Later" for a task carrying `HITL` and `code-review`
+- **THEN** the task keeps `code-review` and nothing is written
+
+#### Scenario: Autonomy missing
+
+- **WHEN** the transition out of `code-review` is requested for a task carrying `personal` and `code-review` only
+- **THEN** nothing is written and the reason names the missing autonomy

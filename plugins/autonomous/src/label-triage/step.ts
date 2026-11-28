@@ -14,11 +14,12 @@ import {
     type DecidedGroup,
     GROUPS,
     type Group,
+    TRIAGE_LABEL,
 } from "../label-contract/contract.ts";
 import { type Detection, detect, isComplete } from "../label-contract/detect.ts";
 import type { Step, StepResult, StepTier } from "../runner.ts";
 import { answerLabelTriage } from "./answer.ts";
-import { decide, selectForJudgement } from "./decide.ts";
+import { decide, markedRecords, selectForJudgement } from "./decide.ts";
 import {
     interpretAnswers,
     type JudgementExec,
@@ -29,8 +30,13 @@ import { LABEL_TRIAGE } from "./question-id.ts";
 import { questionsFor } from "./questions.ts";
 import { plural, renderLabelTriage } from "./render.ts";
 import { type Derivation, deriveByRule, recordsForAutonomy } from "./rules.ts";
-import type { TrackerTask, Trackers } from "./trackers/tracker.ts";
-import { applyDerivations, type TriageRecord, type WriteFailure } from "./write.ts";
+import type { TrackerResult, TrackerTask, Trackers } from "./trackers/tracker.ts";
+import {
+    applyDerivations,
+    type MarkRecord,
+    type TriageRecord,
+    type WriteFailure,
+} from "./write.ts";
 
 export interface SourceCounts {
     source: Source;
@@ -48,6 +54,9 @@ export interface LabelTriageData {
     remainder: number; // tasks beyond the cap
     judgement: { model: string; effort: string; cap: number; batches: number } | null;
     failures: WriteFailure[];
+    marked: MarkRecord[]; // tasks this run marked with `triage-me`, or would
+    unmarked: MarkRecord[]; // tasks this run unmarked, or would
+    markedRead: number; // tasks that carried `triage-me` when the run read them
 }
 
 const SOURCE_ORDER: readonly Source[] = ["beads", "github", "linear"];
@@ -62,6 +71,9 @@ const EMPTY: LabelTriageData = {
     remainder: 0,
     judgement: null,
     failures: [],
+    marked: [],
+    unmarked: [],
+    markedRead: 0,
 };
 
 function result(
@@ -83,14 +95,11 @@ export const labelTriageStep: Step<LabelTriageData> = {
         const trackers = ctx.io.trackers(config);
         const enabled = SOURCE_ORDER.filter((source) => config.sources[source].enabled);
 
-        const detections: Detection[] = [];
-        for (const source of enabled) {
-            const listed = await trackers[source].listTasks();
-            if (!listed.ok) {
-                return result("not-evaluable", [`${source}: ${listed.error}`], EMPTY);
-            }
-            detections.push(...listed.value.map((task) => detect(task, config.sources[source])));
+        const read = await readDetections(config, trackers);
+        if (!read.ok) {
+            return result("not-evaluable", [read.error], EMPTY);
         }
+        const detections = read.value;
 
         const sources = enabled.map((source) => countSource(source, detections));
         const conflicts = detections.flatMap(conflictsOf);
@@ -117,11 +126,12 @@ export const labelTriageStep: Step<LabelTriageData> = {
             ]),
         );
         const { eligible, asked } = decideAll(derivations, tasks, config.judgement.threshold);
-        const written = await applyDerivations(eligible, tasks, trackers, ctx.args.apply);
+        const toMark = unmarkedAsked(asked, detections);
+        const written = await applyDerivations(eligible, tasks, trackers, ctx.args.apply, toMark);
 
         const data: LabelTriageData = {
             sources,
-            records: [...written.records, ...asked],
+            records: [...written.records, ...asked, ...markedRecords(detections)],
             conflicts,
             notJudged: judged.notJudged,
             remainder,
@@ -132,6 +142,9 @@ export const labelTriageStep: Step<LabelTriageData> = {
                 batches: judged.batches,
             },
             failures: written.failures,
+            marked: written.marked,
+            unmarked: written.unmarked,
+            markedRead: detections.filter((detection) => detection.marked).length,
         };
         const questions = questionsFor(
             data.records,
@@ -139,8 +152,7 @@ export const labelTriageStep: Step<LabelTriageData> = {
             detections,
             judged.descriptions,
         );
-        // The step's tier is the highest its parts used in this run: `llm` once a
-        // judgement batch was requested, `code` otherwise.
+        // The step's tier is the highest its parts used in this run.
         const tier = judged.batches > 0 ? "llm" : "code";
         return {
             ...result("advance", reasonsFor(data, written.missing), data, tier),
@@ -150,6 +162,26 @@ export const labelTriageStep: Step<LabelTriageData> = {
     render: renderLabelTriage,
     answer: answerLabelTriage,
 };
+
+// The open tasks of every enabled source, detected. Reading fails closed: the error names
+// the source and the command. Shared with the triage questions mode.
+export async function readDetections(
+    config: AutonomousConfig,
+    trackers: Trackers,
+): Promise<TrackerResult<Detection[]>> {
+    const detections: Detection[] = [];
+    for (const source of SOURCE_ORDER) {
+        if (!config.sources[source].enabled) {
+            continue;
+        }
+        const listed = await trackers[source].listTasks();
+        if (!listed.ok) {
+            return { ok: false, error: `${source}: ${listed.error}` };
+        }
+        detections.push(...listed.value.map((task) => detect(task, config.sources[source])));
+    }
+    return { ok: true, value: detections };
+}
 
 // A deferred autonomy is complete.
 function judgementCandidates(detections: Detection[]): Map<Detection, DecidedGroup[]> {
@@ -164,6 +196,23 @@ function judgementCandidates(detections: Detection[]): Map<Detection, DecidedGro
         }
     }
     return candidates;
+}
+
+// Spec label-triage, "Mark the tasks left for the human": the unmarked tasks with a scope or
+// autonomy group asked in this run. A present-label conflict, a task not judged and a task
+// beyond the cap are not asked records, so none of them marks.
+function unmarkedAsked(asked: readonly TriageRecord[], detections: Detection[]): Set<TaskKey> {
+    const marked = new Set(
+        detections
+            .filter((detection) => detection.marked)
+            .map((detection) => taskKey(detection.task.source, detection.task.id)),
+    );
+    return new Set(
+        asked
+            .filter((record) => record.group !== "stage")
+            .map((record) => taskKey(record.source, record.taskId))
+            .filter((key) => !marked.has(key)),
+    );
 }
 
 function decideAll(
@@ -326,6 +375,29 @@ function labelCount(records: TriageRecord[]): number {
     return records.reduce((total, record) => total + record.labels.length, 0);
 }
 
+// One line per kind of mark with something in it: `marked 2 tasks triage-me`, `proposed
+// unmarking 1 task triage-me`, `1 failed marking`.
+function markReasons({ marked, unmarked }: LabelTriageData): string[] {
+    const lines: string[] = [];
+    for (const [done, proposed, failed, marks] of [
+        ["marked", "marking", "marking", marked],
+        ["unmarked", "unmarking", "unmarking", unmarked],
+    ] as const) {
+        for (const status of ["applied", "proposed", "failed"] as const) {
+            const count = marks.filter((mark) => mark.status === status).length;
+            if (count > 0) {
+                const verb = {
+                    applied: done,
+                    proposed: `proposed ${proposed}`,
+                    failed: `failed ${failed}`,
+                }[status];
+                lines.push(`${verb} ${plural(count, "task")} ${TRIAGE_LABEL}`);
+            }
+        }
+    }
+    return lines;
+}
+
 // `missing`: the label-availability notes, one line per label a tracker lacks (naming the
 // bootstrap) and, without --apply, per source whose labels could not be listed.
 function reasonsFor(data: LabelTriageData, missing: readonly string[]): string[] {
@@ -341,7 +413,7 @@ function reasonsFor(data: LabelTriageData, missing: readonly string[]): string[]
             reasons.push(`${status} ${plural(labels, "label")}`);
         }
     }
-    reasons.push(...missing);
+    reasons.push(...markReasons(data), ...missing);
     const forHuman =
         data.records.filter((record) => record.status === "asked").length + data.conflicts.length;
     if (forHuman > 0) {

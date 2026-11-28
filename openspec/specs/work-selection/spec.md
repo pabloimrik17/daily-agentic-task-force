@@ -88,7 +88,7 @@ For Beads and Linear, the step SHALL read each task's open blockers, the tasks i
 
 ### Requirement: Next stage of a task
 
-The next stage of a task SHALL be the stage label it carries: `grill-me` or `proposal`. A task without a stage label has no next stage and is excluded under classification. The only supported stage SHALL be `grill-me`.
+The next stage of a task SHALL be the stage label it carries: `grill-me`, `proposal`, `implement`, `verify`, `code-review`, `qa`, `external-review`, `wrap-up` or `ready-to-merge`. A task without a stage label has no next stage and is excluded under classification. The supported stages SHALL be `grill-me`, `proposal`, `implement`, `verify` and `code-review`; a task whose next stage is any other is excluded as an unsupported stage.
 
 #### Scenario: grill-me task
 
@@ -98,7 +98,32 @@ The next stage of a task SHALL be the stage label it carries: `grill-me` or `pro
 #### Scenario: AFK task
 
 - **WHEN** a task carries `personal`, `AFK` and `proposal`
-- **THEN** its next stage is `proposal`, which is not supported
+- **THEN** its next stage is `proposal`, which is supported
+
+#### Scenario: Task ready to implement
+
+- **WHEN** a task carries `personal`, `AFK` and `implement`
+- **THEN** its next stage is `implement`, which is supported
+
+#### Scenario: Task ready to verify
+
+- **WHEN** a task carries `personal`, `AFK` and `verify`
+- **THEN** its next stage is `verify`, which is supported
+
+#### Scenario: Task ready for code review
+
+- **WHEN** a task carries `personal`, `AFK` and `code-review`
+- **THEN** its next stage is `code-review`, which is supported
+
+#### Scenario: Task waiting for external review
+
+- **WHEN** a task carries `personal`, `HITL` and `external-review`
+- **THEN** its next stage is `external-review`, which is not supported
+
+#### Scenario: Task in a stage declared later
+
+- **WHEN** a task carries `personal`, `AFK` and one of `qa`, `external-review`, `wrap-up` or `ready-to-merge`
+- **THEN** its next stage is that label, which is not supported
 
 ### Requirement: Candidates and exclusions
 
@@ -109,7 +134,7 @@ A task SHALL be a candidate, whatever its scope, unless an exclusion applies. Ea
 3. **labelled this run**: `label-triage` labelled it, or tried to, this run;
 4. **unsupported stage**: its next stage is not supported;
 5. **blocked**: an open blocker;
-6. **split**: an open child.
+6. **split**: an open child, or, for a task whose next stage is `proposal`, any child, open or closed.
 
 #### Scenario: Small task that unblocks others
 
@@ -124,7 +149,22 @@ A task SHALL be a candidate, whatever its scope, unless an exclusion applies. Ea
 #### Scenario: AFK task already taken
 
 - **WHEN** a task carries `personal`, `AFK`, `proposal` and `taken`
-- **THEN** it is excluded as taken, not as unsupported stage
+- **THEN** it is excluded as taken
+
+#### Scenario: Task ready to implement
+
+- **WHEN** a task carries `personal`, `AFK` and `implement`, and nothing else excludes it
+- **THEN** it is not excluded as unsupported stage
+
+#### Scenario: Task ready to verify
+
+- **WHEN** a task carries `personal`, `AFK` and `verify`, and nothing else excludes it
+- **THEN** it is not excluded as unsupported stage
+
+#### Scenario: Task ready for code review
+
+- **WHEN** a task carries `personal`, `AFK` and `code-review`
+- **THEN** it is excluded as unsupported stage
 
 #### Scenario: Labelled by triage in this run
 
@@ -145,6 +185,16 @@ A task SHALL be a candidate, whatever its scope, unless an exclusion applies. Ea
 
 - **WHEN** a `grill-me` task in Linear has an open child
 - **THEN** it is excluded as split
+
+#### Scenario: Split parent whose subtasks are closed
+
+- **WHEN** a task carrying `personal`, `AFK` and `proposal` has two children, both closed
+- **THEN** it is excluded as split
+
+#### Scenario: Grill of a task whose subtasks are closed
+
+- **WHEN** a task carrying `personal` and `grill-me` has one child, closed
+- **THEN** it is not excluded as split
 
 #### Scenario: Missing scope
 
@@ -172,7 +222,7 @@ A tracker status such as Beads `in_progress` or a Linear started state SHALL NOT
 
 ### Requirement: A single candidate needs no comparison
 
-With exactly one candidate, the step SHALL select it without an LLM and explain that it was the only one. When that candidate is outside the machine scope, the step SHALL mark the selection as a machine-scope exception whose reason is that it was the only candidate.
+With exactly one candidate kept, the step SHALL select it without an LLM and explain that it was the only one. When that candidate is outside the machine scope, the step SHALL mark the selection as a machine-scope exception whose reason is that it was the only candidate.
 
 #### Scenario: Single candidate
 
@@ -184,14 +234,24 @@ With exactly one candidate, the step SHALL select it without an LLM and explain 
 - **WHEN** the machine scope is `personal` and the only candidate is a `work` task
 - **THEN** it is selected without an LLM, and the report marks it as a machine-scope exception because it was the only candidate
 
+#### Scenario: Single candidate at the most advanced stage
+
+- **WHEN** three candidates remain, one in `proposal` and two in `grill-me`, and both stages are supported
+- **THEN** the `proposal` candidate is selected, no LLM is called and the step's tier is `code`
+
 ### Requirement: Compare the candidates
 
-With two or more candidates, an LLM SHALL choose, run in print mode with a JSON schema, the configured selection model and effort, no tools and a 300 s limit. The LLM MAY weigh urgency, impact, effort and the ability to unblock other work; no fixed formula SHALL be applied. It SHALL return the chosen source and id, a brief explanation based on the evidence it was given, and an exception reason when the choice is outside the machine scope.
+With two or more candidates kept, an LLM SHALL choose among them, run in print mode with a JSON schema, the configured selection model and effort, no tools and a 300 s limit. The LLM MAY weigh urgency, impact, effort and the ability to unblock other work; no fixed formula SHALL be applied. It SHALL return the chosen source and id, a brief explanation based on the evidence it was given, and an exception reason when the choice is outside the machine scope.
 
 #### Scenario: Two candidates
 
 - **WHEN** two candidates remain and the configured selection model is `sonnet` with effort `high`
 - **THEN** the LLM is called once with that model and effort, and the step's tier is `llm`
+
+#### Scenario: Candidates set aside are not compared
+
+- **WHEN** two candidates are in `proposal` and one in `grill-me`, and both stages are supported
+- **THEN** the LLM is given the two `proposal` candidates only
 
 ### Requirement: What the comparison is given
 
@@ -238,7 +298,9 @@ The text report SHALL show:
 - the selected work unit: source, id, title, next stage, autonomy (`none` for a task in `grill-me` without one), scope, explanation;
 - the machine-scope exception reason, when there is one;
 - the candidates compared;
+- the candidates set aside because a candidate at a more advanced stage exists, each with its source, id, title and stage;
 - the excluded tasks, grouped by reason, each with its source, id and title;
+- the tasks ready to close: each task excluded as split whose children are all closed;
 - the note that GitHub dependencies were not evaluated, when GitHub is enabled.
 
 #### Scenario: Selected task in the text report
@@ -251,6 +313,21 @@ The text report SHALL show:
 - **WHEN** a task carrying `personal` and `grill-me` only is selected
 - **THEN** the report gives its autonomy as `none`
 
+#### Scenario: Parent ready to close
+
+- **WHEN** a task in `proposal` is excluded as split and every one of its children is closed
+- **THEN** the report lists it as ready to close, and no tracker write is issued for it
+
+#### Scenario: Parent with an open subtask
+
+- **WHEN** a task excluded as split still has an open child
+- **THEN** the report does not list it as ready to close
+
+#### Scenario: Candidate set aside in the report
+
+- **WHEN** a `grill-me` candidate is set aside because a `proposal` candidate exists
+- **THEN** the report lists it as set aside with its stage, and not among the excluded tasks
+
 ### Requirement: Selection data in JSON
 
 The JSON data of the step SHALL carry the same information as the text report, plus the selection model and effort when the LLM was called.
@@ -259,3 +336,89 @@ The JSON data of the step SHALL carry the same information as the text report, p
 
 - **WHEN** the run is invoked with `--json`
 - **THEN** the step's data lists every excluded task with its source, id, title and exclusion reason
+
+### Requirement: Closed children are counted
+
+For every source, the step SHALL read how many children a task has in all, closed ones included, beside its open children. A task that never had a child has none. The JSON data of the step SHALL carry, for each task ready to close, its source, id and title.
+
+#### Scenario: Linear parent with closed sub-issues
+
+- **WHEN** a Linear issue has three sub-issues, all completed
+- **THEN** it has three children in all and no open child
+
+#### Scenario: Task without children
+
+- **WHEN** a Beads task was never a parent
+- **THEN** it has no children in all, and it is not excluded as split
+
+### Requirement: No free slot
+
+In an iteration of the loop, a candidate whose slot kind is full SHALL be excluded as **no free slot**, after every other exclusion. Outside an iteration this exclusion SHALL NOT apply.
+
+#### Scenario: Grill slots full
+
+- **WHEN** an iteration finds the grill kind full, a free work slot, one `grill-me` task and one `proposal` task, both otherwise candidates, and `proposal` is supported
+- **THEN** the `grill-me` task is excluded as no free slot and the `proposal` task is a candidate
+
+#### Scenario: Blocked task with no free slot
+
+- **WHEN** a `grill-me` task has an open blocker and the grill kind is full
+- **THEN** it is excluded as blocked, not as no free slot
+
+#### Scenario: Manual run with the grill kind full
+
+- **WHEN** `/autonomous:run` is invoked with the grill kind full and a `grill-me` task that nothing else excludes
+- **THEN** the task is a candidate
+
+### Requirement: Most advanced stage first
+
+Before the choice, the step SHALL keep only the candidates whose next stage is the most advanced among the candidates, in the order of the stage labels of the label contract: `grill-me`, then `proposal`, then `implement`, then `verify`, then `code-review`. The other candidates SHALL be set aside for this run and reported as such. The rule SHALL apply whatever the scope of the candidates, in a run and in an iteration.
+
+#### Scenario: Proposal over grill
+
+- **WHEN** one candidate is in `grill-me` and one in `proposal`, and both stages are supported
+- **THEN** only the `proposal` candidate is kept, and the `grill-me` candidate is set aside
+
+#### Scenario: Other scope at a later stage
+
+- **WHEN** the machine scope is `work`, a `personal` candidate is in `proposal` and a `work` candidate is in `grill-me`, and both stages are supported
+- **THEN** the `personal` candidate is kept and selected as a machine-scope exception
+
+#### Scenario: Same stage
+
+- **WHEN** every candidate is in `grill-me`
+- **THEN** every candidate is kept and none is set aside
+
+#### Scenario: Implementation before proposal
+
+- **WHEN** one candidate is in `proposal` and one in `implement`, and both stages are supported
+- **THEN** only the `implement` candidate is kept, and the `proposal` candidate is set aside
+
+#### Scenario: Verification before implementation
+
+- **WHEN** one candidate is in `implement` and one in `verify`, and both stages are supported
+- **THEN** only the `verify` candidate is kept, and the `implement` candidate is set aside
+
+#### Scenario: Code review before verification
+
+- **WHEN** one candidate is in `verify` and one in `code-review`, and both stages are supported
+- **THEN** only the `code-review` candidate is kept, and the `verify` candidate is set aside
+
+### Requirement: A marked task is excluded
+
+A task that carries `triage-me` SHALL be excluded as **triage-me**, after the classification and taken exclusions and before every other. A task from which this run removed `triage-me` SHALL NOT be excluded for it.
+
+#### Scenario: Stale mark
+
+- **WHEN** a run without `--apply` reads a task that carries `personal`, `grill-me` and `triage-me`
+- **THEN** the task is excluded as triage-me
+
+#### Scenario: Marked and incomplete
+
+- **WHEN** a task carries `personal` and `triage-me` and no autonomy or stage label
+- **THEN** it is excluded under classification, not as triage-me
+
+#### Scenario: Mark removed in this run
+
+- **WHEN** `label-triage` removed `triage-me` from a task that carries `work`, `HITL` and `proposal`, and wrote nothing else to it
+- **THEN** the task is not excluded as triage-me

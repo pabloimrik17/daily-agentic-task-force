@@ -15,6 +15,7 @@ import {
     LABELS,
     MEANINGS,
     optionsFor,
+    STAGE_ORDER,
 } from "./contract.ts";
 
 // criteria.md wraps lines, backticks label names and lowercases the first
@@ -24,7 +25,7 @@ function normalise(text: string): string {
 }
 
 describe("LABELS, GROUPS and COLOURS", () => {
-    it("lists exactly the seven contract labels", () => {
+    it("lists exactly the fifteen contract labels", () => {
         expect(LABELS).toEqual([
             "work",
             "personal",
@@ -32,7 +33,15 @@ describe("LABELS, GROUPS and COLOURS", () => {
             "HITL",
             "grill-me",
             "proposal",
+            "implement",
+            "verify",
+            "code-review",
+            "qa",
+            "external-review",
+            "wrap-up",
+            "ready-to-merge",
             "taken",
+            "triage-me",
         ]);
     });
 
@@ -40,7 +49,17 @@ describe("LABELS, GROUPS and COLOURS", () => {
         expect(GROUPS).toEqual({
             scope: ["work", "personal"],
             autonomy: ["AFK", "HITL"],
-            stage: ["grill-me", "proposal"],
+            stage: [
+                "grill-me",
+                "proposal",
+                "implement",
+                "verify",
+                "code-review",
+                "qa",
+                "external-review",
+                "wrap-up",
+                "ready-to-merge",
+            ],
         });
     });
 
@@ -54,9 +73,17 @@ describe("LABELS, GROUPS and COLOURS", () => {
             HITL: "#eb5757",
             "grill-me": "#f2994a",
             proposal: "#bb87fc",
+            implement: "#26b5ce",
+            verify: "#d6409f",
+            "code-review": "#a3e635",
+            qa: "#0d9488",
+            "external-review": "#8b5e3c",
+            "wrap-up": "#64748b",
+            "ready-to-merge": "#15803d",
             work: "#2f80ed",
             personal: "#27ae60",
             taken: "#95a2b3",
+            "triage-me": "#f2c94c",
         });
     });
 
@@ -81,10 +108,57 @@ describe("LABELS, GROUPS and COLOURS", () => {
         );
     });
 
+    it("states that implement means the task has a proposal and is ready to implement", () => {
+        expect(MEANINGS.implement).toBe("The task has a proposal and is ready to implement.");
+    });
+
+    it("states that verify means the task is implemented and ready to verify against its proposal", () => {
+        expect(MEANINGS.verify).toBe(
+            "The task is implemented and ready to verify against its proposal.",
+        );
+    });
+
+    it("states that code-review means the task is verified and ready for code review", () => {
+        expect(MEANINGS["code-review"]).toBe("The task is verified and ready for code review.");
+    });
+
+    it("states the meaning of each declared stage label", () => {
+        expect(MEANINGS.qa).toBe("The task has passed code review and is ready for QA.");
+        expect(MEANINGS["external-review"]).toBe(
+            "The task has passed every review stage and is ready for external review.",
+        );
+        expect(MEANINGS["wrap-up"]).toBe(
+            "The task has passed external review and is ready for wrap-up.",
+        );
+        expect(MEANINGS["ready-to-merge"]).toBe(
+            "The task is wrapped up and waits for a person to merge its pull request.",
+        );
+    });
+
+    it("orders the declared stage labels after code-review", () => {
+        expect(STAGE_ORDER.slice(STAGE_ORDER.indexOf("code-review"))).toEqual([
+            "code-review",
+            "qa",
+            "external-review",
+            "wrap-up",
+            "ready-to-merge",
+        ]);
+    });
+
     it("states grill-me without any precedence over AFK and HITL", () => {
         expect(MEANINGS["grill-me"]).toBe(
             "The task must be refined with a human in a grill before anyone works on it.",
         );
+    });
+
+    it("keeps triage-me in the vocabulary, in no group, with its colour and a meaning", () => {
+        expect(LABELS).toContain("triage-me");
+        expect(isContractLabel("triage-me")).toBe(true);
+        for (const labels of Object.values(GROUPS)) {
+            expect(labels).not.toContain("triage-me");
+        }
+        expect(COLOURS["triage-me"]).toBe("#f2c94c");
+        expect(MEANINGS["triage-me"]).toBeTruthy();
     });
 
     it("states that taken means someone is advancing the task now", () => {
@@ -117,7 +191,29 @@ describe("isContractLabel", () => {
     it("accepts exact spellings", () => {
         expect(isContractLabel("grill-me")).toBe(true);
         expect(isContractLabel("proposal")).toBe(true);
+        expect(isContractLabel("implement")).toBe(true);
     });
+
+    it("accepts code-review and rejects its near-miss spellings", () => {
+        expect(isContractLabel("code-review")).toBe(true);
+        expect(isContractLabel("Code Review")).toBe(false);
+        expect(isContractLabel("code_review")).toBe(false);
+        expect(isContractLabel("codereview")).toBe(false);
+    });
+
+    it("accepts external-review and rejects its near-miss spellings", () => {
+        expect(isContractLabel("external-review")).toBe(true);
+        expect(isContractLabel("External Review")).toBe(false);
+        expect(isContractLabel("external_review")).toBe(false);
+        expect(isContractLabel("externalreview")).toBe(false);
+    });
+    it.each(["qa", "external-review", "wrap-up", "ready-to-merge"])(
+        "accepts the declared stage label %s",
+        (label) => {
+            expect(isContractLabel(label)).toBe(true);
+            expect(isStageLabel(label)).toBe(true);
+        },
+    );
 
     it("rejects a near-miss spelling", () => {
         expect(isContractLabel("Grill Me")).toBe(false);
@@ -184,6 +280,17 @@ describe("isValidGroup", () => {
     it("rejects a label of another group", () => {
         expect(isValidGroup("stage", ["AFK"])).toBe(false);
     });
+
+    it("code-review with qa: two stage labels are not valid", () => {
+        expect(isValidGroup("stage", ["code-review", "qa"])).toBe(false);
+    });
+
+    it.each(["qa", "external-review", "wrap-up", "ready-to-merge"])(
+        "accepts %s as a single stage label",
+        (label) => {
+            expect(isValidGroup("stage", [label])).toBe(true);
+        },
+    );
 });
 
 describe("optionsFor", () => {
@@ -199,6 +306,29 @@ describe("optionsFor", () => {
         expect(optionsFor("autonomy", ["personal", "proposal"])).toEqual(["AFK", "HITL"]);
         expect(optionsFor("autonomy", ["grill-me"])).toEqual(["AFK", "HITL"]);
     });
+
+    it("Task in implement: its autonomy is AFK or HITL, never grill-me", () => {
+        expect(optionsFor("autonomy", ["personal", "implement"])).toEqual(["AFK", "HITL"]);
+    });
+
+    it("Task in verify: its autonomy is AFK or HITL, never grill-me", () => {
+        expect(optionsFor("autonomy", ["work", "verify"])).toEqual(["AFK", "HITL"]);
+    });
+});
+
+describe("optionsFor in code-review", () => {
+    it("Task in code-review: its autonomy is AFK or HITL, never grill-me", () => {
+        expect(optionsFor("autonomy", ["work", "code-review"])).toEqual(["AFK", "HITL"]);
+    });
+});
+
+describe("optionsFor in a stage with no implementation", () => {
+    it.each(["qa", "external-review", "wrap-up", "ready-to-merge"])(
+        "Task in %s: its autonomy is AFK or HITL, never grill-me",
+        (stage) => {
+            expect(optionsFor("autonomy", ["personal", stage])).toEqual(["AFK", "HITL"]);
+        },
+    );
 });
 
 describe("isValidDecision", () => {

@@ -521,3 +521,100 @@ describe("answers to triage questions: writes and rejections", () => {
         expect(await labelsOf(given, "X-12")).toEqual(["bug", "personal", "AFK", "proposal"]);
     });
 });
+
+describe("answers to triage questions: An answer removes the mark", () => {
+    it("Answer that completes the task: HITL and proposal are added, triage-me is removed, and the answer is applied", async () => {
+        const calls: string[] = [];
+        const given = trackers(calls, {
+            beads: [task("beads", "X-12", ["personal", "triage-me"])],
+        });
+        const records = await answerLabelTriage(
+            [answer("label-triage:beads:X-12:autonomy", "HITL")],
+            context(given),
+        );
+        expect(records).toEqual([
+            {
+                id: "label-triage:beads:X-12:autonomy",
+                labels: ["HITL"],
+                status: "applied",
+                detail: "added HITL, proposal to beads X-12, read back, removed triage-me",
+            },
+        ]);
+        expect(calls.filter((call) => call.includes("removeLabel"))).toEqual([
+            "beads:removeLabel:X-12:triage-me",
+        ]);
+        expect(await labelsOf(given, "X-12")).toEqual(["personal", "HITL", "proposal"]);
+    });
+
+    it("Answer that leaves another doubt: work is added and triage-me stays", async () => {
+        const calls: string[] = [];
+        const given = trackers(calls, { beads: [task("beads", "X-12", ["triage-me"])] });
+        const records = await answerLabelTriage(
+            [answer("label-triage:beads:X-12:scope", "work")],
+            context(given),
+        );
+        expect(records).toEqual([
+            {
+                id: "label-triage:beads:X-12:scope",
+                labels: ["work"],
+                status: "applied",
+                detail: "added work to beads X-12, read back",
+            },
+        ]);
+        expect(calls.filter((call) => call.includes("removeLabel"))).toEqual([]);
+        expect(await labelsOf(given, "X-12")).toEqual(["triage-me", "work"]);
+    });
+
+    it("Later (never sent to the script): a skipped or rejected answer leaves triage-me and writes nothing", async () => {
+        const calls: string[] = [];
+        const given = trackers(calls, {
+            beads: [
+                task("beads", "X-12", ["personal", "HITL", "proposal", "triage-me"]),
+                task("beads", "X-13", ["personal", "triage-me"]),
+            ],
+        });
+        const records = await answerLabelTriage(
+            [
+                answer("label-triage:beads:X-12:autonomy", "AFK"),
+                answer("label-triage:beads:X-13:autonomy", "work"),
+            ],
+            context(given),
+        );
+        expect(records.map((record) => record.status)).toEqual(["skipped", "rejected"]);
+        expect(calls).toEqual(["beads:readTask:X-12", "beads:readTask:X-13"]);
+        expect(await labelsOf(given, "X-12")).toContain("triage-me");
+        expect(await labelsOf(given, "X-13")).toContain("triage-me");
+    });
+
+    it("keeps an answer applied when the removal of triage-me fails, naming it in the detail", async () => {
+        const calls: string[] = [];
+        const given = trackers(calls, {
+            beads: [task("beads", "X-12", ["personal", "triage-me"])],
+        });
+        given.beads = {
+            ...given.beads,
+            removeLabel: (id, name) => {
+                calls.push(`beads:removeLabel:${id}:${name}`);
+                return Promise.resolve({ ok: false, error: "bd label remove: boom" });
+            },
+        };
+        const records = await answerLabelTriage(
+            [answer("label-triage:beads:X-12:autonomy", "HITL")],
+            context(given),
+        );
+        expect(records).toEqual([
+            {
+                id: "label-triage:beads:X-12:autonomy",
+                labels: ["HITL"],
+                status: "applied",
+                detail: "added HITL, proposal to beads X-12, read back; triage-me not removed: bd label remove: boom (labels [personal, triage-me, HITL, proposal])",
+            },
+        ]);
+        expect(await labelsOf(given, "X-12")).toEqual([
+            "personal",
+            "triage-me",
+            "HITL",
+            "proposal",
+        ]);
+    });
+});

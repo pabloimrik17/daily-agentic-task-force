@@ -5,7 +5,7 @@ import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 
 import type { Exec, ExecResult } from "../exec.ts";
-import { WORKSPACE_TIMEOUT_MS, worktrunkManager } from "./worktrunk.ts";
+import { worktrunkManager } from "./worktrunk.ts";
 
 const dirs: string[] = [];
 
@@ -166,11 +166,5 @@ describe("worktrunk release", () => {
             ok: false,
             error: "wt remove: wt failed: ✗ No branch named feature/nope",
         });
-    });
-});
-
-describe("worktrunk limits", () => {
-    it("gives wt 120 s, long enough for the hooks that run in the foreground", () => {
-        expect(WORKSPACE_TIMEOUT_MS).toBe(120_000);
     });
 });

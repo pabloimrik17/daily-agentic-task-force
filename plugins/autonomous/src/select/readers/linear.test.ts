@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
 import type { Exec } from "../../exec.ts";
 import listing from "./fixtures/linear-query.json";
+import subtask from "./fixtures/linear-view-subtask.json";
 import detail from "./fixtures/linear-view.json";
 import { linearWorkReader } from "./linear.ts";
 
@@ -80,6 +81,61 @@ describe("linearWorkReader", () => {
             ["issue", "view", "DEMO-82", "--no-comments", "--json"],
         ]);
     });
+    it("counts the children in all beside the open ones", async () => {
+        const result = await detailOf(detail);
+        expect(result.ok && [result.value.children, result.value.childCount]).toEqual([
+            ["DEMO-108", "DEMO-999"],
+            4,
+        ]);
+    });
+    it("counts three completed sub-issues as three children and no open child", async () => {
+        const done = { ...listing.nodes[3]!, identifier: "DEMO-202" };
+        const query = { ...listing, nodes: [...listing.nodes, done] };
+        const children = ["DEMO-200", "DEMO-201", "DEMO-202"].map((identifier) => ({
+            identifier,
+            title: "Synthetic child",
+            state: { name: "Done", color: "#000000" },
+        }));
+        const work = readerWith(
+            {
+                ...query,
+                nodes: query.nodes.map((node) =>
+                    node.identifier === "DEMO-201"
+                        ? { ...node, state: { ...node.state, name: "Done", type: "completed" } }
+                        : node,
+                ),
+            },
+            { ...detail, children: { nodes: children } },
+        );
+        const listed = await work.list();
+        if (!listed.ok) throw new Error(listed.error);
+        const result = await work.detail(listed.value.find((task) => task.id === "DEMO-82")!);
+        expect(result.ok && [result.value.children, result.value.childCount]).toEqual([[], 3]);
+    });
+    it("reads a child whose state name changed since the listing as open", async () => {
+        const reopened = detail.children.nodes.map((child) =>
+            child.identifier === "DEMO-200"
+                ? { ...child, state: { ...child.state, name: "Backlog" } }
+                : child,
+        );
+        const result = await detailOf({ ...detail, children: { nodes: reopened } });
+        expect(result.ok && [result.value.children, result.value.childCount]).toEqual([
+            ["DEMO-108", "DEMO-200", "DEMO-999"],
+            4,
+        ]);
+    });
+    it("counts no children for an issue without sub-issues", async () => {
+        const result = await detailOf({ ...detail, children: { nodes: [] } });
+        expect(result.ok && [result.value.children, result.value.childCount]).toEqual([[], 0]);
+    });
+    it("leaves the child count unread in the listing", async () => {
+        const result = await reader().work.list();
+        expect(result.ok && result.value.map((task) => task.childCount)).toEqual([
+            null,
+            null,
+            null,
+        ]);
+    });
     it("reads the project name from the issue view, and none from the listing", async () => {
         const { work } = reader();
         const listed = await work.list();
@@ -114,6 +170,43 @@ describe("linearWorkReader", () => {
             ok: false,
             error: "linear issue view DEMO-82: output does not match the expected shape: $.project.name must be a string",
         });
+    });
+    it("reads the url and the parent of a subtask, the parent having no url of its own", async () => {
+        const result = await detailOf(subtask);
+        expect(result.ok && [result.value.url, result.value.parent]).toEqual([
+            "https://linear.app/example/issue/DEMO-108",
+            { id: "DEMO-82", url: null },
+        ]);
+    });
+    it("takes the parent's url when the CLI returns one", async () => {
+        const parent = { ...subtask.parent, url: "https://linear.app/example/issue/DEMO-82" };
+        const result = await detailOf({ ...subtask, parent });
+        expect(result.ok && result.value.parent).toEqual({
+            id: "DEMO-82",
+            url: "https://linear.app/example/issue/DEMO-82",
+        });
+    });
+    it("sets a null url and a null parent for a task with neither", async () => {
+        const result = await detailOf(detail);
+        expect(result.ok && [result.value.url, result.value.parent]).toEqual([null, null]);
+    });
+    it("reads a null parent when the view's parent is null", async () => {
+        const result = await detailOf({ ...subtask, parent: null });
+        expect(result.ok && result.value.parent).toBeNull();
+    });
+    it("fails naming the path when the parent has no identifier", async () => {
+        expect(await detailOf({ ...subtask, parent: { title: "x" } })).toEqual({
+            ok: false,
+            error: "linear issue view DEMO-82: output does not match the expected shape: $.parent.identifier must be a string",
+        });
+    });
+    it("leaves url and parent unset in the listing", async () => {
+        const result = await reader().work.list();
+        expect(result.ok && result.value.map((task) => [task.url, task.parent])).toEqual([
+            [undefined, undefined],
+            [undefined, undefined],
+            [undefined, undefined],
+        ]);
     });
     it("names linear auth login for an unauthenticated CLI", async () => {
         const { exec, work } = reader();

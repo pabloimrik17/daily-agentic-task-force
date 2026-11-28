@@ -5,13 +5,28 @@
 // labels is derived from these.
 const SCOPE_LABELS = ["work", "personal"] as const;
 const AUTONOMY_LABELS = ["AFK", "HITL"] as const;
-const STAGE_LABELS = ["grill-me", "proposal"] as const;
-const TAKEN_LABEL = "taken";
+const STAGE_LABELS = [
+    "grill-me",
+    "proposal",
+    "implement",
+    "verify",
+    "code-review",
+    "qa",
+    "external-review",
+    "wrap-up",
+    "ready-to-merge",
+] as const;
+export const TAKEN_LABEL = "taken";
+export const TRIAGE_LABEL = "triage-me";
+// The labels outside every group: never required, never missing, never in conflict,
+// and never given an alias.
+const UNGROUPED_LABELS = [TAKEN_LABEL, TRIAGE_LABEL] as const;
 
 export type Scope = (typeof SCOPE_LABELS)[number];
 export type AutonomyLabel = (typeof AUTONOMY_LABELS)[number];
 export type StageLabel = (typeof STAGE_LABELS)[number];
-export type ContractLabel = Scope | AutonomyLabel | StageLabel | typeof TAKEN_LABEL;
+export type UngroupedLabel = (typeof UNGROUPED_LABELS)[number];
+export type ContractLabel = Scope | AutonomyLabel | StageLabel | UngroupedLabel;
 
 export type Group = "scope" | "autonomy" | "stage";
 // The stage is left out: it follows the autonomy.
@@ -23,7 +38,7 @@ export const LABELS: readonly ContractLabel[] = [
     ...SCOPE_LABELS,
     ...AUTONOMY_LABELS,
     ...STAGE_LABELS,
-    TAKEN_LABEL,
+    ...UNGROUPED_LABELS,
 ];
 
 export const GROUPS: Record<Group, readonly ContractLabel[]> = {
@@ -32,6 +47,9 @@ export const GROUPS: Record<Group, readonly ContractLabel[]> = {
     stage: STAGE_LABELS,
 };
 
+// From the earliest stage to the most advanced.
+export const STAGE_ORDER: readonly StageLabel[] = STAGE_LABELS;
+
 export const DECIDED_GROUPS: readonly DecidedGroup[] = ["scope", "autonomy"];
 
 export const COLOURS: Record<ContractLabel, string> = {
@@ -39,9 +57,17 @@ export const COLOURS: Record<ContractLabel, string> = {
     HITL: "#eb5757",
     "grill-me": "#f2994a",
     proposal: "#bb87fc",
+    implement: "#26b5ce",
+    verify: "#d6409f",
+    "code-review": "#a3e635",
+    qa: "#0d9488",
+    "external-review": "#8b5e3c",
+    "wrap-up": "#64748b",
+    "ready-to-merge": "#15803d",
     work: "#2f80ed",
     personal: "#27ae60",
     taken: "#95a2b3",
+    "triage-me": "#f2c94c",
 };
 
 export const MEANINGS: Record<ContractLabel, string> = {
@@ -52,11 +78,24 @@ export const MEANINGS: Record<ContractLabel, string> = {
     "grill-me": "The task must be refined with a human in a grill before anyone works on it.",
     proposal:
         "The task is ready for proposal preparation, its autonomy decided and any grill it needed over.",
+    implement: "The task has a proposal and is ready to implement.",
+    verify: "The task is implemented and ready to verify against its proposal.",
+    "code-review": "The task is verified and ready for code review.",
+    qa: "The task has passed code review and is ready for QA.",
+    "external-review": "The task has passed every review stage and is ready for external review.",
+    "wrap-up": "The task has passed external review and is ready for wrap-up.",
+    "ready-to-merge": "The task is wrapped up and waits for a person to merge its pull request.",
     taken: "An agent or a person is advancing the task now; it is not selected until the label is removed.",
+    "triage-me":
+        "The task's scope or autonomy could not be decided without the human; it is neither judged again nor selected until the label is removed.",
 };
 
 export function isContractLabel(name: string): name is ContractLabel {
     return (LABELS as readonly string[]).includes(name);
+}
+
+export function isUngroupedLabel(name: string): name is UngroupedLabel {
+    return (UNGROUPED_LABELS as readonly string[]).includes(name);
 }
 
 export function isScope(value: string): value is Scope {

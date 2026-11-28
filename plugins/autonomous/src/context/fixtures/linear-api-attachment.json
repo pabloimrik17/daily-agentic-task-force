@@ -1,0 +1,52 @@
+{
+    "data": {
+        "issue": {
+            "identifier": "DEMO-125",
+            "project": {
+                "name": "Synthetic project"
+            },
+            "parent": null,
+            "children": {
+                "nodes": [],
+                "pageInfo": {
+                    "hasNextPage": false
+                }
+            },
+            "relations": {
+                "nodes": [
+                    {
+                        "type": "related",
+                        "relatedIssue": {
+                            "identifier": "DEMO-82",
+                            "title": "Synthetic DEMO-82",
+                            "url": "https://linear.app/demo/issue/DEMO-82/synthetic",
+                            "state": {
+                                "name": "In Progress"
+                            }
+                        }
+                    }
+                ],
+                "pageInfo": {
+                    "hasNextPage": false
+                }
+            },
+            "inverseRelations": {
+                "nodes": [],
+                "pageInfo": {
+                    "hasNextPage": false
+                }
+            },
+            "attachments": {
+                "nodes": [
+                    {
+                        "title": "Synthetic attachment",
+                        "url": "https://example.com/synthetic-attachment"
+                    }
+                ],
+                "pageInfo": {
+                    "hasNextPage": false
+                }
+            }
+        }
+    }
+}

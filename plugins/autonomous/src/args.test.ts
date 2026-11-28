@@ -1,9 +1,8 @@
 import { describe, expect, it } from "vitest";
 
-import { parseArgs, type RunArgs } from "./args.ts";
+import { parseArgs, type RunArgs, USAGE } from "./args.ts";
 
 const DEFAULTS: RunArgs = {
-    account: undefined,
     task: undefined,
     stage: undefined,
     discard: undefined,
@@ -15,21 +14,40 @@ const DEFAULTS: RunArgs = {
     noHandoff: false,
     answers: [],
     transition: undefined,
+    from: undefined,
     persist: undefined,
+    pullRequest: undefined,
+    title: undefined,
+    log: undefined,
+    publish: undefined,
+    loop: false,
+    grills: undefined,
+    parallel: undefined,
+    interval: undefined,
+    notices: undefined,
+    triageQuestions: false,
+    stopLoop: false,
 };
+
+const REQUIRE_LOOP = "--grills, --parallel and --interval require --loop";
+const LOOP_ONLY =
+    "--loop can only be combined with --apply, --force, --json, --grills, --parallel and --interval";
+const NOTICES_ALONE = "--notices cannot be combined with other flags";
+const ACCOUNT_REMOVED =
+    "--account is no longer accepted: the run evaluates the account Claude Code is logged in as";
 
 function accepted(overrides: Partial<RunArgs>) {
     return { ok: true, args: { ...DEFAULTS, ...overrides } };
 }
 
 describe("parseArgs", () => {
-    it("defaults to no account, cached read, text output, no apply, no bootstrap and a handoff", () => {
+    it("defaults to cached read, text output, no apply, no bootstrap and a handoff", () => {
         expect(parseArgs([])).toEqual(accepted({}));
     });
 
     it("reads every flag", () => {
-        expect(parseArgs(["--account", "claude@123", "--force", "--json", "--apply"])).toEqual(
-            accepted({ account: "claude@123", force: true, json: true, apply: true }),
+        expect(parseArgs(["--force", "--json", "--apply"])).toEqual(
+            accepted({ force: true, json: true, apply: true }),
         );
     });
 
@@ -48,10 +66,8 @@ describe("parseArgs", () => {
     });
 
     it("reads --no-handoff combined with every run flag", () => {
-        expect(
-            parseArgs(["--account", "claude", "--force", "--json", "--apply", "--no-handoff"]),
-        ).toEqual(
-            accepted({ account: "claude", force: true, json: true, apply: true, noHandoff: true }),
+        expect(parseArgs(["--force", "--json", "--apply", "--no-handoff"])).toEqual(
+            accepted({ force: true, json: true, apply: true, noHandoff: true }),
         );
     });
 
@@ -104,22 +120,12 @@ describe("parseArgs", () => {
         );
     });
 
-    it("reads --task with --account, --force, --json, --apply and --no-handoff", () => {
+    it("reads --task with --force, --json, --apply and --no-handoff", () => {
         expect(
-            parseArgs([
-                "--task",
-                "beads:X-12",
-                "--account",
-                "claude",
-                "--force",
-                "--json",
-                "--apply",
-                "--no-handoff",
-            ]),
+            parseArgs(["--task", "beads:X-12", "--force", "--json", "--apply", "--no-handoff"]),
         ).toEqual(
             accepted({
                 task: { source: "beads", id: "X-12" },
-                account: "claude",
                 force: true,
                 json: true,
                 apply: true,
@@ -141,6 +147,66 @@ describe("parseArgs", () => {
                 json: true,
                 transition: { source: "github", id: "owner/repo#12" },
             }),
+        );
+    });
+
+    it("reads --apply --transition with --from and --json", () => {
+        expect(
+            parseArgs([
+                "--apply",
+                "--transition",
+                "linear:DOT-110",
+                "--from",
+                "implement",
+                "--json",
+            ]),
+        ).toEqual(
+            accepted({
+                apply: true,
+                json: true,
+                transition: { source: "linear", id: "DOT-110" },
+                from: "implement",
+            }),
+        );
+    });
+
+    it("reads --apply --transition --from code-review", () => {
+        expect(
+            parseArgs(["--apply", "--transition", "linear:DOT-110", "--from", "code-review"]),
+        ).toEqual(
+            accepted({
+                apply: true,
+                transition: { source: "linear", id: "DOT-110" },
+                from: "code-review",
+            }),
+        );
+    });
+
+    it("reads --apply --pull-request with and without --title and --json", () => {
+        const id = "linear:DOT-121:grill-me:1";
+        expect(parseArgs(["--apply", "--pull-request", id])).toEqual(
+            accepted({ apply: true, pullRequest: id }),
+        );
+        expect(parseArgs(["--title", "Fix it", "--json", "--pull-request", id, "--apply"])).toEqual(
+            accepted({ apply: true, json: true, pullRequest: id, title: "Fix it" }),
+        );
+    });
+
+    it("reads --apply --log with and without --json", () => {
+        const id = "linear:DOT-121:grill-me:1";
+        expect(parseArgs(["--apply", "--log", id])).toEqual(accepted({ apply: true, log: id }));
+        expect(parseArgs(["--log", id, "--json", "--apply"])).toEqual(
+            accepted({ apply: true, json: true, log: id }),
+        );
+    });
+
+    it("Publish mode: reads --apply --publish with and without --json", () => {
+        const id = "linear:DOT-121:code-review:1";
+        expect(parseArgs(["--apply", "--publish", id])).toEqual(
+            accepted({ apply: true, publish: id }),
+        );
+        expect(parseArgs(["--publish", id, "--json", "--apply"])).toEqual(
+            accepted({ apply: true, json: true, publish: id }),
         );
     });
 
@@ -183,15 +249,8 @@ describe("parseArgs", () => {
     it.each([
         [["--verbose"], "unrecognised argument: --verbose"],
         [["claude"], "unrecognised argument: claude"],
-        [["--account"], "--account requires a provider key"],
-        [["--account", "--json"], "--account requires a provider key"],
-        [["--account", "a", "--account", "b"], "--account given more than once"],
         [["--bootstrap-labels", "--apply"], "--bootstrap-labels can only be combined with --json"],
         [["--bootstrap-labels", "--force"], "--bootstrap-labels can only be combined with --json"],
-        [
-            ["--bootstrap-labels", "--account", "x"],
-            "--bootstrap-labels can only be combined with --json",
-        ],
         [
             ["--json", "--bootstrap-labels", "--apply"],
             "--bootstrap-labels can only be combined with --json",
@@ -208,10 +267,6 @@ describe("parseArgs", () => {
         [["--json", "--answer", "a:b=HITL"], "--answer requires --apply"],
         [
             ["--apply", "--force", "--answer", "a:b=HITL"],
-            "--answer can only be combined with --apply and --json",
-        ],
-        [
-            ["--apply", "--account", "claude", "--answer", "a:b=HITL"],
             "--answer can only be combined with --apply and --json",
         ],
         [
@@ -252,8 +307,8 @@ describe("parseArgs", () => {
             "--stage given more than once",
         ],
         [
-            ["--task", "linear:A-1", "--stage", "proposal"],
-            "--stage proposal is not a registered stage (test, grill-me)",
+            ["--task", "linear:A-1", "--stage", "external-review"],
+            "--stage external-review is not a registered stage (test, grill-me, proposal, implement, verify, code-review)",
         ],
         [["--stage", "test"], "--stage requires --task"],
         [
@@ -277,10 +332,6 @@ describe("parseArgs", () => {
         ],
         [["--discard", "beads:X-1"], "--discard requires --apply"],
         [
-            ["--apply", "--discard", "beads:X-1", "--account", "claude"],
-            "--discard can only be combined with --apply, --json and --release-workspace",
-        ],
-        [
             ["--apply", "--discard", "beads:X-1", "--force"],
             "--discard can only be combined with --apply, --json and --release-workspace",
         ],
@@ -293,6 +344,24 @@ describe("parseArgs", () => {
             "--discard can only be combined with --apply, --json and --release-workspace",
         ],
         [["--stage", "test", "--apply", "--discard", "beads:X-1"], "--stage requires --task"],
+        [["--apply", "--from", "verify"], "--from requires --transition"],
+        [
+            ["--apply", "--persist", "linear:DOT-121:verify:1", "--from", "verify"],
+            "--from requires --transition",
+        ],
+        [["--apply", "--transition", "linear:DOT-110", "--from"], "--from requires a stage name"],
+        [
+            ["--apply", "--transition", "linear:DOT-110", "--from", "--json"],
+            "--from requires a stage name",
+        ],
+        [
+            ["--apply", "--transition", "linear:DOT-110", "--from", "external-review"],
+            "--from external-review is not a stage a transition leaves (grill-me, proposal, implement, verify, code-review)",
+        ],
+        [
+            ["--apply", "--transition", "linear:DOT-110", "--from", "verify", "--from", "verify"],
+            "--from given more than once",
+        ],
         [["--transition"], "--transition requires <source>:<id>"],
         [["--apply", "--transition"], "--transition requires <source>:<id>"],
         [["--apply", "--transition", "--json"], "--transition requires <source>:<id>"],
@@ -320,7 +389,7 @@ describe("parseArgs", () => {
         ],
         [
             ["--apply", "--transition", "linear:DOT-110", "--answer", "a:b=HITL"],
-            "--transition can only be combined with --apply and --json",
+            "--transition can only be combined with --apply, --from and --json",
         ],
         [
             ["--apply", "--transition", "linear:DOT-110", "--task", "linear:DOT-111"],
@@ -340,23 +409,19 @@ describe("parseArgs", () => {
         ],
         [
             ["--apply", "--transition", "linear:DOT-110", "--discard", "beads:X-1"],
-            "--transition can only be combined with --apply and --json",
+            "--transition can only be combined with --apply, --from and --json",
         ],
         [
             ["--apply", "--transition", "linear:DOT-110", "--bootstrap-labels"],
             "--bootstrap-labels can only be combined with --json",
         ],
         [
-            ["--apply", "--transition", "linear:DOT-110", "--account", "claude"],
-            "--transition can only be combined with --apply and --json",
-        ],
-        [
             ["--apply", "--transition", "linear:DOT-110", "--force"],
-            "--transition can only be combined with --apply and --json",
+            "--transition can only be combined with --apply, --from and --json",
         ],
         [
             ["--apply", "--transition", "linear:DOT-110", "--release-workspace"],
-            "--transition can only be combined with --apply and --json",
+            "--transition can only be combined with --apply, --from and --json",
         ],
         [["--apply", "--persist"], "--persist requires an attempt id <source>:<task>:<stage>:<n>"],
         [
@@ -400,10 +465,6 @@ describe("parseArgs", () => {
         [["--persist", "linear:DOT-121:grill-me:1"], "--persist requires --apply"],
         [["--persist", "linear:DOT-121:grill-me:1", "--json"], "--persist requires --apply"],
         [
-            ["--apply", "--persist", "linear:DOT-121:grill-me:1", "--account", "claude"],
-            "--persist can only be combined with --apply and --json",
-        ],
-        [
             ["--apply", "--persist", "linear:DOT-121:grill-me:1", "--force"],
             "--persist can only be combined with --apply and --json",
         ],
@@ -417,7 +478,7 @@ describe("parseArgs", () => {
         ],
         [
             ["--apply", "--persist", "linear:DOT-121:grill-me:1", "--transition", "linear:DOT-121"],
-            "--persist can only be combined with --apply and --json",
+            "--transition can only be combined with --apply, --from and --json",
         ],
         [
             ["--apply", "--persist", "linear:DOT-121:grill-me:1", "--answer", "a:b=HITL"],
@@ -435,9 +496,316 @@ describe("parseArgs", () => {
             ["--apply", "--persist", "linear:DOT-121:grill-me:1", "--release-workspace"],
             "--persist can only be combined with --apply and --json",
         ],
+        [
+            ["--apply", "--pull-request", "linear:DOT-121"],
+            "--pull-request linear:DOT-121 must be an attempt id <source>:<task>:<stage>:<n>",
+        ],
+        [
+            ["--apply", "--log", "linear:DOT-121:review:1"],
+            "--log linear:DOT-121:review:1 must be an attempt id <source>:<task>:<stage>:<n>",
+        ],
+        [
+            [
+                "--apply",
+                "--pull-request",
+                "linear:DOT-121:grill-me:1",
+                "--pull-request",
+                "linear:DOT-121:grill-me:1",
+            ],
+            "--pull-request given more than once",
+        ],
+        [["--pull-request", "linear:DOT-121:grill-me:1"], "--pull-request requires --apply"],
+        [["--log", "linear:DOT-121:grill-me:1"], "--log requires --apply"],
+        [["--apply", "--title", "Fix it"], "--title requires --pull-request"],
+        [
+            ["--apply", "--pull-request", "linear:DOT-121:grill-me:1", "--title", "  "],
+            "--title requires a title",
+        ],
+        [
+            ["--apply", "--pull-request", "linear:DOT-121:grill-me:1", "--title", "--json"],
+            "--title requires a title",
+        ],
+        [
+            [
+                "--apply",
+                "--pull-request",
+                "linear:DOT-121:grill-me:1",
+                "--title",
+                "a",
+                "--title",
+                "b",
+            ],
+            "--title given more than once",
+        ],
+        [
+            [
+                "--apply",
+                "--pull-request",
+                "linear:DOT-121:grill-me:1",
+                "--persist",
+                "linear:DOT-121:grill-me:1",
+            ],
+            "--persist can only be combined with --apply and --json",
+        ],
+        [
+            [
+                "--apply",
+                "--pull-request",
+                "linear:DOT-121:grill-me:1",
+                "--transition",
+                "linear:DOT-121",
+            ],
+            "--transition can only be combined with --apply, --from and --json",
+        ],
+        [
+            ["--apply", "--pull-request", "linear:DOT-121:grill-me:1", "--discard", "beads:X-1"],
+            "--pull-request can only be combined with --apply, --title and --json",
+        ],
+        [
+            [
+                "--apply",
+                "--log",
+                "linear:DOT-121:grill-me:1",
+                "--pull-request",
+                "linear:DOT-121:grill-me:1",
+            ],
+            "--pull-request can only be combined with --apply, --title and --json",
+        ],
+        [
+            [
+                "--apply",
+                "--log",
+                "linear:DOT-121:grill-me:1",
+                "--persist",
+                "linear:DOT-121:grill-me:1",
+            ],
+            "--persist can only be combined with --apply and --json",
+        ],
+        [
+            ["--apply", "--log", "linear:DOT-121:grill-me:1", "--title", "x"],
+            "--title requires --pull-request",
+        ],
         [["--release-workspace"], "--release-workspace requires --discard"],
         [["--apply", "--release-workspace"], "--release-workspace requires --discard"],
+        [["--parallel", "3"], REQUIRE_LOOP],
+        [["--apply", "--grills", "1"], REQUIRE_LOOP],
+        [["--interval", "5"], REQUIRE_LOOP],
+        [["--loop", "--task", "linear:DOT-120"], LOOP_ONLY],
+        [["--loop", "--no-handoff"], LOOP_ONLY],
+        [["--loop", "--bootstrap-labels"], LOOP_ONLY],
+        [["--loop", "--apply", "--answer", "a:b=HITL"], LOOP_ONLY],
+        [["--loop", "--apply", "--discard", "beads:X-1"], LOOP_ONLY],
+        [["--loop", "--apply", "--transition", "linear:DOT-121"], LOOP_ONLY],
+        [["--loop", "--apply", "--persist", "linear:DOT-121:grill-me:1"], LOOP_ONLY],
+        [["--loop", "--apply", "--pull-request", "linear:DOT-121:grill-me:1"], LOOP_ONLY],
+        [["--loop", "--apply", "--log", "linear:DOT-121:grill-me:1"], LOOP_ONLY],
+        [["--loop", "--interval", "0"], "--interval 0 must be an integer of 1 or more"],
+        [["--loop", "--interval", "2.5"], "--interval requires an integer of 1 or more"],
+        [["--loop", "--interval", "-3"], "--interval requires an integer of 1 or more"],
+        [["--loop", "--interval", "soon"], "--interval requires an integer of 1 or more"],
+        [["--loop", "--interval"], "--interval requires an integer of 1 or more"],
+        [["--loop", "--interval", "--apply"], "--interval requires an integer of 1 or more"],
+        [["--loop", "--parallel", "-1"], "--parallel requires an integer of 0 or more"],
+        [["--loop", "--grills", "1.5"], "--grills requires an integer of 0 or more"],
+        [["--loop", "--grills", "1", "--grills", "2"], "--grills given more than once"],
+        [["--notices"], "--notices requires an integer of 0 or more"],
+        [["--notices", "-1"], "--notices requires an integer of 0 or more"],
+        [["--notices", "0", "--loop"], NOTICES_ALONE],
+        [["--notices", "0", "--apply"], NOTICES_ALONE],
+        [["--notices", "0", "--json"], NOTICES_ALONE],
+        [["--notices", "0", "--force"], NOTICES_ALONE],
+        [["--notices", "0", "--task", "linear:DOT-120"], NOTICES_ALONE],
+        [["--notices", "0", "--bootstrap-labels"], NOTICES_ALONE],
+        [["--notices", "0", "--no-handoff"], NOTICES_ALONE],
+        [["--notices", "0", "--loop", "--interval", "5"], NOTICES_ALONE],
+        [["--apply", "--notices", "0", "--persist", "linear:DOT-121:grill-me:1"], NOTICES_ALONE],
+        [["--apply", "--notices", "0", "--log", "linear:DOT-121:grill-me:1"], NOTICES_ALONE],
+        [["--publish", "linear:DOT-121:code-review:1"], "--publish requires --apply"],
+        [["--publish", "linear:DOT-121:code-review:1", "--json"], "--publish requires --apply"],
+        [["--apply", "--publish"], "--publish requires an attempt id <source>:<task>:<stage>:<n>"],
+        [
+            ["--apply", "--publish", "linear:DOT-121"],
+            "--publish linear:DOT-121 must be an attempt id <source>:<task>:<stage>:<n>",
+        ],
+        [
+            [
+                "--apply",
+                "--publish",
+                "linear:DOT-121:code-review:1",
+                "--publish",
+                "linear:DOT-121:code-review:1",
+            ],
+            "--publish given more than once",
+        ],
+        [
+            ["--apply", "--publish", "linear:DOT-121:code-review:1", "--force"],
+            "--publish can only be combined with --apply and --json",
+        ],
+        [
+            ["--apply", "--publish", "linear:DOT-121:code-review:1", "--discard", "beads:X-1"],
+            "--publish can only be combined with --apply and --json",
+        ],
+        [
+            [
+                "--apply",
+                "--publish",
+                "linear:DOT-121:code-review:1",
+                "--log",
+                "linear:DOT-121:code-review:1",
+            ],
+            "--log can only be combined with --apply and --json",
+        ],
+        [
+            ["--apply", "--publish", "linear:DOT-121:code-review:1", "--title", "x"],
+            "--title requires --pull-request",
+        ],
+        [["--loop", "--apply", "--publish", "linear:DOT-121:code-review:1"], LOOP_ONLY],
+        [["--apply", "--notices", "0", "--publish", "linear:DOT-121:code-review:1"], NOTICES_ALONE],
     ])("rejects %j", (argv, error) => {
         expect(parseArgs(argv)).toEqual({ ok: false, error });
+    });
+});
+
+describe("parseArgs --account", () => {
+    it.each([
+        [["--account", "ana@example.com"]],
+        [["--account"]],
+        [["--account", "--json"]],
+        [["--account", "a@example.com", "--account", "b@example.com"]],
+        [["--loop", "--apply", "--account", "claude@1a2b3c4d"]],
+        [["--task", "beads:agentic-task-2x0", "--account", "ana@example.com"]],
+        [["--account", "ana@example.com", "--stage", "test"]],
+        [["--bootstrap-labels", "--account", "ana@example.com"]],
+        [["--apply", "--answer", "a:b=HITL", "--account", "ana@example.com"]],
+        [["--apply", "--discard", "beads:X-1", "--account", "ana@example.com"]],
+        [["--notices", "0", "--account", "ana@example.com"]],
+        [["--stop-loop", "--account", "ana@example.com"]],
+        [["--triage-questions", "--account", "ana@example.com"]],
+        [["--parallel", "3", "--account", "ana@example.com"]],
+    ])("rejects %j with the removal message", (argv) => {
+        expect(parseArgs(argv)).toEqual({ ok: false, error: ACCOUNT_REMOVED });
+    });
+
+    it("leaves --account out of the usage text", () => {
+        expect(USAGE).not.toContain("--account");
+        expect(USAGE).not.toContain("provider-key");
+    });
+});
+
+describe("parseArgs loop flags", () => {
+    it("reads --loop alone as a dry iteration", () => {
+        expect(parseArgs(["--loop"])).toEqual(accepted({ loop: true }));
+    });
+
+    it("reads --loop with every flag it accepts", () => {
+        expect(
+            parseArgs([
+                "--loop",
+                "--apply",
+                "--force",
+                "--json",
+                "--grills",
+                "0",
+                "--parallel",
+                "3",
+                "--interval",
+                "30",
+            ]),
+        ).toEqual(
+            accepted({
+                loop: true,
+                apply: true,
+                force: true,
+                json: true,
+                grills: 0,
+                parallel: 3,
+                interval: 30,
+            }),
+        );
+    });
+
+    it("accepts --force with --loop", () => {
+        expect(parseArgs(["--loop", "--force"])).toEqual(accepted({ loop: true, force: true }));
+    });
+
+    it("accepts --grills 0 and --parallel 0", () => {
+        expect(parseArgs(["--loop", "--grills", "0", "--parallel", "0"])).toEqual(
+            accepted({ loop: true, grills: 0, parallel: 0 }),
+        );
+    });
+
+    it("reads --notices alone", () => {
+        expect(parseArgs(["--notices", "0"])).toEqual(accepted({ notices: 0 }));
+        expect(parseArgs(["--notices", "12"])).toEqual(accepted({ notices: 12 }));
+    });
+
+    it("names the loop in the usage text", () => {
+        expect(USAGE).toContain("/autonomous:loop [");
+        expect(USAGE).not.toContain("/autonomous:run --loop");
+        expect(USAGE).not.toContain("/autonomous:run --notices");
+        expect(USAGE).toContain("--notices <n>");
+    });
+});
+
+describe("parseArgs --triage-questions", () => {
+    const TRIAGE_ONLY = "--triage-questions can only be combined with --json";
+
+    it("reads --triage-questions alone", () => {
+        expect(parseArgs(["--triage-questions"])).toEqual(accepted({ triageQuestions: true }));
+    });
+
+    it("reads --triage-questions combined with --json", () => {
+        expect(parseArgs(["--json", "--triage-questions"])).toEqual(
+            accepted({ triageQuestions: true, json: true }),
+        );
+    });
+
+    it.each([
+        [["--triage-questions", "--apply"]],
+        [["--triage-questions", "--task", "linear:DOT-120"]],
+        [["--triage-questions", "--force"]],
+        [["--triage-questions", "--loop"]],
+        [["--triage-questions", "--answer", "linear:DOT-1:scope=personal"]],
+        [["--apply", "--triage-questions", "--answer", "linear:DOT-1:scope=personal"]],
+        [["--triage-questions", "--no-handoff"]],
+        [["--triage-questions", "--bootstrap-labels"]],
+        [["--triage-questions", "--notices", "0"]],
+        [["--triage-questions", "--stage", "grill-me", "--task", "linear:DOT-120"]],
+        [["--apply", "--triage-questions", "--discard", "linear:DOT-120"]],
+        [["--loop", "--triage-questions", "--grills", "1"]],
+        [["--apply", "--transition", "linear:DOT-110", "--triage-questions"]],
+    ])("rejects %j", (argv) => {
+        expect(parseArgs(argv)).toEqual({ ok: false, error: TRIAGE_ONLY });
+    });
+
+    it("names the mode in the usage text", () => {
+        expect(USAGE).toContain("/autonomous:run --triage-questions [--json]");
+    });
+});
+
+describe("parseArgs --stop-loop", () => {
+    const STOP_ALONE = "--stop-loop cannot be combined with other flags";
+
+    it("reads --stop-loop alone", () => {
+        expect(parseArgs(["--stop-loop"])).toEqual(accepted({ stopLoop: true }));
+    });
+
+    it.each([
+        [["--stop-loop", "--apply"]],
+        [["--stop-loop", "--json"]],
+        [["--stop-loop", "--loop"]],
+        [["--stop-loop", "--notices", "0"]],
+        [["--notices", "0", "--stop-loop"]],
+        [["--stop-loop", "--force"]],
+        [["--stop-loop", "--task", "linear:DOT-120"]],
+        [["--stop-loop", "--triage-questions"]],
+        [["--stop-loop", "--loop", "--interval", "5"]],
+        [["--apply", "--stop-loop", "--persist", "linear:DOT-121:grill-me:1"]],
+    ])("rejects %j", (argv) => {
+        expect(parseArgs(argv)).toEqual({ ok: false, error: STOP_ALONE });
+    });
+
+    it("names the mode in the usage text", () => {
+        expect(USAGE).toContain("run.ts --stop-loop");
     });
 });

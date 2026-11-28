@@ -33,10 +33,14 @@ export default {
             entry: ["scripts/*.ts", "scripts/**/*.test.ts"],
             project: ["scripts/**/*.ts"],
         },
-        // Plugin workspaces: their tests and any scripts/ entries.
         "plugins/*": {
             entry: ["scripts/**/*.ts", "**/*.test.ts"],
             project: ["**/*.ts"],
+        },
+        // Production entries are the files commands, skills and hooks run with `bun`.
+        "plugins/autonomous": {
+            entry: ["src/run.ts!", "src/label-at-creation/cli.ts!"],
+            project: ["src/**/*.ts!", "!src/**/*.test.ts!", "!src/**/*fixtures.ts!"],
         },
         // The stonks hooks module is loaded by Claude Code from hooks.json
         // `modules`; `claude-code` is the engine's own module, present at run
@@ -45,11 +49,20 @@ export default {
             entry: [
                 "scripts/**/*.ts",
                 "**/*.test.ts",
-                "mod/register.ts",
                 // The PostToolUse command hook, run from hooks.json (design D5).
-                "src/capture.ts",
+                "src/capture.ts!",
+                "mod/register.ts!",
+                "src/cli.ts!",
             ],
-            project: ["**/*.ts", "!mod/types/claude-code.d.ts"],
+            project: [
+                "scripts/**/*.ts",
+                "*.ts",
+                "src/**/*.ts!",
+                "mod/**/*.ts!",
+                "!mod/types/claude-code.d.ts",
+                "!src/**/*.test.ts!",
+                "!mod/**/*.test.ts!",
+            ],
             ignoreDependencies: ["claude-code"],
         },
     },
