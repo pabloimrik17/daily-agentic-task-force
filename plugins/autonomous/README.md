@@ -5303,8 +5303,9 @@ the prompt tells the agent, for `AFK` and `HITL` alike, to:
 The task keeps `external-review` and `taken`, the attempt is retained once its
 session ends, every run lists it, and the pull request's logbook says why (see
 [What it does to each attempt](#what-it-does-to-each-attempt)). A contested
-finding an `AFK` round refuted twice also keeps its thread open for a person, and
-the task does not reach a quiet round until a person resolves it.
+finding an `AFK` round refuted twice also keeps its thread open for a person: the
+quiet round leaves that thread open, and the task goes on to `wrap-up` with it,
+where the open thread still blocks the merge.
 
 ### The autonomy
 

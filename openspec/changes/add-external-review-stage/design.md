@@ -161,7 +161,7 @@ The prompt lists the finding threads of the pull request a code review published
 
 ### D16. A contested answer is judged once more
 
-A contested finding goes through a fresh refutation by teammates other than the first. If it survives, it is fixed. If it is refuted again: `AFK` answers once more with the outcome `blocked` and the thread stays open for a person, named in the stage summary and the logbook entry, and the task does not reach a quiet round until a person resolves it; `HITL` asks the human, whose decision stands.
+A contested finding goes through a fresh refutation by teammates other than the first. If it survives, it is fixed. If it is refuted again: `AFK` answers once more with the outcome `blocked` and the thread stays open for a person, named in the stage summary and the logbook entry; the quiet round leaves that thread open and the task goes on to `wrap-up` with it, where the open thread still blocks the merge (ADR 0008); `HITL` asks the human, whose decision stands.
 
 ### D17. `HITL`
 
